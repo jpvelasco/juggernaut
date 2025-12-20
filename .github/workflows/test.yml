@@ -1,0 +1,109 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-unix:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Bash 4+ (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> $GITHUB_PATH
+
+      - name: Show environment
+        run: |
+          echo "OS: $OSTYPE"
+          echo "Shell: $SHELL"
+          echo "Bash: $(which bash)"
+          bash --version | head -1
+
+      - name: Run test suite
+        run: bash ./test.sh
+
+      - name: Test dry-run (bash)
+        run: bash ./setup-claude-bedrock.sh bash --dry-run
+
+      - name: Test dry-run (zsh)
+        run: bash ./setup-claude-bedrock.sh zsh --dry-run
+
+      - name: Test dry-run (fish)
+        run: bash ./setup-claude-bedrock.sh fish --dry-run
+
+      - name: Test unified entry point
+        run: bash ./setup --dry-run
+
+      - name: Test uninstall help
+        run: bash ./uninstall.sh --help
+
+  test-windows-powershell:
+    name: Test on Windows (PowerShell)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show environment
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
+          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+
+      - name: Test PowerShell setup (dry-run)
+        shell: pwsh
+        run: .\setup-claude-bedrock.ps1 -DryRun
+
+      - name: Test PowerShell setup with region
+        shell: pwsh
+        run: .\setup-claude-bedrock.ps1 -DryRun -Region us-east-1
+
+      - name: Test PowerShell setup help
+        shell: pwsh
+        run: .\setup-claude-bedrock.ps1 -Help
+
+      - name: Validate JSON
+        shell: pwsh
+        run: Get-Content .\iam-policy.json | ConvertFrom-Json
+
+  test-windows-gitbash:
+    name: Test on Windows (Git Bash)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show environment
+        shell: bash
+        run: |
+          echo "OS: $OSTYPE"
+          echo "Shell: $SHELL"
+          echo "Bash version: $BASH_VERSION"
+
+      - name: Run test suite
+        shell: bash
+        run: ./test.sh
+
+      - name: Test dry-run (bash)
+        shell: bash
+        run: ./setup-claude-bedrock.sh bash --dry-run
+
+      - name: Test unified entry point
+        shell: bash
+        run: ./setup --dry-run
