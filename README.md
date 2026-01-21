@@ -184,8 +184,10 @@ claude
 - `setup-claude-bedrock.ps1` - Windows PowerShell setup script
 - `uninstall.sh` - Remove Bedrock configuration from shell profiles (Unix/macOS/Linux)
 - `uninstall.ps1` - Remove Bedrock configuration from PowerShell profile (Windows)
-- `apply-config.sh` - Apply configuration to current terminal session
-- `validate-setup.sh` - Comprehensive configuration validator
+- `apply-config.sh` - Apply configuration to current terminal session (Unix/macOS/Linux)
+- `apply-config.ps1` - Apply configuration to current PowerShell session (Windows)
+- `validate-setup.sh` - Comprehensive configuration validator (Unix/macOS/Linux)
+- `validate-setup.ps1` - Comprehensive configuration validator (Windows)
 - `test.sh` - Test suite for verifying scripts work correctly
 - `iam-policy.json` - Required IAM permissions template
 - `README.md` - Complete documentation
@@ -201,6 +203,10 @@ The setup adds these environment variables:
 - `MAX_THINKING_TOKENS=1024` - Balanced reasoning without cutting off tool responses
 - `ANTHROPIC_MODEL=global.anthropic.claude-opus-4-5-20251101-v1:0` - Global CRIS primary model
 - `ANTHROPIC_SMALL_FAST_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0` - Global CRIS fast model
+- `DISABLE_ERROR_REPORTING=1` - Disable error reporting to Anthropic
+- `DISABLE_TELEMETRY=1` - Disable telemetry collection
+- `DISABLE_AUTOUPDATE=1` - Disable automatic updates
+- `DISABLE_BUG_COMMAND=1` - Disable the /bug command
 
 ## Default Models
 

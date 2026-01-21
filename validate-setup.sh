@@ -47,6 +47,10 @@ declare -A EXPECTED_ENV_VARS=(
     [MAX_THINKING_TOKENS]="1024"
     [ANTHROPIC_MODEL]="global.anthropic.claude-opus-4-5-20251101-v1:0"
     [ANTHROPIC_SMALL_FAST_MODEL]="global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    [DISABLE_ERROR_REPORTING]="1"
+    [DISABLE_TELEMETRY]="1"
+    [DISABLE_AUTOUPDATE]="1"
+    [DISABLE_BUG_COMMAND]="1"
 )
 
 # Variables that just need to be set (any value)
