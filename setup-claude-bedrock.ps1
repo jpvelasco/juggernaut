@@ -60,6 +60,10 @@ $ConfigBlock = @"
 `$env:MAX_THINKING_TOKENS = "1024"
 `$env:ANTHROPIC_MODEL = "global.anthropic.claude-opus-4-5-20251101-v1:0"
 `$env:ANTHROPIC_SMALL_FAST_MODEL = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+`$env:DISABLE_ERROR_REPORTING = "1"
+`$env:DISABLE_TELEMETRY = "1"
+`$env:DISABLE_AUTOUPDATE = "1"
+`$env:DISABLE_BUG_COMMAND = "1"
 # END: Claude Code Bedrock Configuration
 "@
 

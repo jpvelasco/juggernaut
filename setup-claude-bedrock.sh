@@ -61,6 +61,10 @@ declare -A BEDROCK_CONFIG=(
     [MAX_THINKING_TOKENS]="1024"
     [ANTHROPIC_MODEL]="global.anthropic.claude-opus-4-5-20251101-v1:0"
     [ANTHROPIC_SMALL_FAST_MODEL]="global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    [DISABLE_ERROR_REPORTING]="1"
+    [DISABLE_TELEMETRY]="1"
+    [DISABLE_AUTOUPDATE]="1"
+    [DISABLE_BUG_COMMAND]="1"
 )
 
 # Order matters for config file output
@@ -71,6 +75,10 @@ declare -a CONFIG_KEY_ORDER=(
     MAX_THINKING_TOKENS
     ANTHROPIC_MODEL
     ANTHROPIC_SMALL_FAST_MODEL
+    DISABLE_ERROR_REPORTING
+    DISABLE_TELEMETRY
+    DISABLE_AUTOUPDATE
+    DISABLE_BUG_COMMAND
 )
 
 #───────────────────────────────────────────────────────────────────────────────
