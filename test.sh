@@ -112,6 +112,7 @@ test_required_files() {
     run_test "LICENSE exists" "test -f $SCRIPT_DIR/LICENSE"
     run_test "VERSION exists" "test -f $SCRIPT_DIR/VERSION"
     run_test "iam-policy.json exists" "test -f $SCRIPT_DIR/iam-policy.json"
+    run_test "bedrock-config.json exists" "test -f $SCRIPT_DIR/bedrock-config.json"
     run_test "setup is executable" "test -x $SCRIPT_DIR/setup"
 }
 
@@ -120,10 +121,13 @@ test_json_validity() {
 
     if command -v python3 >/dev/null 2>&1; then
         run_test "iam-policy.json valid (python3)" "python3 -m json.tool $SCRIPT_DIR/iam-policy.json"
+        run_test "bedrock-config.json valid (python3)" "python3 -m json.tool $SCRIPT_DIR/bedrock-config.json"
     elif command -v jq >/dev/null 2>&1; then
         run_test "iam-policy.json valid (jq)" "jq . $SCRIPT_DIR/iam-policy.json"
+        run_test "bedrock-config.json valid (jq)" "jq . $SCRIPT_DIR/bedrock-config.json"
     else
         skip_test "iam-policy.json valid" "no JSON validator (install jq or python3)"
+        skip_test "bedrock-config.json valid" "no JSON validator (install jq or python3)"
     fi
 }
 

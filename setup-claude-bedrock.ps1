@@ -3,15 +3,51 @@
 
 param(
     [ValidateSet("iam", "api-key")]
-    [string]$Auth = "iam",
+    [string]$Auth = "",
     [string]$BedrockKey = "",
-    [string]$Region = "us-west-2",
+    [string]$Region = "",
     [switch]$Force,
     [switch]$DryRun,
     [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+
+#───────────────────────────────────────────────────────────────────────────────
+# Load Configuration from JSON
+#───────────────────────────────────────────────────────────────────────────────
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ConfigFile = Join-Path $ScriptDir "bedrock-config.json"
+$Config = $null
+
+if (Test-Path $ConfigFile) {
+    try {
+        $Config = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+    } catch {
+        Write-Host "Warning: Could not parse config file: $ConfigFile" -ForegroundColor Yellow
+    }
+}
+
+# Apply defaults from config or use hardcoded fallbacks
+if ([string]::IsNullOrEmpty($Region)) {
+    $Region = if ($Config -and $Config.defaults.region) { $Config.defaults.region } else { "us-west-2" }
+}
+if ([string]::IsNullOrEmpty($Auth)) {
+    $Auth = if ($Config -and $Config.defaults.auth_mode) { $Config.defaults.auth_mode } else { "iam" }
+}
+
+# Load valid regions from config or use defaults
+$ValidRegions = if ($Config -and $Config.regions) {
+    $Config.regions
+} else {
+    @(
+        "us-east-1", "us-east-2", "us-west-2",
+        "eu-west-1", "eu-west-2", "eu-west-3", "eu-central-1", "eu-central-2",
+        "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-northeast-1", "ap-northeast-2", "ap-south-1",
+        "sa-east-1", "ca-central-1", "me-south-1", "me-central-1", "il-central-1"
+    )
+}
 
 # Show help
 if ($Help) {
@@ -68,15 +104,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
     }
 }
 
-# Valid AWS regions that support Bedrock (as of 2025)
-$ValidRegions = @(
-    "us-east-1", "us-east-2", "us-west-2",
-    "eu-west-1", "eu-west-2", "eu-west-3", "eu-central-1", "eu-central-2",
-    "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-northeast-1", "ap-northeast-2", "ap-south-1",
-    "sa-east-1", "ca-central-1", "me-south-1", "me-central-1", "il-central-1"
-)
-
-# Validate region
+# Validate region (ValidRegions loaded from config above)
 if (-not ($ValidRegions -contains $Region)) {
     Write-Host "Warning: '$Region' may not be a valid Bedrock region" -ForegroundColor Yellow
     Write-Host "   Common Bedrock regions: us-east-1, us-west-2, eu-west-1, ap-northeast-1"
@@ -97,13 +125,21 @@ if ($DryRun) {
 $AuthDisplay = if ($Auth -eq "api-key") { "API key" } else { "IAM/SSO" }
 Write-Host "Setting up Claude Code with Amazon Bedrock ($AuthDisplay auth)..." -ForegroundColor Cyan
 
-# Build configuration block
-$ConfigBlock = @"
+# Build configuration block from JSON config or fallback to defaults
+$ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
 
-# BEGIN: Claude Code Bedrock Configuration
-# Auth mode: $Auth
+# Add AWS_REGION first
+$ConfigBlock += "`$env:AWS_REGION = `"$Region`"`n"
+
+# Add environment variables from config
+if ($Config -and $Config.environment) {
+    $Config.environment.PSObject.Properties | ForEach-Object {
+        $ConfigBlock += "`$env:$($_.Name) = `"$($_.Value)`"`n"
+    }
+} else {
+    # Fallback to hardcoded defaults if config not available
+    $ConfigBlock += @"
 `$env:CLAUDE_CODE_USE_BEDROCK = "1"
-`$env:AWS_REGION = "$Region"
 `$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "16384"
 `$env:MAX_THINKING_TOKENS = "1024"
 `$env:ANTHROPIC_MODEL = "global.anthropic.claude-opus-4-5-20251101-v1:0"
@@ -112,11 +148,13 @@ $ConfigBlock = @"
 `$env:DISABLE_TELEMETRY = "1"
 `$env:DISABLE_AUTOUPDATE = "1"
 `$env:DISABLE_BUG_COMMAND = "1"
+
 "@
+}
 
 # Add API key if using api-key auth
 if ($Auth -eq "api-key") {
-    $ConfigBlock += "`n`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`""
+    $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
 }
 
 $ConfigBlock += "`n# END: Claude Code Bedrock Configuration"

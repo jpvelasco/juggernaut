@@ -29,8 +29,11 @@ if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
 fi
 
 #───────────────────────────────────────────────────────────────────────────────
-# Configuration Registry (Associative Arrays)
+# Configuration Registry
 #───────────────────────────────────────────────────────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/bedrock-config.json"
 
 declare -A SHELL_CONFIGS=(
     [bash]="$HOME/.bashrc"
@@ -50,43 +53,99 @@ declare -A SHELL_DISPLAY_NAMES=(
     [fish]="Fish"
 )
 
-# Valid AWS regions that support Bedrock
-declare -a VALID_REGIONS=(
-    us-east-1 us-east-2 us-west-2
-    eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-central-2
-    ap-southeast-1 ap-southeast-2 ap-southeast-3 ap-northeast-1 ap-northeast-2 ap-south-1
-    sa-east-1 ca-central-1 me-south-1 me-central-1 il-central-1
-)
-
-# Bedrock configuration values
-declare -A BEDROCK_CONFIG=(
-    [CLAUDE_CODE_USE_BEDROCK]="1"
-    [CLAUDE_CODE_MAX_OUTPUT_TOKENS]="16384"
-    [MAX_THINKING_TOKENS]="1024"
-    [ANTHROPIC_MODEL]="global.anthropic.claude-opus-4-5-20251101-v1:0"
-    [ANTHROPIC_SMALL_FAST_MODEL]="global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    [DISABLE_ERROR_REPORTING]="1"
-    [DISABLE_TELEMETRY]="1"
-    [DISABLE_AUTOUPDATE]="1"
-    [DISABLE_BUG_COMMAND]="1"
-)
-
-# Order matters for config file output (base keys, API key added dynamically)
-declare -a CONFIG_KEY_ORDER=(
-    CLAUDE_CODE_USE_BEDROCK
-    AWS_REGION
-    CLAUDE_CODE_MAX_OUTPUT_TOKENS
-    MAX_THINKING_TOKENS
-    ANTHROPIC_MODEL
-    ANTHROPIC_SMALL_FAST_MODEL
-    DISABLE_ERROR_REPORTING
-    DISABLE_TELEMETRY
-    DISABLE_AUTOUPDATE
-    DISABLE_BUG_COMMAND
-)
-
 # Valid authentication modes
 declare -a VALID_AUTH_MODES=(iam api-key)
+
+#───────────────────────────────────────────────────────────────────────────────
+# JSON Config Loading (using jq or python fallback)
+#───────────────────────────────────────────────────────────────────────────────
+
+json_get() {
+    local file=$1
+    local query=$2
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -r "$query" "$file" 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c "import json,sys; data=json.load(open('$file')); print(eval('data$query'))" 2>/dev/null
+    elif command -v python >/dev/null 2>&1; then
+        python -c "import json,sys; data=json.load(open('$file')); print(eval('data$query'))" 2>/dev/null
+    else
+        echo ""
+    fi
+}
+
+json_get_keys() {
+    local file=$1
+    local query=$2
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -r "$query | keys[]" "$file" 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}.keys()))" 2>/dev/null
+    elif command -v python >/dev/null 2>&1; then
+        python -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}.keys()))" 2>/dev/null
+    else
+        echo ""
+    fi
+}
+
+json_get_array() {
+    local file=$1
+    local query=$2
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -r "$query[]" "$file" 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}))" 2>/dev/null
+    elif command -v python >/dev/null 2>&1; then
+        python -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}))" 2>/dev/null
+    else
+        echo ""
+    fi
+}
+
+load_config() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo "Warning: Config file not found: $CONFIG_FILE" >&2
+        echo "Using built-in defaults" >&2
+        return 1
+    fi
+
+    # Load environment variables
+    local keys
+    keys=$(json_get_keys "$CONFIG_FILE" '["environment"]')
+    if [[ -n "$keys" ]]; then
+        while IFS= read -r key; do
+            local value
+            value=$(json_get "$CONFIG_FILE" ".environment[\"$key\"]")
+            BEDROCK_CONFIG["$key"]="$value"
+            CONFIG_KEY_ORDER+=("$key")
+        done <<< "$keys"
+    fi
+
+    # Load valid regions
+    local regions
+    regions=$(json_get_array "$CONFIG_FILE" '["regions"]')
+    if [[ -n "$regions" ]]; then
+        VALID_REGIONS=()
+        while IFS= read -r region; do
+            VALID_REGIONS+=("$region")
+        done <<< "$regions"
+    fi
+
+    # Load defaults
+    DEFAULT_REGION=$(json_get "$CONFIG_FILE" '.defaults.region')
+    DEFAULT_AUTH=$(json_get "$CONFIG_FILE" '.defaults.auth_mode')
+}
+
+# Initialize config arrays
+declare -A BEDROCK_CONFIG
+declare -a CONFIG_KEY_ORDER=(AWS_REGION)  # AWS_REGION always first, rest loaded from JSON
+declare -a VALID_REGIONS
+
+# Load configuration from JSON
+load_config
 
 #───────────────────────────────────────────────────────────────────────────────
 # Detection Functions
@@ -339,9 +398,9 @@ EOF
 
 DRY_RUN=false
 FORCE=false
-AWS_REGION="us-west-2"
+AWS_REGION="${DEFAULT_REGION:-us-west-2}"
 SHELL_TYPE=""
-AUTH_MODE="iam"
+AUTH_MODE="${DEFAULT_AUTH:-iam}"
 BEDROCK_API_KEY=""
 
 parse_arguments() {

@@ -220,6 +220,7 @@ claude
 - `setup` - **Unified entry point** (auto-detects OS and shell)
 - `setup-claude-bedrock.sh` - Unix/macOS/Linux setup script
 - `setup-claude-bedrock.ps1` - Windows PowerShell setup script
+- `bedrock-config.json` - **Single source of truth** for environment variables and settings
 - `uninstall.sh` - Remove Bedrock configuration from shell profiles (Unix/macOS/Linux)
 - `uninstall.ps1` - Remove Bedrock configuration from PowerShell profile (Windows)
 - `apply-config.sh` - Apply configuration to current terminal session (Unix/macOS/Linux)
@@ -230,6 +231,60 @@ claude
 - `iam-policy.json` - Required IAM permissions template
 - `README.md` - Complete documentation
 - `QUICKSTART.md` - 5-minute setup guide
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         User runs ./setup                           │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     setup (unified entry point)                     │
+│                   Detects OS: macOS/Linux/Windows                   │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │
+                 ┌─────────────────┴─────────────────┐
+                 ▼                                   ▼
+┌───────────────────────────────┐   ┌───────────────────────────────┐
+│   setup-claude-bedrock.sh     │   │   setup-claude-bedrock.ps1    │
+│   (Unix/macOS/Linux/WSL)      │   │   (Windows PowerShell)        │
+└───────────────────────────────┘   └───────────────────────────────┘
+                 │                                   │
+                 └─────────────────┬─────────────────┘
+                                   ▼
+                 ┌─────────────────────────────────────┐
+                 │       bedrock-config.json           │
+                 │   (single source of truth for       │
+                 │    env vars, regions, defaults)     │
+                 └─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Shell Profile Modified                         │
+│  ~/.bashrc | ~/.zshrc | ~/.config/fish/config.fish | $PROFILE       │
+│                                                                     │
+│  # BEGIN: Claude Code Bedrock Configuration                         │
+│  export CLAUDE_CODE_USE_BEDROCK=1                                   │
+│  export AWS_REGION=us-west-2                                        │
+│  export ANTHROPIC_MODEL=global.anthropic.claude-opus-4-5-...        │
+│  ...                                                                │
+│  # END: Claude Code Bedrock Configuration                           │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Claude Code → Amazon Bedrock                     │
+│            Uses configured env vars for authentication              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Design Decisions:**
+- **Single config file**: `bedrock-config.json` is the source of truth for both Bash and PowerShell scripts
+- **Marker-based config**: Scripts use `# BEGIN/END` markers to safely update/remove configuration
+- **Automatic backups**: Profile files are backed up before modification (`.backup.YYYYMMDD_HHMMSS`)
+- **File locking**: Prevents concurrent modifications to profile files
 
 ## Configuration Details
 
