@@ -320,3 +320,38 @@ Your AWS user/role needs:
 See `iam-policy.json` for the complete policy.
 
 **Security Note:** The provided IAM policy uses wildcard regions (`arn:aws:bedrock:*:...`) for flexibility. For tighter security, you can restrict to specific regions by replacing `*` with your region (e.g., `arn:aws:bedrock:us-west-2:...`).
+
+## Security Considerations
+
+### API Key Authentication
+
+When using `--bedrock-key` on the command line, be aware that:
+
+1. **Process visibility**: Command-line arguments are visible to other users via `ps aux`:
+   ```
+   $ ps aux | grep setup
+   user  12345  ./setup --auth=api-key --bedrock-key=br-YOUR_KEY_IS_VISIBLE
+   ```
+
+2. **Shell history**: Commands are saved to `~/.bash_history` or `~/.zsh_history`
+
+3. **System logs**: Some systems log process execution with arguments
+
+**Recommendations:**
+
+- **Prefer IAM/SSO authentication** when possible (more secure, no secrets in commands)
+- **Clear shell history** after running setup with API key:
+  ```bash
+  history -d $(history 1 | awk '{print $1}')  # Delete last command (bash)
+  ```
+- **Use environment variable** instead of command line (slightly better):
+  ```bash
+  BEDROCK_KEY=br-xxx ./setup --auth=api-key --bedrock-key="$BEDROCK_KEY"
+  ```
+- **On shared systems**: Use IAM roles or run setup in a private session
+
+### Shell Profile Security
+
+- API keys stored in shell profiles (`~/.bashrc`, `~/.zshrc`) are readable by your user account
+- Ensure proper file permissions: `chmod 600 ~/.bashrc`
+- Backups are created before modifications (`.backup.YYYYMMDD_HHMMSS`)
