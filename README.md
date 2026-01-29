@@ -160,6 +160,38 @@ Use the provided setup script for your operating system:
 .\setup-claude-bedrock.ps1 -Region us-east-1  # Windows PowerShell
 ```
 
+### API Key Authentication (Alternative)
+
+Instead of IAM/SSO, you can use a Bedrock API key for simpler setup:
+
+**Interactive mode (recommended - secure):**
+```bash
+./setup --auth=api-key                     # Prompts securely for key
+.\setup-claude-bedrock.ps1 -Auth api-key   # Windows PowerShell
+```
+
+The script will prompt for your API key with hidden input (like a password):
+```
+Get your Bedrock API key from:
+  AWS Console → Amazon Bedrock → API keys
+
+Enter your Bedrock API key: ********
+```
+
+**Inline mode (for CI/CD and scripting):**
+```bash
+./setup --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
+.\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxxxxxxxxxxx
+```
+
+> **Note:** In non-interactive environments (CI/CD, piped input, cron), you must use `--bedrock-key` as the script cannot prompt for input.
+
+**API Key Lifetime (AWS Bedrock):**
+| Type | Duration | Use Case |
+|------|----------|----------|
+| Short-term | Up to 12 hours | Production (recommended) |
+| Long-term | Up to 30 days | Exploration/testing only |
+
 ### 4. Apply Configuration
 
 **Bash/Zsh:**
@@ -323,9 +355,22 @@ See `iam-policy.json` for the complete policy.
 
 ## Security Considerations
 
+### Authentication Methods (Most to Least Secure)
+
+| Method | Security | Use Case |
+|--------|----------|----------|
+| IAM/SSO | Most secure | Production - no secrets in commands |
+| API key (interactive) | Secure | When IAM not available - hidden prompt |
+| API key (inline) | Least secure | CI/CD only - visible in process list |
+
 ### API Key Authentication
 
-When using `--bedrock-key` on the command line, be aware that:
+**Interactive mode (`./setup --auth=api-key`)** is secure:
+- Key is entered with hidden input (not displayed while typing)
+- Not visible in `ps aux` or process listings
+- Not saved to shell history
+
+**Inline mode (`--bedrock-key=xxx`)** has risks - use only for CI/CD:
 
 1. **Process visibility**: Command-line arguments are visible to other users via `ps aux`:
    ```
@@ -339,14 +384,19 @@ When using `--bedrock-key` on the command line, be aware that:
 
 **Recommendations:**
 
-- **Prefer IAM/SSO authentication** when possible (more secure, no secrets in commands)
-- **Clear shell history** after running setup with API key:
+- **Prefer IAM/SSO authentication** when possible (most secure, no secrets anywhere)
+- **Use interactive mode** for API key auth: `./setup --auth=api-key`
+- **Clear shell history** if you used inline mode:
   ```bash
   history -d $(history 1 | awk '{print $1}')  # Delete last command (bash)
   ```
-- **Use environment variable** instead of command line (slightly better):
+- **For CI/CD**, use secrets management:
   ```bash
-  BEDROCK_KEY=br-xxx ./setup --auth=api-key --bedrock-key="$BEDROCK_KEY"
+  # GitHub Actions
+  ./setup --auth=api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
+
+  # Generic CI/CD (key from environment)
+  ./setup --auth=api-key --bedrock-key="$BEDROCK_KEY"
   ```
 - **On shared systems**: Use IAM roles or run setup in a private session
 
