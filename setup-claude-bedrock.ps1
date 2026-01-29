@@ -21,7 +21,7 @@ if ($Help) {
     Write-Host ""
     Write-Host "Options:"
     Write-Host "  -Auth <MODE>       Authentication: iam (default) or api-key"
-    Write-Host "  -BedrockKey <KEY>  Bedrock API key (required for -Auth api-key)"
+    Write-Host "  -BedrockKey <KEY>  Bedrock API key (optional; prompts if not provided)"
     Write-Host "  -Region <REGION>   AWS region (default: us-west-2)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
@@ -32,25 +32,34 @@ if ($Help) {
     Write-Host "             Requires: aws configure, SSO login, or IAM role"
     Write-Host ""
     Write-Host "  api-key    Use Bedrock API key (simpler setup)"
-    Write-Host "             Requires: -BedrockKey YOUR_KEY"
+    Write-Host "             Prompts securely if -BedrockKey not provided"
     Write-Host "             Get key from: AWS Console -> Bedrock -> API keys"
     Write-Host ""
     Write-Host "Examples:"
-    Write-Host "  .\setup-claude-bedrock.ps1"
-    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxxxxxxxxxxx"
+    Write-Host "  .\setup-claude-bedrock.ps1                              # IAM/SSO (default)"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key                # Prompts for key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxx  # Inline key"
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"
     exit 0
 }
 
-# Validate API key is provided when using api-key auth
+# Prompt for API key if using api-key auth and key not provided
 if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
-    Write-Host "Error: -BedrockKey is required when using -Auth api-key" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Get your Bedrock API key from:"
-    Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
-    Write-Host ""
-    Write-Host "Usage: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey YOUR_KEY"
-    exit 1
+    if ($DryRun) {
+        Write-Host "[DRY RUN] Would prompt for Bedrock API key" -ForegroundColor Magenta
+        $BedrockKey = "dry-run-placeholder"
+    } else {
+        Write-Host "Get your Bedrock API key from:"
+        Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
+        Write-Host ""
+        $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
+        $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey))
+
+        if ([string]::IsNullOrEmpty($BedrockKey)) {
+            Write-Host "Error: API key cannot be empty" -ForegroundColor Red
+            exit 1
+        }
+    }
 }
 
 # Valid AWS regions that support Bedrock (as of 2025)

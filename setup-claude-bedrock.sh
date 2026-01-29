@@ -302,7 +302,7 @@ Arguments:
 
 Options:
   --auth=MODE            Authentication mode: iam (default) or api-key
-  --bedrock-key=KEY      Bedrock API key (required when --auth=api-key)
+  --bedrock-key=KEY      Bedrock API key (optional; prompts if not provided)
   --region=REGION        AWS region (default: us-west-2)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
@@ -313,7 +313,7 @@ Authentication Modes:
              Requires: aws configure, SSO login, or IAM role
 
   api-key    Use Bedrock API key (simpler setup)
-             Requires: --bedrock-key=YOUR_KEY
+             Prompts securely if --bedrock-key not provided
              Get key from: AWS Console → Bedrock → API keys
 
 Examples:
@@ -321,9 +321,11 @@ Examples:
   ./setup-claude-bedrock.sh
   ./setup-claude-bedrock.sh zsh --region=us-east-1
 
-  # API key authentication
+  # API key authentication (interactive - recommended, more secure)
+  ./setup-claude-bedrock.sh --auth=api-key
+
+  # API key authentication (inline - for scripting/CI)
   ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
-  ./setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
 
   # Preview changes
   ./setup-claude-bedrock.sh --dry-run
@@ -398,15 +400,23 @@ validate_inputs() {
         exit 1
     fi
 
-    # Validate API key is provided when using api-key auth
+    # Prompt for API key if using api-key auth and key not provided
     if [[ "$AUTH_MODE" == "api-key" && -z "$BEDROCK_API_KEY" ]]; then
-        echo "Error: --bedrock-key is required when using --auth=api-key"
-        echo ""
-        echo "Get your Bedrock API key from:"
-        echo "  AWS Console → Amazon Bedrock → API keys"
-        echo ""
-        echo "Usage: ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=YOUR_KEY"
-        exit 1
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "[DRY RUN] Would prompt for Bedrock API key"
+            BEDROCK_API_KEY="dry-run-placeholder"
+        else
+            echo "Get your Bedrock API key from:"
+            echo "  AWS Console → Amazon Bedrock → API keys"
+            echo ""
+            read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
+            echo ""  # newline after hidden input
+
+            if [[ -z "$BEDROCK_API_KEY" ]]; then
+                echo "Error: API key cannot be empty"
+                exit 1
+            fi
+        fi
     fi
 
     # Validate region
