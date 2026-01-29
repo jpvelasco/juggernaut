@@ -405,6 +405,12 @@ validate_inputs() {
         if [[ "$DRY_RUN" == true ]]; then
             echo "[DRY RUN] Would prompt for Bedrock API key"
             BEDROCK_API_KEY="dry-run-placeholder"
+        elif [[ ! -t 0 ]]; then
+            # Non-interactive mode (stdin is not a terminal)
+            echo "Error: --bedrock-key is required in non-interactive mode" >&2
+            echo "" >&2
+            echo "Usage: ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=YOUR_KEY" >&2
+            exit 1
         else
             echo "Get your Bedrock API key from:"
             echo "  AWS Console → Amazon Bedrock → API keys"

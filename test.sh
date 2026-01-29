@@ -139,6 +139,7 @@ test_api_key_auth() {
     run_test "--auth=api-key with key works" "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123456789 --dry-run"
     run_test "api-key config includes token" "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run | grep -q AWS_BEARER_TOKEN_BEDROCK"
     run_test "iam mode skips api key" "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run | grep -q AWS_BEARER_TOKEN_BEDROCK"
+    run_test "non-interactive requires key" "echo '' | $SCRIPT_DIR/setup-claude-bedrock.sh --auth=api-key 2>&1 | grep -q 'required in non-interactive'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────

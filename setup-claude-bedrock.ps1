@@ -48,6 +48,12 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
     if ($DryRun) {
         Write-Host "[DRY RUN] Would prompt for Bedrock API key" -ForegroundColor Magenta
         $BedrockKey = "dry-run-placeholder"
+    } elseif (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+        # Non-interactive mode (CI/CD, piped input, etc.)
+        Write-Host "Error: -BedrockKey is required in non-interactive mode" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Usage: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey YOUR_KEY"
+        exit 1
     } else {
         Write-Host "Get your Bedrock API key from:"
         Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
