@@ -4,64 +4,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Juggernaut is a one-command setup utility that configures Claude Code to use Amazon Bedrock instead of the direct Anthropic API. It supports macOS, Linux, WSL, and Windows with auto-detection of OS and shell type.
+Juggernaut is a cross-platform setup utility that configures Claude Code to use Amazon Bedrock instead of the direct Anthropic API. Supports macOS, Linux, WSL, and Windows with auto-detection of OS and shell type.
 
 ## Commands
 
 ### Testing
 ```bash
-bash ./test.sh                    # Run full test suite
+bash ./test.sh                    # Run full test suite (33 tests)
 ```
 
-Tests include: syntax validation, help flags, dry-run mode, region validation, API key auth, JSON validity.
-
-### Validation
+### Dry-Run Mode
 ```bash
-./validate-setup.sh               # Unix/macOS/Linux
-.\validate-setup.ps1              # Windows PowerShell
-```
-
-### Dry-Run Mode (preview changes without applying)
-```bash
-./setup --dry-run                           # Auto-detect
-./setup-claude-bedrock.sh --dry-run         # Unix explicit
+./setup --dry-run                           # Unix (auto-detect shell)
+./setup-claude-bedrock.sh bash --dry-run    # Unix (specific shell)
 .\setup-claude-bedrock.ps1 -DryRun          # PowerShell
 ```
 
+### Validation
+```bash
+./validate-setup.sh               # Unix - checks env vars, AWS creds, Bedrock access
+.\validate-setup.ps1              # Windows PowerShell
+```
+
 ### Linting
-ShellCheck is configured via `.shellcheckrc`. Disabled rules: SC1091 (non-existent paths), SC2016 (single-quoted expressions).
+ShellCheck via `.shellcheckrc`. Disabled: SC1091, SC2016.
 
 ## Architecture
 
-**Entry Point Flow:**
-1. `./setup` - Unified entry point that auto-detects OS/shell
-2. Delegates to `setup-claude-bedrock.sh` (Unix) or `setup-claude-bedrock.ps1` (Windows)
-3. Scripts modify shell profile files with configuration blocks
+```
+./setup → detects OS → setup-claude-bedrock.sh (Unix) or .ps1 (Windows)
+                              ↓
+                    bedrock-config.json (single source of truth)
+                              ↓
+                    Shell profile modified with markers
+```
 
-**Shell Profile Targets:**
-- Bash: `~/.bashrc`
-- Zsh: `~/.zshrc`
-- Fish: `~/.config/fish/config.fish`
-- PowerShell: `$PROFILE`
+**Single Source of Truth:** `bedrock-config.json` contains all environment variables, valid regions, and defaults. Both Bash and PowerShell scripts read from this file (Bash uses jq/python fallback, PowerShell uses ConvertFrom-Json).
 
-**Authentication Modes:**
-- IAM/SSO (default): Uses AWS credentials from `~/.aws/config`
-- API Key: Uses `AWS_BEARER_TOKEN_BEDROCK` environment variable
+**Configuration Markers:** Scripts use `# BEGIN: Claude Code Bedrock Configuration` and `# END: Claude Code Bedrock Configuration` to identify managed blocks for updates/uninstallation.
 
-**Configuration Markers:**
-Scripts use `# >>> claude-bedrock-config >>>` and `# <<< claude-bedrock-config <<<` markers to identify managed configuration blocks for updates and uninstallation.
+**Safety Features:**
+- Automatic backup before modification (`.backup.YYYYMMDD_HHMMSS`)
+- File locking prevents concurrent modifications (flock on Linux, mkdir fallback on macOS)
+- Non-interactive mode detection (requires `--bedrock-key` in CI/CD)
 
-## Key Environment Variables Set
+## Authentication Modes
 
-The setup configures Claude Code for Bedrock with:
-- `CLAUDE_CODE_USE_BEDROCK=1`
-- `ANTHROPIC_MODEL=global.anthropic.claude-opus-4-5-20251101-v1:0` (Global CRIS)
-- `ANTHROPIC_SMALL_FAST_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0`
-- `CLAUDE_CODE_MAX_OUTPUT_TOKENS=16384` (Bedrock limit)
-- Telemetry/autoupdate disabled for enterprise environments
+| Mode | Flag | Notes |
+|------|------|-------|
+| IAM/SSO | `--auth=iam` (default) | Uses AWS credentials |
+| API Key | `--auth=api-key` | Prompts securely; use `--bedrock-key` for CI/CD |
+
+## Key Files
+
+- `bedrock-config.json` - Environment variables, regions, defaults (edit this to change models)
+- `setup-claude-bedrock.sh` - Main Unix implementation (~550 lines)
+- `setup-claude-bedrock.ps1` - PowerShell implementation (~220 lines)
+- `iam-policy.json` - Required AWS IAM permissions
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/test.yml`) runs matrix tests across:
-- Ubuntu + macOS: Bash, Zsh, Fish shells
+GitHub Actions (`.github/workflows/test.yml`):
+- Ubuntu + macOS: Bash, Zsh, Fish
 - Windows: PowerShell, Git Bash
