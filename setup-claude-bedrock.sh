@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 
 # Claude Code - Amazon Bedrock Setup Script
-# Usage: ./setup-claude-bedrock.sh [bash|zsh|fish] [--dry-run] [--region=REGION]
+# Usage: ./setup-claude-bedrock.sh [bash|zsh|fish] [OPTIONS]
+#
+# Authentication modes:
+#   --auth=iam       Use IAM/SSO credentials (default)
+#   --auth=api-key   Use Bedrock API key (simpler, no AWS creds needed)
 
 set -e
 
@@ -67,7 +71,7 @@ declare -A BEDROCK_CONFIG=(
     [DISABLE_BUG_COMMAND]="1"
 )
 
-# Order matters for config file output
+# Order matters for config file output (base keys, API key added dynamically)
 declare -a CONFIG_KEY_ORDER=(
     CLAUDE_CODE_USE_BEDROCK
     AWS_REGION
@@ -80,6 +84,9 @@ declare -a CONFIG_KEY_ORDER=(
     DISABLE_AUTOUPDATE
     DISABLE_BUG_COMMAND
 )
+
+# Valid authentication modes
+declare -a VALID_AUTH_MODES=(iam api-key)
 
 #───────────────────────────────────────────────────────────────────────────────
 # Detection Functions
@@ -123,6 +130,15 @@ is_valid_region() {
     return 1
 }
 
+is_valid_auth_mode() {
+    local mode=$1
+    local m
+    for m in "${VALID_AUTH_MODES[@]}"; do
+        [[ "$m" == "$mode" ]] && return 0
+    done
+    return 1
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Config Generation (Template Pattern)
 #───────────────────────────────────────────────────────────────────────────────
@@ -130,10 +146,13 @@ is_valid_region() {
 generate_config_block() {
     local shell=$1
     local region=$2
+    local auth_mode=$3
+    local api_key=$4
     local syntax="${SHELL_EXPORT_SYNTAX[$shell]}"
     local config=""
 
     config+=$'\n'"# BEGIN: Claude Code Bedrock Configuration"$'\n'
+    config+="# Auth mode: $auth_mode"$'\n'
 
     for key in "${CONFIG_KEY_ORDER[@]}"; do
         local value
@@ -150,6 +169,15 @@ generate_config_block() {
         fi
     done
 
+    # Add API key if using api-key auth mode
+    if [[ "$auth_mode" == "api-key" && -n "$api_key" ]]; then
+        if [[ "$shell" == "fish" ]]; then
+            config+="$syntax AWS_BEARER_TOKEN_BEDROCK $api_key"$'\n'
+        else
+            config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$api_key"$'\n'
+        fi
+    fi
+
     config+="# END: Claude Code Bedrock Configuration"$'\n'
 
     echo "$config"
@@ -164,6 +192,39 @@ sed_inplace() {
         sed -i '' "$@"
     else
         sed -i "$@"
+    fi
+}
+
+backup_config_file() {
+    local config_file=$1
+    local backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+
+    if [[ -f "$config_file" ]]; then
+        if cp "$config_file" "$backup_file" 2>/dev/null; then
+            echo "Backup created: $backup_file"
+            return 0
+        else
+            echo "Warning: Could not create backup at $backup_file" >&2
+            return 1
+        fi
+    fi
+    return 0
+}
+
+write_config_to_file() {
+    local config_file=$1
+    local config_block=$2
+
+    if ! echo "$config_block" >> "$config_file" 2>/dev/null; then
+        echo "" >&2
+        echo "ERROR: Cannot write to $config_file" >&2
+        echo "Possible causes:" >&2
+        echo "  - File or directory is read-only" >&2
+        echo "  - Insufficient permissions" >&2
+        echo "  - Disk is full" >&2
+        echo "" >&2
+        echo "Try running with appropriate permissions or check disk space." >&2
+        exit 1
     fi
 }
 
@@ -184,20 +245,36 @@ Claude Code - Amazon Bedrock Setup Script
 Usage: ./setup-claude-bedrock.sh [SHELL] [OPTIONS]
 
 Arguments:
-  SHELL              Target shell: bash, zsh, or fish (auto-detected if omitted)
+  SHELL                  Target shell: bash, zsh, or fish (auto-detected if omitted)
 
 Options:
-  --dry-run          Preview changes without modifying files
-  --force, -f        Skip confirmation prompts
-  --region=REGION    AWS region (default: us-west-2)
-  --help, -h         Show this help message
+  --auth=MODE            Authentication mode: iam (default) or api-key
+  --bedrock-key=KEY      Bedrock API key (required when --auth=api-key)
+  --region=REGION        AWS region (default: us-west-2)
+  --dry-run              Preview changes without modifying files
+  --force, -f            Skip confirmation prompts
+  --help, -h             Show this help message
+
+Authentication Modes:
+  iam        Use AWS IAM/SSO credentials (default)
+             Requires: aws configure, SSO login, or IAM role
+
+  api-key    Use Bedrock API key (simpler setup)
+             Requires: --bedrock-key=YOUR_KEY
+             Get key from: AWS Console → Bedrock → API keys
 
 Examples:
-  ./setup-claude-bedrock.sh                    # Auto-detect shell
-  ./setup-claude-bedrock.sh zsh                # Configure zsh
-  ./setup-claude-bedrock.sh --dry-run          # Preview changes
-  ./setup-claude-bedrock.sh --force            # No prompts
+  # IAM/SSO authentication (default)
+  ./setup-claude-bedrock.sh
   ./setup-claude-bedrock.sh zsh --region=us-east-1
+
+  # API key authentication
+  ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
+  ./setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
+
+  # Preview changes
+  ./setup-claude-bedrock.sh --dry-run
+  ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxx --dry-run
 EOF
 }
 
@@ -209,6 +286,8 @@ DRY_RUN=false
 FORCE=false
 AWS_REGION="us-west-2"
 SHELL_TYPE=""
+AUTH_MODE="iam"
+BEDROCK_API_KEY=""
 
 parse_arguments() {
     for arg in "$@"; do
@@ -221,6 +300,12 @@ parse_arguments() {
                 ;;
             --region=*)
                 AWS_REGION="${arg#--region=}"
+                ;;
+            --auth=*)
+                AUTH_MODE="${arg#--auth=}"
+                ;;
+            --bedrock-key=*)
+                BEDROCK_API_KEY="${arg#--bedrock-key=}"
                 ;;
             --help|-h)
                 show_help
@@ -253,12 +338,30 @@ validate_inputs() {
         exit 1
     fi
 
+    # Validate auth mode
+    if ! is_valid_auth_mode "$AUTH_MODE"; then
+        echo "Invalid auth mode: $AUTH_MODE"
+        echo "Valid modes: iam, api-key"
+        exit 1
+    fi
+
+    # Validate API key is provided when using api-key auth
+    if [[ "$AUTH_MODE" == "api-key" && -z "$BEDROCK_API_KEY" ]]; then
+        echo "Error: --bedrock-key is required when using --auth=api-key"
+        echo ""
+        echo "Get your Bedrock API key from:"
+        echo "  AWS Console → Amazon Bedrock → API keys"
+        echo ""
+        echo "Usage: ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=YOUR_KEY"
+        exit 1
+    fi
+
     # Validate region
     if ! is_valid_region "$AWS_REGION"; then
         echo "Warning: '$AWS_REGION' may not be a valid Bedrock region"
         echo "Common Bedrock regions: us-east-1, us-west-2, eu-west-1, ap-northeast-1"
 
-        if [[ "$DRY_RUN" == false ]]; then
+        if [[ "$DRY_RUN" == false && "$FORCE" == false ]]; then
             read -p "Continue anyway? (y/n) " -n 1 -r
             echo
             [[ ! $REPLY =~ ^[Yy]$ ]] && { echo "Setup cancelled"; exit 1; }
@@ -289,6 +392,12 @@ setup_shell() {
     echo "Detected: $display_name on $os"
     echo "Target:   $config_file"
     echo "Region:   $AWS_REGION"
+    echo "Auth:     $AUTH_MODE"
+    if [[ "$AUTH_MODE" == "api-key" ]]; then
+        # Show masked key for security
+        local masked_key="${BEDROCK_API_KEY:0:8}...${BEDROCK_API_KEY: -4}"
+        echo "API Key:  $masked_key"
+    fi
     echo ""
 
     # Confirm with user (unless dry-run or force)
@@ -296,6 +405,13 @@ setup_shell() {
         read -p "Configure $display_name for Bedrock? (y/n) " -n 1 -r
         echo
         [[ ! $REPLY =~ ^[Yy]$ ]] && { echo "Setup cancelled"; exit 0; }
+    fi
+
+    # Backup existing config file before any modifications
+    if [[ -f "$config_file" && "$DRY_RUN" == false ]]; then
+        backup_config_file "$config_file"
+    elif [[ -f "$config_file" && "$DRY_RUN" == true ]]; then
+        echo "[DRY RUN] Would create backup of $config_file"
     fi
 
     # Check for existing configuration
@@ -319,7 +435,7 @@ setup_shell() {
 
     # Generate and apply configuration
     local config_block
-    config_block=$(generate_config_block "$shell" "$AWS_REGION")
+    config_block=$(generate_config_block "$shell" "$AWS_REGION" "$AUTH_MODE" "$BEDROCK_API_KEY")
 
     if [[ "$DRY_RUN" == true ]]; then
         echo ""
@@ -330,16 +446,17 @@ setup_shell() {
         echo ""
         echo "[DRY RUN] No changes made"
     else
-        echo "$config_block" >> "$config_file"
+        write_config_to_file "$config_file" "$config_block"
         echo "Configuration added to $config_file"
         echo ""
-        show_next_steps "$shell" "$config_file"
+        show_next_steps "$shell" "$config_file" "$AUTH_MODE"
     fi
 }
 
 show_next_steps() {
     local shell=$1
     local config_file=$2
+    local auth_mode=$3
 
     echo "Next steps:"
     echo ""
@@ -350,11 +467,19 @@ show_next_steps() {
         echo "   source $config_file"
     fi
     echo ""
-    echo "2. Verify AWS credentials:"
-    echo "   aws sts get-caller-identity"
-    echo ""
-    echo "3. Launch Claude Code:"
-    echo "   claude"
+
+    if [[ "$auth_mode" == "api-key" ]]; then
+        echo "2. Launch Claude Code:"
+        echo "   claude"
+        echo ""
+        echo "   (No AWS credential setup needed - using API key)"
+    else
+        echo "2. Verify AWS credentials:"
+        echo "   aws sts get-caller-identity"
+        echo ""
+        echo "3. Launch Claude Code:"
+        echo "   claude"
+    fi
     echo ""
     echo "Setup complete!"
 }
@@ -372,7 +497,11 @@ main() {
         echo ""
     fi
 
-    echo "Setting up Claude Code with Amazon Bedrock..."
+    if [[ "$AUTH_MODE" == "api-key" ]]; then
+        echo "Setting up Claude Code with Amazon Bedrock (API key auth)..."
+    else
+        echo "Setting up Claude Code with Amazon Bedrock (IAM/SSO auth)..."
+    fi
     echo ""
 
     setup_shell "$SHELL_TYPE"

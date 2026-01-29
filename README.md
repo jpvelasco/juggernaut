@@ -127,6 +127,12 @@ Use the provided setup script for your operating system:
 ```
 
 **For Windows (PowerShell):**
+
+> **Note:** If you get an execution policy error, run this first:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
 ```powershell
 .\setup-claude-bedrock.ps1
 ```
@@ -261,6 +267,15 @@ aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 3. **Region errors**
    - Verify model availability in your region
    - Try `us-east-1` or `us-west-2`
+
+4. **PowerShell execution policy error** (Windows)
+   - Run: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+   - Then retry the setup script
+
+5. **Permission denied writing to profile**
+   - Check file permissions on your shell profile
+   - On Windows, try running PowerShell as Administrator
+   - A backup is automatically created before modifications
 
 ## Uninstalling
 
