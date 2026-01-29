@@ -26,6 +26,12 @@ jobs:
           echo "/opt/homebrew/bin" >> $GITHUB_PATH
           echo "/usr/local/bin" >> $GITHUB_PATH
 
+      - name: Install Fish shell (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fish
+
       - name: Show environment
         run: |
           echo "OS: $OSTYPE"
@@ -44,6 +50,15 @@ jobs:
 
       - name: Test dry-run (fish)
         run: bash ./setup-claude-bedrock.sh fish --dry-run
+
+      - name: Test fish config syntax (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          # Generate fish config and validate syntax
+          bash ./setup-claude-bedrock.sh fish --dry-run | grep -A 100 "Would append" | grep "set -gx" > /tmp/fish_config.fish || true
+          if [[ -s /tmp/fish_config.fish ]]; then
+            fish -c "source /tmp/fish_config.fish && echo 'Fish syntax OK'"
+          fi
 
       - name: Test unified entry point
         run: bash ./setup --dry-run
