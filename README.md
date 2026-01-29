@@ -32,6 +32,30 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Cost Control**: Route through your AWS account for billing/governance
 - **Enterprise Ready**: Works with AWS SSO, IAM roles, and corporate identity providers
 
+## Why Bedrock?
+
+| Feature | Direct Anthropic API | Amazon Bedrock |
+|---------|---------------------|----------------|
+| **Billing** | Separate Anthropic account | Consolidated AWS billing |
+| **Authentication** | API keys only | IAM, SSO, roles, federation |
+| **Data Residency** | Anthropic infrastructure | Your chosen AWS region |
+| **Compliance** | Anthropic's certifications | AWS compliance (SOC, HIPAA, FedRAMP, etc.) |
+| **Network** | Public internet | VPC endpoints, PrivateLink |
+| **Governance** | Limited controls | IAM policies, CloudTrail, quotas |
+| **Cost Tracking** | Anthropic console | AWS Cost Explorer, tags, budgets |
+
+**Choose Bedrock if you:**
+- Need consolidated billing through AWS
+- Require enterprise SSO/identity federation
+- Have data residency or compliance requirements
+- Want to use existing AWS governance (IAM, CloudTrail)
+- Need private network connectivity (VPC)
+
+**Stick with direct API if you:**
+- Want the simplest setup (just an API key)
+- Don't have AWS infrastructure
+- Are exploring/prototyping individually
+
 ## Prerequisites
 
 1. AWS account with Bedrock access enabled
