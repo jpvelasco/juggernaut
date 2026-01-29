@@ -58,8 +58,8 @@ ShellCheck via `.shellcheckrc`. Disabled: SC1091, SC2016.
 ## Key Files
 
 - `bedrock-config.json` - Environment variables, regions, defaults (edit this to change models)
-- `setup-claude-bedrock.sh` - Main Unix implementation (~550 lines)
-- `setup-claude-bedrock.ps1` - PowerShell implementation (~220 lines)
+- `setup-claude-bedrock.sh` - Main Unix implementation (~640 lines)
+- `setup-claude-bedrock.ps1` - PowerShell implementation (~280 lines)
 - `iam-policy.json` - Required AWS IAM permissions
 
 ## CI/CD
