@@ -56,6 +56,9 @@ declare -A EXPECTED_ENV_VARS=(
 # Variables that just need to be set (any value)
 declare -a REQUIRED_ENV_VARS=(AWS_REGION)
 
+# Optional API key variable (for api-key auth mode)
+API_KEY_VAR="AWS_BEARER_TOKEN_BEDROCK"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -127,6 +130,25 @@ check_env_var_exists() {
     fi
 }
 
+detect_auth_mode() {
+    if [[ -n "${!API_KEY_VAR}" ]]; then
+        echo "api-key"
+    else
+        echo "iam"
+    fi
+}
+
+check_api_key() {
+    local key="${!API_KEY_VAR}"
+    if [[ -n "$key" ]]; then
+        # Mask the key for display
+        local masked="${key:0:8}...${key: -4}"
+        echo -e "${GREEN}PASS${NC} $API_KEY_VAR is set ($masked)"
+    else
+        echo -e "${YELLOW}INFO${NC} $API_KEY_VAR not set (using IAM/SSO auth)"
+    fi
+}
+
 check_aws_credentials() {
     if aws sts get-caller-identity >/dev/null 2>&1; then
         local account_id
@@ -179,10 +201,15 @@ main() {
     echo "Validating Claude Code Bedrock Configuration..."
     echo ""
 
+    # Detect auth mode
+    local auth_mode
+    auth_mode=$(detect_auth_mode)
+
     # System Info
     echo -e "${CYAN}System${NC}"
     echo "  OS:    $(detect_os)"
     echo "  Shell: $(detect_shell)"
+    echo "  Auth:  $auth_mode"
     echo ""
 
     # Environment Variables
@@ -193,17 +220,25 @@ main() {
     for var in "${REQUIRED_ENV_VARS[@]}"; do
         check_env_var_exists "$var"
     done
+    check_api_key
     echo ""
 
-    # AWS Credentials
-    echo -e "${CYAN}AWS Credentials${NC}"
-    check_aws_credentials
-    echo ""
+    # Authentication check (depends on auth mode)
+    if [[ "$auth_mode" == "api-key" ]]; then
+        echo -e "${CYAN}Authentication (API Key)${NC}"
+        echo -e "${GREEN}PASS${NC} Using Bedrock API key authentication"
+        echo "     (Skipping IAM credential check - not needed with API key)"
+        echo ""
+    else
+        echo -e "${CYAN}AWS Credentials (IAM/SSO)${NC}"
+        check_aws_credentials
+        echo ""
 
-    # Bedrock Access
-    echo -e "${CYAN}Bedrock Access${NC}"
-    check_bedrock_access
-    echo ""
+        # Bedrock Access (only test with IAM - API key can't be tested without making a call)
+        echo -e "${CYAN}Bedrock Access${NC}"
+        check_bedrock_access
+        echo ""
+    fi
 
     # Claude Code
     echo -e "${CYAN}Claude Code${NC}"

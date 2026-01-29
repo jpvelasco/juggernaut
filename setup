@@ -2,7 +2,7 @@
 
 # Juggernaut - Unified Setup Entry Point
 # Automatically detects OS and shell, then runs the appropriate setup
-# Usage: ./setup [--dry-run] [--region=REGION] [--help]
+# Usage: ./setup [--auth=iam|api-key] [--bedrock-key=KEY] [--region=REGION] [--dry-run]
 
 set -e
 
@@ -51,10 +51,17 @@ for arg in "$@"; do
         echo "to use Amazon Bedrock with Global CRIS inference profiles."
         echo ""
         echo "Options:"
-        echo "  --dry-run        Preview changes without modifying files"
-        echo "  --force, -f      Skip confirmation prompts"
-        echo "  --region=REGION  AWS region (default: us-west-2)"
-        echo "  --help, -h       Show this help message"
+        echo "  --auth=MODE          Authentication: iam (default) or api-key"
+        echo "  --bedrock-key=KEY    Bedrock API key (required for --auth=api-key)"
+        echo "  --region=REGION      AWS region (default: us-west-2)"
+        echo "  --dry-run            Preview changes without modifying files"
+        echo "  --force, -f          Skip confirmation prompts"
+        echo "  --help, -h           Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  ./setup                                    # IAM/SSO auth (default)"
+        echo "  ./setup --auth=api-key --bedrock-key=br-xxx   # API key auth"
+        echo "  ./setup --dry-run                          # Preview changes"
         echo ""
         echo "Supported platforms:"
         echo "  - macOS (bash, zsh, fish)"

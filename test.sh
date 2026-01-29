@@ -133,6 +133,14 @@ test_unified_entry_point() {
     run_test "setup detects shell types" "$SCRIPT_DIR/setup --help | grep -q 'bash, zsh, fish'"
 }
 
+test_api_key_auth() {
+    section "API Key Authentication"
+    run_test "--auth=api-key requires key" "! $SCRIPT_DIR/setup-claude-bedrock.sh --auth=api-key --dry-run 2>&1"
+    run_test "--auth=api-key with key works" "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123456789 --dry-run"
+    run_test "api-key config includes token" "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run | grep -q AWS_BEARER_TOKEN_BEDROCK"
+    run_test "iam mode skips api key" "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run | grep -q AWS_BEARER_TOKEN_BEDROCK"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -146,6 +154,7 @@ main() {
     test_help_flags
     test_dry_run
     test_region_flag
+    test_api_key_auth
     test_required_files
     test_json_validity
     test_unified_entry_point
