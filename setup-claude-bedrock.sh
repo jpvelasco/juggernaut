@@ -219,13 +219,14 @@ generate_config_block() {
 
     # Unset conflicting auth variables to prevent credential conflicts
     if [[ "$auth_mode" == "api-key" ]]; then
-        # Using API key - unset AWS STS credentials that might interfere
+        # Using API key - unset AWS credentials/profile that might cause confusion
         if [[ "$shell" == "fish" ]]; then
             config+="set -e AWS_ACCESS_KEY_ID 2>/dev/null"$'\n'
             config+="set -e AWS_SECRET_ACCESS_KEY 2>/dev/null"$'\n'
             config+="set -e AWS_SESSION_TOKEN 2>/dev/null"$'\n'
+            config+="set -e AWS_PROFILE 2>/dev/null"$'\n'
         else
-            config+="unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN 2>/dev/null || true"$'\n'
+            config+="unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE 2>/dev/null || true"$'\n'
         fi
     else
         # Using IAM/SSO - unset API key that might interfere

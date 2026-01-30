@@ -138,6 +138,62 @@ detect_auth_mode() {
     fi
 }
 
+check_credential_conflicts() {
+    local has_api_key=false
+    local has_iam_env=false
+    local has_aws_profile=false
+    local has_aws_creds_file=false
+    local conflicts=()
+
+    # Check what credentials are present
+    [[ -n "${!API_KEY_VAR}" ]] && has_api_key=true
+    [[ -n "$AWS_ACCESS_KEY_ID" || -n "$AWS_SECRET_ACCESS_KEY" ]] && has_iam_env=true
+    [[ -n "$AWS_PROFILE" ]] && has_aws_profile=true
+    [[ -f "$HOME/.aws/credentials" ]] && has_aws_creds_file=true
+
+    echo -e "${CYAN}Credential Conflict Check${NC}"
+
+    # Check for conflicts when using API key
+    if [[ "$has_api_key" == true ]]; then
+        if [[ "$has_iam_env" == true ]]; then
+            conflicts+=("AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY")
+        fi
+        if [[ "$has_aws_profile" == true ]]; then
+            conflicts+=("AWS_PROFILE=$AWS_PROFILE")
+        fi
+        if [[ "$has_aws_creds_file" == true ]]; then
+            conflicts+=("~/.aws/credentials file exists")
+        fi
+
+        if [[ ${#conflicts[@]} -gt 0 ]]; then
+            echo -e "${YELLOW}WARN${NC} API key mode active, but other credentials also present:"
+            for conflict in "${conflicts[@]}"; do
+                echo "     - $conflict"
+            done
+            echo "     API key takes precedence; other credentials are ignored."
+            echo "     Consider removing unused credentials to avoid confusion."
+            ((WARNINGS++))
+        else
+            echo -e "${GREEN}PASS${NC} No conflicting credentials detected"
+        fi
+    else
+        # IAM mode - check for credentials file
+        if [[ "$has_aws_creds_file" == true ]]; then
+            echo -e "${GREEN}INFO${NC} ~/.aws/credentials file found (may be used for auth)"
+        fi
+        if [[ "$has_aws_profile" == true ]]; then
+            echo -e "${GREEN}INFO${NC} AWS_PROFILE=$AWS_PROFILE is set"
+        fi
+        if [[ "$has_iam_env" == false && "$has_aws_profile" == false && "$has_aws_creds_file" == false ]]; then
+            echo -e "${YELLOW}WARN${NC} No AWS credentials detected in environment or files"
+            ((WARNINGS++))
+        else
+            echo -e "${GREEN}PASS${NC} IAM credentials configuration looks reasonable"
+        fi
+    fi
+    echo ""
+}
+
 check_api_key() {
     local key="${!API_KEY_VAR}"
     if [[ -n "$key" ]]; then
@@ -258,6 +314,9 @@ main() {
     echo "  Shell: $(detect_shell)"
     echo "  Auth:  $auth_mode"
     echo ""
+
+    # Credential conflict check
+    check_credential_conflicts
 
     # Environment Variables
     echo -e "${CYAN}Environment Variables${NC}"
