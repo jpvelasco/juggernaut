@@ -293,9 +293,9 @@ test_shell_specific_syntax() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q 'set -gx'"
 
     # Test: Fish config does NOT use export in the config block itself
-    # We extract just the config block and check it doesn't have 'export'
+    # We extract just the FIRST config block (for fish) - script may also configure current shell
     run_test "fish config avoids 'export'" \
-        "! $SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | sed -n '/BEGIN.*Configuration/,/END.*Configuration/p' | grep -q '^export '"
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | sed -n '/BEGIN.*Configuration/,/END.*Configuration/{p;/END/q}' | grep -q '^export '"
 
     # Test: Fish keychain syntax (when available)
     if command -v secret-tool >/dev/null 2>&1 || command -v security >/dev/null 2>&1; then
