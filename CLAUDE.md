@@ -33,8 +33,17 @@ bash ./test.sh                    # Run full test suite (requires Bash 4.0+)
 .\uninstall.ps1                   # PowerShell
 ```
 
+### Apply Config (current session only)
+```bash
+source ./apply-config.sh              # Unix - apply to current terminal without modifying profile
+. .\apply-config.ps1                  # PowerShell
+```
+
 ### Linting
-ShellCheck via `.shellcheckrc`. Disabled: SC1091, SC2016.
+```bash
+shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh
+```
+ShellCheck configured via `.shellcheckrc`. Disabled: SC1091 (source paths), SC2016 (single-quote expressions).
 
 ## Architecture
 
@@ -54,6 +63,8 @@ ShellCheck via `.shellcheckrc`. Disabled: SC1091, SC2016.
 - Automatic backup before modification (`.backup.YYYYMMDD_HHMMSS`)
 - File locking prevents concurrent modifications (flock on Linux, mkdir fallback on macOS)
 - Non-interactive mode detection (requires `--bedrock-key` in CI/CD)
+- Credential conflict detection warns when multiple auth methods are present
+- Setup script unsets conflicting env vars (`AWS_ACCESS_KEY_ID`, `AWS_PROFILE`, etc.) when switching auth modes
 
 ## Authentication Modes
 
