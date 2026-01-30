@@ -386,6 +386,7 @@ Arguments:
 Options:
   --auth=MODE            Authentication mode: iam (default) or api-key
   --bedrock-key=KEY      Bedrock API key (optional; prompts if not provided)
+  --preserve-key         Reuse existing API key from environment (no prompt)
   --region=REGION        AWS region (default: us-west-2)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
@@ -410,6 +411,9 @@ Examples:
   # API key authentication (inline - for scripting/CI)
   ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
 
+  # Update config while preserving existing API key
+  ./setup-claude-bedrock.sh --auth=api-key --preserve-key
+
   # Preview changes
   ./setup-claude-bedrock.sh --dry-run
   ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxx --dry-run
@@ -422,6 +426,7 @@ EOF
 
 DRY_RUN=false
 FORCE=false
+PRESERVE_KEY=false
 AWS_REGION="${DEFAULT_REGION:-us-west-2}"
 SHELL_TYPE=""
 AUTH_MODE="${DEFAULT_AUTH:-iam}"
@@ -444,6 +449,9 @@ parse_arguments() {
                 ;;
             --bedrock-key=*)
                 BEDROCK_API_KEY="${arg#--bedrock-key=}"
+                ;;
+            --preserve-key)
+                PRESERVE_KEY=true
                 ;;
             --help|-h)
                 show_help
@@ -483,16 +491,27 @@ validate_inputs() {
         exit 1
     fi
 
-    # Prompt for API key if using api-key auth and key not provided
+    # Handle API key for api-key auth mode
     if [[ "$AUTH_MODE" == "api-key" && -z "$BEDROCK_API_KEY" ]]; then
-        if [[ "$DRY_RUN" == true ]]; then
+        if [[ "$PRESERVE_KEY" == true ]]; then
+            # Reuse existing key from environment
+            if [[ -n "$AWS_BEARER_TOKEN_BEDROCK" ]]; then
+                BEDROCK_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
+                echo "Using existing API key from environment"
+            else
+                echo "Error: --preserve-key specified but AWS_BEARER_TOKEN_BEDROCK is not set" >&2
+                echo "Run setup without --preserve-key to enter a new key" >&2
+                exit 1
+            fi
+        elif [[ "$DRY_RUN" == true ]]; then
             echo "[DRY RUN] Would prompt for Bedrock API key"
             BEDROCK_API_KEY="dry-run-placeholder"
         elif [[ ! -t 0 ]]; then
             # Non-interactive mode (stdin is not a terminal)
-            echo "Error: --bedrock-key is required in non-interactive mode" >&2
+            echo "Error: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
             echo "" >&2
             echo "Usage: ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=YOUR_KEY" >&2
+            echo "   or: ./setup-claude-bedrock.sh --auth=api-key --preserve-key" >&2
             exit 1
         else
             echo "Get your Bedrock API key from:"

@@ -1,10 +1,11 @@
 # Claude Code - Amazon Bedrock Setup Script for Windows
-# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-Region <region>] [-Force] [-DryRun]
+# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Force] [-DryRun]
 
 param(
     [ValidateSet("iam", "api-key")]
     [string]$Auth = "",
     [string]$BedrockKey = "",
+    [switch]$PreserveKey,
     [string]$Region = "",
     [switch]$Force,
     [switch]$DryRun,
@@ -58,6 +59,7 @@ if ($Help) {
     Write-Host "Options:"
     Write-Host "  -Auth <MODE>       Authentication: iam (default) or api-key"
     Write-Host "  -BedrockKey <KEY>  Bedrock API key (optional; prompts if not provided)"
+    Write-Host "  -PreserveKey       Reuse existing API key from environment (no prompt)"
     Write-Host "  -Region <REGION>   AWS region (default: us-west-2)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
@@ -75,20 +77,33 @@ if ($Help) {
     Write-Host "  .\setup-claude-bedrock.ps1                              # IAM/SSO (default)"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key                # Prompts for key"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxx  # Inline key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -PreserveKey   # Reuse existing key"
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"
     exit 0
 }
 
-# Prompt for API key if using api-key auth and key not provided
+# Handle API key for api-key auth mode
 if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
-    if ($DryRun) {
+    if ($PreserveKey) {
+        # Reuse existing key from environment
+        $existingKey = [Environment]::GetEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK")
+        if (-not [string]::IsNullOrEmpty($existingKey)) {
+            $BedrockKey = $existingKey
+            Write-Host "Using existing API key from environment"
+        } else {
+            Write-Host "Error: -PreserveKey specified but AWS_BEARER_TOKEN_BEDROCK is not set" -ForegroundColor Red
+            Write-Host "Run setup without -PreserveKey to enter a new key"
+            exit 1
+        }
+    } elseif ($DryRun) {
         Write-Host "[DRY RUN] Would prompt for Bedrock API key" -ForegroundColor Magenta
         $BedrockKey = "dry-run-placeholder"
     } elseif (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
         # Non-interactive mode (CI/CD, piped input, etc.)
-        Write-Host "Error: -BedrockKey is required in non-interactive mode" -ForegroundColor Red
+        Write-Host "Error: -BedrockKey or -PreserveKey is required in non-interactive mode" -ForegroundColor Red
         Write-Host ""
         Write-Host "Usage: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey YOUR_KEY"
+        Write-Host "   or: .\setup-claude-bedrock.ps1 -Auth api-key -PreserveKey"
         exit 1
     } else {
         Write-Host "Get your Bedrock API key from:"
