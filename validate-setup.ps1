@@ -39,6 +39,9 @@ $ExpectedEnvVars = @{
 # Variables that just need to be set (any value)
 $RequiredEnvVars = @("AWS_REGION")
 
+# Optional API key variable (for api-key auth mode)
+$ApiKeyVar = "AWS_BEARER_TOKEN_BEDROCK"
+
 # Counters
 $script:Errors = 0
 $script:Warnings = 0
@@ -82,6 +85,83 @@ function Test-EnvVarExists {
         Write-Host "PASS" -ForegroundColor Green -NoNewline
         Write-Host " $VarName=$Current"
     }
+}
+
+function Get-AuthMode {
+    $key = [Environment]::GetEnvironmentVariable($ApiKeyVar)
+    if (-not [string]::IsNullOrEmpty($key)) {
+        return "api-key"
+    }
+    return "iam"
+}
+
+function Test-ApiKey {
+    $key = [Environment]::GetEnvironmentVariable($ApiKeyVar)
+    if (-not [string]::IsNullOrEmpty($key)) {
+        # Mask the key for display
+        $masked = $key.Substring(0, [Math]::Min(8, $key.Length)) + "..." + $key.Substring([Math]::Max(0, $key.Length - 4))
+        Write-Host "PASS" -ForegroundColor Green -NoNewline
+        Write-Host " $ApiKeyVar is set ($masked)"
+    }
+    else {
+        Write-Host "INFO" -ForegroundColor Yellow -NoNewline
+        Write-Host " $ApiKeyVar not set (using IAM/SSO auth)"
+    }
+}
+
+function Test-ApiKeyValidity {
+    $key = [Environment]::GetEnvironmentVariable($ApiKeyVar)
+    if ([string]::IsNullOrEmpty($key)) {
+        return
+    }
+
+    $region = $env:AWS_REGION
+    if ([string]::IsNullOrEmpty($region)) {
+        $region = "us-west-2"
+    }
+
+    Write-Host "API Key Validity" -ForegroundColor Cyan
+    Write-Host "  Testing API key with Bedrock..."
+
+    try {
+        # Make a minimal Bedrock API call to test the key
+        $result = aws bedrock-runtime converse `
+            --region $region `
+            --model-id "anthropic.claude-3-haiku-20240307-v1:0" `
+            --messages '[{"role":"user","content":[{"text":"hi"}]}]' `
+            --max-tokens 1 2>&1
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "PASS" -ForegroundColor Green -NoNewline
+            Write-Host " API key is valid and working"
+        }
+        elseif ($result -match "expired|invalid.*token|unauthorized|forbidden|access denied") {
+            Write-Host "FAIL" -ForegroundColor Red -NoNewline
+            Write-Host " API key appears to be invalid or expired"
+            Write-Host "     Claude Code will hang if you try to use it!"
+            Write-Host "     Fix: Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK"
+            Write-Host "     Or:  Get a new API key and run setup with -Auth api-key"
+            $script:Errors++
+        }
+        elseif ($result -match "could not connect|timeout|network") {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " Could not reach Bedrock (network issue?)"
+            Write-Host "     Unable to verify API key validity"
+            $script:Warnings++
+        }
+        else {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " API key test returned unexpected result"
+            Write-Host "     $result"
+            $script:Warnings++
+        }
+    }
+    catch {
+        Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+        Write-Host " Could not test API key: $_"
+        $script:Warnings++
+    }
+    Write-Host ""
 }
 
 function Test-AwsCredentials {
@@ -158,10 +238,14 @@ function Test-ClaudeCode {
 Write-Host "Validating Claude Code Bedrock Configuration..." -ForegroundColor Cyan
 Write-Host ""
 
+# Detect auth mode
+$authMode = Get-AuthMode
+
 # System Info
 Write-Host "System" -ForegroundColor Cyan
 Write-Host "  OS:    Windows"
 Write-Host "  Shell: PowerShell $($PSVersionTable.PSVersion)"
+Write-Host "  Auth:  $authMode"
 Write-Host ""
 
 # Environment Variables
@@ -172,17 +256,31 @@ foreach ($var in $ExpectedEnvVars.Keys) {
 foreach ($var in $RequiredEnvVars) {
     Test-EnvVarExists -VarName $var
 }
+Test-ApiKey
 Write-Host ""
 
-# AWS Credentials
-Write-Host "AWS Credentials" -ForegroundColor Cyan
-Test-AwsCredentials
-Write-Host ""
+# Authentication check (depends on auth mode)
+if ($authMode -eq "api-key") {
+    Write-Host "Authentication (API Key)" -ForegroundColor Cyan
+    Write-Host "PASS" -ForegroundColor Green -NoNewline
+    Write-Host " Using Bedrock API key authentication"
+    Write-Host "     (Skipping IAM credential check - not needed with API key)"
+    Write-Host ""
 
-# Bedrock Access
-Write-Host "Bedrock Access" -ForegroundColor Cyan
-Test-BedrockAccess
-Write-Host ""
+    # Test if the API key actually works
+    Test-ApiKeyValidity
+}
+else {
+    # AWS Credentials
+    Write-Host "AWS Credentials (IAM/SSO)" -ForegroundColor Cyan
+    Test-AwsCredentials
+    Write-Host ""
+
+    # Bedrock Access (only test with IAM - API key can't be tested without making a call)
+    Write-Host "Bedrock Access" -ForegroundColor Cyan
+    Test-BedrockAccess
+    Write-Host ""
+}
 
 # Claude Code
 Write-Host "Claude Code" -ForegroundColor Cyan

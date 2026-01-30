@@ -365,25 +365,48 @@ aws sts get-caller-identity
 aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 ```
 
+### Authentication Precedence
+
+When using Bedrock, Claude Code follows this precedence:
+
+| Priority | Credential Source | Notes |
+|----------|-------------------|-------|
+| 1 (highest) | `AWS_BEARER_TOKEN_BEDROCK` | API key always takes precedence if set |
+| 2 | Environment variables | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| 3 | AWS credentials file | `~/.aws/credentials` |
+| 4 | AWS config/SSO | `~/.aws/config` with profiles |
+
+**Important behavior:**
+- If `AWS_BEARER_TOKEN_BEDROCK` is set but **invalid or expired**, Claude Code will **hang** - it does NOT fall back to AWS credentials
+- There is no automatic fallback between authentication methods
+- If your API key expires, you must either get a new key or `unset AWS_BEARER_TOKEN_BEDROCK`
+
+**Recommendation:** Use one authentication method at a time. The setup script handles this by unsetting conflicting environment variables, but cannot modify `~/.aws/credentials`.
+
 ### Common Issues
 
 1. **"API Error: exceeded token maximum"**
    - Restart terminal to load new environment variables
    - Run: `source ~/.zshrc` (or your shell config)
 
-2. **Authentication errors**
+2. **Claude Code hangs on startup**
+   - API key may be expired/invalid: `unset AWS_BEARER_TOKEN_BEDROCK` then retry
+   - Or get a new API key and re-run setup with `--auth=api-key`
+   - Run `./validate-setup.sh` to test API key validity
+
+3. **Authentication errors**
    - Re-authenticate: `aws sso login --profile=<profile>`
    - Check credentials haven't expired
 
-3. **Region errors**
+4. **Region errors**
    - Verify model availability in your region
    - Try `us-east-1` or `us-west-2`
 
-4. **PowerShell execution policy error** (Windows)
+5. **PowerShell execution policy error** (Windows)
    - Run: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
    - Then retry the setup script
 
-5. **Permission denied writing to profile**
+6. **Permission denied writing to profile**
    - Check file permissions on your shell profile
    - On Windows, try running PowerShell as Administrator
    - A backup is automatically created before modifications

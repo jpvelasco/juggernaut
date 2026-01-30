@@ -149,6 +149,53 @@ check_api_key() {
     fi
 }
 
+check_api_key_validity() {
+    local key="${!API_KEY_VAR}"
+    local region="${AWS_REGION:-us-west-2}"
+
+    if [[ -z "$key" ]]; then
+        return 0  # No API key to check
+    fi
+
+    echo -e "${CYAN}API Key Validity${NC}"
+    echo "  Testing API key with Bedrock..."
+
+    # Make a minimal Bedrock API call to test the key
+    # Using converse API with minimal input to test authentication
+    local test_result
+    local http_code
+
+    # Try to invoke the model with a minimal request
+    # This will fail fast if the key is invalid
+    test_result=$(aws bedrock-runtime converse \
+        --region "$region" \
+        --model-id "anthropic.claude-3-haiku-20240307-v1:0" \
+        --messages '[{"role":"user","content":[{"text":"hi"}]}]' \
+        --max-tokens 1 \
+        2>&1)
+    local exit_code=$?
+
+    if [[ $exit_code -eq 0 ]]; then
+        echo -e "${GREEN}PASS${NC} API key is valid and working"
+    elif echo "$test_result" | grep -qi "expired\|invalid.*token\|unauthorized\|forbidden\|access denied"; then
+        echo -e "${RED}FAIL${NC} API key appears to be invalid or expired"
+        echo "     Claude Code will hang if you try to use it!"
+        echo "     Fix: unset AWS_BEARER_TOKEN_BEDROCK"
+        echo "     Or:  Get a new API key and run setup with --auth=api-key"
+        ((ERRORS++))
+    elif echo "$test_result" | grep -qi "could not connect\|timeout\|network"; then
+        echo -e "${YELLOW}WARN${NC} Could not reach Bedrock (network issue?)"
+        echo "     Unable to verify API key validity"
+        ((WARNINGS++))
+    else
+        # Other error - might be permissions, model access, etc.
+        echo -e "${YELLOW}WARN${NC} API key test returned unexpected result"
+        echo "     $test_result"
+        ((WARNINGS++))
+    fi
+    echo ""
+}
+
 check_aws_credentials() {
     if aws sts get-caller-identity >/dev/null 2>&1; then
         local account_id
@@ -229,6 +276,9 @@ main() {
         echo -e "${GREEN}PASS${NC} Using Bedrock API key authentication"
         echo "     (Skipping IAM credential check - not needed with API key)"
         echo ""
+
+        # Test if the API key actually works
+        check_api_key_validity
     else
         echo -e "${CYAN}AWS Credentials (IAM/SSO)${NC}"
         check_aws_credentials
