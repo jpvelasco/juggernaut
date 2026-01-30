@@ -128,6 +128,17 @@ Write-Host "Setting up Claude Code with Amazon Bedrock ($AuthDisplay auth)..." -
 # Build configuration block from JSON config or fallback to defaults
 $ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
 
+# Unset conflicting auth variables to prevent credential conflicts
+if ($Auth -eq "api-key") {
+    # Using API key - unset AWS STS credentials that might interfere
+    $ConfigBlock += "Remove-Item Env:AWS_ACCESS_KEY_ID -ErrorAction SilentlyContinue`n"
+    $ConfigBlock += "Remove-Item Env:AWS_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue`n"
+    $ConfigBlock += "Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue`n"
+} else {
+    # Using IAM/SSO - unset API key that might interfere
+    $ConfigBlock += "Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue`n"
+}
+
 # Add AWS_REGION first
 $ConfigBlock += "`$env:AWS_REGION = `"$Region`"`n"
 
@@ -161,6 +172,62 @@ $ConfigBlock += "`n# END: Claude Code Bedrock Configuration"
 
 # Determine PowerShell profile path
 $ProfilePath = $PROFILE.CurrentUserAllHosts
+
+#───────────────────────────────────────────────────────────────────────────────
+# File Locking - Prevent concurrent modifications
+#───────────────────────────────────────────────────────────────────────────────
+
+$LockFile = "$ProfilePath.lock"
+$LockAcquired = $false
+$LockTimeout = 30  # seconds to wait for lock
+$StaleLockAge = 300  # 5 minutes - consider lock stale after this
+
+function Get-FileLock {
+    param([string]$LockPath)
+
+    $startTime = Get-Date
+    while (((Get-Date) - $startTime).TotalSeconds -lt $LockTimeout) {
+        try {
+            # Check for stale lock
+            if (Test-Path $LockPath) {
+                $lockAge = ((Get-Date) - (Get-Item $LockPath).LastWriteTime).TotalSeconds
+                if ($lockAge -gt $StaleLockAge) {
+                    Write-Host "Removing stale lock file (age: $([int]$lockAge)s)" -ForegroundColor Yellow
+                    Remove-Item $LockPath -Force -ErrorAction SilentlyContinue
+                }
+            }
+
+            # Try to create lock file atomically
+            $null = New-Item -Path $LockPath -ItemType File -ErrorAction Stop
+            return $true
+        } catch {
+            # Lock exists, wait and retry
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    return $false
+}
+
+function Release-FileLock {
+    param([string]$LockPath)
+    Remove-Item $LockPath -Force -ErrorAction SilentlyContinue
+}
+
+if (-not $DryRun) {
+    $LockAcquired = Get-FileLock -LockPath $LockFile
+    if (-not $LockAcquired) {
+        Write-Host "Error: Could not acquire lock on profile file" -ForegroundColor Red
+        Write-Host "Another instance may be modifying the profile. Try again later." -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Ensure lock is released on exit
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+    if ($LockAcquired -and (Test-Path $LockFile)) {
+        Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
+    }
+}
 
 # Create profile directory if it doesn't exist
 $ProfileDir = Split-Path -Parent $ProfilePath
@@ -241,6 +308,7 @@ if ($DryRun) {
 try {
     Add-Content -Path $ProfilePath -Value $ConfigBlock -ErrorAction Stop
 } catch {
+    Release-FileLock -LockPath $LockFile
     Write-Host "" -ForegroundColor Red
     Write-Host "ERROR: Cannot write to $ProfilePath" -ForegroundColor Red
     Write-Host "Possible causes:" -ForegroundColor Red
@@ -274,3 +342,6 @@ if ($Auth -eq "api-key") {
 
 Write-Host ""
 Write-Host "Setup complete!" -ForegroundColor Green
+
+# Release file lock
+Release-FileLock -LockPath $LockFile
