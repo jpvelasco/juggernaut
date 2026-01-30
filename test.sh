@@ -189,7 +189,7 @@ test_keychain_storage() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain --dry-run 2>&1 | grep -qE 'keychain|not available'"
 
     run_test "invalid --storage value rejected" \
-        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=invalid --dry-run 2>&1 | grep -q 'Invalid storage mode'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=invalid --dry-run 2>&1 | grep -q 'Invalid storage mode'"
 
     run_test "help shows --storage option" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'storage='"
