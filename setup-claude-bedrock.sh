@@ -58,7 +58,14 @@ declare -a VALID_AUTH_MODES=(iam api-key)
 
 #───────────────────────────────────────────────────────────────────────────────
 # JSON Config Loading (using jq or python fallback)
+# All queries use jq-style dot notation: .key, .key.subkey
 #───────────────────────────────────────────────────────────────────────────────
+
+# Convert jq query to Python: .key.subkey -> ["key"]["subkey"]
+jq_to_python() {
+    local query=$1
+    echo "$query" | sed "s/\\.\\([^.]*\\)/['\1']/g"
+}
 
 json_get() {
     local file=$1
@@ -66,12 +73,11 @@ json_get() {
 
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query" "$file" 2>/dev/null
-    elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "import json,sys; data=json.load(open('$file')); print(eval('data$query'))" 2>/dev/null
-    elif command -v python >/dev/null 2>&1; then
-        python -c "import json,sys; data=json.load(open('$file')); print(eval('data$query'))" 2>/dev/null
     else
-        echo ""
+        local py_query
+        py_query=$(jq_to_python "$query")
+        python3 -c "import json; data=json.load(open('$file')); print(data$py_query)" 2>/dev/null || \
+        python -c "import json; data=json.load(open('$file')); print(data$py_query)" 2>/dev/null
     fi
 }
 
@@ -81,12 +87,11 @@ json_get_keys() {
 
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query | keys[]" "$file" 2>/dev/null
-    elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}.keys()))" 2>/dev/null
-    elif command -v python >/dev/null 2>&1; then
-        python -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}.keys()))" 2>/dev/null
     else
-        echo ""
+        local py_query
+        py_query=$(jq_to_python "$query")
+        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query.keys()))" 2>/dev/null || \
+        python -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query.keys()))" 2>/dev/null
     fi
 }
 
@@ -96,12 +101,11 @@ json_get_array() {
 
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query[]" "$file" 2>/dev/null
-    elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}))" 2>/dev/null
-    elif command -v python >/dev/null 2>&1; then
-        python -c "import json; data=json.load(open('$file')); print('\n'.join(data${query}))" 2>/dev/null
     else
-        echo ""
+        local py_query
+        py_query=$(jq_to_python "$query")
+        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query))" 2>/dev/null || \
+        python -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query))" 2>/dev/null
     fi
 }
 
@@ -114,11 +118,11 @@ load_config() {
 
     # Load environment variables
     local keys
-    keys=$(json_get_keys "$CONFIG_FILE" '["environment"]')
+    keys=$(json_get_keys "$CONFIG_FILE" '.environment')
     if [[ -n "$keys" ]]; then
         while IFS= read -r key; do
             local value
-            value=$(json_get "$CONFIG_FILE" ".environment[\"$key\"]")
+            value=$(json_get "$CONFIG_FILE" ".environment.$key")
             BEDROCK_CONFIG["$key"]="$value"
             CONFIG_KEY_ORDER+=("$key")
         done <<< "$keys"
@@ -126,7 +130,7 @@ load_config() {
 
     # Load valid regions
     local regions
-    regions=$(json_get_array "$CONFIG_FILE" '["regions"]')
+    regions=$(json_get_array "$CONFIG_FILE" '.regions')
     if [[ -n "$regions" ]]; then
         VALID_REGIONS=()
         while IFS= read -r region; do
@@ -212,6 +216,25 @@ generate_config_block() {
 
     config+=$'\n'"# BEGIN: Claude Code Bedrock Configuration"$'\n'
     config+="# Auth mode: $auth_mode"$'\n'
+
+    # Unset conflicting auth variables to prevent credential conflicts
+    if [[ "$auth_mode" == "api-key" ]]; then
+        # Using API key - unset AWS STS credentials that might interfere
+        if [[ "$shell" == "fish" ]]; then
+            config+="set -e AWS_ACCESS_KEY_ID 2>/dev/null"$'\n'
+            config+="set -e AWS_SECRET_ACCESS_KEY 2>/dev/null"$'\n'
+            config+="set -e AWS_SESSION_TOKEN 2>/dev/null"$'\n'
+        else
+            config+="unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN 2>/dev/null || true"$'\n'
+        fi
+    else
+        # Using IAM/SSO - unset API key that might interfere
+        if [[ "$shell" == "fish" ]]; then
+            config+="set -e AWS_BEARER_TOKEN_BEDROCK 2>/dev/null"$'\n'
+        else
+            config+="unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true"$'\n'
+        fi
+    fi
 
     for key in "${CONFIG_KEY_ORDER[@]}"; do
         local value
@@ -581,40 +604,37 @@ setup_shell() {
     else
         write_config_to_file "$config_file" "$config_block"
         echo "Configuration added to $config_file"
-        echo ""
-        show_next_steps "$shell" "$config_file" "$AUTH_MODE"
     fi
 }
 
 show_next_steps() {
-    local shell=$1
-    local config_file=$2
-    local auth_mode=$3
+    local auth_mode=$1
+    local current_shell
+    current_shell=$(basename "$SHELL")
+    local config_file="${SHELL_CONFIGS[$current_shell]}"
 
-    echo "Next steps:"
     echo ""
-    echo "1. Apply configuration:"
-    if [[ "$shell" == "fish" ]]; then
+    echo "Setup complete!"
+    echo ""
+    echo "To apply configuration:"
+    echo ""
+    if [[ "$current_shell" == "fish" ]]; then
         echo "   source ~/.config/fish/config.fish"
     else
         echo "   source $config_file"
     fi
     echo ""
+    echo "Or restart your terminal."
+    echo ""
 
     if [[ "$auth_mode" == "api-key" ]]; then
-        echo "2. Launch Claude Code:"
+        echo "Then launch Claude Code:"
         echo "   claude"
-        echo ""
-        echo "   (No AWS credential setup needed - using API key)"
     else
-        echo "2. Verify AWS credentials:"
+        echo "Then verify AWS credentials and launch:"
         echo "   aws sts get-caller-identity"
-        echo ""
-        echo "3. Launch Claude Code:"
         echo "   claude"
     fi
-    echo ""
-    echo "Setup complete!"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -637,7 +657,31 @@ main() {
     fi
     echo ""
 
+    # Detect current shell
+    local current_shell
+    current_shell=$(basename "$SHELL")
+
+    # Configure the specified shell
     setup_shell "$SHELL_TYPE"
+
+    # If current shell differs from specified, configure it too
+    if [[ "$current_shell" != "$SHELL_TYPE" && -n "${SHELL_CONFIGS[$current_shell]}" ]]; then
+        echo ""
+        echo "────────────────────────────────────────────────────────────"
+        echo "Also configuring your current shell ($current_shell)..."
+        echo "────────────────────────────────────────────────────────────"
+        echo ""
+        # Use FORCE for the second shell to avoid double prompting
+        local orig_force=$FORCE
+        FORCE=true
+        setup_shell "$current_shell"
+        FORCE=$orig_force
+    fi
+
+    # Show next steps (always for current shell, which is now guaranteed to be configured)
+    if [[ "$DRY_RUN" == false ]]; then
+        show_next_steps "$AUTH_MODE"
+    fi
 }
 
 main "$@"

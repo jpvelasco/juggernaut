@@ -10,7 +10,7 @@ Juggernaut is a cross-platform setup utility that configures Claude Code to use 
 
 ### Testing
 ```bash
-bash ./test.sh                    # Run full test suite (33 tests)
+bash ./test.sh                    # Run full test suite (requires Bash 4.0+)
 ```
 
 ### Dry-Run Mode
@@ -24,6 +24,13 @@ bash ./test.sh                    # Run full test suite (33 tests)
 ```bash
 ./validate-setup.sh               # Unix - checks env vars, AWS creds, Bedrock access
 .\validate-setup.ps1              # Windows PowerShell
+```
+
+### Uninstall
+```bash
+./uninstall.sh zsh                # Remove from specific shell (bash/zsh/fish)
+./uninstall.sh all                # Remove from all shells
+.\uninstall.ps1                   # PowerShell
 ```
 
 ### Linting
@@ -58,8 +65,8 @@ ShellCheck via `.shellcheckrc`. Disabled: SC1091, SC2016.
 ## Key Files
 
 - `bedrock-config.json` - Environment variables, regions, defaults (edit this to change models)
-- `setup-claude-bedrock.sh` - Main Unix implementation (~640 lines)
-- `setup-claude-bedrock.ps1` - PowerShell implementation (~280 lines)
+- `setup-claude-bedrock.sh` - Main Unix implementation (Bash uses jq or python fallback for JSON parsing)
+- `setup-claude-bedrock.ps1` - PowerShell implementation (uses ConvertFrom-Json)
 - `iam-policy.json` - Required AWS IAM permissions
 
 ## CI/CD
