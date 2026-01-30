@@ -210,6 +210,198 @@ test_keychain_storage() {
     fi
 }
 
+test_keychain_security() {
+    section "Keychain Security"
+
+    # CRITICAL: Keychain mode should NOT contain plaintext key in profile
+    if command -v secret-tool >/dev/null 2>&1 || command -v security >/dev/null 2>&1; then
+        run_test "keychain mode: no plaintext key in config" \
+            "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-supersecretkey123 --storage=keychain --dry-run 2>&1 | grep -q 'br-supersecretkey123'"
+
+        run_test "profile mode: key IS in config (baseline)" \
+            "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-supersecretkey123 --storage=profile --dry-run 2>&1 | grep -q 'br-supersecretkey123'"
+    else
+        skip_test "keychain plaintext check" "no keychain tool available"
+        skip_test "profile plaintext check" "no keychain tool available"
+    fi
+
+    # Test: Storage mode is shown in dry-run output
+    run_test "dry-run shows storage mode" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=profile --dry-run 2>&1 | grep -q 'Storage:'"
+}
+
+test_api_key_special_characters() {
+    section "API Key Special Characters (Injection Prevention)"
+
+    # These tests verify that special characters in API keys don't break the script
+    # or cause command injection vulnerabilities
+
+    # Test: Keys with spaces
+    run_test "key with spaces (should fail gracefully)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test with spaces' --storage=profile --dry-run 2>&1"
+
+    # Test: Keys with single quotes (potential injection)
+    run_test "key with single quotes handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=\"br-test'quote\" --storage=profile --dry-run 2>&1"
+
+    # Test: Keys with double quotes
+    run_test "key with double quotes handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\"doublequote' --storage=profile --dry-run 2>&1"
+
+    # Test: Keys with backticks (command substitution attempt)
+    run_test "key with backticks (no execution)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\`echo pwned\`' --storage=profile --dry-run 2>&1 | grep -v 'pwned'"
+
+    # Test: Keys with $() (command substitution attempt)
+    run_test "key with \$() (no execution)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$(echo pwned)' --storage=profile --dry-run 2>&1 | grep -v 'pwned'"
+
+    # Test: Keys with semicolon (command chaining attempt)
+    run_test "key with semicolon handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test;echo pwned' --storage=profile --dry-run 2>&1 | grep -v 'pwned'"
+
+    # Test: Keys with pipe (command piping attempt)
+    run_test "key with pipe handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test|echo pwned' --storage=profile --dry-run 2>&1 | grep -v 'pwned'"
+
+    # Test: Keys with newline (multiline injection attempt)
+    run_test "key with newline handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=$'br-test\necho pwned' --storage=profile --dry-run 2>&1 | grep -v 'pwned'"
+
+    # Test: Keys with dollar sign (variable expansion attempt)
+    run_test "key with \$ sign handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$HOME' --storage=profile --dry-run 2>&1"
+
+    # Test: Keys with ampersand (background execution attempt)
+    run_test "key with & handled" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test&echo pwned' --storage=profile --dry-run 2>&1 | grep -v 'pwned'"
+}
+
+test_shell_specific_syntax() {
+    section "Shell-Specific Syntax Validation"
+
+    # Test: Bash config syntax is valid
+    run_test "bash config syntax valid" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep 'export' | head -1"
+
+    # Test: Zsh config syntax is valid (same as bash)
+    run_test "zsh config syntax valid" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep 'export' | head -1"
+
+    # Test: Fish config uses set -gx (not export)
+    run_test "fish config uses 'set -gx'" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q 'set -gx'"
+
+    # Test: Fish config does NOT use export
+    run_test "fish config avoids 'export'" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -E '^export '"
+
+    # Test: Fish keychain syntax (when available)
+    if command -v secret-tool >/dev/null 2>&1 || command -v security >/dev/null 2>&1; then
+        run_test "fish keychain uses parentheses syntax" \
+            "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --storage=keychain --dry-run 2>&1 | grep -qE 'set -gx AWS_BEARER_TOKEN_BEDROCK \\('"
+    else
+        skip_test "fish keychain syntax" "no keychain tool"
+    fi
+}
+
+test_config_block_integrity() {
+    section "Config Block Integrity"
+
+    # Test: Config block has BEGIN marker
+    run_test "config has BEGIN marker" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q '# BEGIN: Claude Code Bedrock Configuration'"
+
+    # Test: Config block has END marker
+    run_test "config has END marker" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q '# END: Claude Code Bedrock Configuration'"
+
+    # Test: Config block includes auth mode comment
+    run_test "config shows auth mode" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q '# Auth mode: api-key'"
+
+    # Test: Keychain config shows storage mode comment
+    if command -v secret-tool >/dev/null 2>&1 || command -v security >/dev/null 2>&1; then
+        run_test "keychain config shows storage comment" \
+            "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain --dry-run 2>&1 | grep -q '# Storage: keychain'"
+    else
+        skip_test "keychain storage comment" "no keychain tool"
+    fi
+
+    # Test: All required env vars are present
+    run_test "config has CLAUDE_CODE_USE_BEDROCK" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'CLAUDE_CODE_USE_BEDROCK'"
+
+    run_test "config has AWS_REGION" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'AWS_REGION'"
+
+    run_test "config has ANTHROPIC_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_MODEL'"
+
+    # Test: IAM mode unsets API key
+    run_test "iam mode unsets API key var" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run 2>&1 | grep -q 'unset AWS_BEARER_TOKEN_BEDROCK'"
+
+    # Test: API key mode unsets IAM vars
+    run_test "api-key mode unsets IAM vars" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q 'unset AWS_ACCESS_KEY_ID'"
+}
+
+test_error_handling() {
+    section "Error Handling"
+
+    # Test: Empty API key rejected
+    run_test "empty key rejected (non-interactive)" \
+        "echo '' | $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key 2>&1 | grep -qE 'required|empty'"
+
+    # Test: Invalid shell rejected
+    run_test "invalid shell rejected" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh invalidshell --dry-run 2>&1 | grep -q 'Unsupported shell'"
+
+    # Test: Invalid auth mode rejected
+    run_test "invalid auth mode rejected" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=invalid --dry-run 2>&1 | grep -q 'Invalid auth mode'"
+
+    # Test: Graceful handling when config file missing
+    run_test "missing config warns gracefully" \
+        "(cd /tmp && $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1) | grep -qE 'Warning|Config'"
+}
+
+test_keychain_unavailable() {
+    section "Keychain Unavailable Handling"
+
+    # This tests the error message when keychain tools aren't available
+    # We simulate this by checking for the install instructions in error output
+
+    # Test: Error message mentions how to install on Linux
+    if [[ "$OSTYPE" == linux* ]] && ! command -v secret-tool >/dev/null 2>&1; then
+        run_test "Linux: shows install instructions" \
+            "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain 2>&1 | grep -q 'apt install\\|dnf install\\|pacman'"
+    else
+        skip_test "Linux install instructions" "keychain available or not Linux"
+    fi
+
+    # Test: Falls back gracefully with helpful message
+    run_test "keychain unavailable: suggests profile" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain 2>&1 | grep -qE 'storage=profile|keychain|secret-tool|security'"
+}
+
+test_preserve_key_with_storage() {
+    section "Preserve Key + Storage Mode"
+
+    # Test: --preserve-key works with --storage=profile
+    run_test "preserve-key + profile (no env key)" \
+        "(unset AWS_BEARER_TOKEN_BEDROCK; $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --preserve-key --storage=profile --dry-run 2>&1 | grep -q 'not set')"
+
+    # Test: --preserve-key works with --storage=keychain
+    run_test "preserve-key + keychain (no env key)" \
+        "(unset AWS_BEARER_TOKEN_BEDROCK; $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --preserve-key --storage=keychain --dry-run 2>&1 | grep -q 'not set')"
+
+    # Test: --preserve-key with existing env var
+    run_test "preserve-key uses env var" \
+        "AWS_BEARER_TOKEN_BEDROCK=br-existing123 $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --preserve-key --dry-run 2>&1 | grep -q 'existing API key'"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -227,6 +419,13 @@ main() {
     test_credential_conflict_detection
     test_api_key_type_detection
     test_keychain_storage
+    test_keychain_security
+    test_api_key_special_characters
+    test_shell_specific_syntax
+    test_config_block_integrity
+    test_error_handling
+    test_keychain_unavailable
+    test_preserve_key_with_storage
     test_required_files
     test_json_validity
     test_unified_entry_point

@@ -66,6 +66,43 @@ jobs:
       - name: Test keychain storage (dry-run)
         run: bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
 
+      - name: Test keychain with all shells (dry-run)
+        run: |
+          for shell in bash zsh fish; do
+            echo "Testing $shell..."
+            bash ./setup-claude-bedrock.sh $shell --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
+          done
+
+      - name: Test special characters in API key
+        run: |
+          # Test various special characters that could cause injection
+          bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test$var' --dry-run
+          bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test"quote' --dry-run
+          bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key="br-test'quote" --dry-run
+
+      - name: Test actual keychain store/retrieve (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Test actual keychain operations
+          TEST_KEY="br-citest-$(date +%s)"
+          SERVICE="juggernaut-bedrock-test"
+          ACCOUNT="test-key"
+
+          # Store in keychain
+          security add-generic-password -s "$SERVICE" -a "$ACCOUNT" -w "$TEST_KEY" 2>/dev/null || true
+
+          # Retrieve and verify
+          RETRIEVED=$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>/dev/null)
+          if [[ "$RETRIEVED" == "$TEST_KEY" ]]; then
+            echo "✓ Keychain store/retrieve works correctly"
+          else
+            echo "✗ Keychain mismatch: expected '$TEST_KEY', got '$RETRIEVED'"
+            exit 1
+          fi
+
+          # Cleanup
+          security delete-generic-password -s "$SERVICE" -a "$ACCOUNT" 2>/dev/null || true
+
       - name: Test uninstall help
         run: bash ./uninstall.sh --help
 
@@ -99,6 +136,36 @@ jobs:
         shell: pwsh
         run: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-test123 -Storage keychain -DryRun
 
+      - name: Test PowerShell special characters in API key
+        shell: pwsh
+        run: |
+          # Test special characters that could cause issues
+          .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey 'br-test$var' -DryRun
+          .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey 'br-test"quote' -DryRun
+          .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey "br-test'quote" -DryRun
+
+      - name: Test actual Credential Manager store/retrieve
+        shell: pwsh
+        run: |
+          $testKey = "br-citest-$(Get-Date -Format 'yyyyMMddHHmmss')"
+          $target = "juggernaut-bedrock-test"
+
+          # Store credential using cmdkey
+          $null = cmdkey /delete:$target 2>$null
+          cmdkey /generic:$target /user:api-key /pass:$testKey
+
+          # Verify it was stored
+          $stored = cmdkey /list:$target 2>&1
+          if ($stored -match $target) {
+            Write-Host "✓ Credential Manager store works"
+          } else {
+            Write-Host "✗ Credential not found"
+            exit 1
+          }
+
+          # Cleanup
+          cmdkey /delete:$target
+
       - name: Validate JSON
         shell: pwsh
         run: Get-Content .\iam-policy.json | ConvertFrom-Json
@@ -125,6 +192,37 @@ jobs:
       - name: Test dry-run (bash)
         shell: bash
         run: ./setup-claude-bedrock.sh bash --dry-run
+
+      - name: Test keychain storage (dry-run)
+        shell: bash
+        run: ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
+
+      - name: Test special characters in API key
+        shell: bash
+        run: |
+          ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test$var' --dry-run
+          ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test"quote' --dry-run
+
+      - name: Test actual Credential Manager (Git Bash)
+        shell: bash
+        run: |
+          TEST_KEY="br-citest-$(date +%s)"
+          TARGET="juggernaut-bedrock-test"
+
+          # Store using cmdkey
+          cmdkey.exe /delete:"$TARGET" >/dev/null 2>&1 || true
+          cmdkey.exe /generic:"$TARGET" /user:api-key /pass:"$TEST_KEY"
+
+          # Verify stored
+          if cmdkey.exe /list:"$TARGET" 2>&1 | grep -q "$TARGET"; then
+            echo "✓ Credential Manager store works from Git Bash"
+          else
+            echo "✗ Credential not found"
+            exit 1
+          fi
+
+          # Cleanup
+          cmdkey.exe /delete:"$TARGET" >/dev/null 2>&1 || true
 
       - name: Test unified entry point
         shell: bash
