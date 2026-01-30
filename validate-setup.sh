@@ -237,7 +237,7 @@ check_api_key_validity() {
         --region "$region" \
         --model-id "anthropic.claude-3-haiku-20240307-v1:0" \
         --messages '[{"role":"user","content":[{"text":"hi"}]}]' \
-        --max-tokens 1 \
+        --inference-config '{"maxTokens":1}' \
         2>&1)
     local exit_code=$?
 
