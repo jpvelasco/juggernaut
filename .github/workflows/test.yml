@@ -26,11 +26,11 @@ jobs:
           echo "/opt/homebrew/bin" >> $GITHUB_PATH
           echo "/usr/local/bin" >> $GITHUB_PATH
 
-      - name: Install Fish shell (Ubuntu)
+      - name: Install Fish shell and libsecret (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fish
+          sudo apt-get install -y fish libsecret-tools
 
       - name: Show environment
         run: |
@@ -63,6 +63,9 @@ jobs:
       - name: Test unified entry point
         run: bash ./setup --dry-run
 
+      - name: Test keychain storage (dry-run)
+        run: bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
+
       - name: Test uninstall help
         run: bash ./uninstall.sh --help
 
@@ -91,6 +94,10 @@ jobs:
       - name: Test PowerShell setup help
         shell: pwsh
         run: .\setup-claude-bedrock.ps1 -Help
+
+      - name: Test PowerShell keychain storage (dry-run)
+        shell: pwsh
+        run: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-test123 -Storage keychain -DryRun
 
       - name: Validate JSON
         shell: pwsh

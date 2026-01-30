@@ -6,6 +6,8 @@ param(
     [string]$Auth = "",
     [string]$BedrockKey = "",
     [switch]$PreserveKey,
+    [ValidateSet("profile", "keychain")]
+    [string]$Storage = "profile",
     [string]$Region = "",
     [switch]$Force,
     [switch]$DryRun,
@@ -60,6 +62,7 @@ if ($Help) {
     Write-Host "  -Auth <MODE>       Authentication: iam (default) or api-key"
     Write-Host "  -BedrockKey <KEY>  Bedrock API key (optional; prompts if not provided)"
     Write-Host "  -PreserveKey       Reuse existing API key from environment (no prompt)"
+    Write-Host "  -Storage <MODE>    Where to store API key: profile (default) or keychain"
     Write-Host "  -Region <REGION>   AWS region (default: us-west-2)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
@@ -73,9 +76,14 @@ if ($Help) {
     Write-Host "             Prompts securely if -BedrockKey not provided"
     Write-Host "             Get key from: AWS Console -> Bedrock -> API keys"
     Write-Host ""
+    Write-Host "Storage Modes:"
+    Write-Host "  profile    Store API key directly in PowerShell profile (default)"
+    Write-Host "  keychain   Store API key in Windows Credential Manager (more secure)"
+    Write-Host ""
     Write-Host "Examples:"
     Write-Host "  .\setup-claude-bedrock.ps1                              # IAM/SSO (default)"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key                # Prompts for key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -Storage keychain  # Secure storage"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxx  # Inline key"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -PreserveKey   # Reuse existing key"
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"
@@ -132,6 +140,54 @@ if (-not ($ValidRegions -contains $Region)) {
     }
 }
 
+#───────────────────────────────────────────────────────────────────────────────
+# Keychain Functions (Windows Credential Manager)
+#───────────────────────────────────────────────────────────────────────────────
+
+$KeychainTarget = "juggernaut-bedrock"
+
+function Test-KeychainAvailable {
+    # Windows Credential Manager is always available on Windows
+    return $true
+}
+
+function Set-KeychainCredential {
+    param([string]$Key)
+
+    # Use cmdkey to store in Windows Credential Manager
+    $null = cmdkey /delete:$KeychainTarget 2>$null
+    $result = cmdkey /generic:$KeychainTarget /user:api-key /pass:$Key 2>&1
+    return $LASTEXITCODE -eq 0
+}
+
+function Get-KeychainCredential {
+    # Use PowerShell to retrieve from Credential Manager
+    try {
+        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue
+        $cred = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR(
+                (Get-StoredCredential -Target $KeychainTarget -ErrorAction Stop).Password
+            )
+        )
+        return $cred
+    } catch {
+        # Fallback: try using cmdkey list and parse (less reliable)
+        return $null
+    }
+}
+
+function Remove-KeychainCredential {
+    $null = cmdkey /delete:$KeychainTarget 2>$null
+}
+
+# Generate the PowerShell command to retrieve key from Credential Manager
+function Get-KeychainRetrievalCommand {
+    # This generates the code that will run in the profile to get the credential
+    return @'
+(Get-StoredCredential -Target 'juggernaut-bedrock' -ErrorAction SilentlyContinue).GetNetworkCredential().Password
+'@
+}
+
 if ($DryRun) {
     Write-Host "[DRY RUN] No changes will be made" -ForegroundColor Magenta
     Write-Host ""
@@ -142,6 +198,9 @@ Write-Host "Setting up Claude Code with Amazon Bedrock ($AuthDisplay auth)..." -
 
 # Build configuration block from JSON config or fallback to defaults
 $ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
+if ($Storage -eq "keychain") {
+    $ConfigBlock += "# Storage: keychain (encrypted)`n"
+}
 
 # Unset conflicting auth variables to prevent credential conflicts
 if ($Auth -eq "api-key") {
@@ -170,7 +229,13 @@ if ($Config -and $Config.environment) {
 
 # Add API key if using api-key auth
 if ($Auth -eq "api-key") {
-    $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
+    if ($Storage -eq "keychain") {
+        # Retrieve from Credential Manager at profile load
+        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = (Get-StoredCredential -Target 'juggernaut-bedrock' -ErrorAction SilentlyContinue).GetNetworkCredential().Password`n"
+    } else {
+        # Store directly in profile (legacy behavior)
+        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
+    }
 }
 
 $ConfigBlock += "`n# END: Claude Code Bedrock Configuration"
@@ -255,6 +320,7 @@ Write-Host "Auth:     $Auth" -ForegroundColor Gray
 if ($Auth -eq "api-key") {
     $MaskedKey = $BedrockKey.Substring(0, [Math]::Min(8, $BedrockKey.Length)) + "..." + $BedrockKey.Substring([Math]::Max(0, $BedrockKey.Length - 4))
     Write-Host "API Key:  $MaskedKey" -ForegroundColor Gray
+    Write-Host "Storage:  $Storage" -ForegroundColor Gray
 }
 Write-Host ""
 
@@ -298,6 +364,21 @@ if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
     }
 }
 
+# Store API key in Credential Manager if using keychain storage
+if ($Auth -eq "api-key" -and $Storage -eq "keychain") {
+    if ($DryRun) {
+        Write-Host "[DRY RUN] Would store API key in Windows Credential Manager" -ForegroundColor Magenta
+    } else {
+        if (Set-KeychainCredential -Key $BedrockKey) {
+            Write-Host "API key stored in Windows Credential Manager" -ForegroundColor Gray
+        } else {
+            Write-Host "Error: Failed to store API key in Credential Manager" -ForegroundColor Red
+            Release-FileLock -LockPath $LockFile
+            exit 1
+        }
+    }
+}
+
 # Add new configuration
 if ($DryRun) {
     Write-Host ""
@@ -306,6 +387,9 @@ if ($DryRun) {
     Write-Host $ConfigBlock -ForegroundColor White
     Write-Host "-------------------------------------" -ForegroundColor Gray
     Write-Host ""
+    if ($Storage -eq "keychain") {
+        Write-Host "[DRY RUN] API key would be stored in Windows Credential Manager (encrypted)" -ForegroundColor Magenta
+    }
     Write-Host "[DRY RUN] No changes made" -ForegroundColor Green
     exit 0
 }

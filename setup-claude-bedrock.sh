@@ -56,6 +56,9 @@ declare -A SHELL_DISPLAY_NAMES=(
 # Valid authentication modes
 declare -a VALID_AUTH_MODES=(iam api-key)
 
+# Valid storage modes
+declare -a VALID_STORAGE_MODES=(profile keychain)
+
 #───────────────────────────────────────────────────────────────────────────────
 # JSON Config Loading (using jq or python fallback)
 # All queries use jq-style dot notation: .key, .key.subkey
@@ -202,6 +205,137 @@ is_valid_auth_mode() {
     return 1
 }
 
+is_valid_storage_mode() {
+    local mode=$1
+    local m
+    for m in "${VALID_STORAGE_MODES[@]}"; do
+        [[ "$m" == "$mode" ]] && return 0
+    done
+    return 1
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Keychain Functions (OS-specific secure credential storage)
+#───────────────────────────────────────────────────────────────────────────────
+
+KEYCHAIN_SERVICE="juggernaut-bedrock"
+KEYCHAIN_ACCOUNT="api-key"
+
+# Detect if keychain is available on this system
+keychain_available() {
+    local os=$(detect_os)
+    case "$os" in
+        macos)
+            command -v security >/dev/null 2>&1
+            ;;
+        linux|wsl)
+            command -v secret-tool >/dev/null 2>&1
+            ;;
+        gitbash|cygwin)
+            # Windows - check for cmdkey (built-in) or PowerShell
+            command -v cmdkey.exe >/dev/null 2>&1 || command -v powershell.exe >/dev/null 2>&1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Store API key in system keychain
+keychain_store() {
+    local key=$1
+    local os=$(detect_os)
+
+    case "$os" in
+        macos)
+            # Delete existing entry first (ignore errors)
+            security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" 2>/dev/null || true
+            # Add new entry
+            security add-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w "$key" 2>/dev/null
+            ;;
+        linux|wsl)
+            # secret-tool will overwrite existing entry
+            echo -n "$key" | secret-tool store --label="Juggernaut Bedrock API Key" \
+                service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null
+            ;;
+        gitbash|cygwin)
+            # Use cmdkey for Windows Credential Manager
+            cmdkey.exe /delete:"$KEYCHAIN_SERVICE" >/dev/null 2>&1 || true
+            cmdkey.exe /generic:"$KEYCHAIN_SERVICE" /user:"$KEYCHAIN_ACCOUNT" /pass:"$key" >/dev/null 2>&1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Retrieve API key from system keychain
+keychain_get() {
+    local os=$(detect_os)
+
+    case "$os" in
+        macos)
+            security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null
+            ;;
+        linux|wsl)
+            secret-tool lookup service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null
+            ;;
+        gitbash|cygwin)
+            # Use PowerShell to read from Windows Credential Manager
+            powershell.exe -NoProfile -Command "
+                \$cred = Get-StoredCredential -Target '$KEYCHAIN_SERVICE' -ErrorAction SilentlyContinue
+                if (\$cred) { \$cred.GetNetworkCredential().Password }
+            " 2>/dev/null | tr -d '\r'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Delete API key from system keychain
+keychain_delete() {
+    local os=$(detect_os)
+
+    case "$os" in
+        macos)
+            security delete-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" 2>/dev/null || true
+            ;;
+        linux|wsl)
+            secret-tool clear service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null || true
+            ;;
+        gitbash|cygwin)
+            cmdkey.exe /delete:"$KEYCHAIN_SERVICE" >/dev/null 2>&1 || true
+            ;;
+    esac
+}
+
+# Generate the shell command to retrieve key from keychain
+keychain_get_command() {
+    local shell=$1
+    local os=$(detect_os)
+    local cmd=""
+
+    case "$os" in
+        macos)
+            cmd="security find-generic-password -s '$KEYCHAIN_SERVICE' -a '$KEYCHAIN_ACCOUNT' -w 2>/dev/null"
+            ;;
+        linux|wsl)
+            cmd="secret-tool lookup service '$KEYCHAIN_SERVICE' account '$KEYCHAIN_ACCOUNT' 2>/dev/null"
+            ;;
+        gitbash|cygwin)
+            cmd="powershell.exe -NoProfile -Command \"(Get-StoredCredential -Target '$KEYCHAIN_SERVICE').GetNetworkCredential().Password\" 2>/dev/null | tr -d '\\r'"
+            ;;
+    esac
+
+    # Format for shell syntax
+    if [[ "$shell" == "fish" ]]; then
+        echo "($cmd)"
+    else
+        echo "\$($cmd)"
+    fi
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Config Generation (Template Pattern)
 #───────────────────────────────────────────────────────────────────────────────
@@ -211,11 +345,15 @@ generate_config_block() {
     local region=$2
     local auth_mode=$3
     local api_key=$4
+    local storage_mode=$5
     local syntax="${SHELL_EXPORT_SYNTAX[$shell]}"
     local config=""
 
     config+=$'\n'"# BEGIN: Claude Code Bedrock Configuration"$'\n'
     config+="# Auth mode: $auth_mode"$'\n'
+    if [[ "$storage_mode" == "keychain" ]]; then
+        config+="# Storage: keychain (encrypted)"$'\n'
+    fi
 
     # Unset conflicting auth variables to prevent credential conflicts
     if [[ "$auth_mode" == "api-key" ]]; then
@@ -254,10 +392,22 @@ generate_config_block() {
 
     # Add API key if using api-key auth mode
     if [[ "$auth_mode" == "api-key" && -n "$api_key" ]]; then
-        if [[ "$shell" == "fish" ]]; then
-            config+="$syntax AWS_BEARER_TOKEN_BEDROCK $api_key"$'\n'
+        if [[ "$storage_mode" == "keychain" ]]; then
+            # Retrieve from keychain at shell startup
+            local keychain_cmd
+            keychain_cmd=$(keychain_get_command "$shell")
+            if [[ "$shell" == "fish" ]]; then
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK $keychain_cmd"$'\n'
+            else
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$keychain_cmd"$'\n'
+            fi
         else
-            config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$api_key"$'\n'
+            # Store directly in profile (legacy behavior)
+            if [[ "$shell" == "fish" ]]; then
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK $api_key"$'\n'
+            else
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$api_key"$'\n'
+            fi
         fi
     fi
 
@@ -387,6 +537,7 @@ Options:
   --auth=MODE            Authentication mode: iam (default) or api-key
   --bedrock-key=KEY      Bedrock API key (optional; prompts if not provided)
   --preserve-key         Reuse existing API key from environment (no prompt)
+  --storage=MODE         Where to store API key: profile (default) or keychain
   --region=REGION        AWS region (default: us-west-2)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
@@ -400,6 +551,15 @@ Authentication Modes:
              Prompts securely if --bedrock-key not provided
              Get key from: AWS Console → Bedrock → API keys
 
+Storage Modes:
+  profile    Store API key directly in shell profile (default)
+             Key is plaintext but protected by file permissions
+
+  keychain   Store API key in system keychain (more secure)
+             macOS: Keychain Access
+             Linux: Secret Service (GNOME Keyring / KWallet)
+             Windows: Credential Manager
+
 Examples:
   # IAM/SSO authentication (default)
   ./setup-claude-bedrock.sh
@@ -407,6 +567,9 @@ Examples:
 
   # API key authentication (interactive - recommended, more secure)
   ./setup-claude-bedrock.sh --auth=api-key
+
+  # API key with secure keychain storage (most secure)
+  ./setup-claude-bedrock.sh --auth=api-key --storage=keychain
 
   # API key authentication (inline - for scripting/CI)
   ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
@@ -430,6 +593,7 @@ PRESERVE_KEY=false
 AWS_REGION="${DEFAULT_REGION:-us-west-2}"
 SHELL_TYPE=""
 AUTH_MODE="${DEFAULT_AUTH:-iam}"
+STORAGE_MODE="profile"
 BEDROCK_API_KEY=""
 
 parse_arguments() {
@@ -452,6 +616,9 @@ parse_arguments() {
                 ;;
             --preserve-key)
                 PRESERVE_KEY=true
+                ;;
+            --storage=*)
+                STORAGE_MODE="${arg#--storage=}"
                 ;;
             --help|-h)
                 show_help
@@ -489,6 +656,40 @@ validate_inputs() {
         echo "Invalid auth mode: $AUTH_MODE"
         echo "Valid modes: iam, api-key"
         exit 1
+    fi
+
+    # Validate storage mode
+    if ! is_valid_storage_mode "$STORAGE_MODE"; then
+        echo "Invalid storage mode: $STORAGE_MODE"
+        echo "Valid modes: profile, keychain"
+        exit 1
+    fi
+
+    # Check keychain availability when using keychain storage
+    if [[ "$STORAGE_MODE" == "keychain" ]]; then
+        if ! keychain_available; then
+            local os=$(detect_os)
+            echo "Error: Keychain storage not available on this system" >&2
+            echo "" >&2
+            case "$os" in
+                linux|wsl)
+                    echo "Install libsecret tools:" >&2
+                    echo "  Ubuntu/Debian: sudo apt install libsecret-tools" >&2
+                    echo "  Fedora/RHEL:   sudo dnf install libsecret" >&2
+                    echo "  Arch:          sudo pacman -S libsecret" >&2
+                    ;;
+                macos)
+                    echo "macOS Keychain should be available by default." >&2
+                    echo "Ensure 'security' command exists: which security" >&2
+                    ;;
+                *)
+                    echo "Keychain storage requires OS-specific tools." >&2
+                    ;;
+            esac
+            echo "" >&2
+            echo "Alternatively, use --storage=profile (default)" >&2
+            exit 1
+        fi
     fi
 
     # Handle API key for api-key auth mode
@@ -572,6 +773,7 @@ setup_shell() {
         # Show masked key for security
         local masked_key="${BEDROCK_API_KEY:0:8}...${BEDROCK_API_KEY: -4}"
         echo "API Key:  $masked_key"
+        echo "Storage:  $STORAGE_MODE"
     fi
     echo ""
 
@@ -613,9 +815,23 @@ setup_shell() {
         fi
     fi
 
+    # Store API key in keychain if using keychain storage
+    if [[ "$AUTH_MODE" == "api-key" && "$STORAGE_MODE" == "keychain" ]]; then
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "[DRY RUN] Would store API key in system keychain"
+        else
+            if keychain_store "$BEDROCK_API_KEY"; then
+                echo "API key stored in system keychain"
+            else
+                echo "Error: Failed to store API key in keychain" >&2
+                exit 1
+            fi
+        fi
+    fi
+
     # Generate and apply configuration
     local config_block
-    config_block=$(generate_config_block "$shell" "$AWS_REGION" "$AUTH_MODE" "$BEDROCK_API_KEY")
+    config_block=$(generate_config_block "$shell" "$AWS_REGION" "$AUTH_MODE" "$BEDROCK_API_KEY" "$STORAGE_MODE")
 
     if [[ "$DRY_RUN" == true ]]; then
         echo ""
@@ -624,6 +840,9 @@ setup_shell() {
         echo "$config_block"
         echo "─────────────────────────────────────────"
         echo ""
+        if [[ "$STORAGE_MODE" == "keychain" ]]; then
+            echo "[DRY RUN] API key would be stored in system keychain (encrypted)"
+        fi
         echo "[DRY RUN] No changes made"
     else
         write_config_to_file "$config_file" "$config_block"

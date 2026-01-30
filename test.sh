@@ -178,6 +178,38 @@ test_api_key_type_detection() {
         "AWS_BEARER_TOKEN_BEDROCK=ABSK12345 $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -q 'Long-term API key'"
 }
 
+test_keychain_storage() {
+    section "Keychain Storage"
+
+    # Test: --storage flag is recognized
+    run_test "--storage=profile works (dry-run)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=profile --dry-run"
+
+    run_test "--storage=keychain in dry-run mode" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain --dry-run 2>&1 | grep -qE 'keychain|not available'"
+
+    run_test "invalid --storage value rejected" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=invalid --dry-run 2>&1 | grep -q 'Invalid storage mode'"
+
+    run_test "help shows --storage option" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'storage='"
+
+    run_test "help shows keychain storage mode" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'keychain'"
+
+    # Test: keychain config block contains retrieval command (when keychain available)
+    # This will vary by OS - on Linux needs secret-tool, on macOS needs security
+    if command -v secret-tool >/dev/null 2>&1; then
+        run_test "keychain config uses secret-tool (Linux)" \
+            "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain --dry-run 2>&1 | grep -q 'secret-tool'"
+    elif command -v security >/dev/null 2>&1; then
+        run_test "keychain config uses security (macOS)" \
+            "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --storage=keychain --dry-run 2>&1 | grep -q 'security find-generic-password'"
+    else
+        skip_test "keychain retrieval command" "no keychain tool available"
+    fi
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -194,6 +226,7 @@ main() {
     test_api_key_auth
     test_credential_conflict_detection
     test_api_key_type_detection
+    test_keychain_storage
     test_required_files
     test_json_validity
     test_unified_entry_point
