@@ -200,6 +200,16 @@ check_api_key() {
         # Mask the key for display
         local masked="${key:0:8}...${key: -4}"
         echo -e "${GREEN}PASS${NC} $API_KEY_VAR is set ($masked)"
+
+        # Detect key type by prefix
+        if [[ "$key" == bedrock-api-key-* ]]; then
+            echo -e "${YELLOW}WARN${NC} Short-term API key detected (expires ≤12 hours)"
+            echo "     Consider using long-term key for persistent setups"
+            ((WARNINGS++))
+        elif [[ "$key" == ABSK* ]]; then
+            echo -e "${GREEN}INFO${NC} Long-term API key detected"
+            echo "     Check expiration in AWS console if issues occur"
+        fi
     else
         echo -e "${YELLOW}INFO${NC} $API_KEY_VAR not set (using IAM/SSO auth)"
     fi

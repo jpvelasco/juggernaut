@@ -95,6 +95,65 @@ function Get-AuthMode {
     return "iam"
 }
 
+function Test-CredentialConflicts {
+    $hasApiKey = -not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($ApiKeyVar))
+    $hasIamEnv = (-not [string]::IsNullOrEmpty($env:AWS_ACCESS_KEY_ID)) -or (-not [string]::IsNullOrEmpty($env:AWS_SECRET_ACCESS_KEY))
+    $hasAwsProfile = -not [string]::IsNullOrEmpty($env:AWS_PROFILE)
+    $hasAwsCredsFile = Test-Path "$env:USERPROFILE\.aws\credentials"
+    $conflicts = @()
+
+    Write-Host "Credential Conflict Check" -ForegroundColor Cyan
+
+    # Check for conflicts when using API key
+    if ($hasApiKey) {
+        if ($hasIamEnv) {
+            $conflicts += "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY"
+        }
+        if ($hasAwsProfile) {
+            $conflicts += "AWS_PROFILE=$env:AWS_PROFILE"
+        }
+        if ($hasAwsCredsFile) {
+            $conflicts += "~\.aws\credentials file exists"
+        }
+
+        if ($conflicts.Count -gt 0) {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " API key mode active, but other credentials also present:"
+            foreach ($conflict in $conflicts) {
+                Write-Host "     - $conflict"
+            }
+            Write-Host "     API key takes precedence; other credentials are ignored."
+            Write-Host "     Consider removing unused credentials to avoid confusion."
+            $script:Warnings++
+        }
+        else {
+            Write-Host "PASS" -ForegroundColor Green -NoNewline
+            Write-Host " No conflicting credentials detected"
+        }
+    }
+    else {
+        # IAM mode - check for credentials file
+        if ($hasAwsCredsFile) {
+            Write-Host "INFO" -ForegroundColor Green -NoNewline
+            Write-Host " ~\.aws\credentials file found (may be used for auth)"
+        }
+        if ($hasAwsProfile) {
+            Write-Host "INFO" -ForegroundColor Green -NoNewline
+            Write-Host " AWS_PROFILE=$env:AWS_PROFILE is set"
+        }
+        if (-not $hasIamEnv -and -not $hasAwsProfile -and -not $hasAwsCredsFile) {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " No AWS credentials detected in environment or files"
+            $script:Warnings++
+        }
+        else {
+            Write-Host "PASS" -ForegroundColor Green -NoNewline
+            Write-Host " IAM credentials configuration looks reasonable"
+        }
+    }
+    Write-Host ""
+}
+
 function Test-ApiKey {
     $key = [Environment]::GetEnvironmentVariable($ApiKeyVar)
     if (-not [string]::IsNullOrEmpty($key)) {
@@ -102,6 +161,19 @@ function Test-ApiKey {
         $masked = $key.Substring(0, [Math]::Min(8, $key.Length)) + "..." + $key.Substring([Math]::Max(0, $key.Length - 4))
         Write-Host "PASS" -ForegroundColor Green -NoNewline
         Write-Host " $ApiKeyVar is set ($masked)"
+
+        # Detect key type by prefix
+        if ($key.StartsWith("bedrock-api-key-")) {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " Short-term API key detected (expires ≤12 hours)"
+            Write-Host "     Consider using long-term key for persistent setups"
+            $script:Warnings++
+        }
+        elseif ($key.StartsWith("ABSK")) {
+            Write-Host "INFO" -ForegroundColor Green -NoNewline
+            Write-Host " Long-term API key detected"
+            Write-Host "     Check expiration in AWS console if issues occur"
+        }
     }
     else {
         Write-Host "INFO" -ForegroundColor Yellow -NoNewline
@@ -247,6 +319,9 @@ Write-Host "  OS:    Windows"
 Write-Host "  Shell: PowerShell $($PSVersionTable.PSVersion)"
 Write-Host "  Auth:  $authMode"
 Write-Host ""
+
+# Credential conflict check
+Test-CredentialConflicts
 
 # Environment Variables
 Write-Host "Environment Variables" -ForegroundColor Cyan

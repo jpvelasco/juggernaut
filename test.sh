@@ -146,6 +146,38 @@ test_api_key_auth() {
     run_test "non-interactive requires key" "echo '' | $SCRIPT_DIR/setup-claude-bedrock.sh --auth=api-key 2>&1 | grep -q 'required in non-interactive'"
 }
 
+test_credential_conflict_detection() {
+    section "Credential Conflict Detection"
+
+    # Test: API key + IAM env vars triggers warning
+    run_test "conflict: api-key + IAM env vars" \
+        "AWS_BEARER_TOKEN_BEDROCK=test AWS_ACCESS_KEY_ID=AKIATEST $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -q 'AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY'"
+
+    # Test: API key + AWS_PROFILE triggers warning
+    run_test "conflict: api-key + AWS_PROFILE" \
+        "AWS_BEARER_TOKEN_BEDROCK=test AWS_PROFILE=default $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -q 'AWS_PROFILE='"
+
+    # Test: Unsetting env vars removes those specific conflicts
+    run_test "no env var conflicts when unset" \
+        "(unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_PROFILE; AWS_BEARER_TOKEN_BEDROCK=test $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -v 'AWS_ACCESS_KEY_ID' | grep -v 'AWS_PROFILE=')"
+
+    # Test: IAM mode without creds warns
+    run_test "warn: IAM mode no credentials" \
+        "(unset AWS_BEARER_TOKEN_BEDROCK AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_PROFILE; HOME=/nonexistent $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -q 'No AWS credentials detected')"
+}
+
+test_api_key_type_detection() {
+    section "API Key Type Detection"
+
+    # Test: Short-term key detection
+    run_test "detect short-term key (bedrock-api-key-*)" \
+        "AWS_BEARER_TOKEN_BEDROCK=bedrock-api-key-12345 $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -q 'Short-term API key'"
+
+    # Test: Long-term key detection
+    run_test "detect long-term key (ABSK*)" \
+        "AWS_BEARER_TOKEN_BEDROCK=ABSK12345 $SCRIPT_DIR/validate-setup.sh 2>&1 | grep -q 'Long-term API key'"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -160,6 +192,8 @@ main() {
     test_dry_run
     test_region_flag
     test_api_key_auth
+    test_credential_conflict_detection
+    test_api_key_type_detection
     test_required_files
     test_json_validity
     test_unified_entry_point
