@@ -501,6 +501,10 @@ validate_inputs() {
             read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
             echo ""  # newline after hidden input
 
+            # Strip any trailing whitespace/carriage returns (common from copy-paste)
+            BEDROCK_API_KEY="${BEDROCK_API_KEY%"${BEDROCK_API_KEY##*[![:space:]]}"}"
+            BEDROCK_API_KEY="${BEDROCK_API_KEY#"${BEDROCK_API_KEY%%[![:space:]]*}"}"
+
             if [[ -z "$BEDROCK_API_KEY" ]]; then
                 echo "Error: API key cannot be empty"
                 exit 1

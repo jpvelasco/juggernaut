@@ -40,18 +40,50 @@ done
 # Configuration
 #───────────────────────────────────────────────────────────────────────────────
 
-# Expected environment variable values
-declare -A EXPECTED_ENV_VARS=(
-    [CLAUDE_CODE_USE_BEDROCK]="1"
-    [CLAUDE_CODE_MAX_OUTPUT_TOKENS]="16384"
-    [MAX_THINKING_TOKENS]="1024"
-    [ANTHROPIC_MODEL]="global.anthropic.claude-opus-4-5-20251101-v1:0"
-    [ANTHROPIC_SMALL_FAST_MODEL]="global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    [DISABLE_ERROR_REPORTING]="1"
-    [DISABLE_TELEMETRY]="1"
-    [DISABLE_AUTOUPDATE]="1"
-    [DISABLE_BUG_COMMAND]="1"
-)
+# Find the config file (same directory as this script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/bedrock-config.json"
+
+# Load expected values from bedrock-config.json (single source of truth)
+declare -A EXPECTED_ENV_VARS
+
+load_config() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo "Error: Config file not found: $CONFIG_FILE" >&2
+        exit 1
+    fi
+
+    local json_content
+    json_content=$(cat "$CONFIG_FILE")
+
+    # Try jq first, fall back to python
+    if command -v jq >/dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+            [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"
+        done < <(echo "$json_content" | jq -r '.environment | to_entries[] | "\(.key)=\(.value)"')
+    elif command -v python3 >/dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+            [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"
+        done < <(echo "$json_content" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for k, v in data.get('environment', {}).items():
+    print(f'{k}={v}')
+")
+    elif command -v python >/dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+            [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"
+        done < <(echo "$json_content" | python -c "
+import sys, json
+data = json.load(sys.stdin)
+for k, v in data.get('environment', {}).items():
+    print(f'{k}={v}')
+")
+    else
+        echo "Error: jq or python required to parse config" >&2
+        exit 1
+    fi
+}
 
 # Variables that just need to be set (any value)
 declare -a REQUIRED_ENV_VARS=(AWS_REGION)
@@ -311,6 +343,9 @@ check_claude_code() {
 #───────────────────────────────────────────────────────────────────────────────
 
 main() {
+    # Load expected values from config file
+    load_config
+
     echo "Validating Claude Code Bedrock Configuration..."
     echo ""
 

@@ -23,18 +23,28 @@ if ($Help) {
 # Configuration
 #───────────────────────────────────────────────────────────────────────────────
 
-# Expected environment variable values
-$ExpectedEnvVars = @{
-    "CLAUDE_CODE_USE_BEDROCK" = "1"
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS" = "16384"
-    "MAX_THINKING_TOKENS" = "1024"
-    "ANTHROPIC_MODEL" = "global.anthropic.claude-opus-4-5-20251101-v1:0"
-    "ANTHROPIC_SMALL_FAST_MODEL" = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    "DISABLE_ERROR_REPORTING" = "1"
-    "DISABLE_TELEMETRY" = "1"
-    "DISABLE_AUTOUPDATE" = "1"
-    "DISABLE_BUG_COMMAND" = "1"
+# Find the config file (same directory as this script)
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ConfigFile = Join-Path $ScriptDir "bedrock-config.json"
+
+# Load expected values from bedrock-config.json (single source of truth)
+function Load-Config {
+    if (-not (Test-Path $ConfigFile)) {
+        Write-Host "Error: Config file not found: $ConfigFile" -ForegroundColor Red
+        exit 1
+    }
+
+    $config = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+    $envVars = @{}
+
+    foreach ($property in $config.environment.PSObject.Properties) {
+        $envVars[$property.Name] = $property.Value
+    }
+
+    return $envVars
 }
+
+$ExpectedEnvVars = Load-Config
 
 # Variables that just need to be set (any value)
 $RequiredEnvVars = @("AWS_REGION")

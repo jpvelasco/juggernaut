@@ -4,7 +4,7 @@
 # NOTE: This script must be dot-sourced (. .\apply-config.ps1) for environment variables to persist.
 
 param(
-    [string]$Region = "us-west-2",
+    [string]$Region,
     [switch]$Help
 )
 
@@ -17,7 +17,7 @@ if ($Help) {
     Write-Host "This script must be dot-sourced (note the leading dot) for environment variables to persist."
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Region <region>    AWS region (default: us-west-2)"
+    Write-Host "  -Region <region>    AWS region (default: from bedrock-config.json)"
     Write-Host "  -Help               Show this help message"
     Write-Host ""
     Write-Host "Examples:"
@@ -26,32 +26,40 @@ if ($Help) {
     return
 }
 
+#───────────────────────────────────────────────────────────────────────────────
+# Load Configuration from JSON
+#───────────────────────────────────────────────────────────────────────────────
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ConfigFile = Join-Path $ScriptDir "bedrock-config.json"
+
+if (-not (Test-Path $ConfigFile)) {
+    Write-Host "Error: Config file not found: $ConfigFile" -ForegroundColor Red
+    return
+}
+
+$config = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+
 Write-Host "Applying Claude Code Bedrock configuration..." -ForegroundColor Cyan
 Write-Host ""
 
-# Apply configuration
-$env:CLAUDE_CODE_USE_BEDROCK = "1"
-$env:AWS_REGION = $Region
-$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "16384"
-$env:MAX_THINKING_TOKENS = "1024"
-$env:ANTHROPIC_MODEL = "global.anthropic.claude-opus-4-5-20251101-v1:0"
-$env:ANTHROPIC_SMALL_FAST_MODEL = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-$env:DISABLE_ERROR_REPORTING = "1"
-$env:DISABLE_TELEMETRY = "1"
-$env:DISABLE_AUTOUPDATE = "1"
-$env:DISABLE_BUG_COMMAND = "1"
+# Apply configuration from JSON
+foreach ($property in $config.environment.PSObject.Properties) {
+    [Environment]::SetEnvironmentVariable($property.Name, $property.Value, "Process")
+}
+
+# Region: command line overrides config default
+if ($Region) {
+    $env:AWS_REGION = $Region
+} else {
+    $env:AWS_REGION = $config.defaults.region
+}
 
 Write-Host "Configuration applied:" -ForegroundColor Green
-Write-Host "  CLAUDE_CODE_USE_BEDROCK=$env:CLAUDE_CODE_USE_BEDROCK"
 Write-Host "  AWS_REGION=$env:AWS_REGION"
-Write-Host "  CLAUDE_CODE_MAX_OUTPUT_TOKENS=$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS"
-Write-Host "  MAX_THINKING_TOKENS=$env:MAX_THINKING_TOKENS"
-Write-Host "  ANTHROPIC_MODEL=$env:ANTHROPIC_MODEL"
-Write-Host "  ANTHROPIC_SMALL_FAST_MODEL=$env:ANTHROPIC_SMALL_FAST_MODEL"
-Write-Host "  DISABLE_ERROR_REPORTING=$env:DISABLE_ERROR_REPORTING"
-Write-Host "  DISABLE_TELEMETRY=$env:DISABLE_TELEMETRY"
-Write-Host "  DISABLE_AUTOUPDATE=$env:DISABLE_AUTOUPDATE"
-Write-Host "  DISABLE_BUG_COMMAND=$env:DISABLE_BUG_COMMAND"
+foreach ($property in $config.environment.PSObject.Properties) {
+    Write-Host "  $($property.Name)=$($property.Value)"
+}
 Write-Host ""
 Write-Host "This configuration is active for the current PowerShell session only." -ForegroundColor Yellow
 Write-Host "To make it permanent, run: .\setup-claude-bedrock.ps1"

@@ -148,19 +148,9 @@ if ($Config -and $Config.environment) {
         $ConfigBlock += "`$env:$($_.Name) = `"$($_.Value)`"`n"
     }
 } else {
-    # Fallback to hardcoded defaults if config not available
-    $ConfigBlock += @"
-`$env:CLAUDE_CODE_USE_BEDROCK = "1"
-`$env:CLAUDE_CODE_MAX_OUTPUT_TOKENS = "16384"
-`$env:MAX_THINKING_TOKENS = "1024"
-`$env:ANTHROPIC_MODEL = "global.anthropic.claude-opus-4-5-20251101-v1:0"
-`$env:ANTHROPIC_SMALL_FAST_MODEL = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
-`$env:DISABLE_ERROR_REPORTING = "1"
-`$env:DISABLE_TELEMETRY = "1"
-`$env:DISABLE_AUTOUPDATE = "1"
-`$env:DISABLE_BUG_COMMAND = "1"
-
-"@
+    Write-Host "Error: Could not load environment variables from config file" -ForegroundColor Red
+    Write-Host "Ensure bedrock-config.json exists and is valid JSON" -ForegroundColor Red
+    exit 1
 }
 
 # Add API key if using api-key auth
