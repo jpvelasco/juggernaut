@@ -1,0 +1,60 @@
+# Juggernaut - Claude Code Bedrock Setup
+# Git ignore file
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+*.tmp
+*.temp
+Desktop.ini
+
+# Linux
+*~
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*.backup
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Personal AWS credentials (should never be committed)
+.aws/
+credentials
+config
+
+# Secrets and sensitive files
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.*
+*_secret*
+*.credentials
+
+# Personal shell history
+.bash_history
+.zsh_history
+
+# Test files
+test_*
+*.test
+
+# Claude Code local settings
+.claude/

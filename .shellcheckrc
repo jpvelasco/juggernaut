@@ -1,0 +1,11 @@
+# Shellcheck configuration for Juggernaut
+# https://github.com/koalaman/shellcheck/wiki/Ignore
+
+# Allow sourcing from paths that don't exist at analysis time
+disable=SC1091
+
+# Allow expressions in single quotes (common in echo statements)
+disable=SC2016
+
+# Default shell dialect
+shell=bash

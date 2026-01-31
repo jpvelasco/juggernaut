@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+# Juggernaut - Unified Setup Entry Point
+# Automatically detects OS and shell, then runs the appropriate setup
+# Usage: ./setup [OPTIONS]
+
+set -e
+
+#───────────────────────────────────────────────────────────────────────────────
+# Detection Functions
+#───────────────────────────────────────────────────────────────────────────────
+
+detect_os() {
+    case "$OSTYPE" in
+        darwin*)      echo "macos" ;;
+        linux*)
+            [[ -f /proc/version ]] && grep -qi microsoft /proc/version 2>/dev/null \
+                && echo "wsl" || echo "linux" ;;
+        msys*|mingw*) echo "gitbash" ;;
+        cygwin*)      echo "cygwin" ;;
+        *)            echo "unknown" ;;
+    esac
+}
+
+detect_shell() {
+    # Detect actual running shell, not login shell ($SHELL)
+    if [[ -n "$ZSH_VERSION" ]]; then
+        echo "zsh"
+    elif [[ -n "$BASH_VERSION" ]]; then
+        echo "bash"
+    elif [[ -n "$FISH_VERSION" ]]; then
+        echo "fish"
+    else
+        # Fallback to login shell
+        basename "$SHELL"
+    fi
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Main
+#───────────────────────────────────────────────────────────────────────────────
+
+# Pass through help flag
+for arg in "$@"; do
+    [[ "$arg" == "--help" || "$arg" == "-h" ]] && {
+        echo "Juggernaut - Claude Code Bedrock Setup"
+        echo ""
+        echo "Usage: ./setup [OPTIONS]"
+        echo ""
+        echo "Automatically detects your OS and shell, then configures Claude Code"
+        echo "to use Amazon Bedrock with Global CRIS inference profiles."
+        echo ""
+        echo "Options:"
+        echo "  --auth=MODE          Authentication: iam (default) or api-key"
+        echo "  --bedrock-key=KEY    Bedrock API key (optional; prompts if not provided)"
+        echo "  --preserve-key       Reuse existing API key from environment (no prompt)"
+        echo "  --storage=MODE       Where to store API key: profile (default) or keychain"
+        echo "  --region=REGION      AWS region (default: us-west-2)"
+        echo "  --dry-run            Preview changes without modifying files"
+        echo "  --force, -f          Skip confirmation prompts"
+        echo "  --help, -h           Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  ./setup                                    # IAM/SSO auth (default)"
+        echo "  ./setup --auth=api-key                     # API key (interactive prompt)"
+        echo "  ./setup --auth=api-key --bedrock-key=br-xxx   # API key (inline)"
+        echo "  ./setup --auth=api-key --preserve-key      # Reuse existing env key"
+        echo "  ./setup --dry-run                          # Preview changes"
+        echo ""
+        echo "Supported platforms:"
+        echo "  - macOS (bash, zsh, fish)"
+        echo "  - Linux (bash, zsh, fish)"
+        echo "  - Windows WSL (bash, zsh, fish)"
+        echo "  - Windows Git Bash"
+        echo "  - Windows PowerShell (use setup-claude-bedrock.ps1)"
+        exit 0
+    }
+done
+
+OS=$(detect_os)
+SHELL_TYPE=$(detect_shell)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Detected: $OS / $SHELL_TYPE"
+
+# Handle Windows PowerShell (can't be detected from bash, but inform user)
+if [[ "$OS" == "unknown" ]]; then
+    echo ""
+    echo "Could not detect OS. If you're on Windows PowerShell, run:"
+    echo "  .\\setup-claude-bedrock.ps1"
+    exit 1
+fi
+
+# Delegate to main setup script with detected shell
+exec "$SCRIPT_DIR/setup-claude-bedrock.sh" "$SHELL_TYPE" "$@"
