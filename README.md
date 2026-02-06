@@ -32,6 +32,19 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Cost Control**: Route through your AWS account for billing/governance
 - **Enterprise Ready**: Works with AWS SSO, IAM roles, and corporate identity providers
 
+## What's New in v1.3.0
+
+- **Custom Model IDs**: Override default models with `--model` and `--fast-model` flags
+  ```bash
+  ./setup --model=anthropic.claude-3-opus-20240229-v1:0
+  ./setup --fast-model=anthropic.claude-3-haiku-20240307-v1:0
+  ```
+- **Model Persistence**: Custom models are preserved across re-runs (like auth mode)
+- **Reset to Defaults**: Use `--model=default` or `--fast-model=default` to revert to `bedrock-config.json`
+- **Format Validation**: Warns on non-standard Bedrock model ID patterns
+
+See [Custom Models](#custom-models) for full details.
+
 ## Why Bedrock?
 
 | Feature | Direct Anthropic API | Amazon Bedrock |
@@ -59,7 +72,7 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 ## Prerequisites
 
 1. AWS account with Bedrock access enabled
-2. Access to Claude models (Opus 4.5, Sonnet 4.5) in Bedrock
+2. Access to Claude models (Opus 4.6, Sonnet 4.5) in Bedrock
 3. Claude Code installed
 4. Valid AWS credentials
 5. Bash 4.0+ (macOS users: `brew install bash`)
@@ -91,7 +104,7 @@ claude
 
 # Manual checks
 echo $CLAUDE_CODE_USE_BEDROCK     # Should show: 1
-echo $ANTHROPIC_MODEL             # Should show: global.anthropic.claude-opus-4-5-20251101-v1:0
+echo $ANTHROPIC_MODEL             # Should show: global.anthropic.claude-opus-4-6-v1
 ```
 
 ## Detailed Setup Steps
@@ -329,7 +342,7 @@ The setup adds these environment variables:
 - `AWS_REGION=us-west-2` - Default region (change as needed)
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS=16384` - **Required for Bedrock** (allows longer responses)
 - `MAX_THINKING_TOKENS=32768` - Extended reasoning for complex tasks
-- `ANTHROPIC_MODEL=global.anthropic.claude-opus-4-5-20251101-v1:0` - Global CRIS primary model
+- `ANTHROPIC_MODEL=global.anthropic.claude-opus-4-6-v1` - Global CRIS primary model
 - `ANTHROPIC_SMALL_FAST_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0` - Global CRIS fast model
 - `DISABLE_ERROR_REPORTING=1` - Disable error reporting to Anthropic
 - `DISABLE_TELEMETRY=1` - Disable telemetry collection
@@ -338,10 +351,10 @@ The setup adds these environment variables:
 
 ## Default Models
 
-- **Primary**: Claude Opus 4.5 (Global CRIS: `global.anthropic.claude-opus-4-5-20251101-v1:0`)
+- **Primary**: Claude Opus 4.6 (Global CRIS: `global.anthropic.claude-opus-4-6-v1`)
 - **Fast**: Claude Sonnet 4.5 (Global CRIS: `global.anthropic.claude-sonnet-4-5-20250929-v1:0`)
 
-**Note**: This configuration uses Global Cross-Region Inference Service (CRIS) profiles for optimal availability and performance across AWS regions. Opus 4.5 provides the most powerful intelligence for complex tasks, while Sonnet 4.5 offers excellent performance for faster operations.
+**Note**: This configuration uses Global Cross-Region Inference Service (CRIS) profiles for optimal availability and performance across AWS regions. Opus 4.6 provides the most powerful intelligence for complex tasks, while Sonnet 4.5 offers excellent performance for faster operations.
 
 ## How Models Are Used
 
@@ -349,14 +362,43 @@ Claude Code uses these two models differently:
 
 | Variable | Model | Usage | Visible in `/model`? |
 |----------|-------|-------|---------------------|
-| `ANTHROPIC_MODEL` | Opus 4.5 | Primary conversation model - all direct interactions | Yes (as custom model) |
+| `ANTHROPIC_MODEL` | Opus 4.6 | Primary conversation model - all direct interactions | Yes (as custom model) |
 | `ANTHROPIC_SMALL_FAST_MODEL` | Sonnet 4.5 | Background agent tasks - file exploration, quick searches, codebase analysis | No (automatic) |
 
 **What this means in practice:**
-- When you chat with Claude Code, you're talking to Opus 4.5
+- When you chat with Claude Code, you're talking to Opus 4.6
 - When Claude Code spawns background agents for tasks like exploring code or quick searches, it automatically uses Sonnet 4.5
 - The `/model` command only shows the primary model because the fast model is used internally, not for direct conversation
 - This setup optimizes both capability (Opus for complex work) and cost/speed (Sonnet for background operations)
+
+## Custom Models
+
+Override the default model IDs from `bedrock-config.json`:
+
+```bash
+# Unix/macOS/Linux
+./setup --model=anthropic.claude-3-opus-20240229-v1:0
+./setup --fast-model=anthropic.claude-3-haiku-20240307-v1:0
+./setup --model=anthropic.claude-3-opus-20240229-v1:0 --fast-model=anthropic.claude-3-haiku-20240307-v1:0
+
+# Windows PowerShell
+.\setup-claude-bedrock.ps1 -Model anthropic.claude-3-opus-20240229-v1:0
+.\setup-claude-bedrock.ps1 -FastModel anthropic.claude-3-haiku-20240307-v1:0
+```
+
+**Reset to defaults:**
+```bash
+./setup --model=default --fast-model=default
+.\setup-claude-bedrock.ps1 -Model default -FastModel default
+```
+
+| Flag | PowerShell | Notes |
+|------|------------|-------|
+| `--model=ID` | `-Model ID` | Custom primary model |
+| `--fast-model=ID` | `-FastModel ID` | Custom fast model |
+| `--model=default` | `-Model default` | Reset to bedrock-config.json default |
+
+Custom models are persisted via comments in the config block and preserved on re-run, just like auth mode. Use `--model=default` to revert.
 
 ## Troubleshooting
 
