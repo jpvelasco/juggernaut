@@ -14,6 +14,9 @@ param(
     [switch]$Help
 )
 
+# Track if -Auth was explicitly provided by the user
+$AuthExplicit = $PSBoundParameters.ContainsKey('Auth')
+
 $ErrorActionPreference = "Stop"
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -32,10 +35,36 @@ if (Test-Path $ConfigFile) {
     }
 }
 
+# Detect existing auth mode from profile file
+# Returns: "iam", "api-key", or $null if not found
+function Get-ExistingAuthMode {
+    param([string]$ProfilePath)
+
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# Auth mode: (iam|api-key)") {
+            return $Matches[1]
+        }
+    }
+    return $null
+}
+
 # Apply defaults from config or use hardcoded fallbacks
 if ([string]::IsNullOrEmpty($Region)) {
     $Region = if ($Config -and $Config.defaults.region) { $Config.defaults.region } else { "us-west-2" }
 }
+
+# Detect existing auth mode if user didn't explicitly specify -Auth
+$ProfilePathForDetection = $PROFILE.CurrentUserAllHosts
+if (-not $AuthExplicit -and [string]::IsNullOrEmpty($Auth)) {
+    $existingAuth = Get-ExistingAuthMode -ProfilePath $ProfilePathForDetection
+    if ($existingAuth) {
+        $Auth = $existingAuth
+        Write-Host "Preserving existing auth mode: $Auth"
+    }
+}
+
+# Apply default if still unset
 if ([string]::IsNullOrEmpty($Auth)) {
     $Auth = if ($Config -and $Config.defaults.auth_mode) { $Config.defaults.auth_mode } else { "iam" }
 }

@@ -471,6 +471,15 @@ remove_existing_config() {
     sed_inplace '/# Claude Code - Amazon Bedrock Configuration/,/ANTHROPIC_SMALL_FAST_MODEL/d' "$config_file"
 }
 
+# Detect existing auth mode from config file
+# Returns: "iam", "api-key", or empty string if not found
+detect_existing_auth_mode() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# Auth mode:" "$config_file" 2>/dev/null | sed 's/^# Auth mode: //'
+    fi
+}
+
 # File locking to prevent concurrent modifications
 LOCK_FD=""
 LOCK_FILE=""
@@ -592,7 +601,8 @@ FORCE=false
 PRESERVE_KEY=false
 AWS_REGION="${DEFAULT_REGION:-us-west-2}"
 SHELL_TYPE=""
-AUTH_MODE="${DEFAULT_AUTH:-iam}"
+AUTH_MODE=""                 # Don't set default yet - may be detected from existing config
+AUTH_MODE_EXPLICIT=false     # Track if user explicitly set --auth flag
 STORAGE_MODE="profile"
 BEDROCK_API_KEY=""
 
@@ -610,6 +620,7 @@ parse_arguments() {
                 ;;
             --auth=*)
                 AUTH_MODE="${arg#--auth=}"
+                AUTH_MODE_EXPLICIT=true   # User explicitly set auth mode
                 ;;
             --bedrock-key=*)
                 BEDROCK_API_KEY="${arg#--bedrock-key=}"
@@ -886,6 +897,25 @@ show_next_steps() {
 
 main() {
     parse_arguments "$@"
+
+    # Detect existing auth mode if user didn't explicitly specify
+    if [[ "$AUTH_MODE_EXPLICIT" != true ]]; then
+        local config_file="${SHELL_CONFIGS[$SHELL_TYPE]}"
+        if [[ -f "$config_file" ]] && grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
+            local existing_auth
+            existing_auth=$(detect_existing_auth_mode "$config_file")
+            if [[ -n "$existing_auth" ]]; then
+                AUTH_MODE="$existing_auth"
+                echo "Preserving existing auth mode: $AUTH_MODE"
+            fi
+        fi
+    fi
+
+    # Apply default if still unset
+    if [[ -z "$AUTH_MODE" ]]; then
+        AUTH_MODE="${DEFAULT_AUTH:-iam}"
+    fi
+
     validate_inputs
 
     if [[ "$DRY_RUN" == true ]]; then

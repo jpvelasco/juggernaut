@@ -32,6 +32,12 @@ Tests run as a full suite only (no individual test execution). Categories: synta
 ./setup --auth=api-key --preserve-key       # Reuse AWS_BEARER_TOKEN_BEDROCK from env
 ```
 
+### Upgrade Models (Preserve Auth Mode)
+```bash
+./setup --force --preserve-key              # Re-running preserves existing auth mode automatically
+```
+When re-running setup without `--auth`, the script detects the existing auth mode from the config block (`# Auth mode: api-key` or `# Auth mode: iam`) and preserves it. Use explicit `--auth=` to override.
+
 ### Keychain Storage (optional)
 ```bash
 ./setup --auth=api-key --storage=keychain   # Store key in OS keychain instead of profile
@@ -86,6 +92,7 @@ ShellCheck configured via `.shellcheckrc`. Disabled: SC1091 (source paths), SC20
 - Non-interactive mode detection (requires `--bedrock-key` or `--preserve-key` in CI/CD)
 - Credential conflict detection warns when multiple auth methods are present
 - Setup script unsets conflicting env vars (`AWS_ACCESS_KEY_ID`, `AWS_PROFILE`, etc.) when switching auth modes
+- Auth mode preservation: re-running setup detects existing auth mode from `# Auth mode:` comment in config block
 
 ## Authentication Modes
 
