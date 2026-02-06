@@ -114,6 +114,35 @@ Keychain storage requires OS-specific tools:
 - **macOS**: Keychain Access (built-in)
 - **Windows**: Credential Manager (built-in)
 
+## Custom Models
+
+Override the default model IDs from `bedrock-config.json`:
+
+```bash
+# Unix
+./setup --model=anthropic.claude-3-opus-20240229-v1:0
+./setup --fast-model=anthropic.claude-3-haiku-20240307-v1:0
+./setup --model=anthropic.claude-3-opus-20240229-v1:0 --fast-model=anthropic.claude-3-haiku-20240307-v1:0
+
+# PowerShell
+.\setup-claude-bedrock.ps1 -Model anthropic.claude-3-opus-20240229-v1:0
+.\setup-claude-bedrock.ps1 -FastModel anthropic.claude-3-haiku-20240307-v1:0
+```
+
+Reset to defaults from `bedrock-config.json`:
+```bash
+./setup --model=default --fast-model=default
+.\setup-claude-bedrock.ps1 -Model default -FastModel default
+```
+
+| Flag | PowerShell | Notes |
+|------|------------|-------|
+| `--model=ID` | `-Model ID` | Custom primary model |
+| `--fast-model=ID` | `-FastModel ID` | Custom fast model |
+| `--model=default` | `-Model default` | Reset to bedrock-config.json |
+
+Custom models are persisted via `# Model:` and `# FastModel:` comments in the config block. Re-running setup preserves custom models unless explicitly overridden.
+
 ## Key Files
 
 - `bedrock-config.json` - Environment variables, regions, defaults (edit this to change models)

@@ -9,13 +9,17 @@ param(
     [ValidateSet("profile", "keychain")]
     [string]$Storage = "profile",
     [string]$Region = "",
+    [string]$Model = "",
+    [string]$FastModel = "",
     [switch]$Force,
     [switch]$DryRun,
     [switch]$Help
 )
 
-# Track if -Auth was explicitly provided by the user
+# Track if parameters were explicitly provided by the user
 $AuthExplicit = $PSBoundParameters.ContainsKey('Auth')
+$ModelExplicit = $PSBoundParameters.ContainsKey('Model')
+$FastModelExplicit = $PSBoundParameters.ContainsKey('FastModel')
 
 $ErrorActionPreference = "Stop"
 
@@ -49,6 +53,75 @@ function Get-ExistingAuthMode {
     return $null
 }
 
+# Detect existing custom model from profile file
+function Get-ExistingModel {
+    param([string]$ProfilePath)
+
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# Model: (.+)$" ) {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
+# Detect existing custom fast model from profile file
+function Get-ExistingFastModel {
+    param([string]$ProfilePath)
+
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# FastModel: (.+)$") {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
+# Validate model ID format
+function Test-ModelIdFormat {
+    param([string]$ModelId, [string]$ModelType)
+
+    # "default" is a special value to reset to bedrock-config.json
+    if ($ModelId -eq "default") {
+        return $true
+    }
+
+    # Non-empty check
+    if ([string]::IsNullOrEmpty($ModelId)) {
+        Write-Host "Error: -$ModelType model ID cannot be empty" -ForegroundColor Red
+        return $false
+    }
+
+    # Basic format check (Bedrock model ID patterns)
+    if ($ModelId -notmatch "^(global\.)?anthropic\.") {
+        Write-Host "Warning: '$ModelId' doesn't match expected Bedrock model ID format" -ForegroundColor Yellow
+        Write-Host "Expected patterns: anthropic.claude-* or global.anthropic.claude-*" -ForegroundColor Yellow
+    }
+
+    return $true
+}
+
+# Warn user about custom model usage
+function Show-CustomModelWarning {
+    param([string]$ModelId, [string]$ModelType)
+
+    Write-Host ""
+    Write-Host "Warning: Custom $ModelType model: $ModelId" -ForegroundColor Yellow
+    Write-Host "   Cannot validate without working AWS credentials."
+    Write-Host "   Ensure this model is available in your Bedrock region."
+    Write-Host ""
+
+    if (-not $Force -and -not $DryRun) {
+        $response = Read-Host "Continue with custom model? (y/n)"
+        if ($response -ne "y" -and $response -ne "Y") {
+            Write-Host "Setup cancelled" -ForegroundColor Red
+            exit 0
+        }
+    }
+}
+
 # Apply defaults from config or use hardcoded fallbacks
 if ([string]::IsNullOrEmpty($Region)) {
     $Region = if ($Config -and $Config.defaults.region) { $Config.defaults.region } else { "us-west-2" }
@@ -67,6 +140,48 @@ if (-not $AuthExplicit -and [string]::IsNullOrEmpty($Auth)) {
 # Apply default if still unset
 if ([string]::IsNullOrEmpty($Auth)) {
     $Auth = if ($Config -and $Config.defaults.auth_mode) { $Config.defaults.auth_mode } else { "iam" }
+}
+
+# Detect existing custom models if user didn't explicitly specify
+if (-not $ModelExplicit) {
+    $existingModel = Get-ExistingModel -ProfilePath $ProfilePathForDetection
+    if ($existingModel) {
+        $Model = $existingModel
+        Write-Host "Preserving existing custom model: $Model"
+    }
+}
+
+if (-not $FastModelExplicit) {
+    $existingFastModel = Get-ExistingFastModel -ProfilePath $ProfilePathForDetection
+    if ($existingFastModel) {
+        $FastModel = $existingFastModel
+        Write-Host "Preserving existing custom fast model: $FastModel"
+    }
+}
+
+# Handle "default" reset value - clears custom model
+if ($Model -eq "default") {
+    $Model = ""
+    Write-Host "Resetting primary model to default from bedrock-config.json"
+}
+if ($FastModel -eq "default") {
+    $FastModel = ""
+    Write-Host "Resetting fast model to default from bedrock-config.json"
+}
+
+# Validate and warn for custom models
+if (-not [string]::IsNullOrEmpty($Model)) {
+    if (-not (Test-ModelIdFormat -ModelId $Model -ModelType "Model")) {
+        exit 1
+    }
+    Show-CustomModelWarning -ModelId $Model -ModelType "primary"
+}
+
+if (-not [string]::IsNullOrEmpty($FastModel)) {
+    if (-not (Test-ModelIdFormat -ModelId $FastModel -ModelType "FastModel")) {
+        exit 1
+    }
+    Show-CustomModelWarning -ModelId $FastModel -ModelType "fast"
 }
 
 # Load valid regions from config or use defaults
@@ -93,6 +208,8 @@ if ($Help) {
     Write-Host "  -PreserveKey       Reuse existing API key from environment (no prompt)"
     Write-Host "  -Storage <MODE>    Where to store API key: profile (default) or keychain"
     Write-Host "  -Region <REGION>   AWS region (default: us-west-2)"
+    Write-Host "  -Model <ID>        Custom primary model (use 'default' to reset)"
+    Write-Host "  -FastModel <ID>    Custom fast model (use 'default' to reset)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
@@ -115,6 +232,8 @@ if ($Help) {
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -Storage keychain  # Secure storage"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxx  # Inline key"
     Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -PreserveKey   # Reuse existing key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Model anthropic.claude-3-opus-20240229-v1:0  # Custom model"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Model default               # Reset to default"
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"
     exit 0
 }
@@ -227,6 +346,12 @@ Write-Host "Setting up Claude Code with Amazon Bedrock ($AuthDisplay auth)..." -
 
 # Build configuration block from JSON config or fallback to defaults
 $ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
+if (-not [string]::IsNullOrEmpty($Model)) {
+    $ConfigBlock += "# Model: $Model`n"
+}
+if (-not [string]::IsNullOrEmpty($FastModel)) {
+    $ConfigBlock += "# FastModel: $FastModel`n"
+}
 if ($Storage -eq "keychain") {
     $ConfigBlock += "# Storage: keychain (encrypted)`n"
 }
@@ -248,7 +373,15 @@ $ConfigBlock += "`$env:AWS_REGION = `"$Region`"`n"
 # Add environment variables from config
 if ($Config -and $Config.environment) {
     $Config.environment.PSObject.Properties | ForEach-Object {
-        $ConfigBlock += "`$env:$($_.Name) = `"$($_.Value)`"`n"
+        $value = $_.Value
+        # Use custom model if specified
+        if ($_.Name -eq "ANTHROPIC_MODEL" -and -not [string]::IsNullOrEmpty($Model)) {
+            $value = $Model
+        }
+        if ($_.Name -eq "ANTHROPIC_SMALL_FAST_MODEL" -and -not [string]::IsNullOrEmpty($FastModel)) {
+            $value = $FastModel
+        }
+        $ConfigBlock += "`$env:$($_.Name) = `"$value`"`n"
     }
 } else {
     Write-Host "Error: Could not load environment variables from config file" -ForegroundColor Red
