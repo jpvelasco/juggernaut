@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "environment": {
     "CLAUDE_CODE_USE_BEDROCK": "1",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "16384",
