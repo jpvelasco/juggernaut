@@ -351,6 +351,12 @@ generate_config_block() {
 
     config+=$'\n'"# BEGIN: Claude Code Bedrock Configuration"$'\n'
     config+="# Auth mode: $auth_mode"$'\n'
+    if [[ -n "$CUSTOM_MODEL" ]]; then
+        config+="# Model: $CUSTOM_MODEL"$'\n'
+    fi
+    if [[ -n "$CUSTOM_FAST_MODEL" ]]; then
+        config+="# FastModel: $CUSTOM_FAST_MODEL"$'\n'
+    fi
     if [[ "$storage_mode" == "keychain" ]]; then
         config+="# Storage: keychain (encrypted)"$'\n'
     fi
@@ -379,6 +385,10 @@ generate_config_block() {
         local value
         if [[ "$key" == "AWS_REGION" ]]; then
             value="$region"
+        elif [[ "$key" == "ANTHROPIC_MODEL" && -n "$CUSTOM_MODEL" ]]; then
+            value="$CUSTOM_MODEL"
+        elif [[ "$key" == "ANTHROPIC_SMALL_FAST_MODEL" && -n "$CUSTOM_FAST_MODEL" ]]; then
+            value="$CUSTOM_FAST_MODEL"
         else
             value="${BEDROCK_CONFIG[$key]}"
         fi
@@ -476,7 +486,66 @@ remove_existing_config() {
 detect_existing_auth_mode() {
     local config_file=$1
     if [[ -f "$config_file" ]]; then
-        grep "^# Auth mode:" "$config_file" 2>/dev/null | sed 's/^# Auth mode: //'
+        grep "^# Auth mode:" "$config_file" 2>/dev/null | head -1 | sed 's/^# Auth mode: //'
+    fi
+}
+
+# Detect existing custom model from config file
+detect_existing_model() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# Model:" "$config_file" 2>/dev/null | head -1 | sed 's/^# Model: //'
+    fi
+}
+
+# Detect existing custom fast model from config file
+detect_existing_fast_model() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# FastModel:" "$config_file" 2>/dev/null | head -1 | sed 's/^# FastModel: //'
+    fi
+}
+
+# Validate model ID format
+validate_model_id() {
+    local model_id=$1
+    local model_type=$2  # "model" or "fast-model"
+
+    # "default" is a special value to reset to bedrock-config.json
+    if [[ "$model_id" == "default" ]]; then
+        return 0
+    fi
+
+    # Non-empty check
+    if [[ -z "$model_id" ]]; then
+        echo "Error: --$model_type model ID cannot be empty" >&2
+        return 1
+    fi
+
+    # Basic format check (Bedrock model ID patterns)
+    if [[ ! "$model_id" =~ ^(global\.)?anthropic\. ]]; then
+        echo "Warning: '$model_id' doesn't match expected Bedrock model ID format" >&2
+        echo "Expected patterns: anthropic.claude-* or global.anthropic.claude-*" >&2
+    fi
+
+    return 0
+}
+
+# Warn user about custom model usage
+warn_custom_model() {
+    local model_id=$1
+    local model_type=$2
+
+    echo ""
+    echo "⚠️  Custom $model_type model: $model_id"
+    echo "   Cannot validate without working AWS credentials."
+    echo "   Ensure this model is available in your Bedrock region."
+    echo ""
+
+    if [[ "$FORCE" != true && "$DRY_RUN" != true ]]; then
+        read -p "Continue with custom model? (y/n) " -n 1 -r
+        echo
+        [[ ! $REPLY =~ ^[Yy]$ ]] && { echo "Setup cancelled"; exit 0; }
     fi
 }
 
@@ -548,6 +617,8 @@ Options:
   --preserve-key         Reuse existing API key from environment (no prompt)
   --storage=MODE         Where to store API key: profile (default) or keychain
   --region=REGION        AWS region (default: us-west-2)
+  --model=ID             Custom primary model (use "default" to reset)
+  --fast-model=ID        Custom fast model (use "default" to reset)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
   --help, -h             Show this help message
@@ -586,6 +657,13 @@ Examples:
   # Update config while preserving existing API key
   ./setup-claude-bedrock.sh --auth=api-key --preserve-key
 
+  # Custom model IDs
+  ./setup-claude-bedrock.sh --model=anthropic.claude-3-opus-20240229-v1:0
+  ./setup-claude-bedrock.sh --fast-model=anthropic.claude-3-haiku-20240307-v1:0
+
+  # Reset custom model back to bedrock-config.json default
+  ./setup-claude-bedrock.sh --model=default
+
   # Preview changes
   ./setup-claude-bedrock.sh --dry-run
   ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxx --dry-run
@@ -605,6 +683,10 @@ AUTH_MODE=""                 # Don't set default yet - may be detected from exis
 AUTH_MODE_EXPLICIT=false     # Track if user explicitly set --auth flag
 STORAGE_MODE="profile"
 BEDROCK_API_KEY=""
+CUSTOM_MODEL=""
+CUSTOM_FAST_MODEL=""
+MODEL_EXPLICIT=false
+FAST_MODEL_EXPLICIT=false
 
 parse_arguments() {
     for arg in "$@"; do
@@ -630,6 +712,14 @@ parse_arguments() {
                 ;;
             --storage=*)
                 STORAGE_MODE="${arg#--storage=}"
+                ;;
+            --model=*)
+                CUSTOM_MODEL="${arg#--model=}"
+                MODEL_EXPLICIT=true
+                ;;
+            --fast-model=*)
+                CUSTOM_FAST_MODEL="${arg#--fast-model=}"
+                FAST_MODEL_EXPLICIT=true
                 ;;
             --help|-h)
                 show_help
@@ -914,6 +1004,47 @@ main() {
     # Apply default if still unset
     if [[ -z "$AUTH_MODE" ]]; then
         AUTH_MODE="${DEFAULT_AUTH:-iam}"
+    fi
+
+    # Detect existing custom models if user didn't explicitly specify
+    local config_file="${SHELL_CONFIGS[$SHELL_TYPE]}"
+    if [[ "$MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
+        local existing_model
+        existing_model=$(detect_existing_model "$config_file")
+        if [[ -n "$existing_model" ]]; then
+            CUSTOM_MODEL="$existing_model"
+            echo "Preserving existing custom model: $CUSTOM_MODEL"
+        fi
+    fi
+
+    if [[ "$FAST_MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
+        local existing_fast_model
+        existing_fast_model=$(detect_existing_fast_model "$config_file")
+        if [[ -n "$existing_fast_model" ]]; then
+            CUSTOM_FAST_MODEL="$existing_fast_model"
+            echo "Preserving existing custom fast model: $CUSTOM_FAST_MODEL"
+        fi
+    fi
+
+    # Handle "default" reset value - clears custom model
+    if [[ "$CUSTOM_MODEL" == "default" ]]; then
+        CUSTOM_MODEL=""
+        echo "Resetting primary model to default from bedrock-config.json"
+    fi
+    if [[ "$CUSTOM_FAST_MODEL" == "default" ]]; then
+        CUSTOM_FAST_MODEL=""
+        echo "Resetting fast model to default from bedrock-config.json"
+    fi
+
+    # Validate and warn for custom models
+    if [[ -n "$CUSTOM_MODEL" ]]; then
+        validate_model_id "$CUSTOM_MODEL" "model" || exit 1
+        warn_custom_model "$CUSTOM_MODEL" "primary"
+    fi
+
+    if [[ -n "$CUSTOM_FAST_MODEL" ]]; then
+        validate_model_id "$CUSTOM_FAST_MODEL" "fast-model" || exit 1
+        warn_custom_model "$CUSTOM_FAST_MODEL" "fast"
     fi
 
     validate_inputs
