@@ -62,13 +62,8 @@ declare -a VALID_STORAGE_MODES=(profile keychain)
 #───────────────────────────────────────────────────────────────────────────────
 # JSON Config Loading (using jq or python fallback)
 # All queries use jq-style dot notation: .key, .key.subkey
+# Python fallback uses sys.argv to avoid shell injection risks
 #───────────────────────────────────────────────────────────────────────────────
-
-# Convert jq query to Python: .key.subkey -> ["key"]["subkey"]
-jq_to_python() {
-    local query=$1
-    echo "$query" | sed "s/\\.\\([^.]*\\)/['\1']/g"
-}
 
 json_get() {
     local file=$1
@@ -77,10 +72,18 @@ json_get() {
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query" "$file" 2>/dev/null
     else
-        local py_query
-        py_query=$(jq_to_python "$query")
-        python3 -c "import json; data=json.load(open('$file')); print(data$py_query)" 2>/dev/null || \
-        python -c "import json; data=json.load(open('$file')); print(data$py_query)" 2>/dev/null
+        python3 -c "
+import json,sys,functools
+data=json.load(open(sys.argv[1]))
+keys=[k for k in sys.argv[2].split('.') if k]
+print(functools.reduce(lambda d,k: d[k], keys, data))
+" "$file" "$query" 2>/dev/null || \
+        python -c "
+import json,sys,functools
+data=json.load(open(sys.argv[1]))
+keys=[k for k in sys.argv[2].split('.') if k]
+print(functools.reduce(lambda d,k: d[k], keys, data))
+" "$file" "$query" 2>/dev/null
     fi
 }
 
@@ -91,10 +94,20 @@ json_get_keys() {
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query | keys[]" "$file" 2>/dev/null
     else
-        local py_query
-        py_query=$(jq_to_python "$query")
-        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query.keys()))" 2>/dev/null || \
-        python -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query.keys()))" 2>/dev/null
+        python3 -c "
+import json,sys,functools
+data=json.load(open(sys.argv[1]))
+keys=[k for k in sys.argv[2].split('.') if k]
+obj=functools.reduce(lambda d,k: d[k], keys, data)
+print('\n'.join(obj.keys()))
+" "$file" "$query" 2>/dev/null || \
+        python -c "
+import json,sys,functools
+data=json.load(open(sys.argv[1]))
+keys=[k for k in sys.argv[2].split('.') if k]
+obj=functools.reduce(lambda d,k: d[k], keys, data)
+print('\n'.join(obj.keys()))
+" "$file" "$query" 2>/dev/null
     fi
 }
 
@@ -105,10 +118,20 @@ json_get_array() {
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query[]" "$file" 2>/dev/null
     else
-        local py_query
-        py_query=$(jq_to_python "$query")
-        python3 -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query))" 2>/dev/null || \
-        python -c "import json; data=json.load(open('$file')); print('\n'.join(data$py_query))" 2>/dev/null
+        python3 -c "
+import json,sys,functools
+data=json.load(open(sys.argv[1]))
+keys=[k for k in sys.argv[2].split('.') if k]
+arr=functools.reduce(lambda d,k: d[k], keys, data)
+print('\n'.join(str(x) for x in arr))
+" "$file" "$query" 2>/dev/null || \
+        python -c "
+import json,sys,functools
+data=json.load(open(sys.argv[1]))
+keys=[k for k in sys.argv[2].split('.') if k]
+arr=functools.reduce(lambda d,k: d[k], keys, data)
+print('\n'.join(str(x) for x in arr))
+" "$file" "$query" 2>/dev/null
     fi
 }
 
@@ -281,10 +304,31 @@ keychain_get() {
             secret-tool lookup service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null
             ;;
         gitbash|cygwin)
-            # Use PowerShell to read from Windows Credential Manager
+            # Use PowerShell with .NET CredentialManager to read from Windows Credential Manager
             powershell.exe -NoProfile -Command "
-                \$cred = Get-StoredCredential -Target '$KEYCHAIN_SERVICE' -ErrorAction SilentlyContinue
-                if (\$cred) { \$cred.GetNetworkCredential().Password }
+                Add-Type -Namespace 'Win32' -Name 'Credential' -MemberDefinition '
+                    [DllImport(\"advapi32.dll\", SetLastError = true, CharSet = CharSet.Unicode)]
+                    public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+                    [DllImport(\"advapi32.dll\")]
+                    public static extern void CredFree(IntPtr credential);
+                    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+                    public struct CREDENTIAL {
+                        public int Flags; public int Type;
+                        public string TargetName; public string Comment;
+                        public long LastWritten; public int CredentialBlobSize;
+                        public IntPtr CredentialBlob; public int Persist;
+                        public int AttributeCount; public IntPtr Attributes;
+                        public string TargetAlias; public string UserName;
+                    }
+                '
+                \$ptr = [IntPtr]::Zero
+                if ([Win32.Credential]::CredRead('$KEYCHAIN_SERVICE', 1, 0, [ref]\$ptr)) {
+                    \$cred = [Runtime.InteropServices.Marshal]::PtrToStructure(\$ptr, [Type][Win32.Credential+CREDENTIAL])
+                    if (\$cred.CredentialBlobSize -gt 0) {
+                        [Runtime.InteropServices.Marshal]::PtrToStringUni(\$cred.CredentialBlob, \$cred.CredentialBlobSize / 2)
+                    }
+                    [Win32.Credential]::CredFree(\$ptr)
+                }
             " 2>/dev/null | tr -d '\r'
             ;;
         *)
@@ -324,7 +368,7 @@ keychain_get_command() {
             cmd="secret-tool lookup service '$KEYCHAIN_SERVICE' account '$KEYCHAIN_ACCOUNT' 2>/dev/null"
             ;;
         gitbash|cygwin)
-            cmd="powershell.exe -NoProfile -Command \"(Get-StoredCredential -Target '$KEYCHAIN_SERVICE').GetNetworkCredential().Password\" 2>/dev/null | tr -d '\\r'"
+            cmd="powershell.exe -NoProfile -Command \"Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport(\\\"advapi32.dll\\\", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport(\\\"advapi32.dll\\\")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }'; \\\$p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('$KEYCHAIN_SERVICE',1,0,[ref]\\\$p)){ \\\$c=[Runtime.InteropServices.Marshal]::PtrToStructure(\\\$p,[Type][Win32.Cred+CREDENTIAL]); if(\\\$c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::PtrToStringUni(\\\$c.CredentialBlob,\\\$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree(\\\$p) }\" 2>/dev/null | tr -d '\\r'"
             ;;
     esac
 
@@ -477,8 +521,8 @@ remove_existing_config() {
     # Remove config with markers (current format)
     sed_inplace '/# BEGIN: Claude Code Bedrock Configuration/,/# END: Claude Code Bedrock Configuration/d' "$config_file"
 
-    # Remove config without markers (legacy format)
-    sed_inplace '/# Claude Code - Amazon Bedrock Configuration/,/ANTHROPIC_SMALL_FAST_MODEL/d' "$config_file"
+    # Remove config without markers (legacy format - match from header to last known env var)
+    sed_inplace '/# Claude Code - Amazon Bedrock Configuration/,/ANTHROPIC_SMALL_FAST_MODEL\|ANTHROPIC_MODEL/d' "$config_file"
 }
 
 # Detect existing auth mode from config file
@@ -871,8 +915,13 @@ setup_shell() {
     echo "Region:   $AWS_REGION"
     echo "Auth:     $AUTH_MODE"
     if [[ "$AUTH_MODE" == "api-key" ]]; then
-        # Show masked key for security
-        local masked_key="${BEDROCK_API_KEY:0:8}...${BEDROCK_API_KEY: -4}"
+        # Show masked key for security (guard against short keys)
+        local masked_key
+        if [[ ${#BEDROCK_API_KEY} -gt 12 ]]; then
+            masked_key="${BEDROCK_API_KEY:0:8}...${BEDROCK_API_KEY: -4}"
+        else
+            masked_key="****"
+        fi
         echo "API Key:  $masked_key"
         echo "Storage:  $STORAGE_MODE"
     fi

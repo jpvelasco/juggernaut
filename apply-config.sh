@@ -65,14 +65,54 @@ fi
 _JUGGERNAUT_JSON_CONTENT=$(cat "$_JUGGERNAUT_CONFIG_FILE")
 
 # Parse JSON using jq or python fallback
+# Python fallback uses sys.argv to avoid eval() and shell injection risks
 _juggernaut_get_json_value() {
     local key=$1
     if command -v jq >/dev/null 2>&1; then
         echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key // empty"
     elif command -v python3 >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(eval('d$key') if eval('d$key') else '')" 2>/dev/null
+        echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "
+import sys,json,functools
+d=json.load(sys.stdin)
+keys=[k for k in sys.argv[1].split('.') if k]
+val=functools.reduce(lambda d,k: d[k], keys, d)
+print(val if val else '')
+" "$key" 2>/dev/null
     elif command -v python >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | python -c "import sys,json; d=json.load(sys.stdin); print(eval('d$key') if eval('d$key') else '')" 2>/dev/null
+        echo "$_JUGGERNAUT_JSON_CONTENT" | python -c "
+import sys,json,functools
+d=json.load(sys.stdin)
+keys=[k for k in sys.argv[1].split('.') if k]
+val=functools.reduce(lambda d,k: d[k], keys, d)
+print(val if val else '')
+" "$key" 2>/dev/null
+    else
+        echo "Error: jq or python required to parse config" >&2
+        return 1
+    fi
+}
+
+# Helper to get all keys from a JSON object
+_juggernaut_get_json_keys() {
+    local key=$1
+    if command -v jq >/dev/null 2>&1; then
+        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key | keys[]"
+    elif command -v python3 >/dev/null 2>&1; then
+        echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "
+import sys,json,functools
+d=json.load(sys.stdin)
+keys=[k for k in sys.argv[1].split('.') if k]
+obj=functools.reduce(lambda d,k: d[k], keys, d)
+print('\n'.join(obj.keys()))
+" "$key" 2>/dev/null
+    elif command -v python >/dev/null 2>&1; then
+        echo "$_JUGGERNAUT_JSON_CONTENT" | python -c "
+import sys,json,functools
+d=json.load(sys.stdin)
+keys=[k for k in sys.argv[1].split('.') if k]
+obj=functools.reduce(lambda d,k: d[k], keys, d)
+print('\n'.join(obj.keys()))
+" "$key" 2>/dev/null
     else
         echo "Error: jq or python required to parse config" >&2
         return 1
@@ -86,16 +126,17 @@ _juggernaut_get_json_value() {
 echo "Applying Claude Code Bedrock configuration..."
 echo ""
 
-# Load environment variables from config
-export CLAUDE_CODE_USE_BEDROCK="$(_juggernaut_get_json_value '.environment.CLAUDE_CODE_USE_BEDROCK')"
-export CLAUDE_CODE_MAX_OUTPUT_TOKENS="$(_juggernaut_get_json_value '.environment.CLAUDE_CODE_MAX_OUTPUT_TOKENS')"
-export MAX_THINKING_TOKENS="$(_juggernaut_get_json_value '.environment.MAX_THINKING_TOKENS')"
-export ANTHROPIC_MODEL="$(_juggernaut_get_json_value '.environment.ANTHROPIC_MODEL')"
-export ANTHROPIC_SMALL_FAST_MODEL="$(_juggernaut_get_json_value '.environment.ANTHROPIC_SMALL_FAST_MODEL')"
-export DISABLE_ERROR_REPORTING="$(_juggernaut_get_json_value '.environment.DISABLE_ERROR_REPORTING')"
-export DISABLE_TELEMETRY="$(_juggernaut_get_json_value '.environment.DISABLE_TELEMETRY')"
-export DISABLE_AUTOUPDATE="$(_juggernaut_get_json_value '.environment.DISABLE_AUTOUPDATE')"
-export DISABLE_BUG_COMMAND="$(_juggernaut_get_json_value '.environment.DISABLE_BUG_COMMAND')"
+# Dynamically load and export all environment variables from config
+_JUGGERNAUT_ENV_KEYS=$(_juggernaut_get_json_keys '.environment')
+if [[ -n "$_JUGGERNAUT_ENV_KEYS" ]]; then
+    while IFS= read -r _JUGGERNAUT_KEY; do
+        _JUGGERNAUT_VAL="$(_juggernaut_get_json_value ".environment.$_JUGGERNAUT_KEY")"
+        export "$_JUGGERNAUT_KEY=$_JUGGERNAUT_VAL"
+    done <<< "$_JUGGERNAUT_ENV_KEYS"
+else
+    echo "Error: Could not load environment variables from config" >&2
+    return 1 2>/dev/null || exit 1
+fi
 
 # Region: command line overrides config default
 if [[ -n "$_JUGGERNAUT_REGION" ]]; then
@@ -104,21 +145,18 @@ else
     export AWS_REGION="$(_juggernaut_get_json_value '.defaults.region')"
 fi
 
+# Display applied configuration
+echo "Configuration applied:"
+echo "  AWS_REGION=$AWS_REGION"
+while IFS= read -r _JUGGERNAUT_KEY; do
+    eval "echo \"  \${_JUGGERNAUT_KEY}=\${$_JUGGERNAUT_KEY}\""
+done <<< "$_JUGGERNAUT_ENV_KEYS"
+
 # Clean up temp variables and functions
 unset _JUGGERNAUT_REGION _JUGGERNAUT_SCRIPT_DIR _JUGGERNAUT_CONFIG_FILE _JUGGERNAUT_JSON_CONTENT
-unset -f _juggernaut_get_json_value
+unset _JUGGERNAUT_ENV_KEYS _JUGGERNAUT_KEY _JUGGERNAUT_VAL
+unset -f _juggernaut_get_json_value _juggernaut_get_json_keys
 
-echo "Configuration applied:"
-echo "  CLAUDE_CODE_USE_BEDROCK=$CLAUDE_CODE_USE_BEDROCK"
-echo "  AWS_REGION=$AWS_REGION"
-echo "  CLAUDE_CODE_MAX_OUTPUT_TOKENS=$CLAUDE_CODE_MAX_OUTPUT_TOKENS"
-echo "  MAX_THINKING_TOKENS=$MAX_THINKING_TOKENS"
-echo "  ANTHROPIC_MODEL=$ANTHROPIC_MODEL"
-echo "  ANTHROPIC_SMALL_FAST_MODEL=$ANTHROPIC_SMALL_FAST_MODEL"
-echo "  DISABLE_ERROR_REPORTING=$DISABLE_ERROR_REPORTING"
-echo "  DISABLE_TELEMETRY=$DISABLE_TELEMETRY"
-echo "  DISABLE_AUTOUPDATE=$DISABLE_AUTOUPDATE"
-echo "  DISABLE_BUG_COMMAND=$DISABLE_BUG_COMMAND"
 echo ""
 echo "This configuration is active for the current terminal session only."
 echo "To make it permanent, run: ./setup-claude-bedrock.sh"
