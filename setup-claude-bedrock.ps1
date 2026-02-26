@@ -309,17 +309,35 @@ function Set-KeychainCredential {
 }
 
 function Get-KeychainCredential {
-    # Use PowerShell to retrieve from Credential Manager
+    # Use Win32 CredRead API to retrieve from Credential Manager (no external modules)
     try {
-        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue
-        $cred = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR(
-                (Get-StoredCredential -Target $KeychainTarget -ErrorAction Stop).Password
-            )
-        )
-        return $cred
+        Add-Type -Namespace 'Win32' -Name 'Credential' -MemberDefinition '
+            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+            public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+            [DllImport("advapi32.dll")]
+            public static extern void CredFree(IntPtr credential);
+            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+            public struct CREDENTIAL {
+                public int Flags; public int Type;
+                public string TargetName; public string Comment;
+                public long LastWritten; public int CredentialBlobSize;
+                public IntPtr CredentialBlob; public int Persist;
+                public int AttributeCount; public IntPtr Attributes;
+                public string TargetAlias; public string UserName;
+            }
+        ' -ErrorAction SilentlyContinue
+        $ptr = [IntPtr]::Zero
+        if ([Win32.Credential]::CredRead($KeychainTarget, 1, 0, [ref]$ptr)) {
+            $cred = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Win32.Credential+CREDENTIAL])
+            $password = $null
+            if ($cred.CredentialBlobSize -gt 0) {
+                $password = [Runtime.InteropServices.Marshal]::PtrToStringUni($cred.CredentialBlob, $cred.CredentialBlobSize / 2)
+            }
+            [Win32.Credential]::CredFree($ptr)
+            return $password
+        }
+        return $null
     } catch {
-        # Fallback: try using cmdkey list and parse (less reliable)
         return $null
     }
 }
@@ -331,8 +349,9 @@ function Remove-KeychainCredential {
 # Generate the PowerShell command to retrieve key from Credential Manager
 function Get-KeychainRetrievalCommand {
     # This generates the code that will run in the profile to get the credential
+    # Uses Win32 CredRead API - no external modules required
     return @'
-(Get-StoredCredential -Target 'juggernaut-bedrock' -ErrorAction SilentlyContinue).GetNetworkCredential().Password
+& { Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }' -ErrorAction SilentlyContinue; $p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('juggernaut-bedrock',1,0,[ref]$p)){ $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[Type][Win32.Cred+CREDENTIAL]); $r=$null; if($c.CredentialBlobSize -gt 0){$r=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob,$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree($p); $r } }
 '@
 }
 
@@ -392,8 +411,9 @@ if ($Config -and $Config.environment) {
 # Add API key if using api-key auth
 if ($Auth -eq "api-key") {
     if ($Storage -eq "keychain") {
-        # Retrieve from Credential Manager at profile load
-        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = (Get-StoredCredential -Target 'juggernaut-bedrock' -ErrorAction SilentlyContinue).GetNetworkCredential().Password`n"
+        # Retrieve from Credential Manager at profile load using Win32 CredRead API
+        $retrievalCmd = Get-KeychainRetrievalCommand
+        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = $retrievalCmd`n"
     } else {
         # Store directly in profile (legacy behavior)
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
@@ -420,20 +440,22 @@ function Get-FileLock {
     $startTime = Get-Date
     while (((Get-Date) - $startTime).TotalSeconds -lt $LockTimeout) {
         try {
-            # Check for stale lock
-            if (Test-Path $LockPath) {
-                $lockAge = ((Get-Date) - (Get-Item $LockPath).LastWriteTime).TotalSeconds
+            # Atomic lock creation using FileMode.CreateNew (fails if file exists)
+            $fs = [System.IO.File]::Open($LockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write)
+            $fs.Close()
+            return $true
+        } catch [System.IO.IOException] {
+            # Lock file exists - check if it's stale
+            try {
+                $lockAge = ((Get-Date) - (Get-Item $LockPath -ErrorAction Stop).LastWriteTime).TotalSeconds
                 if ($lockAge -gt $StaleLockAge) {
                     Write-Host "Removing stale lock file (age: $([int]$lockAge)s)" -ForegroundColor Yellow
                     Remove-Item $LockPath -Force -ErrorAction SilentlyContinue
+                    # Retry on next iteration rather than assuming we got it
                 }
+            } catch {
+                # Lock file disappeared between check and stat - retry
             }
-
-            # Try to create lock file atomically
-            $null = New-Item -Path $LockPath -ItemType File -ErrorAction Stop
-            return $true
-        } catch {
-            # Lock exists, wait and retry
             Start-Sleep -Milliseconds 500
         }
     }
@@ -454,10 +476,12 @@ if (-not $DryRun) {
     }
 }
 
-# Ensure lock is released on exit
-$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-    if ($LockAcquired -and (Test-Path $LockFile)) {
-        Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
+# Ensure lock is released on exit (use -MessageData to capture values at registration time)
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -MessageData @{
+    LockAcquired = $LockAcquired; LockFile = $LockFile
+} -Action {
+    if ($Event.MessageData.LockAcquired -and (Test-Path $Event.MessageData.LockFile)) {
+        Remove-Item $Event.MessageData.LockFile -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -517,7 +541,7 @@ if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
     } else {
         # Remove old configuration (supports both old and new marker formats)
         $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# BEGIN: Claude Code Bedrock Configuration.*?# END: Claude Code Bedrock Configuration\r?\n?", "`n"
-        $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# Claude Code - Amazon Bedrock Configuration.*?`$env:ANTHROPIC_SMALL_FAST_MODEL = `"[^`"]+`"\r?\n?", "`n"
+        $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# Claude Code - Amazon Bedrock Configuration.*?`$env:ANTHROPIC_(?:SMALL_FAST_)?MODEL = `"[^`"]+`"\r?\n?", "`n"
         # Remove multiple consecutive blank lines
         $ProfileContent = $ProfileContent -replace "(\r?\n){3,}", "`n`n"
         Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline

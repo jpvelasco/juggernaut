@@ -17,9 +17,15 @@ if (-not (Test-Path $ProfilePath)) {
 $ProfileContent = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
 
 if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
+    # Clean up keychain credentials before removing config (needs the markers to detect storage mode)
+    if ($ProfileContent -match "# Storage: keychain") {
+        $null = cmdkey /delete:juggernaut-bedrock 2>$null
+        Write-Host "Removed API key from Windows Credential Manager" -ForegroundColor Gray
+    }
+
     # Remove configuration (supports both old and new marker formats)
     $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# BEGIN: Claude Code Bedrock Configuration.*?# END: Claude Code Bedrock Configuration\r?\n?", "`n"
-    $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# Claude Code - Amazon Bedrock Configuration.*?`$env:ANTHROPIC_SMALL_FAST_MODEL = `"[^`"]+`"\r?\n?", "`n"
+    $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# Claude Code - Amazon Bedrock Configuration.*?`$env:ANTHROPIC_(?:SMALL_FAST_)?MODEL = `"[^`"]+`"\r?\n?", "`n"
     # Remove multiple consecutive blank lines
     $ProfileContent = $ProfileContent -replace "(\r?\n){3,}", "`n`n"
     Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline
