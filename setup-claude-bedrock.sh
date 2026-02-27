@@ -542,6 +542,19 @@ detect_existing_model() {
     fi
 }
 
+# Detect existing storage mode from config file
+# Returns: "keychain" or "profile" (absence of marker = profile)
+detect_existing_storage_mode() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        if grep -q "^# Storage: keychain" "$config_file" 2>/dev/null; then
+            echo "keychain"
+            return
+        fi
+    fi
+    echo "profile"
+}
+
 # Detect existing custom fast model from config file
 detect_existing_fast_model() {
     local config_file=$1
@@ -659,7 +672,8 @@ Options:
   --auth=MODE            Authentication mode: iam (default) or api-key
   --bedrock-key=KEY      Bedrock API key (optional; prompts if not provided)
   --preserve-key         Reuse existing API key from environment (no prompt)
-  --storage=MODE         Where to store API key: profile (default) or keychain
+  --storage=MODE         Where to store API key: profile or keychain
+                         Default: keychain on macOS/Windows, profile on Linux
   --region=REGION        AWS region (default: us-west-2)
   --model=ID             Custom primary model (use "default" to reset)
   --fast-model=ID        Custom fast model (use "default" to reset)
@@ -676,13 +690,14 @@ Authentication Modes:
              Get key from: AWS Console → Bedrock → API keys
 
 Storage Modes:
-  profile    Store API key directly in shell profile (default)
+  profile    Store API key directly in shell profile
              Key is plaintext but protected by file permissions
+             Default on Linux (keychain requires libsecret-tools)
 
   keychain   Store API key in system keychain (more secure)
-             macOS: Keychain Access
+             macOS: Keychain Access (default)
              Linux: Secret Service (GNOME Keyring / KWallet)
-             Windows: Credential Manager
+             Windows: Credential Manager (default)
 
 Examples:
   # IAM/SSO authentication (default)
@@ -726,6 +741,7 @@ SHELL_TYPE=""
 AUTH_MODE=""                 # Don't set default yet - may be detected from existing config
 AUTH_MODE_EXPLICIT=false     # Track if user explicitly set --auth flag
 STORAGE_MODE="profile"
+STORAGE_MODE_EXPLICIT=false  # Track if user explicitly set --storage flag
 BEDROCK_API_KEY=""
 CUSTOM_MODEL=""
 CUSTOM_FAST_MODEL=""
@@ -756,6 +772,7 @@ parse_arguments() {
                 ;;
             --storage=*)
                 STORAGE_MODE="${arg#--storage=}"
+                STORAGE_MODE_EXPLICIT=true
                 ;;
             --model=*)
                 CUSTOM_MODEL="${arg#--model=}"
@@ -848,6 +865,44 @@ validate_inputs() {
                 echo "Error: --preserve-key specified but AWS_BEARER_TOKEN_BEDROCK is not set" >&2
                 echo "Run setup without --preserve-key to enter a new key" >&2
                 exit 1
+            fi
+        elif [[ "$AUTH_MODE_EXPLICIT" != true ]]; then
+            # Auth mode was auto-detected from existing config — try to reuse key automatically
+            if [[ -n "$AWS_BEARER_TOKEN_BEDROCK" ]]; then
+                BEDROCK_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
+                echo "Using existing API key from environment"
+            elif [[ "$STORAGE_MODE" == "keychain" ]] && keychain_available; then
+                local keychain_key
+                keychain_key=$(keychain_get)
+                if [[ -n "$keychain_key" ]]; then
+                    BEDROCK_API_KEY="$keychain_key"
+                    echo "Using existing API key from keychain"
+                fi
+            fi
+            # If still empty, fall through to prompt below
+            if [[ -z "$BEDROCK_API_KEY" ]]; then
+                if [[ "$DRY_RUN" == true ]]; then
+                    echo "[DRY RUN] Would prompt for Bedrock API key"
+                    BEDROCK_API_KEY="dry-run-placeholder"
+                elif [[ ! -t 0 ]]; then
+                    echo "Error: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
+                    echo "" >&2
+                    echo "Usage: ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=YOUR_KEY" >&2
+                    echo "   or: ./setup-claude-bedrock.sh --auth=api-key --preserve-key" >&2
+                    exit 1
+                else
+                    echo "Get your Bedrock API key from:"
+                    echo "  AWS Console → Amazon Bedrock → API keys"
+                    echo ""
+                    read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
+                    echo ""
+                    BEDROCK_API_KEY="${BEDROCK_API_KEY%"${BEDROCK_API_KEY##*[![:space:]]}"}"
+                    BEDROCK_API_KEY="${BEDROCK_API_KEY#"${BEDROCK_API_KEY%%[![:space:]]*}"}"
+                    if [[ -z "$BEDROCK_API_KEY" ]]; then
+                        echo "Error: API key cannot be empty"
+                        exit 1
+                    fi
+                fi
             fi
         elif [[ "$DRY_RUN" == true ]]; then
             echo "[DRY RUN] Would prompt for Bedrock API key"
@@ -1072,6 +1127,58 @@ main() {
         if [[ -n "$existing_fast_model" ]]; then
             CUSTOM_FAST_MODEL="$existing_fast_model"
             echo "Preserving existing custom fast model: $CUSTOM_FAST_MODEL"
+        fi
+    fi
+
+    # Detect existing storage mode if user didn't explicitly specify
+    if [[ "$STORAGE_MODE_EXPLICIT" != true && -f "$config_file" ]]; then
+        local existing_storage
+        existing_storage=$(detect_existing_storage_mode "$config_file")
+        if [[ "$existing_storage" == "keychain" ]]; then
+            STORAGE_MODE="keychain"
+            echo "Preserving existing storage mode: keychain"
+        fi
+    fi
+
+    # Platform-aware storage default for new installs (macOS/Windows default to keychain)
+    if [[ "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
+        local os=$(detect_os)
+        if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
+            # Only change default if there's no existing config (new install)
+            if ! grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
+                if keychain_available; then
+                    STORAGE_MODE="keychain"
+                fi
+            fi
+        fi
+    fi
+
+    # Offer to migrate plaintext API keys to keychain on macOS/Windows
+    if [[ "$AUTH_MODE" == "api-key" && "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
+        local os=$(detect_os)
+        if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
+            if [[ -f "$config_file" ]] && grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
+                if ! grep -q "# Storage: keychain" "$config_file" 2>/dev/null && keychain_available; then
+                    local keychain_name
+                    case "$os" in
+                        macos) keychain_name="macOS Keychain" ;;
+                        *)     keychain_name="Windows Credential Manager" ;;
+                    esac
+                    if [[ "$FORCE" == true ]]; then
+                        STORAGE_MODE="keychain"
+                        echo "Migrating API key to $keychain_name (more secure)"
+                    elif [[ "$DRY_RUN" == false && -t 0 ]]; then
+                        echo ""
+                        echo "Your API key is stored in plaintext in your shell profile."
+                        read -p "Move to $keychain_name for better security? (y/n) " -n 1 -r
+                        echo
+                        if [[ $REPLY =~ ^[Yy]$ ]]; then
+                            STORAGE_MODE="keychain"
+                            echo "Migrating API key to $keychain_name"
+                        fi
+                    fi
+                fi
+            fi
         fi
     fi
 
