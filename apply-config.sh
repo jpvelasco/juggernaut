@@ -149,7 +149,11 @@ fi
 echo "Configuration applied:"
 echo "  AWS_REGION=$AWS_REGION"
 while IFS= read -r _JUGGERNAUT_KEY; do
-    echo "  ${_JUGGERNAUT_KEY}=${!_JUGGERNAUT_KEY}"
+    if [[ -n "$ZSH_VERSION" ]]; then
+        echo "  ${_JUGGERNAUT_KEY}=${(P)_JUGGERNAUT_KEY}"
+    else
+        echo "  ${_JUGGERNAUT_KEY}=${!_JUGGERNAUT_KEY}"
+    fi
 done <<< "$_JUGGERNAUT_ENV_KEYS"
 
 # Clean up temp variables and functions
