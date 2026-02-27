@@ -606,59 +606,6 @@ warn_custom_model() {
     fi
 }
 
-# File locking to prevent concurrent modifications
-LOCK_FD=""
-LOCK_FILE=""
-
-acquire_lock() {
-    local config_file=$1
-    LOCK_FILE="${config_file}.lock"
-
-    # Check if flock is available (Linux, some macOS with homebrew)
-    if command -v flock >/dev/null 2>&1; then
-        exec {LOCK_FD}>"$LOCK_FILE"
-        if ! flock -n "$LOCK_FD" 2>/dev/null; then
-            echo "ERROR: Another instance is modifying $config_file" >&2
-            echo "If no other setup is running, remove: $LOCK_FILE" >&2
-            exit 1
-        fi
-    else
-        # Fallback: use mkdir as atomic operation (portable)
-        if ! mkdir "$LOCK_FILE" 2>/dev/null; then
-            # Check if lock is stale (older than 5 minutes)
-            if [[ -d "$LOCK_FILE" ]]; then
-                local lock_age
-                lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_FILE" 2>/dev/null || stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0) ))
-                if [[ "$lock_age" -gt 300 ]]; then
-                    echo "Warning: Removing stale lock file (age: ${lock_age}s)"
-                    rmdir "$LOCK_FILE" 2>/dev/null || rm -rf "$LOCK_FILE"
-                    mkdir "$LOCK_FILE" || { echo "ERROR: Cannot acquire lock"; exit 1; }
-                else
-                    echo "ERROR: Another instance is modifying $config_file" >&2
-                    echo "If no other setup is running, remove: $LOCK_FILE" >&2
-                    exit 1
-                fi
-            fi
-        fi
-    fi
-}
-
-release_lock() {
-    if [[ -n "$LOCK_FILE" ]]; then
-        if [[ -n "$LOCK_FD" ]]; then
-            # flock mode: close file descriptor
-            exec {LOCK_FD}>&- 2>/dev/null || true
-        fi
-        # Remove lock file/directory
-        rmdir "$LOCK_FILE" 2>/dev/null || rm -f "$LOCK_FILE" 2>/dev/null || true
-        LOCK_FILE=""
-        LOCK_FD=""
-    fi
-}
-
-# Ensure lock is released on exit
-trap release_lock EXIT
-
 show_help() {
     cat << 'EOF'
 Claude Code - Amazon Bedrock Setup Script
@@ -987,11 +934,6 @@ setup_shell() {
         read -p "Configure $display_name for Bedrock? (y/n) " -n 1 -r
         echo
         [[ ! $REPLY =~ ^[Yy]$ ]] && { echo "Setup cancelled"; exit 0; }
-    fi
-
-    # Acquire lock before any file modifications
-    if [[ "$DRY_RUN" == false ]]; then
-        acquire_lock "$config_file"
     fi
 
     # Backup existing config file before any modifications

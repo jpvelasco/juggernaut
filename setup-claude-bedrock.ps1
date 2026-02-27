@@ -515,66 +515,6 @@ $ConfigBlock += "`n# END: Claude Code Bedrock Configuration"
 # Determine PowerShell profile path
 $ProfilePath = $PROFILE.CurrentUserAllHosts
 
-#───────────────────────────────────────────────────────────────────────────────
-# File Locking - Prevent concurrent modifications
-#───────────────────────────────────────────────────────────────────────────────
-
-$LockFile = "$ProfilePath.lock"
-$LockAcquired = $false
-$LockTimeout = 30  # seconds to wait for lock
-$StaleLockAge = 300  # 5 minutes - consider lock stale after this
-
-function Get-FileLock {
-    param([string]$LockPath)
-
-    $startTime = Get-Date
-    while (((Get-Date) - $startTime).TotalSeconds -lt $LockTimeout) {
-        try {
-            # Atomic lock creation using FileMode.CreateNew (fails if file exists)
-            $fs = [System.IO.File]::Open($LockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write)
-            $fs.Close()
-            return $true
-        } catch [System.IO.IOException] {
-            # Lock file exists - check if it's stale
-            try {
-                $lockAge = ((Get-Date) - (Get-Item $LockPath -ErrorAction Stop).LastWriteTime).TotalSeconds
-                if ($lockAge -gt $StaleLockAge) {
-                    Write-Host "Removing stale lock file (age: $([int]$lockAge)s)" -ForegroundColor Yellow
-                    Remove-Item $LockPath -Force -ErrorAction SilentlyContinue
-                    # Retry on next iteration rather than assuming we got it
-                }
-            } catch {
-                # Lock file disappeared between check and stat - retry
-            }
-            Start-Sleep -Milliseconds 500
-        }
-    }
-    return $false
-}
-
-function Release-FileLock {
-    param([string]$LockPath)
-    Remove-Item $LockPath -Force -ErrorAction SilentlyContinue
-}
-
-if (-not $DryRun) {
-    $LockAcquired = Get-FileLock -LockPath $LockFile
-    if (-not $LockAcquired) {
-        Write-Host "Error: Could not acquire lock on profile file" -ForegroundColor Red
-        Write-Host "Another instance may be modifying the profile. Try again later." -ForegroundColor Red
-        exit 1
-    }
-}
-
-# Ensure lock is released on exit (use -MessageData to capture values at registration time)
-$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -MessageData @{
-    LockAcquired = $LockAcquired; LockFile = $LockFile
-} -Action {
-    if ($Event.MessageData.LockAcquired -and (Test-Path $Event.MessageData.LockFile)) {
-        Remove-Item $Event.MessageData.LockFile -Force -ErrorAction SilentlyContinue
-    }
-}
-
 # Create profile directory if it doesn't exist
 $ProfileDir = Split-Path -Parent $ProfilePath
 if (-not (Test-Path $ProfileDir)) {
@@ -653,7 +593,6 @@ if ($Auth -eq "api-key" -and $Storage -eq "keychain") {
             Write-Host "API key stored in Windows Credential Manager" -ForegroundColor Gray
         } else {
             Write-Host "Error: Failed to store API key in Credential Manager" -ForegroundColor Red
-            Release-FileLock -LockPath $LockFile
             exit 1
         }
     }
@@ -677,7 +616,6 @@ if ($DryRun) {
 try {
     Add-Content -Path $ProfilePath -Value $ConfigBlock -ErrorAction Stop
 } catch {
-    Release-FileLock -LockPath $LockFile
     Write-Host "" -ForegroundColor Red
     Write-Host "ERROR: Cannot write to $ProfilePath" -ForegroundColor Red
     Write-Host "Possible causes:" -ForegroundColor Red
@@ -711,6 +649,3 @@ if ($Auth -eq "api-key") {
 
 Write-Host ""
 Write-Host "Setup complete!" -ForegroundColor Green
-
-# Release file lock
-Release-FileLock -LockPath $LockFile
