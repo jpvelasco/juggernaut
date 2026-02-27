@@ -20,6 +20,7 @@ param(
 $AuthExplicit = $PSBoundParameters.ContainsKey('Auth')
 $ModelExplicit = $PSBoundParameters.ContainsKey('Model')
 $FastModelExplicit = $PSBoundParameters.ContainsKey('FastModel')
+$StorageExplicit = $PSBoundParameters.ContainsKey('Storage')
 
 $ErrorActionPreference = "Stop"
 
@@ -77,6 +78,20 @@ function Get-ExistingFastModel {
         }
     }
     return $null
+}
+
+# Detect existing storage mode from profile file
+# Returns: "keychain" or "profile" (absence of marker = profile)
+function Get-ExistingStorageMode {
+    param([string]$ProfilePath)
+
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# Storage: keychain") {
+            return "keychain"
+        }
+    }
+    return "profile"
 }
 
 # Validate model ID format
@@ -169,6 +184,44 @@ if ($FastModel -eq "default") {
     Write-Host "Resetting fast model to default from bedrock-config.json"
 }
 
+# Detect existing storage mode if user didn't explicitly specify
+if (-not $StorageExplicit) {
+    $existingStorage = Get-ExistingStorageMode -ProfilePath $ProfilePathForDetection
+    if ($existingStorage -eq "keychain") {
+        $Storage = "keychain"
+        Write-Host "Preserving existing storage mode: keychain"
+    }
+}
+
+# Platform-aware storage default for new installs (Windows defaults to keychain)
+if (-not $StorageExplicit -and $Storage -eq "profile") {
+    # On Windows, Credential Manager is always available
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    if (-not ($profileContent -match "CLAUDE_CODE_USE_BEDROCK")) {
+        # New install — default to keychain on Windows
+        $Storage = "keychain"
+    }
+}
+
+# Offer to migrate plaintext API keys to Credential Manager
+if ($Auth -eq "api-key" -and -not $StorageExplicit -and $Storage -eq "profile") {
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    if ($profileContent -match "CLAUDE_CODE_USE_BEDROCK" -and $profileContent -notmatch "# Storage: keychain") {
+        if ($Force) {
+            $Storage = "keychain"
+            Write-Host "Migrating API key to Windows Credential Manager (more secure)"
+        } elseif (-not $DryRun) {
+            Write-Host ""
+            Write-Host "Your API key is stored in plaintext in your PowerShell profile." -ForegroundColor Yellow
+            $response = Read-Host "Move to Windows Credential Manager for better security? (y/n)"
+            if ($response -eq "y" -or $response -eq "Y") {
+                $Storage = "keychain"
+                Write-Host "Migrating API key to Windows Credential Manager"
+            }
+        }
+    }
+}
+
 # Validate and warn for custom models
 if (-not [string]::IsNullOrEmpty($Model)) {
     if (-not (Test-ModelIdFormat -ModelId $Model -ModelType "Model")) {
@@ -206,7 +259,8 @@ if ($Help) {
     Write-Host "  -Auth <MODE>       Authentication: iam (default) or api-key"
     Write-Host "  -BedrockKey <KEY>  Bedrock API key (optional; prompts if not provided)"
     Write-Host "  -PreserveKey       Reuse existing API key from environment (no prompt)"
-    Write-Host "  -Storage <MODE>    Where to store API key: profile (default) or keychain"
+    Write-Host "  -Storage <MODE>    Where to store API key: profile or keychain"
+    Write-Host "                     Default: keychain on Windows, profile on Linux"
     Write-Host "  -Region <REGION>   AWS region (default: us-west-2)"
     Write-Host "  -Model <ID>        Custom primary model (use 'default' to reset)"
     Write-Host "  -FastModel <ID>    Custom fast model (use 'default' to reset)"
@@ -223,8 +277,8 @@ if ($Help) {
     Write-Host "             Get key from: AWS Console -> Bedrock -> API keys"
     Write-Host ""
     Write-Host "Storage Modes:"
-    Write-Host "  profile    Store API key directly in PowerShell profile (default)"
-    Write-Host "  keychain   Store API key in Windows Credential Manager (more secure)"
+    Write-Host "  profile    Store API key directly in PowerShell profile"
+    Write-Host "  keychain   Store API key in Windows Credential Manager (default, more secure)"
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  .\setup-claude-bedrock.ps1                              # IAM/SSO (default)"
@@ -250,6 +304,42 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
             Write-Host "Error: -PreserveKey specified but AWS_BEARER_TOKEN_BEDROCK is not set" -ForegroundColor Red
             Write-Host "Run setup without -PreserveKey to enter a new key"
             exit 1
+        }
+    } elseif (-not $AuthExplicit) {
+        # Auth mode was auto-detected from existing config — try to reuse key automatically
+        $existingKey = [Environment]::GetEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK")
+        if (-not [string]::IsNullOrEmpty($existingKey)) {
+            $BedrockKey = $existingKey
+            Write-Host "Using existing API key from environment"
+        } elseif ($Storage -eq "keychain") {
+            $keychainKey = Get-KeychainCredential
+            if (-not [string]::IsNullOrEmpty($keychainKey)) {
+                $BedrockKey = $keychainKey
+                Write-Host "Using existing API key from Credential Manager"
+            }
+        }
+        # If still empty, fall through to prompt below
+        if ([string]::IsNullOrEmpty($BedrockKey)) {
+            if ($DryRun) {
+                Write-Host "[DRY RUN] Would prompt for Bedrock API key" -ForegroundColor Magenta
+                $BedrockKey = "dry-run-placeholder"
+            } elseif (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+                Write-Host "Error: -BedrockKey or -PreserveKey is required in non-interactive mode" -ForegroundColor Red
+                Write-Host ""
+                Write-Host "Usage: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey YOUR_KEY"
+                Write-Host "   or: .\setup-claude-bedrock.ps1 -Auth api-key -PreserveKey"
+                exit 1
+            } else {
+                Write-Host "Get your Bedrock API key from:"
+                Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
+                Write-Host ""
+                $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
+                $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey))
+                if ([string]::IsNullOrEmpty($BedrockKey)) {
+                    Write-Host "Error: API key cannot be empty" -ForegroundColor Red
+                    exit 1
+                }
+            }
         }
     } elseif ($DryRun) {
         Write-Host "[DRY RUN] Would prompt for Bedrock API key" -ForegroundColor Magenta
