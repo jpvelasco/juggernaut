@@ -249,6 +249,73 @@ $ValidRegions = if ($Config -and $Config.regions) {
     )
 }
 
+#───────────────────────────────────────────────────────────────────────────────
+# Keychain Functions (Windows Credential Manager)
+#───────────────────────────────────────────────────────────────────────────────
+
+$KeychainTarget = "juggernaut-bedrock"
+
+function Test-KeychainAvailable {
+    # Windows Credential Manager is always available on Windows
+    return $true
+}
+
+function Set-KeychainCredential {
+    param([string]$Key)
+
+    # Use cmdkey to store in Windows Credential Manager
+    $null = cmdkey /delete:$KeychainTarget 2>$null
+    $result = cmdkey /generic:$KeychainTarget /user:api-key /pass:$Key 2>&1
+    return $LASTEXITCODE -eq 0
+}
+
+function Get-KeychainCredential {
+    # Use Win32 CredRead API to retrieve from Credential Manager (no external modules)
+    try {
+        Add-Type -Namespace 'Win32' -Name 'Credential' -MemberDefinition '
+            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+            public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+            [DllImport("advapi32.dll")]
+            public static extern void CredFree(IntPtr credential);
+            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+            public struct CREDENTIAL {
+                public int Flags; public int Type;
+                public string TargetName; public string Comment;
+                public long LastWritten; public int CredentialBlobSize;
+                public IntPtr CredentialBlob; public int Persist;
+                public int AttributeCount; public IntPtr Attributes;
+                public string TargetAlias; public string UserName;
+            }
+        ' -ErrorAction SilentlyContinue
+        $ptr = [IntPtr]::Zero
+        if ([Win32.Credential]::CredRead($KeychainTarget, 1, 0, [ref]$ptr)) {
+            $cred = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Win32.Credential+CREDENTIAL])
+            $password = $null
+            if ($cred.CredentialBlobSize -gt 0) {
+                $password = [Runtime.InteropServices.Marshal]::PtrToStringUni($cred.CredentialBlob, $cred.CredentialBlobSize / 2)
+            }
+            [Win32.Credential]::CredFree($ptr)
+            return $password
+        }
+        return $null
+    } catch {
+        return $null
+    }
+}
+
+function Remove-KeychainCredential {
+    $null = cmdkey /delete:$KeychainTarget 2>$null
+}
+
+# Generate the PowerShell command to retrieve key from Credential Manager
+function Get-KeychainRetrievalCommand {
+    # This generates the code that will run in the profile to get the credential
+    # Uses Win32 CredRead API - no external modules required
+    return @'
+& { Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }' -ErrorAction SilentlyContinue; $p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('juggernaut-bedrock',1,0,[ref]$p)){ $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[Type][Win32.Cred+CREDENTIAL]); $r=$null; if($c.CredentialBlobSize -gt 0){$r=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob,$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree($p); $r } }
+'@
+}
+
 # Show help
 if ($Help) {
     Write-Host "Claude Code - Amazon Bedrock Setup Script"
@@ -376,73 +443,6 @@ if (-not ($ValidRegions -contains $Region)) {
             exit 1
         }
     }
-}
-
-#───────────────────────────────────────────────────────────────────────────────
-# Keychain Functions (Windows Credential Manager)
-#───────────────────────────────────────────────────────────────────────────────
-
-$KeychainTarget = "juggernaut-bedrock"
-
-function Test-KeychainAvailable {
-    # Windows Credential Manager is always available on Windows
-    return $true
-}
-
-function Set-KeychainCredential {
-    param([string]$Key)
-
-    # Use cmdkey to store in Windows Credential Manager
-    $null = cmdkey /delete:$KeychainTarget 2>$null
-    $result = cmdkey /generic:$KeychainTarget /user:api-key /pass:$Key 2>&1
-    return $LASTEXITCODE -eq 0
-}
-
-function Get-KeychainCredential {
-    # Use Win32 CredRead API to retrieve from Credential Manager (no external modules)
-    try {
-        Add-Type -Namespace 'Win32' -Name 'Credential' -MemberDefinition '
-            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-            public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
-            [DllImport("advapi32.dll")]
-            public static extern void CredFree(IntPtr credential);
-            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-            public struct CREDENTIAL {
-                public int Flags; public int Type;
-                public string TargetName; public string Comment;
-                public long LastWritten; public int CredentialBlobSize;
-                public IntPtr CredentialBlob; public int Persist;
-                public int AttributeCount; public IntPtr Attributes;
-                public string TargetAlias; public string UserName;
-            }
-        ' -ErrorAction SilentlyContinue
-        $ptr = [IntPtr]::Zero
-        if ([Win32.Credential]::CredRead($KeychainTarget, 1, 0, [ref]$ptr)) {
-            $cred = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Win32.Credential+CREDENTIAL])
-            $password = $null
-            if ($cred.CredentialBlobSize -gt 0) {
-                $password = [Runtime.InteropServices.Marshal]::PtrToStringUni($cred.CredentialBlob, $cred.CredentialBlobSize / 2)
-            }
-            [Win32.Credential]::CredFree($ptr)
-            return $password
-        }
-        return $null
-    } catch {
-        return $null
-    }
-}
-
-function Remove-KeychainCredential {
-    $null = cmdkey /delete:$KeychainTarget 2>$null
-}
-
-# Generate the PowerShell command to retrieve key from Credential Manager
-function Get-KeychainRetrievalCommand {
-    # This generates the code that will run in the profile to get the credential
-    # Uses Win32 CredRead API - no external modules required
-    return @'
-& { Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }' -ErrorAction SilentlyContinue; $p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('juggernaut-bedrock',1,0,[ref]$p)){ $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[Type][Win32.Cred+CREDENTIAL]); $r=$null; if($c.CredentialBlobSize -gt 0){$r=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob,$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree($p); $r } }
-'@
 }
 
 if ($DryRun) {
@@ -594,7 +594,11 @@ Write-Host "Target:   $ProfilePath" -ForegroundColor Gray
 Write-Host "Region:   $Region" -ForegroundColor Gray
 Write-Host "Auth:     $Auth" -ForegroundColor Gray
 if ($Auth -eq "api-key") {
-    $MaskedKey = $BedrockKey.Substring(0, [Math]::Min(8, $BedrockKey.Length)) + "..." + $BedrockKey.Substring([Math]::Max(0, $BedrockKey.Length - 4))
+    if ($BedrockKey.Length -gt 12) {
+        $MaskedKey = $BedrockKey.Substring(0, 8) + "..." + $BedrockKey.Substring($BedrockKey.Length - 4)
+    } else {
+        $MaskedKey = "****"
+    }
     Write-Host "API Key:  $MaskedKey" -ForegroundColor Gray
     Write-Host "Storage:  $Storage" -ForegroundColor Gray
 }

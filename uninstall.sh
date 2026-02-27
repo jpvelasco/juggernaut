@@ -67,11 +67,19 @@ detect_os() {
     esac
 }
 
+# Track whether keychain has already been cleaned (prevents duplicate messages)
+_KEYCHAIN_CLEANED=false
+
 # Remove API key from system keychain if keychain storage was used
 cleanup_keychain() {
     local config_file=$1
     local keychain_service="juggernaut-bedrock"
     local keychain_account="api-key"
+
+    # Only clean up once, even if called for multiple shell configs
+    if [[ "$_KEYCHAIN_CLEANED" == true ]]; then
+        return 0
+    fi
 
     # Check if keychain storage was used by looking for the marker
     if ! grep -q "# Storage: keychain" "$config_file" 2>/dev/null; then
@@ -92,6 +100,7 @@ cleanup_keychain() {
             cmdkey.exe /delete:"$keychain_service" >/dev/null 2>&1 || true
             ;;
     esac
+    _KEYCHAIN_CLEANED=true
     echo "  Removed API key from system keychain"
 }
 

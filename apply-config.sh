@@ -76,7 +76,7 @@ import sys,json,functools
 d=json.load(sys.stdin)
 keys=[k for k in sys.argv[1].split('.') if k]
 val=functools.reduce(lambda d,k: d[k], keys, d)
-print(val if val else '')
+print('' if val is None else val)
 " "$key" 2>/dev/null
     elif command -v python >/dev/null 2>&1; then
         echo "$_JUGGERNAUT_JSON_CONTENT" | python -c "
@@ -84,7 +84,7 @@ import sys,json,functools
 d=json.load(sys.stdin)
 keys=[k for k in sys.argv[1].split('.') if k]
 val=functools.reduce(lambda d,k: d[k], keys, d)
-print(val if val else '')
+print('' if val is None else val)
 " "$key" 2>/dev/null
     else
         echo "Error: jq or python required to parse config" >&2
@@ -149,7 +149,7 @@ fi
 echo "Configuration applied:"
 echo "  AWS_REGION=$AWS_REGION"
 while IFS= read -r _JUGGERNAUT_KEY; do
-    eval "echo \"  \${_JUGGERNAUT_KEY}=\${$_JUGGERNAUT_KEY}\""
+    echo "  ${_JUGGERNAUT_KEY}=${!_JUGGERNAUT_KEY}"
 done <<< "$_JUGGERNAUT_ENV_KEYS"
 
 # Clean up temp variables and functions
