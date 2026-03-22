@@ -71,19 +71,16 @@ json_get() {
 
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query" "$file" 2>/dev/null
-    else
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 print(functools.reduce(lambda d,k: d[k], keys, data))
-" "$file" "$query" 2>/dev/null || \
-        python -c "
-import json,sys,functools
-data=json.load(open(sys.argv[1]))
-keys=[k for k in sys.argv[2].split('.') if k]
-print(functools.reduce(lambda d,k: d[k], keys, data))
 " "$file" "$query" 2>/dev/null
+    else
+        echo "Error: jq or python3 required" >&2
+        return 1
     fi
 }
 
@@ -93,21 +90,17 @@ json_get_keys() {
 
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query | keys[]" "$file" 2>/dev/null
-    else
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 obj=functools.reduce(lambda d,k: d[k], keys, data)
 print('\n'.join(obj.keys()))
-" "$file" "$query" 2>/dev/null || \
-        python -c "
-import json,sys,functools
-data=json.load(open(sys.argv[1]))
-keys=[k for k in sys.argv[2].split('.') if k]
-obj=functools.reduce(lambda d,k: d[k], keys, data)
-print('\n'.join(obj.keys()))
 " "$file" "$query" 2>/dev/null
+    else
+        echo "Error: jq or python3 required" >&2
+        return 1
     fi
 }
 
@@ -117,21 +110,17 @@ json_get_array() {
 
     if command -v jq >/dev/null 2>&1; then
         jq -r "$query[]" "$file" 2>/dev/null
-    else
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 arr=functools.reduce(lambda d,k: d[k], keys, data)
 print('\n'.join(str(x) for x in arr))
-" "$file" "$query" 2>/dev/null || \
-        python -c "
-import json,sys,functools
-data=json.load(open(sys.argv[1]))
-keys=[k for k in sys.argv[2].split('.') if k]
-arr=functools.reduce(lambda d,k: d[k], keys, data)
-print('\n'.join(str(x) for x in arr))
 " "$file" "$query" 2>/dev/null
+    else
+        echo "Error: jq or python3 required" >&2
+        return 1
     fi
 }
 
