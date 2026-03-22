@@ -639,8 +639,8 @@ try {
 Write-Host "Configuration added to $ProfilePath" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
-Write-Host "1. Reload PowerShell profile:"
-Write-Host "   . `$PROFILE" -ForegroundColor White
+Write-Host "1. Restart PowerShell, or reload your profile:"
+Write-Host "   . `$PROFILE.CurrentUserAllHosts" -ForegroundColor White
 Write-Host ""
 
 if ($Auth -eq "api-key") {
