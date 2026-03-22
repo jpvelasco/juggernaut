@@ -254,7 +254,7 @@ source ~/.config/fish/config.fish
 
 **PowerShell (Windows):**
 ```powershell
-. $PROFILE
+. $PROFILE.CurrentUserAllHosts
 ```
 
 ### 5. Launch Claude Code
@@ -485,7 +485,7 @@ source ~/.zshrc
 .\uninstall.ps1
 
 # Then restart PowerShell or reload profile
-. $PROFILE
+. $PROFILE.CurrentUserAllHosts
 ```
 
 After uninstalling, Claude Code will prompt you to log in with your Anthropic account.

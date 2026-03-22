@@ -58,7 +58,7 @@ cd ~/path/to/juggernaut
 source ~/.zshrc  # or ~/.bashrc or ~/.config/fish/config.fish
 
 # Windows PowerShell
-. $PROFILE
+. $PROFILE.CurrentUserAllHosts
 
 # Launch Claude Code
 claude
