@@ -3,8 +3,8 @@
   "version": "1.5.0",
   "environment": {
     "CLAUDE_CODE_USE_BEDROCK": "1",
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "16384",
-    "MAX_THINKING_TOKENS": "32768",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
+    "MAX_THINKING_TOKENS": "65536",
     "ANTHROPIC_MODEL": "global.anthropic.claude-opus-4-6-v1",
     "ANTHROPIC_SMALL_FAST_MODEL": "global.anthropic.claude-sonnet-4-6",
     "DISABLE_ERROR_REPORTING": "1",
