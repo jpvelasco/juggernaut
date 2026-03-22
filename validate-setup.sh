@@ -13,6 +13,16 @@ if [[ -z "$BASH_VERSION" ]]; then
     exit 1
 fi
 
+if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+    echo "This script requires Bash 4.0 or later (found: $BASH_VERSION)"
+    echo ""
+    echo "Upgrade instructions:"
+    echo "  macOS:  brew install bash"
+    echo "  Ubuntu: sudo apt install bash"
+    echo "  RHEL:   sudo yum install bash"
+    exit 1
+fi
+
 #───────────────────────────────────────────────────────────────────────────────
 # Help
 #───────────────────────────────────────────────────────────────────────────────
@@ -77,7 +87,7 @@ for k, v in data.get('environment', {}).items():
 import sys, json
 data = json.load(sys.stdin)
 for k, v in data.get('environment', {}).items():
-    print(f'{k}={v}')
+    print('{0}={1}'.format(k, v))
 ")
     else
         echo "Error: jq or python required to parse config" >&2
