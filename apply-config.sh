@@ -31,6 +31,10 @@ for arg in "$@"; do
         --region=*)
             _JUGGERNAUT_REGION="${arg#--region=}"
             ;;
+        --version|-v)
+            cat "$_JUGGERNAUT_SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
+            return 0 2>/dev/null || exit 0
+            ;;
         --help|-h)
             cat << 'EOF'
 Apply Claude Code Bedrock Configuration
@@ -42,6 +46,7 @@ This script must be sourced (not executed) for environment variables to persist.
 
 Options:
   --region=REGION    AWS region (default: from bedrock-config.json)
+  --version, -v      Show version
   --help, -h         Show this help message
 
 Examples:

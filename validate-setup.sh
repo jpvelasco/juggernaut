@@ -29,6 +29,10 @@ fi
 
 for arg in "$@"; do
     case "$arg" in
+        --version|-v)
+            cat "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/VERSION" 2>/dev/null || echo "unknown"
+            exit 0
+            ;;
         --help|-h)
             cat << 'EOF'
 Juggernaut - Configuration Validator
@@ -39,6 +43,7 @@ Validates that Claude Code is properly configured for Amazon Bedrock.
 Checks environment variables, AWS credentials, Bedrock access, and Claude Code installation.
 
 Options:
+  --version, -v Show version
   --help, -h    Show this help message
 EOF
             exit 0

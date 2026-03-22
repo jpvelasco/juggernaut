@@ -13,7 +13,9 @@ param(
     [string]$FastModel = "",
     [switch]$Force,
     [switch]$DryRun,
-    [switch]$Help
+    [switch]$Help,
+    [Alias("v")]
+    [switch]$Version
 )
 
 # Track if parameters were explicitly provided by the user
@@ -314,6 +316,13 @@ function Get-KeychainRetrievalCommand {
     return @'
 & { Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }' -ErrorAction SilentlyContinue; $p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('juggernaut-bedrock',1,0,[ref]$p)){ $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[Type][Win32.Cred+CREDENTIAL]); $r=$null; if($c.CredentialBlobSize -gt 0){$r=[Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob,$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree($p); $r } }
 '@
+}
+
+# Show version
+if ($Version) {
+    $versionFile = Join-Path $ScriptDir "VERSION"
+    if (Test-Path $versionFile) { Get-Content $versionFile } else { Write-Host "unknown" }
+    exit 0
 }
 
 # Show help

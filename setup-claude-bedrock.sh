@@ -626,6 +626,7 @@ Options:
   --fast-model=ID        Custom fast model (use "default" to reset)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
+  --version, -v          Show version
   --help, -h             Show this help message
 
 Authentication Modes:
@@ -728,6 +729,10 @@ parse_arguments() {
             --fast-model=*)
                 CUSTOM_FAST_MODEL="${arg#--fast-model=}"
                 FAST_MODEL_EXPLICIT=true
+                ;;
+            --version|-v)
+                cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
+                exit 0
                 ;;
             --help|-h)
                 show_help
