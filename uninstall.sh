@@ -177,9 +177,15 @@ uninstall_shell() {
 
 TARGET="all"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 parse_arguments() {
     for arg in "$@"; do
         case "$arg" in
+            --version|-v)
+                cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
+                exit 0
+                ;;
             --help|-h)
                 show_help
                 exit 0

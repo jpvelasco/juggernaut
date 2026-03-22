@@ -3,8 +3,16 @@
 # Usage: .\validate-setup.ps1 [-Help]
 
 param(
-    [switch]$Help
+    [switch]$Help,
+    [Alias("v")]
+    [switch]$Version
 )
+
+if ($Version) {
+    $versionFile = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "VERSION"
+    if (Test-Path $versionFile) { Get-Content $versionFile } else { Write-Host "unknown" }
+    exit 0
+}
 
 if ($Help) {
     Write-Host "Juggernaut - Configuration Validator"

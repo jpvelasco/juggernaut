@@ -40,8 +40,12 @@ detect_shell() {
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
-# Pass through help flag
+# Pass through version/help flags
 for arg in "$@"; do
+    [[ "$arg" == "--version" || "$arg" == "-v" ]] && {
+        cat "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/VERSION" 2>/dev/null || echo "unknown"
+        exit 0
+    }
     [[ "$arg" == "--help" || "$arg" == "-h" ]] && {
         echo "Juggernaut - Claude Code Bedrock Setup"
         echo ""
@@ -58,6 +62,7 @@ for arg in "$@"; do
         echo "  --region=REGION      AWS region (default: us-west-2)"
         echo "  --dry-run            Preview changes without modifying files"
         echo "  --force, -f          Skip confirmation prompts"
+        echo "  --version, -v        Show version"
         echo "  --help, -h           Show this help message"
         echo ""
         echo "Examples:"

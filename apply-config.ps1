@@ -5,8 +5,16 @@
 
 param(
     [string]$Region,
-    [switch]$Help
+    [switch]$Help,
+    [Alias("v")]
+    [switch]$Version
 )
+
+if ($Version) {
+    $versionFile = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "VERSION"
+    if (Test-Path $versionFile) { Get-Content $versionFile } else { Write-Host "unknown" }
+    return
+}
 
 if ($Help) {
     Write-Host "Apply Claude Code Bedrock Configuration"
