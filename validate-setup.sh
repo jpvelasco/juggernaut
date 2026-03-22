@@ -13,6 +13,16 @@ if [[ -z "$BASH_VERSION" ]]; then
     exit 1
 fi
 
+if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+    echo "This script requires Bash 4.0 or later (found: $BASH_VERSION)"
+    echo ""
+    echo "Upgrade instructions:"
+    echo "  macOS:  brew install bash"
+    echo "  Ubuntu: sudo apt install bash"
+    echo "  RHEL:   sudo yum install bash"
+    exit 1
+fi
+
 #───────────────────────────────────────────────────────────────────────────────
 # Help
 #───────────────────────────────────────────────────────────────────────────────
@@ -77,7 +87,7 @@ for k, v in data.get('environment', {}).items():
 import sys, json
 data = json.load(sys.stdin)
 for k, v in data.get('environment', {}).items():
-    print(f'{k}={v}')
+    print('{0}={1}'.format(k, v))
 ")
     else
         echo "Error: jq or python required to parse config" >&2
@@ -265,9 +275,11 @@ check_api_key_validity() {
 
     # Try to invoke the model with a minimal request
     # This will fail fast if the key is invalid
+    # Use the configured fast model (cheapest available) for the probe
+    local test_model="${EXPECTED_ENV_VARS[ANTHROPIC_SMALL_FAST_MODEL]:-anthropic.claude-3-haiku-20240307-v1:0}"
     test_result=$(aws bedrock-runtime converse \
         --region "$region" \
-        --model-id "anthropic.claude-3-haiku-20240307-v1:0" \
+        --model-id "$test_model" \
         --messages '[{"role":"user","content":[{"text":"hi"}]}]' \
         --inference-config '{"maxTokens":1}' \
         2>&1)
