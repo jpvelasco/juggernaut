@@ -69,7 +69,7 @@ fi
 
 _JUGGERNAUT_JSON_CONTENT=$(cat "$_JUGGERNAUT_CONFIG_FILE")
 
-# Parse JSON using jq or python fallback
+# Parse JSON using jq or python3 fallback
 # Python fallback uses sys.argv to avoid eval() and shell injection risks
 _juggernaut_get_json_value() {
     local key=$1
@@ -83,16 +83,8 @@ keys=[k for k in sys.argv[1].split('.') if k]
 val=functools.reduce(lambda d,k: d[k], keys, d)
 print('' if val is None else val)
 " "$key" 2>/dev/null
-    elif command -v python >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | python -c "
-import sys,json,functools
-d=json.load(sys.stdin)
-keys=[k for k in sys.argv[1].split('.') if k]
-val=functools.reduce(lambda d,k: d[k], keys, d)
-print('' if val is None else val)
-" "$key" 2>/dev/null
     else
-        echo "Error: jq or python required to parse config" >&2
+        echo "Error: jq or python3 required to parse config" >&2
         return 1
     fi
 }
@@ -110,16 +102,8 @@ keys=[k for k in sys.argv[1].split('.') if k]
 obj=functools.reduce(lambda d,k: d[k], keys, d)
 print('\n'.join(obj.keys()))
 " "$key" 2>/dev/null
-    elif command -v python >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | python -c "
-import sys,json,functools
-d=json.load(sys.stdin)
-keys=[k for k in sys.argv[1].split('.') if k]
-obj=functools.reduce(lambda d,k: d[k], keys, d)
-print('\n'.join(obj.keys()))
-" "$key" 2>/dev/null
     else
-        echo "Error: jq or python required to parse config" >&2
+        echo "Error: jq or python3 required to parse config" >&2
         return 1
     fi
 }

@@ -71,7 +71,7 @@ load_config() {
     local json_content
     json_content=$(cat "$CONFIG_FILE")
 
-    # Try jq first, fall back to python
+    # Try jq first, fall back to python3
     if command -v jq >/dev/null 2>&1; then
         while IFS='=' read -r key value; do
             [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"
@@ -85,17 +85,8 @@ data = json.load(sys.stdin)
 for k, v in data.get('environment', {}).items():
     print(f'{k}={v}')
 ")
-    elif command -v python >/dev/null 2>&1; then
-        while IFS='=' read -r key value; do
-            [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"
-        done < <(echo "$json_content" | python -c "
-import sys, json
-data = json.load(sys.stdin)
-for k, v in data.get('environment', {}).items():
-    print('{0}={1}'.format(k, v))
-")
     else
-        echo "Error: jq or python required to parse config" >&2
+        echo "Error: jq or python3 required to parse config" >&2
         exit 1
     fi
 }
