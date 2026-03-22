@@ -275,9 +275,11 @@ check_api_key_validity() {
 
     # Try to invoke the model with a minimal request
     # This will fail fast if the key is invalid
+    # Use the configured fast model (cheapest available) for the probe
+    local test_model="${EXPECTED_ENV_VARS[ANTHROPIC_SMALL_FAST_MODEL]:-anthropic.claude-3-haiku-20240307-v1:0}"
     test_result=$(aws bedrock-runtime converse \
         --region "$region" \
-        --model-id "anthropic.claude-3-haiku-20240307-v1:0" \
+        --model-id "$test_model" \
         --messages '[{"role":"user","content":[{"text":"hi"}]}]' \
         --inference-config '{"maxTokens":1}' \
         2>&1)

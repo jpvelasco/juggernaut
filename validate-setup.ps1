@@ -207,9 +207,11 @@ function Test-ApiKeyValidity {
 
     try {
         # Make a minimal Bedrock API call to test the key
+        # Use the configured fast model (cheapest available) for the probe
+        $testModel = if ($ExpectedEnvVars["ANTHROPIC_SMALL_FAST_MODEL"]) { $ExpectedEnvVars["ANTHROPIC_SMALL_FAST_MODEL"] } else { "anthropic.claude-3-haiku-20240307-v1:0" }
         $result = aws bedrock-runtime converse `
             --region $region `
-            --model-id "anthropic.claude-3-haiku-20240307-v1:0" `
+            --model-id $testModel `
             --messages '[{"role":"user","content":[{"text":"hi"}]}]' `
             --max-tokens 1 2>&1
 
