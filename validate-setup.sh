@@ -333,6 +333,40 @@ check_bedrock_access() {
     fi
 }
 
+check_bedrock_inference_profile() {
+    local region="${AWS_REGION:-us-west-2}"
+    local test_model="${EXPECTED_ENV_VARS[ANTHROPIC_DEFAULT_SONNET_MODEL]:-global.anthropic.claude-sonnet-4-6}"
+
+    echo -e "${CYAN}Bedrock Inference Profile Access${NC}"
+    echo "  Testing inference profile: $test_model"
+
+    local test_result
+    test_result=$(aws bedrock-runtime invoke-model \
+        --region "$region" \
+        --model-id "$test_model" \
+        --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":10,"messages":[{"role":"user","content":"test"}]}' \
+        --cli-binary-format raw-in-base64-out \
+        /dev/null 2>&1)
+    local exit_code=$?
+
+    if [[ $exit_code -eq 0 ]]; then
+        echo -e "${GREEN}PASS${NC} Inference profile accessible"
+    elif echo "$test_result" | grep -qi "access denied\|not authorized\|forbidden"; then
+        echo -e "${RED}FAIL${NC} Bedrock model access denied"
+        echo "     Did you complete the Anthropic FTU form?"
+        echo "     -> https://${region}.console.aws.amazon.com/bedrock/home?region=${region}#/anthropic-model-access"
+        ((ERRORS++))
+    elif echo "$test_result" | grep -qi "could not connect\|timeout\|network"; then
+        echo -e "${YELLOW}WARN${NC} Could not reach Bedrock (network issue?)"
+        ((WARNINGS++))
+    else
+        echo -e "${YELLOW}WARN${NC} Inference profile test returned unexpected result"
+        echo "     $test_result"
+        ((WARNINGS++))
+    fi
+    echo ""
+}
+
 check_claude_code() {
     if command -v claude >/dev/null 2>&1; then
         local version
@@ -400,6 +434,9 @@ main() {
         echo -e "${CYAN}Bedrock Access${NC}"
         check_bedrock_access
         echo ""
+
+        # Bedrock Inference Profile Access
+        check_bedrock_inference_profile
     fi
 
     # Claude Code
