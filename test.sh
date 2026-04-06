@@ -452,6 +452,31 @@ test_compat_env_vars() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ENABLE_PROMPT_CACHING_1H_BEDROCK'"
 }
 
+test_per_model_flags() {
+    section "Per-Model CLI Flags"
+
+    run_test "--opus-model override" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opus-model=us.anthropic.claude-opus-4-6-v1 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=us.anthropic.claude-opus-4-6-v1'"
+
+    run_test "--sonnet-model override" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --sonnet-model=us.anthropic.claude-sonnet-4-6 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=us.anthropic.claude-sonnet-4-6'"
+
+    run_test "--haiku-model override" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --haiku-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "--model-prefix=us transforms opus model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL' | grep -q 'us.anthropic'"
+
+    run_test "--global keeps global prefix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL' | grep -q 'global.anthropic'"
+
+    run_test "help shows --opus-model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'opus-model'"
+
+    run_test "help shows --model-prefix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'model-prefix'"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -478,6 +503,7 @@ main() {
     test_preserve_key_with_storage
     test_model_picker_env_vars
     test_compat_env_vars
+    test_per_model_flags
     test_required_files
     test_json_validity
     test_unified_entry_point
