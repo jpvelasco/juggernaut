@@ -80,6 +80,7 @@ test_syntax() {
     run_test "validate-setup.sh syntax" "bash -n $SCRIPT_DIR/validate-setup.sh"
     run_test "apply-config.sh syntax" "bash -n $SCRIPT_DIR/apply-config.sh"
     run_test "test.sh syntax" "bash -n $SCRIPT_DIR/test.sh"
+    run_test "install.sh syntax" "bash -n $SCRIPT_DIR/install.sh"
 }
 
 test_help_flags() {
@@ -114,6 +115,7 @@ test_required_files() {
     run_test "iam-policy.json exists" "test -f $SCRIPT_DIR/iam-policy.json"
     run_test "bedrock-config.json exists" "test -f $SCRIPT_DIR/bedrock-config.json"
     run_test "setup is executable" "test -x $SCRIPT_DIR/setup"
+    run_test "install.sh exists" "test -f $SCRIPT_DIR/install.sh"
 }
 
 test_json_validity() {
