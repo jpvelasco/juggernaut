@@ -70,8 +70,8 @@ claude
 # Check environment variables are set correctly
 echo $CLAUDE_CODE_USE_BEDROCK          # Should output: 1
 echo $AWS_REGION                       # Should output: us-west-2
-echo $CLAUDE_CODE_MAX_OUTPUT_TOKENS    # Should output: 16384
-echo $ANTHROPIC_MODEL                  # Should output: global.anthropic.claude-opus-4-5-20251101-v1:0
+echo $CLAUDE_CODE_MAX_OUTPUT_TOKENS    # Should output: 32768
+echo $ANTHROPIC_MODEL                  # Should output: global.anthropic.claude-opus-4-6-v1
 
 # Test Bedrock access
 aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
@@ -81,12 +81,12 @@ aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 
 Your setup includes:
 - ✅ Bedrock integration enabled
-- ✅ Claude Opus 4.5 as primary model (Global CRIS)
-- ✅ Claude Sonnet 4.5 as fast model (Global CRIS)
-- ✅ Optimized token limits for Bedrock (16384 output, 32768 thinking)
+- ✅ Claude Opus 4.6 as primary model (Global CRIS)
+- ✅ Claude Sonnet 4.6 as fast model (Global CRIS)
+- ✅ Claude Haiku 4.5 available via /model picker (Global CRIS)
+- ✅ All three model tiers visible in `/model` selector
+- ✅ Optimized token limits for Bedrock (32768 output, 65536 thinking)
 - ✅ Persistent configuration in shell profile
-
-**Note:** Only Opus 4.5 appears in the `/model` selector. Sonnet 4.5 is used automatically by Claude Code for background tasks (agent operations, file exploration). This is expected behavior.
 
 ## Updating Existing Terminals
 
@@ -94,6 +94,16 @@ If you have terminals open before running setup:
 ```bash
 source apply-config.sh
 ```
+
+## Troubleshooting
+
+### Common 400/403 Errors
+- **400 on latest Claude Code**: Already handled — Juggernaut sets `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`
+- **403 Access Denied**: Complete the Anthropic model access form in the Bedrock console
+- **Model not found**: Ensure you're using global inference profiles (Juggernaut does this by default)
+
+### Only One Model in /model Picker?
+Update to Juggernaut v1.6.0+ — it maps all model tiers (Opus, Sonnet, Haiku) to Bedrock.
 
 ## Need Help?
 
