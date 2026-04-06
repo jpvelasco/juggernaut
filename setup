@@ -31,8 +31,9 @@ detect_shell() {
     elif [[ -n "$FISH_VERSION" ]]; then
         echo "fish"
     else
-        # Fallback to login shell
-        basename "$SHELL"
+        # Fallback to login shell, then system default
+        local login_shell="${SHELL:-$(getent passwd "$USER" 2>/dev/null | cut -d: -f7)}"
+        basename "${login_shell:-bash}"
     fi
 }
 
@@ -62,6 +63,13 @@ for arg in "$@"; do
         echo "  --region=REGION      AWS region (default: us-west-2)"
         echo "  --dry-run            Preview changes without modifying files"
         echo "  --force, -f          Skip confirmation prompts"
+        echo "  --model=ID           Custom primary model (Opus)"
+        echo "  --fast-model=ID      Custom fast model (Sonnet/Haiku)"
+        echo "  --opus-model=ID      Custom opus model for /model picker"
+        echo "  --sonnet-model=ID    Custom sonnet model for /model picker"
+        echo "  --haiku-model=ID     Custom haiku model for /model picker"
+        echo "  --global             Use global inference profiles (default)"
+        echo "  --model-prefix=PFX   Inference profile prefix (us, eu, ap)"
         echo "  --version, -v        Show version"
         echo "  --help, -h           Show this help message"
         echo ""
