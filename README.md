@@ -23,7 +23,7 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Claude Code v2.1.69+ Compatibility**: Automatically sets `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` and `ENABLE_PROMPT_CACHING_1H_BEDROCK` to prevent 400 errors and enable prompt caching
 - **Per-Model Overrides**: New `--opus-model`, `--sonnet-model`, `--haiku-model` flags for granular model control
 - **Model Prefix**: `--model-prefix=us|eu|ap` to use region-specific inference profiles instead of global
-- **One-Line Install**: `curl -fsSL .../install.sh | bash`
+- **One-Line Install**: `curl | bash` (Unix) or `irm | iex` (PowerShell)
 - **Improved Validation**: `validate-setup.sh` now tests Bedrock inference profile access directly
 
 See [Model Switching on Bedrock](#model-switching-on-bedrock) for details.
@@ -70,6 +70,11 @@ See [Model Switching on Bedrock](#model-switching-on-bedrock) for details.
 **One-Line Install (fastest):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
+```
+
+**Windows PowerShell:**
+```powershell
+irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
 ```
 
 **One-Command Setup:**
@@ -256,6 +261,8 @@ claude
 - `setup` - **Unified entry point** (auto-detects OS and shell)
 - `setup-claude-bedrock.sh` - Unix/macOS/Linux setup script
 - `setup-claude-bedrock.ps1` - Windows PowerShell setup script
+- `install.sh` - One-liner installer for Unix/macOS/Linux
+- `install.ps1` - One-liner installer for Windows PowerShell
 - `bedrock-config.json` - **Single source of truth** for environment variables and settings
 - `uninstall.sh` - Remove Bedrock configuration from shell profiles (Unix/macOS/Linux)
 - `uninstall.ps1` - Remove Bedrock configuration from PowerShell profile (Windows)
