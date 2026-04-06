@@ -82,7 +82,7 @@ d=json.load(sys.stdin)
 keys=[k for k in sys.argv[1].split('.') if k]
 val=functools.reduce(lambda d,k: d[k], keys, d)
 print('' if val is None else val)
-" "$key" 2>/dev/null
+" "$key" 2>/dev/null | tr -d '\r'
     else
         echo "Error: jq or python3 required to parse config" >&2
         return 1
@@ -101,7 +101,7 @@ d=json.load(sys.stdin)
 keys=[k for k in sys.argv[1].split('.') if k]
 obj=functools.reduce(lambda d,k: d[k], keys, d)
 print('\n'.join(obj.keys()))
-" "$key" 2>/dev/null
+" "$key" 2>/dev/null | tr -d '\r'
     else
         echo "Error: jq or python3 required to parse config" >&2
         return 1

@@ -84,7 +84,7 @@ import sys, json
 data = json.load(sys.stdin)
 for k, v in data.get('environment', {}).items():
     print(f'{k}={v}')
-")
+" | tr -d '\r')
     else
         echo "Error: jq or python3 required to parse config" >&2
         exit 1
