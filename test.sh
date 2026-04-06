@@ -408,6 +408,50 @@ test_preserve_key_with_storage() {
         "AWS_BEARER_TOKEN_BEDROCK=br-existing123 $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --preserve-key --dry-run 2>&1 | grep -q 'existing API key'"
 }
 
+test_model_picker_env_vars() {
+    section "Model Picker Environment Variables"
+
+    run_test "config has ANTHROPIC_DEFAULT_OPUS_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL'"
+
+    run_test "config has ANTHROPIC_DEFAULT_SONNET_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL'"
+
+    run_test "config has ANTHROPIC_DEFAULT_HAIKU_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL'"
+
+    run_test "config has OPUS model name" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME'"
+
+    run_test "config has SONNET model name" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME'"
+
+    run_test "config has HAIKU model name" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME'"
+
+    run_test "config has OPUS model description" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION'"
+
+    run_test "config has SONNET model description" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION'"
+
+    run_test "config has HAIKU model description" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION'"
+
+    run_test "fish config has model picker vars" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL'"
+}
+
+test_compat_env_vars() {
+    section "Claude Code v2.1.69+ Compatibility Variables"
+
+    run_test "config has CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS'"
+
+    run_test "config has ENABLE_PROMPT_CACHING_1H_BEDROCK" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ENABLE_PROMPT_CACHING_1H_BEDROCK'"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -432,6 +476,8 @@ main() {
     test_error_handling
     test_keychain_unavailable
     test_preserve_key_with_storage
+    test_model_picker_env_vars
+    test_compat_env_vars
     test_required_files
     test_json_validity
     test_unified_entry_point
