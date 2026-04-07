@@ -97,7 +97,7 @@ source apply-config.sh
 
 ## Fast / Background Model Note
 
-Haiku 4.5 is the default for background tasks (subagents, searches). `ANTHROPIC_SMALL_FAST_MODEL` is deprecated — Juggernaut v1.6+ uses `ANTHROPIC_DEFAULT_HAIKU_MODEL` instead. For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`
+Haiku 4.5 is the default for background tasks (subagents, searches, etc.). `ANTHROPIC_SMALL_FAST_MODEL` has been removed — Juggernaut v1.6+ uses `ANTHROPIC_DEFAULT_HAIKU_MODEL` instead. For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`. Official docs: https://code.claude.com/docs/en/model-config
 
 ## Troubleshooting
 
