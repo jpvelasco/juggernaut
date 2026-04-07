@@ -40,5 +40,8 @@
     "auth_mode": "iam",
     "model": "global.anthropic.claude-opus-4-6-v1",
     "fast_model": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  "notes": {
+    "fast_model": "Default fast/background model is Haiku 4.5 following Anthropic's recommendation for cost and speed on subagent and internal tasks. ANTHROPIC_SMALL_FAST_MODEL is deprecated — use ANTHROPIC_DEFAULT_HAIKU_MODEL instead. See https://docs.anthropic.com/en/docs/claude-code/settings#model-configuration"
   }
 }

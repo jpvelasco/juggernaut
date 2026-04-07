@@ -75,7 +75,7 @@ load_config() {
     if command -v jq >/dev/null 2>&1; then
         while IFS='=' read -r key value; do
             [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"
-        done < <(echo "$json_content" | jq -r '.environment | to_entries[] | "\(.key)=\(.value)"')
+        done < <(echo "$json_content" | jq -r '.environment | to_entries[] | "\(.key)=\(.value)"' | tr -d '\r')
     elif command -v python3 >/dev/null 2>&1; then
         while IFS='=' read -r key value; do
             [[ -n "$key" ]] && EXPECTED_ENV_VARS["$key"]="$value"

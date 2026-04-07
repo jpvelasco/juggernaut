@@ -70,7 +70,7 @@ json_get() {
     local query=$2
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query" "$file" 2>/dev/null
+        jq -r "$query" "$file" 2>/dev/null | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json,sys,functools
@@ -89,7 +89,7 @@ json_get_keys() {
     local query=$2
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query | keys[]" "$file" 2>/dev/null
+        jq -r "$query | keys[]" "$file" 2>/dev/null | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json,sys,functools
@@ -109,7 +109,7 @@ json_get_array() {
     local query=$2
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query[]" "$file" 2>/dev/null
+        jq -r "$query[]" "$file" 2>/dev/null | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json,sys,functools
@@ -440,7 +440,7 @@ generate_config_block() {
         fi
 
         if [[ "$shell" == "fish" ]]; then
-            config+="$syntax $key $value"$'\n'
+            config+="$syntax $key \"$value\""$'\n'
         else
             config+="$syntax $key=$value"$'\n'
         fi

@@ -373,6 +373,19 @@ Claude Code uses multiple models for different purposes:
 - The `/model` command shows all three tiers (Opus, Sonnet, Haiku) — you can switch between them
 - For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`
 
+### Fast / Background Model (v1.6 Change)
+
+Juggernaut defaults the fast/background model to **Haiku 4.5**, following Anthropic's architecture where background tasks (subagents, exploration, searches) use the Haiku tier for cost and speed.
+
+`ANTHROPIC_SMALL_FAST_MODEL` is officially deprecated by Anthropic. Background behavior is now driven by `ANTHROPIC_DEFAULT_HAIKU_MODEL`. Juggernaut v1.6+ no longer sets the deprecated variable.
+
+Override with Sonnet for higher-quality background work:
+```bash
+./setup --fast-model=global.anthropic.claude-sonnet-4-6
+```
+
+Official docs: https://docs.anthropic.com/en/docs/claude-code/settings#model-configuration
+
 ## Custom Models
 
 Override the default model IDs from `bedrock-config.json`:

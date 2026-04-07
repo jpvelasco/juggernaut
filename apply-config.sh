@@ -74,7 +74,7 @@ _JUGGERNAUT_JSON_CONTENT=$(cat "$_JUGGERNAUT_CONFIG_FILE")
 _juggernaut_get_json_value() {
     local key=$1
     if command -v jq >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key // empty"
+        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key // empty" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "
 import sys,json,functools
@@ -93,7 +93,7 @@ print('' if val is None else val)
 _juggernaut_get_json_keys() {
     local key=$1
     if command -v jq >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key | keys[]"
+        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key | keys[]" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "
 import sys,json,functools
