@@ -483,6 +483,12 @@ test_per_model_flags() {
 
     run_test "--haiku-model takes priority over --fast-model" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-sonnet-4-6 --haiku-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "ANTHROPIC_SMALL_FAST_MODEL absent from default config" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_SMALL_FAST_MODEL'"
+
+    run_test "--fast-model does not set ANTHROPIC_SMALL_FAST_MODEL" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_SMALL_FAST_MODEL'"
 }
 
 test_value_quoting() {

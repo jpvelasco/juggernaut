@@ -64,7 +64,7 @@ for arg in "$@"; do
         echo "  --dry-run            Preview changes without modifying files"
         echo "  --force, -f          Skip confirmation prompts"
         echo "  --model=ID           Custom primary model (Opus)"
-        echo "  --fast-model=ID      Custom fast model (Sonnet/Haiku)"
+        echo "  --fast-model=ID      Custom fast model (defaults to Haiku)"
         echo "  --opus-model=ID      Custom opus model for /model picker"
         echo "  --sonnet-model=ID    Custom sonnet model for /model picker"
         echo "  --haiku-model=ID     Custom haiku model for /model picker"

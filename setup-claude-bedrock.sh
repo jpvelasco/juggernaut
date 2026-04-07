@@ -68,16 +68,20 @@ declare -a VALID_STORAGE_MODES=(profile keychain)
 json_get() {
     local file=$1
     local query=$2
+    local result
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query" "$file" 2>/dev/null | tr -d '\r'
+        result=$(jq -r "$query // empty" "$file" 2>/dev/null) || return 1
+        printf '%s' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+        result=$(python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
-print(functools.reduce(lambda d,k: d[k], keys, data))
-" "$file" "$query" 2>/dev/null | tr -d '\r'
+val=functools.reduce(lambda d,k: d[k], keys, data)
+print('' if val is None else val)
+" "$file" "$query" 2>/dev/null) || return 1
+        printf '%s' "$result" | tr -d '\r'
     else
         echo "Error: jq or python3 required" >&2
         return 1
@@ -87,17 +91,20 @@ print(functools.reduce(lambda d,k: d[k], keys, data))
 json_get_keys() {
     local file=$1
     local query=$2
+    local result
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query | keys[]" "$file" 2>/dev/null | tr -d '\r'
+        result=$(jq -r "$query | keys[]" "$file" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+        result=$(python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 obj=functools.reduce(lambda d,k: d[k], keys, data)
 print('\n'.join(obj.keys()))
-" "$file" "$query" 2>/dev/null | tr -d '\r'
+" "$file" "$query" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     else
         echo "Error: jq or python3 required" >&2
         return 1
@@ -107,17 +114,20 @@ print('\n'.join(obj.keys()))
 json_get_array() {
     local file=$1
     local query=$2
+    local result
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query[]" "$file" 2>/dev/null | tr -d '\r'
+        result=$(jq -r "$query[]" "$file" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+        result=$(python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 arr=functools.reduce(lambda d,k: d[k], keys, data)
 print('\n'.join(str(x) for x in arr))
-" "$file" "$query" 2>/dev/null | tr -d '\r'
+" "$file" "$query" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     else
         echo "Error: jq or python3 required" >&2
         return 1
@@ -1262,7 +1272,7 @@ main() {
     if [[ -n "$CUSTOM_FAST_MODEL" ]]; then
         validate_model_id "$CUSTOM_FAST_MODEL" "fast-model" || exit 1
         warn_custom_model "$CUSTOM_FAST_MODEL" "fast"
-        # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL is deprecated)
+        # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL was removed)
         if [[ -z "$CUSTOM_HAIKU_MODEL" ]]; then
             CUSTOM_HAIKU_MODEL="$CUSTOM_FAST_MODEL"
         fi

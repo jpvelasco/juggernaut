@@ -311,7 +311,7 @@ claude
 │  # BEGIN: Claude Code Bedrock Configuration                         │
 │  export CLAUDE_CODE_USE_BEDROCK=1                                   │
 │  export AWS_REGION=us-west-2                                        │
-│  export ANTHROPIC_MODEL=global.anthropic.claude-opus-4-5-...        │
+│  export ANTHROPIC_MODEL=global.anthropic.claude-opus-4-6-...        │
 │  ...                                                                │
 │  # END: Claude Code Bedrock Configuration                           │
 └─────────────────────────────────────────────────────────────────────┘

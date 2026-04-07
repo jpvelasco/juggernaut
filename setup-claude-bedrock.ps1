@@ -323,7 +323,7 @@ if (-not [string]::IsNullOrEmpty($FastModel)) {
         exit 1
     }
     Show-CustomModelWarning -ModelId $FastModel -ModelType "fast"
-    # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL is deprecated)
+    # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL was removed)
     if ([string]::IsNullOrEmpty($HaikuModel)) {
         $HaikuModel = $FastModel
     }
@@ -442,7 +442,7 @@ if ($Help) {
     Write-Host "  -SonnetModel <ID>  Custom Sonnet model (use 'default' to reset)"
     Write-Host "  -HaikuModel <ID>   Custom Haiku model (use 'default' to reset)"
     Write-Host "  -Global            Use global inference profiles (default)"
-    Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'apac')"
+    Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'ap')"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
