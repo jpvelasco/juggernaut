@@ -479,6 +479,39 @@ test_per_model_flags() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'model-prefix'"
 }
 
+test_model_prefix_regex() {
+    section "Model Prefix Regex (Correctness)"
+
+    # Verify prefix transform preserves anthropic.* segment for all model vars
+    run_test "prefix=us: opus keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=us.anthropic.claude-opus-4-6-v1'"
+
+    run_test "prefix=us: sonnet keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=us.anthropic.claude-sonnet-4-6'"
+
+    run_test "prefix=us: haiku keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "prefix=eu: primary model keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'ANTHROPIC_MODEL=eu.anthropic.claude-opus-4-6-v1'"
+
+    run_test "prefix=ap: fast model keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=ap --dry-run --force 2>&1 | grep -q 'ANTHROPIC_SMALL_FAST_MODEL=ap.anthropic.claude-sonnet-4-6'"
+
+    run_test "prefix=global: no double-global prefix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_MODEL' | head -1 | grep -q 'global.anthropic.claude-opus-4-6-v1'"
+
+    run_test "--global flag: equivalent to prefix=global" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --global --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=global.anthropic.claude-sonnet-4-6'"
+
+    # Verify no model IDs are malformed (missing anthropic segment)
+    run_test "prefix=us: no bare 'us.claude-' in output" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'us\.claude-'"
+
+    run_test "prefix=eu: no bare 'eu.claude-' in output" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'eu\.claude-'"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -506,6 +539,7 @@ main() {
     test_model_picker_env_vars
     test_compat_env_vars
     test_per_model_flags
+    test_model_prefix_regex
     test_required_files
     test_json_validity
     test_unified_entry_point

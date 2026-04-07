@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+if ! command -v git >/dev/null 2>&1; then
+    echo "Error: git is required but not installed" >&2
+    exit 1
+fi
+
 REPO_URL="https://github.com/jpvelasco/juggernaut.git"
 INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
 

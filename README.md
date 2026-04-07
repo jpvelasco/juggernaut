@@ -26,7 +26,7 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **One-Line Install**: `curl | bash` (Unix) or `irm | iex` (PowerShell)
 - **Improved Validation**: `validate-setup.sh` now tests Bedrock inference profile access directly
 
-See [Model Switching on Bedrock](#model-switching-on-bedrock) for details.
+See [Model Switching on Bedrock](#model-switching-on-bedrock-v16) for details.
 
 ## Why Bedrock?
 

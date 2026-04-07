@@ -735,7 +735,6 @@ OPUS_MODEL_EXPLICIT=false
 SONNET_MODEL_EXPLICIT=false
 HAIKU_MODEL_EXPLICIT=false
 MODEL_PREFIX=""
-MODEL_PREFIX_EXPLICIT=false
 USE_GLOBAL=false
 
 parse_arguments() {
@@ -789,7 +788,6 @@ parse_arguments() {
                 ;;
             --model-prefix=*)
                 MODEL_PREFIX="${arg#--model-prefix=}"
-                MODEL_PREFIX_EXPLICIT=true
                 ;;
             --version|-v)
                 cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
@@ -1275,7 +1273,9 @@ main() {
         )
         for key in "${transform_keys[@]}"; do
             if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
-                BEDROCK_CONFIG["$key"]=$(echo "${BEDROCK_CONFIG[$key]}" | sed "s/^[^.]*\./${MODEL_PREFIX}./")
+                # Replace prefix while preserving anthropic.* segment
+                # Handles both "global.anthropic.*" and bare "anthropic.*" IDs
+                BEDROCK_CONFIG["$key"]=$(echo "${BEDROCK_CONFIG[$key]}" | sed -E "s/^([^.]+\.)?anthropic\./${MODEL_PREFIX}.anthropic./")
             fi
         done
     fi

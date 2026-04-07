@@ -30,7 +30,7 @@ $FastModelExplicit = $PSBoundParameters.ContainsKey('FastModel')
 $OpusModelExplicit = $PSBoundParameters.ContainsKey('OpusModel')
 $SonnetModelExplicit = $PSBoundParameters.ContainsKey('SonnetModel')
 $HaikuModelExplicit = $PSBoundParameters.ContainsKey('HaikuModel')
-$ModelPrefixExplicit = $PSBoundParameters.ContainsKey('ModelPrefix')
+
 $StorageExplicit = $PSBoundParameters.ContainsKey('Storage')
 
 $ErrorActionPreference = "Stop"
@@ -553,7 +553,8 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
     foreach ($key in $modelKeys) {
         $prop = $Config.environment.PSObject.Properties[$key]
         if ($prop) {
-            $prop.Value = $prop.Value -replace "^[^.]+\.", "$ModelPrefix."
+            # Replace prefix while preserving anthropic.* segment
+            $prop.Value = $prop.Value -replace "^([^.]+\.)?anthropic\.", "$ModelPrefix.anthropic."
         }
     }
 }

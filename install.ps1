@@ -1,6 +1,11 @@
 #Requires -Version 5.1
 $ErrorActionPreference = "Stop"
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error "git is required but not installed"
+    exit 1
+}
+
 $RepoUrl = "https://github.com/jpvelasco/juggernaut.git"
 $InstallDir = if ($env:JUGGERNAUT_DIR) { $env:JUGGERNAUT_DIR } else { Join-Path $HOME ".juggernaut" }
 
