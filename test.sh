@@ -477,6 +477,25 @@ test_per_model_flags() {
 
     run_test "help shows --model-prefix" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'model-prefix'"
+
+    run_test "--fast-model sets HAIKU_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "--haiku-model takes priority over --fast-model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-sonnet-4-6 --haiku-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+}
+
+test_value_quoting() {
+    section "Shell Value Quoting"
+
+    run_test "fish quotes values with spaces" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q '\"Opus'"
+
+    run_test "bash quotes values with spaces" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q '\"Opus'"
+
+    run_test "zsh quotes values with spaces" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q '\"Opus'"
 }
 
 test_model_prefix_regex() {
@@ -539,6 +558,7 @@ main() {
     test_model_picker_env_vars
     test_compat_env_vars
     test_per_model_flags
+    test_value_quoting
     test_model_prefix_regex
     test_required_files
     test_json_validity

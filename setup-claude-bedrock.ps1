@@ -441,7 +441,7 @@ if ($Help) {
     Write-Host "  -OpusModel <ID>    Custom Opus model (use 'default' to reset)"
     Write-Host "  -SonnetModel <ID>  Custom Sonnet model (use 'default' to reset)"
     Write-Host "  -HaikuModel <ID>   Custom Haiku model (use 'default' to reset)"
-    Write-Host "  -Global            Use global inference profiles (us-only, lower latency)"
+    Write-Host "  -Global            Use global inference profiles (default)"
     Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'apac')"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
