@@ -560,6 +560,73 @@ test_install_script() {
         "grep -q 'command -v git' $SCRIPT_DIR/install.sh"
 }
 
+test_capabilities() {
+    section "Model Capabilities"
+
+    run_test "opus capabilities present in config" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES='"
+
+    run_test "sonnet capabilities present in config" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES='"
+
+    run_test "no haiku capabilities in config" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES'"
+
+    run_test "opus has max_effort capability" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'OPUS_MODEL_SUPPORTED_CAPABILITIES' | grep -q 'max_effort'"
+
+    run_test "sonnet does not have max_effort" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'SONNET_MODEL_SUPPORTED_CAPABILITIES' | grep -q 'max_effort'"
+}
+
+test_1m_context() {
+    section "1M Context Windows"
+
+    # Core suffix behavior
+    run_test "--1m-context appends [1m] to opus model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
+
+    run_test "--1m-context appends [1m] to sonnet model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL=' | grep -q '\[1m\]'"
+
+    run_test "--1m-context does NOT affect haiku model" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_HAIKU_MODEL=' | grep -q '\[1m\]'"
+
+    run_test "--1m-context does NOT affect ANTHROPIC_MODEL" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -E '^export ANTHROPIC_MODEL=' | grep -q '\[1m\]'"
+
+    run_test "default config has no [1m] suffix" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q '\[1m\]'"
+
+    # Name and description updates
+    run_test "--1m-context updates opus name with 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q '1M Context'"
+
+    run_test "--1m-context updates sonnet name with 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'SONNET_MODEL_NAME' | grep -q '1M Context'"
+
+    run_test "--1m-context does NOT update haiku name" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'HAIKU_MODEL_NAME' | grep -q '1M Context'"
+
+    run_test "--1m-context updates opus description with 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_DESCRIPTION' | grep -q '1M Context'"
+
+    # Prefix combination
+    run_test "--1m-context works with --model-prefix=us" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
+
+    run_test "--1m-context + prefix: name says Bedrock US, 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'Bedrock US, 1M Context'"
+
+    # Persistence
+    run_test "--1m-context persists in config comment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '# 1MContext: true'"
+
+    # Help text
+    run_test "help shows --1m-context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q '1m-context'"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -590,6 +657,8 @@ main() {
     test_value_quoting
     test_model_prefix_regex
     test_install_script
+    test_capabilities
+    test_1m_context
     test_required_files
     test_json_validity
     test_unified_entry_point
