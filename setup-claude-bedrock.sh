@@ -449,10 +449,12 @@ generate_config_block() {
             value="${BEDROCK_CONFIG[$key]}"
         fi
 
+        # Escape double quotes in values
+        local escaped_value="${value//\"/\\\"}"
         if [[ "$shell" == "fish" ]]; then
-            config+="$syntax $key \"$value\""$'\n'
+            config+="$syntax $key \"$escaped_value\""$'\n'
         else
-            config+="$syntax $key=\"$value\""$'\n'
+            config+="$syntax $key=\"$escaped_value\""$'\n'
         fi
     done
 
@@ -1306,6 +1308,27 @@ main() {
                 BEDROCK_CONFIG["$key"]=$(apply_model_prefix "${BEDROCK_CONFIG[$key]}" "$MODEL_PREFIX")
             fi
         done
+
+        # Update friendly names and descriptions to match the prefix
+        if [[ "$MODEL_PREFIX" != "global" ]]; then
+            local prefix_label="${MODEL_PREFIX^^}"
+            local name_keys=(
+                ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
+            )
+            for key in "${name_keys[@]}"; do
+                if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+                    BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Bedrock Global/Bedrock ${prefix_label}}"
+                fi
+            done
+            local desc_keys=(
+                ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
+            )
+            for key in "${desc_keys[@]}"; do
+                if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+                    BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Global inference profile/${prefix_label} inference profile}"
+                fi
+            done
+        fi
     fi
 
     validate_inputs

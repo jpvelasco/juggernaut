@@ -535,6 +535,29 @@ test_model_prefix_regex() {
 
     run_test "prefix=eu: no bare 'eu.claude-' in output" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'eu\.claude-'"
+
+    # Verify friendly names update with prefix
+    run_test "prefix=us: opus name says Bedrock US" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Bedrock US'"
+
+    run_test "prefix=eu: description says EU inference" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION' | grep -q 'EU inference profile'"
+
+    run_test "prefix=global: name stays Bedrock Global" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Bedrock Global'"
+}
+
+test_install_script() {
+    section "Install Script"
+
+    run_test "install.sh syntax" \
+        "bash -n $SCRIPT_DIR/install.sh"
+
+    run_test "install.sh has set -e" \
+        "grep -q 'set -e' $SCRIPT_DIR/install.sh"
+
+    run_test "install.sh checks for git" \
+        "grep -q 'command -v git' $SCRIPT_DIR/install.sh"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -566,6 +589,7 @@ main() {
     test_per_model_flags
     test_value_quoting
     test_model_prefix_regex
+    test_install_script
     test_required_files
     test_json_validity
     test_unified_entry_point

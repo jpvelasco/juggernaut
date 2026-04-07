@@ -576,6 +576,25 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
             $prop.Value = Apply-ModelPrefix -Model $prop.Value -Prefix $ModelPrefix
         }
     }
+
+    # Update friendly names and descriptions to match the prefix
+    if ($ModelPrefix -ne "global") {
+        $prefixLabel = $ModelPrefix.ToUpper()
+        $nameKeys = @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME")
+        foreach ($key in $nameKeys) {
+            $prop = $Config.environment.PSObject.Properties[$key]
+            if ($prop) {
+                $prop.Value = $prop.Value -replace 'Bedrock Global', "Bedrock $prefixLabel"
+            }
+        }
+        $descKeys = @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION")
+        foreach ($key in $descKeys) {
+            $prop = $Config.environment.PSObject.Properties[$key]
+            if ($prop) {
+                $prop.Value = $prop.Value -replace 'Global inference profile', "$prefixLabel inference profile"
+            }
+        }
+    }
 }
 
 # Build configuration block from JSON config or fallback to defaults
@@ -630,7 +649,9 @@ if ($Config -and $Config.environment) {
         if ($_.Name -eq "ANTHROPIC_DEFAULT_HAIKU_MODEL" -and -not [string]::IsNullOrEmpty($HaikuModel)) {
             $value = $HaikuModel
         }
-        $ConfigBlock += "`$env:$($_.Name) = `"$value`"`n"
+        # Escape double quotes in values
+        $escapedValue = $value -replace '"', '`"'
+        $ConfigBlock += "`$env:$($_.Name) = `"$escapedValue`"`n"
     }
 } else {
     Write-Host "Error: Could not load environment variables from config file" -ForegroundColor Red
