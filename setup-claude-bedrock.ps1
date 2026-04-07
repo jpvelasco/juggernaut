@@ -16,6 +16,8 @@ param(
     [string]$HaikuModel = "",
     [switch]$Global,
     [string]$ModelPrefix = "",
+    [Alias("1m-context")]
+    [switch]$OneM,
     [switch]$Force,
     [switch]$DryRun,
     [switch]$Help,
@@ -281,6 +283,15 @@ if (-not $StorageExplicit) {
     }
 }
 
+# Detect existing 1M context flag
+if (-not $OneM) {
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    if ($profileContent -match '# 1MContext: true') {
+        $OneM = $true
+        Write-Host "Preserving existing 1M context setting"
+    }
+}
+
 # Platform-aware storage default for new installs (Windows defaults to keychain)
 if (-not $StorageExplicit -and $Storage -eq "profile") {
     # On Windows, Credential Manager is always available
@@ -443,6 +454,7 @@ if ($Help) {
     Write-Host "  -HaikuModel <ID>   Custom Haiku model (use 'default' to reset)"
     Write-Host "  -Global            Use global inference profiles (default)"
     Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'ap')"
+    Write-Host "  -OneM              Enable 1M token context window (Opus & Sonnet only)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
@@ -597,6 +609,41 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
     }
 }
 
+# Apply 1M context (Opus & Sonnet only)
+if ($OneM) {
+    # Append [1m] to model IDs
+    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL")) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop) {
+            $prop.Value = "$($prop.Value)[1m]"
+        }
+    }
+
+    # Update names: append ", 1M Context" before closing paren
+    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME")) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop) {
+            $prop.Value = $prop.Value -replace '\)$', ', 1M Context)'
+        }
+    }
+
+    # Update descriptions: append "(1M Context)"
+    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION")) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop) {
+            $prop.Value = "$($prop.Value) (1M Context)"
+        }
+    }
+
+    # Apply to custom overrides
+    if (-not [string]::IsNullOrEmpty($OpusModel) -and $OpusModel -ne "default") {
+        $OpusModel = "$OpusModel[1m]"
+    }
+    if (-not [string]::IsNullOrEmpty($SonnetModel) -and $SonnetModel -ne "default") {
+        $SonnetModel = "$SonnetModel[1m]"
+    }
+}
+
 # Build configuration block from JSON config or fallback to defaults
 $ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
 if (-not [string]::IsNullOrEmpty($Model)) {
@@ -613,6 +660,9 @@ if (-not [string]::IsNullOrEmpty($SonnetModel)) {
 }
 if (-not [string]::IsNullOrEmpty($HaikuModel)) {
     $ConfigBlock += "# HaikuModel: $HaikuModel`n"
+}
+if ($OneM) {
+    $ConfigBlock += "# 1MContext: true`n"
 }
 if ($Storage -eq "keychain") {
     $ConfigBlock += "# Storage: keychain (encrypted)`n"
