@@ -442,7 +442,7 @@ generate_config_block() {
         if [[ "$shell" == "fish" ]]; then
             config+="$syntax $key \"$value\""$'\n'
         else
-            config+="$syntax $key=$value"$'\n'
+            config+="$syntax $key=\"$value\""$'\n'
         fi
     done
 
