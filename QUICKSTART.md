@@ -82,7 +82,7 @@ aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 Your setup includes:
 - ✅ Bedrock integration enabled
 - ✅ Claude Opus 4.6 as primary model (Global CRIS)
-- ✅ Claude Sonnet 4.6 as fast model (Global CRIS)
+- ✅ Claude Haiku 4.5 as fast/background model (Global CRIS)
 - ✅ Claude Haiku 4.5 available via /model picker (Global CRIS)
 - ✅ All three model tiers visible in `/model` selector
 - ✅ Optimized token limits for Bedrock (32768 output, 65536 thinking)

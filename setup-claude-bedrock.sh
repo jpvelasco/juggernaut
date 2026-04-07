@@ -634,6 +634,24 @@ warn_custom_model() {
     fi
 }
 
+apply_model_prefix() {
+    local model="$1"
+    local prefix="$2"
+
+    if [[ -z "$prefix" || "$prefix" == "global" ]]; then
+        echo "$model"
+        return
+    fi
+
+    if [[ "$model" == global.anthropic.* ]]; then
+        echo "${prefix}.anthropic.${model#global.anthropic.}"
+    elif [[ "$model" == anthropic.* ]]; then
+        echo "${prefix}.anthropic.${model#anthropic.}"
+    else
+        echo "${prefix}.${model}"
+    fi
+}
+
 show_help() {
     cat << 'EOF'
 Claude Code - Amazon Bedrock Setup Script
@@ -1273,9 +1291,7 @@ main() {
         )
         for key in "${transform_keys[@]}"; do
             if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
-                # Replace prefix while preserving anthropic.* segment
-                # Handles both "global.anthropic.*" and bare "anthropic.*" IDs
-                BEDROCK_CONFIG["$key"]=$(echo "${BEDROCK_CONFIG[$key]}" | sed -E "s/^([^.]+\.)?anthropic\./${MODEL_PREFIX}.anthropic./")
+                BEDROCK_CONFIG["$key"]=$(apply_model_prefix "${BEDROCK_CONFIG[$key]}" "$MODEL_PREFIX")
             fi
         done
     fi

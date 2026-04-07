@@ -181,6 +181,22 @@ function Show-CustomModelWarning {
     }
 }
 
+function Apply-ModelPrefix {
+    param([string]$Model, [string]$Prefix)
+
+    if ([string]::IsNullOrEmpty($Prefix) -or $Prefix -eq "global") {
+        return $Model
+    }
+
+    if ($Model -like "global.anthropic.*") {
+        return "$Prefix.anthropic.$($Model.Substring('global.anthropic.'.Length))"
+    } elseif ($Model -like "anthropic.*") {
+        return "$Prefix.anthropic.$($Model.Substring('anthropic.'.Length))"
+    } else {
+        return "$Prefix.$Model"
+    }
+}
+
 # Apply defaults from config or use hardcoded fallbacks
 if ([string]::IsNullOrEmpty($Region)) {
     $Region = if ($Config -and $Config.defaults.region) { $Config.defaults.region } else { "us-west-2" }
@@ -553,8 +569,7 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
     foreach ($key in $modelKeys) {
         $prop = $Config.environment.PSObject.Properties[$key]
         if ($prop) {
-            # Replace prefix while preserving anthropic.* segment
-            $prop.Value = $prop.Value -replace "^([^.]+\.)?anthropic\.", "$ModelPrefix.anthropic."
+            $prop.Value = Apply-ModelPrefix -Model $prop.Value -Prefix $ModelPrefix
         }
     }
 }
