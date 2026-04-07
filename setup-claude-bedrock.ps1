@@ -154,9 +154,9 @@ function Test-ModelIdFormat {
     }
 
     # Basic format check (Bedrock model ID patterns)
-    if ($ModelId -notmatch "^(global\.)?anthropic\.") {
+    if ($ModelId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
         Write-Host "Warning: '$ModelId' doesn't match expected Bedrock model ID format" -ForegroundColor Yellow
-        Write-Host "Expected patterns: anthropic.claude-* or global.anthropic.claude-*" -ForegroundColor Yellow
+        Write-Host "Expected patterns: anthropic.claude-*, global.anthropic.claude-*, us.anthropic.claude-*" -ForegroundColor Yellow
     }
 
     return $true
