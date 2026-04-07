@@ -70,6 +70,7 @@ for arg in "$@"; do
         echo "  --haiku-model=ID     Custom haiku model for /model picker"
         echo "  --global             Use global inference profiles (default)"
         echo "  --model-prefix=PFX   Inference profile prefix (us, eu, ap)"
+        echo "  --1m-context         Enable 1M token context (Opus & Sonnet)"
         echo "  --version, -v        Show version"
         echo "  --help, -h           Show this help message"
         echo ""
