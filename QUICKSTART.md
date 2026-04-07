@@ -99,6 +99,10 @@ source apply-config.sh
 
 Juggernaut defaults background tasks and subagents to **Haiku 4.5** (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). `ANTHROPIC_SMALL_FAST_MODEL` has been removed as it is officially deprecated. For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`. Official Anthropic docs: https://code.claude.com/docs/en/model-config
 
+## 1M Context Windows
+
+Enable 1M token context for Opus and Sonnet: `./setup --1m-context`. Standard context is the default.
+
 ## Troubleshooting
 
 ### Common 400/403 Errors
