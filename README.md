@@ -338,7 +338,6 @@ The setup adds these environment variables:
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32768` - **Required for Bedrock** (allows longer responses)
 - `MAX_THINKING_TOKENS=65536` - Extended reasoning for complex tasks
 - `ANTHROPIC_MODEL=global.anthropic.claude-opus-4-6-v1` - Global CRIS primary model
-- `ANTHROPIC_SMALL_FAST_MODEL=global.anthropic.claude-haiku-4-5-20251001-v1:0` - Global CRIS fast/background model
 - `DISABLE_ERROR_REPORTING=1` - Disable error reporting to Anthropic
 - `DISABLE_TELEMETRY=1` - Disable telemetry collection
 - `DISABLE_AUTOUPDATE=1` - Disable automatic updates
@@ -366,8 +365,7 @@ Claude Code uses multiple models for different purposes:
 | Variable | Model | Usage | Visible in `/model`? |
 |----------|-------|-------|---------------------|
 | `ANTHROPIC_MODEL` | Opus 4.6 | Primary conversation model - all direct interactions | Yes |
-| `ANTHROPIC_SMALL_FAST_MODEL` | Haiku 4.5 | Background agent tasks - file exploration, quick searches | No (automatic) |
-| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku 4.5 | Quick tasks when selected via /model | Yes |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku 4.5 | Background tasks, subagents, and quick tasks via /model | Yes |
 
 **What this means in practice:**
 - When you chat with Claude Code, you're talking to Opus 4.6

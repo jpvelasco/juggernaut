@@ -495,8 +495,8 @@ test_model_prefix_regex() {
     run_test "prefix=eu: primary model keeps anthropic segment" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'ANTHROPIC_MODEL=eu.anthropic.claude-opus-4-6-v1'"
 
-    run_test "prefix=ap: fast model keeps anthropic segment" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=ap --dry-run --force 2>&1 | grep -q 'ANTHROPIC_SMALL_FAST_MODEL=ap.anthropic.claude-sonnet-4-6'"
+    run_test "prefix=ap: haiku model keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=ap --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=ap.anthropic.claude-haiku-4-5-20251001-v1:0'"
 
     run_test "prefix=global: no double-global prefix" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_MODEL' | head -1 | grep -q 'global.anthropic.claude-opus-4-6-v1'"

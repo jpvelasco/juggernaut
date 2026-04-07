@@ -429,8 +429,6 @@ generate_config_block() {
             value="$region"
         elif [[ "$key" == "ANTHROPIC_MODEL" && -n "$CUSTOM_MODEL" ]]; then
             value="$CUSTOM_MODEL"
-        elif [[ "$key" == "ANTHROPIC_SMALL_FAST_MODEL" && -n "$CUSTOM_FAST_MODEL" ]]; then
-            value="$CUSTOM_FAST_MODEL"
         elif [[ "$key" == "ANTHROPIC_DEFAULT_OPUS_MODEL" && -n "$CUSTOM_OPUS_MODEL" ]]; then
             value="$CUSTOM_OPUS_MODEL"
         elif [[ "$key" == "ANTHROPIC_DEFAULT_SONNET_MODEL" && -n "$CUSTOM_SONNET_MODEL" ]]; then
@@ -1264,6 +1262,10 @@ main() {
     if [[ -n "$CUSTOM_FAST_MODEL" ]]; then
         validate_model_id "$CUSTOM_FAST_MODEL" "fast-model" || exit 1
         warn_custom_model "$CUSTOM_FAST_MODEL" "fast"
+        # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL is deprecated)
+        if [[ -z "$CUSTOM_HAIKU_MODEL" ]]; then
+            CUSTOM_HAIKU_MODEL="$CUSTOM_FAST_MODEL"
+        fi
     fi
 
     if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" ]]; then
@@ -1286,7 +1288,7 @@ main() {
 
     if [[ -n "$MODEL_PREFIX" ]]; then
         local transform_keys=(
-            ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL
+            ANTHROPIC_MODEL
             ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL
         )
         for key in "${transform_keys[@]}"; do

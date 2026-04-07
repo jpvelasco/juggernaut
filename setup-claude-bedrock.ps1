@@ -323,6 +323,10 @@ if (-not [string]::IsNullOrEmpty($FastModel)) {
         exit 1
     }
     Show-CustomModelWarning -ModelId $FastModel -ModelType "fast"
+    # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL is deprecated)
+    if ([string]::IsNullOrEmpty($HaikuModel)) {
+        $HaikuModel = $FastModel
+    }
 }
 
 # Validate per-model overrides
@@ -564,7 +568,7 @@ Write-Host "Setting up Claude Code with Amazon Bedrock ($AuthDisplay auth)..." -
 # Apply -Global or -ModelPrefix to model env vars
 if ($Global) { $ModelPrefix = "global" }
 if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
-    $modelKeys = @("ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
+    $modelKeys = @("ANTHROPIC_MODEL",
                     "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL")
     foreach ($key in $modelKeys) {
         $prop = $Config.environment.PSObject.Properties[$key]
@@ -616,9 +620,6 @@ if ($Config -and $Config.environment) {
         # Use custom model if specified
         if ($_.Name -eq "ANTHROPIC_MODEL" -and -not [string]::IsNullOrEmpty($Model)) {
             $value = $Model
-        }
-        if ($_.Name -eq "ANTHROPIC_SMALL_FAST_MODEL" -and -not [string]::IsNullOrEmpty($FastModel)) {
-            $value = $FastModel
         }
         if ($_.Name -eq "ANTHROPIC_DEFAULT_OPUS_MODEL" -and -not [string]::IsNullOrEmpty($OpusModel)) {
             $value = $OpusModel
