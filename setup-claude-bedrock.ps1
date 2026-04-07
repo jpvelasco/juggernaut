@@ -1,5 +1,5 @@
 # Claude Code - Amazon Bedrock Setup Script for Windows
-# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Force] [-DryRun]
+# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-Force] [-DryRun]
 
 param(
     [ValidateSet("iam", "api-key")]
@@ -11,6 +11,11 @@ param(
     [string]$Region = "",
     [string]$Model = "",
     [string]$FastModel = "",
+    [string]$OpusModel = "",
+    [string]$SonnetModel = "",
+    [string]$HaikuModel = "",
+    [switch]$Global,
+    [string]$ModelPrefix = "",
     [switch]$Force,
     [switch]$DryRun,
     [switch]$Help,
@@ -22,6 +27,10 @@ param(
 $AuthExplicit = $PSBoundParameters.ContainsKey('Auth')
 $ModelExplicit = $PSBoundParameters.ContainsKey('Model')
 $FastModelExplicit = $PSBoundParameters.ContainsKey('FastModel')
+$OpusModelExplicit = $PSBoundParameters.ContainsKey('OpusModel')
+$SonnetModelExplicit = $PSBoundParameters.ContainsKey('SonnetModel')
+$HaikuModelExplicit = $PSBoundParameters.ContainsKey('HaikuModel')
+
 $StorageExplicit = $PSBoundParameters.ContainsKey('Storage')
 
 $ErrorActionPreference = "Stop"
@@ -82,6 +91,39 @@ function Get-ExistingFastModel {
     return $null
 }
 
+function Get-ExistingOpusModel {
+    param([string]$ProfilePath)
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# OpusModel: (.+)$") {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
+function Get-ExistingSonnetModel {
+    param([string]$ProfilePath)
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# SonnetModel: (.+)$") {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
+function Get-ExistingHaikuModel {
+    param([string]$ProfilePath)
+    if (Test-Path $ProfilePath) {
+        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        if ($content -match "# HaikuModel: (.+)$") {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
 # Detect existing storage mode from profile file
 # Returns: "keychain" or "profile" (absence of marker = profile)
 function Get-ExistingStorageMode {
@@ -112,9 +154,9 @@ function Test-ModelIdFormat {
     }
 
     # Basic format check (Bedrock model ID patterns)
-    if ($ModelId -notmatch "^(global\.)?anthropic\.") {
+    if ($ModelId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
         Write-Host "Warning: '$ModelId' doesn't match expected Bedrock model ID format" -ForegroundColor Yellow
-        Write-Host "Expected patterns: anthropic.claude-* or global.anthropic.claude-*" -ForegroundColor Yellow
+        Write-Host "Expected patterns: anthropic.claude-*, global.anthropic.claude-*, us.anthropic.claude-*" -ForegroundColor Yellow
     }
 
     return $true
@@ -136,6 +178,22 @@ function Show-CustomModelWarning {
             Write-Host "Setup cancelled" -ForegroundColor Red
             exit 0
         }
+    }
+}
+
+function Apply-ModelPrefix {
+    param([string]$Model, [string]$Prefix)
+
+    if ([string]::IsNullOrEmpty($Prefix) -or $Prefix -eq "global") {
+        return $Model
+    }
+
+    if ($Model -like "global.anthropic.*") {
+        return "$Prefix.anthropic.$($Model.Substring('global.anthropic.'.Length))"
+    } elseif ($Model -like "anthropic.*") {
+        return "$Prefix.anthropic.$($Model.Substring('anthropic.'.Length))"
+    } else {
+        return "$Prefix.$Model"
     }
 }
 
@@ -176,6 +234,29 @@ if (-not $FastModelExplicit) {
     }
 }
 
+# Detect existing per-model overrides
+if (-not $OpusModelExplicit) {
+    $existingOpusModel = Get-ExistingOpusModel -ProfilePath $ProfilePathForDetection
+    if ($existingOpusModel) {
+        $OpusModel = $existingOpusModel
+        Write-Host "Preserving existing custom opus model: $OpusModel"
+    }
+}
+if (-not $SonnetModelExplicit) {
+    $existingSonnetModel = Get-ExistingSonnetModel -ProfilePath $ProfilePathForDetection
+    if ($existingSonnetModel) {
+        $SonnetModel = $existingSonnetModel
+        Write-Host "Preserving existing custom sonnet model: $SonnetModel"
+    }
+}
+if (-not $HaikuModelExplicit) {
+    $existingHaikuModel = Get-ExistingHaikuModel -ProfilePath $ProfilePathForDetection
+    if ($existingHaikuModel) {
+        $HaikuModel = $existingHaikuModel
+        Write-Host "Preserving existing custom haiku model: $HaikuModel"
+    }
+}
+
 # Handle "default" reset value - clears custom model
 if ($Model -eq "default") {
     $Model = ""
@@ -185,6 +266,11 @@ if ($FastModel -eq "default") {
     $FastModel = ""
     Write-Host "Resetting fast model to default from bedrock-config.json"
 }
+
+# Handle "default" reset for per-model overrides
+if ($OpusModel -eq "default") { $OpusModel = ""; Write-Host "Resetting opus model to default" }
+if ($SonnetModel -eq "default") { $SonnetModel = ""; Write-Host "Resetting sonnet model to default" }
+if ($HaikuModel -eq "default") { $HaikuModel = ""; Write-Host "Resetting haiku model to default" }
 
 # Detect existing storage mode if user didn't explicitly specify
 if (-not $StorageExplicit) {
@@ -237,6 +323,18 @@ if (-not [string]::IsNullOrEmpty($FastModel)) {
         exit 1
     }
     Show-CustomModelWarning -ModelId $FastModel -ModelType "fast"
+    # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL was removed)
+    if ([string]::IsNullOrEmpty($HaikuModel)) {
+        $HaikuModel = $FastModel
+    }
+}
+
+# Validate per-model overrides
+foreach ($entry in @(@{Id=$OpusModel; Type="OpusModel"}, @{Id=$SonnetModel; Type="SonnetModel"}, @{Id=$HaikuModel; Type="HaikuModel"})) {
+    if (-not [string]::IsNullOrEmpty($entry.Id)) {
+        if (-not (Test-ModelIdFormat -ModelId $entry.Id -ModelType $entry.Type)) { exit 1 }
+        Show-CustomModelWarning -ModelId $entry.Id -ModelType $entry.Type
+    }
 }
 
 # Load valid regions from config or use defaults
@@ -340,6 +438,11 @@ if ($Help) {
     Write-Host "  -Region <REGION>   AWS region (default: us-west-2)"
     Write-Host "  -Model <ID>        Custom primary model (use 'default' to reset)"
     Write-Host "  -FastModel <ID>    Custom fast model (use 'default' to reset)"
+    Write-Host "  -OpusModel <ID>    Custom Opus model (use 'default' to reset)"
+    Write-Host "  -SonnetModel <ID>  Custom Sonnet model (use 'default' to reset)"
+    Write-Host "  -HaikuModel <ID>   Custom Haiku model (use 'default' to reset)"
+    Write-Host "  -Global            Use global inference profiles (default)"
+    Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'ap')"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
@@ -462,6 +565,38 @@ if ($DryRun) {
 $AuthDisplay = if ($Auth -eq "api-key") { "API key" } else { "IAM/SSO" }
 Write-Host "Setting up Claude Code with Amazon Bedrock ($AuthDisplay auth)..." -ForegroundColor Cyan
 
+# Apply -Global or -ModelPrefix to model env vars
+if ($Global) { $ModelPrefix = "global" }
+if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
+    $modelKeys = @("ANTHROPIC_MODEL",
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL")
+    foreach ($key in $modelKeys) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop) {
+            $prop.Value = Apply-ModelPrefix -Model $prop.Value -Prefix $ModelPrefix
+        }
+    }
+
+    # Update friendly names and descriptions to match the prefix
+    if ($ModelPrefix -ne "global") {
+        $prefixLabel = $ModelPrefix.ToUpper()
+        $nameKeys = @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME")
+        foreach ($key in $nameKeys) {
+            $prop = $Config.environment.PSObject.Properties[$key]
+            if ($prop) {
+                $prop.Value = $prop.Value -replace 'Bedrock Global', "Bedrock $prefixLabel"
+            }
+        }
+        $descKeys = @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION")
+        foreach ($key in $descKeys) {
+            $prop = $Config.environment.PSObject.Properties[$key]
+            if ($prop) {
+                $prop.Value = $prop.Value -replace 'Global inference profile', "$prefixLabel inference profile"
+            }
+        }
+    }
+}
+
 # Build configuration block from JSON config or fallback to defaults
 $ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
 if (-not [string]::IsNullOrEmpty($Model)) {
@@ -469,6 +604,15 @@ if (-not [string]::IsNullOrEmpty($Model)) {
 }
 if (-not [string]::IsNullOrEmpty($FastModel)) {
     $ConfigBlock += "# FastModel: $FastModel`n"
+}
+if (-not [string]::IsNullOrEmpty($OpusModel)) {
+    $ConfigBlock += "# OpusModel: $OpusModel`n"
+}
+if (-not [string]::IsNullOrEmpty($SonnetModel)) {
+    $ConfigBlock += "# SonnetModel: $SonnetModel`n"
+}
+if (-not [string]::IsNullOrEmpty($HaikuModel)) {
+    $ConfigBlock += "# HaikuModel: $HaikuModel`n"
 }
 if ($Storage -eq "keychain") {
     $ConfigBlock += "# Storage: keychain (encrypted)`n"
@@ -496,10 +640,18 @@ if ($Config -and $Config.environment) {
         if ($_.Name -eq "ANTHROPIC_MODEL" -and -not [string]::IsNullOrEmpty($Model)) {
             $value = $Model
         }
-        if ($_.Name -eq "ANTHROPIC_SMALL_FAST_MODEL" -and -not [string]::IsNullOrEmpty($FastModel)) {
-            $value = $FastModel
+        if ($_.Name -eq "ANTHROPIC_DEFAULT_OPUS_MODEL" -and -not [string]::IsNullOrEmpty($OpusModel)) {
+            $value = $OpusModel
         }
-        $ConfigBlock += "`$env:$($_.Name) = `"$value`"`n"
+        if ($_.Name -eq "ANTHROPIC_DEFAULT_SONNET_MODEL" -and -not [string]::IsNullOrEmpty($SonnetModel)) {
+            $value = $SonnetModel
+        }
+        if ($_.Name -eq "ANTHROPIC_DEFAULT_HAIKU_MODEL" -and -not [string]::IsNullOrEmpty($HaikuModel)) {
+            $value = $HaikuModel
+        }
+        # Escape double quotes in values
+        $escapedValue = $value -replace '"', '`"'
+        $ConfigBlock += "`$env:$($_.Name) = `"$escapedValue`"`n"
     }
 } else {
     Write-Host "Error: Could not load environment variables from config file" -ForegroundColor Red

@@ -216,7 +216,7 @@ function Test-ApiKeyValidity {
     try {
         # Make a minimal Bedrock API call to test the key
         # Use the configured fast model (cheapest available) for the probe
-        $testModel = if ($ExpectedEnvVars["ANTHROPIC_SMALL_FAST_MODEL"]) { $ExpectedEnvVars["ANTHROPIC_SMALL_FAST_MODEL"] } else { "anthropic.claude-haiku-4-5-20251001-v1:0" }
+        $testModel = if ($ExpectedEnvVars["ANTHROPIC_DEFAULT_HAIKU_MODEL"]) { $ExpectedEnvVars["ANTHROPIC_DEFAULT_HAIKU_MODEL"] } else { "anthropic.claude-haiku-4-5-20251001-v1:0" }
         $result = aws bedrock-runtime converse `
             --region $region `
             --model-id $testModel `
@@ -303,6 +303,57 @@ function Test-BedrockAccess {
     }
 }
 
+function Test-BedrockInferenceProfile {
+    $region = $env:AWS_REGION
+    if ([string]::IsNullOrEmpty($region)) { $region = "us-west-2" }
+
+    $testModel = if ($ExpectedEnvVars["ANTHROPIC_DEFAULT_SONNET_MODEL"]) {
+        $ExpectedEnvVars["ANTHROPIC_DEFAULT_SONNET_MODEL"]
+    } else { "global.anthropic.claude-sonnet-4-6" }
+
+    Write-Host "Bedrock Inference Profile Access" -ForegroundColor Cyan
+    Write-Host "  Testing inference profile: $testModel"
+
+    try {
+        $body = '{"anthropic_version":"bedrock-2023-05-31","max_tokens":10,"messages":[{"role":"user","content":"test"}]}'
+        $result = aws bedrock-runtime invoke-model `
+            --region $region `
+            --model-id $testModel `
+            --body $body `
+            --cli-binary-format raw-in-base64-out `
+            NUL 2>&1
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "PASS" -ForegroundColor Green -NoNewline
+            Write-Host " Inference profile accessible"
+        }
+        elseif ($result -match "access denied|not authorized|forbidden") {
+            Write-Host "FAIL" -ForegroundColor Red -NoNewline
+            Write-Host " Bedrock model access denied"
+            Write-Host "     Did you complete the Anthropic FTU form?"
+            Write-Host "     -> https://${region}.console.aws.amazon.com/bedrock/home?region=${region}#/anthropic-model-access"
+            $script:Errors++
+        }
+        elseif ($result -match "could not connect|timeout|network") {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " Could not reach Bedrock (network issue?)"
+            $script:Warnings++
+        }
+        else {
+            Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+            Write-Host " Inference profile test returned unexpected result"
+            Write-Host "     $result"
+            $script:Warnings++
+        }
+    }
+    catch {
+        Write-Host "WARN" -ForegroundColor Yellow -NoNewline
+        Write-Host " Could not test inference profile: $_"
+        $script:Warnings++
+    }
+    Write-Host ""
+}
+
 function Test-ClaudeCode {
     try {
         $version = claude --version 2>$null
@@ -375,6 +426,9 @@ else {
     Write-Host "Bedrock Access" -ForegroundColor Cyan
     Test-BedrockAccess
     Write-Host ""
+
+    # Bedrock Inference Profile Access
+    Test-BedrockInferenceProfile
 }
 
 # Claude Code

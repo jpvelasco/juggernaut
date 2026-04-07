@@ -80,6 +80,7 @@ test_syntax() {
     run_test "validate-setup.sh syntax" "bash -n $SCRIPT_DIR/validate-setup.sh"
     run_test "apply-config.sh syntax" "bash -n $SCRIPT_DIR/apply-config.sh"
     run_test "test.sh syntax" "bash -n $SCRIPT_DIR/test.sh"
+    run_test "install.sh syntax" "bash -n $SCRIPT_DIR/install.sh"
 }
 
 test_help_flags() {
@@ -114,6 +115,7 @@ test_required_files() {
     run_test "iam-policy.json exists" "test -f $SCRIPT_DIR/iam-policy.json"
     run_test "bedrock-config.json exists" "test -f $SCRIPT_DIR/bedrock-config.json"
     run_test "setup is executable" "test -x $SCRIPT_DIR/setup"
+    run_test "install.sh exists" "test -f $SCRIPT_DIR/install.sh"
 }
 
 test_json_validity() {
@@ -408,6 +410,156 @@ test_preserve_key_with_storage() {
         "AWS_BEARER_TOKEN_BEDROCK=br-existing123 $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --preserve-key --dry-run 2>&1 | grep -q 'existing API key'"
 }
 
+test_model_picker_env_vars() {
+    section "Model Picker Environment Variables"
+
+    run_test "config has ANTHROPIC_DEFAULT_OPUS_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL'"
+
+    run_test "config has ANTHROPIC_DEFAULT_SONNET_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL'"
+
+    run_test "config has ANTHROPIC_DEFAULT_HAIKU_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL'"
+
+    run_test "config has OPUS model name" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME'"
+
+    run_test "config has SONNET model name" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME'"
+
+    run_test "config has HAIKU model name" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME'"
+
+    run_test "config has OPUS model description" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION'"
+
+    run_test "config has SONNET model description" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION'"
+
+    run_test "config has HAIKU model description" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION'"
+
+    run_test "fish config has model picker vars" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL'"
+}
+
+test_compat_env_vars() {
+    section "Claude Code v2.1.69+ Compatibility Variables"
+
+    run_test "config has CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS'"
+
+    run_test "config has ENABLE_PROMPT_CACHING_1H_BEDROCK" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ENABLE_PROMPT_CACHING_1H_BEDROCK'"
+}
+
+test_per_model_flags() {
+    section "Per-Model CLI Flags"
+
+    run_test "--opus-model override" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opus-model=us.anthropic.claude-opus-4-6-v1 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-6-v1'"
+
+    run_test "--sonnet-model override" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --sonnet-model=us.anthropic.claude-sonnet-4-6 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.us.anthropic.claude-sonnet-4-6'"
+
+    run_test "--haiku-model override" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --haiku-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "--model-prefix=us transforms opus model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL' | grep -q 'us.anthropic'"
+
+    run_test "--global keeps global prefix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL' | grep -q 'global.anthropic'"
+
+    run_test "help shows --opus-model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'opus-model'"
+
+    run_test "help shows --model-prefix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'model-prefix'"
+
+    run_test "--fast-model sets HAIKU_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "--haiku-model takes priority over --fast-model" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-sonnet-4-6 --haiku-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "ANTHROPIC_SMALL_FAST_MODEL absent from default config" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_SMALL_FAST_MODEL'"
+
+    run_test "--fast-model does not set ANTHROPIC_SMALL_FAST_MODEL" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --fast-model=us.anthropic.claude-haiku-4-5-20251001-v1:0 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_SMALL_FAST_MODEL'"
+}
+
+test_value_quoting() {
+    section "Shell Value Quoting"
+
+    run_test "fish quotes values with spaces" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q '\"Opus'"
+
+    run_test "bash quotes values with spaces" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q '\"Opus'"
+
+    run_test "zsh quotes values with spaces" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q '\"Opus'"
+}
+
+test_model_prefix_regex() {
+    section "Model Prefix Regex (Correctness)"
+
+    # Verify prefix transform preserves anthropic.* segment for all model vars
+    run_test "prefix=us: opus keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-6-v1'"
+
+    run_test "prefix=us: sonnet keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.us.anthropic.claude-sonnet-4-6'"
+
+    run_test "prefix=us: haiku keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "prefix=eu: primary model keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'ANTHROPIC_MODEL=.eu.anthropic.claude-opus-4-6-v1'"
+
+    run_test "prefix=ap: haiku model keeps anthropic segment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=ap --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.ap.anthropic.claude-haiku-4-5-20251001-v1:0'"
+
+    run_test "prefix=global: no double-global prefix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_MODEL' | head -1 | grep -q 'global.anthropic.claude-opus-4-6-v1'"
+
+    run_test "--global flag: equivalent to prefix=global" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --global --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.global.anthropic.claude-sonnet-4-6'"
+
+    # Verify no model IDs are malformed (missing anthropic segment)
+    run_test "prefix=us: no bare 'us.claude-' in output" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'us\.claude-'"
+
+    run_test "prefix=eu: no bare 'eu.claude-' in output" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'eu\.claude-'"
+
+    # Verify friendly names update with prefix
+    run_test "prefix=us: opus name says Bedrock US" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Bedrock US'"
+
+    run_test "prefix=eu: description says EU inference" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION' | grep -q 'EU inference profile'"
+
+    run_test "prefix=global: name stays Bedrock Global" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Bedrock Global'"
+}
+
+test_install_script() {
+    section "Install Script"
+
+    run_test "install.sh syntax" \
+        "bash -n $SCRIPT_DIR/install.sh"
+
+    run_test "install.sh has set -e" \
+        "grep -q 'set -e' $SCRIPT_DIR/install.sh"
+
+    run_test "install.sh checks for git" \
+        "grep -q 'command -v git' $SCRIPT_DIR/install.sh"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -432,6 +584,12 @@ main() {
     test_error_handling
     test_keychain_unavailable
     test_preserve_key_with_storage
+    test_model_picker_env_vars
+    test_compat_env_vars
+    test_per_model_flags
+    test_value_quoting
+    test_model_prefix_regex
+    test_install_script
     test_required_files
     test_json_validity
     test_unified_entry_point

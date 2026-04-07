@@ -68,16 +68,20 @@ declare -a VALID_STORAGE_MODES=(profile keychain)
 json_get() {
     local file=$1
     local query=$2
+    local result
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query" "$file" 2>/dev/null
+        result=$(jq -r "$query // empty" "$file" 2>/dev/null) || return 1
+        printf '%s' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+        result=$(python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
-print(functools.reduce(lambda d,k: d[k], keys, data))
-" "$file" "$query" 2>/dev/null
+val=functools.reduce(lambda d,k: d[k], keys, data)
+print('' if val is None else val)
+" "$file" "$query" 2>/dev/null) || return 1
+        printf '%s' "$result" | tr -d '\r'
     else
         echo "Error: jq or python3 required" >&2
         return 1
@@ -87,17 +91,20 @@ print(functools.reduce(lambda d,k: d[k], keys, data))
 json_get_keys() {
     local file=$1
     local query=$2
+    local result
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query | keys[]" "$file" 2>/dev/null
+        result=$(jq -r "$query | keys[]" "$file" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+        result=$(python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 obj=functools.reduce(lambda d,k: d[k], keys, data)
 print('\n'.join(obj.keys()))
-" "$file" "$query" 2>/dev/null
+" "$file" "$query" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     else
         echo "Error: jq or python3 required" >&2
         return 1
@@ -107,17 +114,20 @@ print('\n'.join(obj.keys()))
 json_get_array() {
     local file=$1
     local query=$2
+    local result
 
     if command -v jq >/dev/null 2>&1; then
-        jq -r "$query[]" "$file" 2>/dev/null
+        result=$(jq -r "$query[]" "$file" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+        result=$(python3 -c "
 import json,sys,functools
 data=json.load(open(sys.argv[1]))
 keys=[k for k in sys.argv[2].split('.') if k]
 arr=functools.reduce(lambda d,k: d[k], keys, data)
 print('\n'.join(str(x) for x in arr))
-" "$file" "$query" 2>/dev/null
+" "$file" "$query" 2>/dev/null) || return 1
+        printf '%s\n' "$result" | tr -d '\r'
     else
         echo "Error: jq or python3 required" >&2
         return 1
@@ -390,6 +400,15 @@ generate_config_block() {
     if [[ -n "$CUSTOM_FAST_MODEL" ]]; then
         config+="# FastModel: $CUSTOM_FAST_MODEL"$'\n'
     fi
+    if [[ -n "$CUSTOM_OPUS_MODEL" ]]; then
+        config+="# OpusModel: $CUSTOM_OPUS_MODEL"$'\n'
+    fi
+    if [[ -n "$CUSTOM_SONNET_MODEL" ]]; then
+        config+="# SonnetModel: $CUSTOM_SONNET_MODEL"$'\n'
+    fi
+    if [[ -n "$CUSTOM_HAIKU_MODEL" ]]; then
+        config+="# HaikuModel: $CUSTOM_HAIKU_MODEL"$'\n'
+    fi
     if [[ "$storage_mode" == "keychain" ]]; then
         config+="# Storage: keychain (encrypted)"$'\n'
     fi
@@ -420,16 +439,22 @@ generate_config_block() {
             value="$region"
         elif [[ "$key" == "ANTHROPIC_MODEL" && -n "$CUSTOM_MODEL" ]]; then
             value="$CUSTOM_MODEL"
-        elif [[ "$key" == "ANTHROPIC_SMALL_FAST_MODEL" && -n "$CUSTOM_FAST_MODEL" ]]; then
-            value="$CUSTOM_FAST_MODEL"
+        elif [[ "$key" == "ANTHROPIC_DEFAULT_OPUS_MODEL" && -n "$CUSTOM_OPUS_MODEL" ]]; then
+            value="$CUSTOM_OPUS_MODEL"
+        elif [[ "$key" == "ANTHROPIC_DEFAULT_SONNET_MODEL" && -n "$CUSTOM_SONNET_MODEL" ]]; then
+            value="$CUSTOM_SONNET_MODEL"
+        elif [[ "$key" == "ANTHROPIC_DEFAULT_HAIKU_MODEL" && -n "$CUSTOM_HAIKU_MODEL" ]]; then
+            value="$CUSTOM_HAIKU_MODEL"
         else
             value="${BEDROCK_CONFIG[$key]}"
         fi
 
+        # Escape double quotes in values
+        local escaped_value="${value//\"/\\\"}"
         if [[ "$shell" == "fish" ]]; then
-            config+="$syntax $key $value"$'\n'
+            config+="$syntax $key \"$escaped_value\""$'\n'
         else
-            config+="$syntax $key=$value"$'\n'
+            config+="$syntax $key=\"$escaped_value\""$'\n'
         fi
     done
 
@@ -552,6 +577,30 @@ detect_existing_fast_model() {
     fi
 }
 
+# Detect existing custom opus model from config file
+detect_existing_opus_model() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# OpusModel:" "$config_file" 2>/dev/null | head -1 | sed 's/^# OpusModel: //'
+    fi
+}
+
+# Detect existing custom sonnet model from config file
+detect_existing_sonnet_model() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# SonnetModel:" "$config_file" 2>/dev/null | head -1 | sed 's/^# SonnetModel: //'
+    fi
+}
+
+# Detect existing custom haiku model from config file
+detect_existing_haiku_model() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# HaikuModel:" "$config_file" 2>/dev/null | head -1 | sed 's/^# HaikuModel: //'
+    fi
+}
+
 # Validate model ID format
 validate_model_id() {
     local model_id=$1
@@ -569,9 +618,9 @@ validate_model_id() {
     fi
 
     # Basic format check (Bedrock model ID patterns)
-    if [[ ! "$model_id" =~ ^(global\.)?anthropic\. ]]; then
+    if [[ ! "$model_id" =~ ^([a-z][-a-z0-9]*\.)?anthropic\. ]]; then
         echo "Warning: '$model_id' doesn't match expected Bedrock model ID format" >&2
-        echo "Expected patterns: anthropic.claude-* or global.anthropic.claude-*" >&2
+        echo "Expected patterns: anthropic.claude-*, global.anthropic.claude-*, us.anthropic.claude-*" >&2
     fi
 
     return 0
@@ -595,6 +644,24 @@ warn_custom_model() {
     fi
 }
 
+apply_model_prefix() {
+    local model="$1"
+    local prefix="$2"
+
+    if [[ -z "$prefix" || "$prefix" == "global" ]]; then
+        echo "$model"
+        return
+    fi
+
+    if [[ "$model" == global.anthropic.* ]]; then
+        echo "${prefix}.anthropic.${model#global.anthropic.}"
+    elif [[ "$model" == anthropic.* ]]; then
+        echo "${prefix}.anthropic.${model#anthropic.}"
+    else
+        echo "${prefix}.${model}"
+    fi
+}
+
 show_help() {
     cat << 'EOF'
 Claude Code - Amazon Bedrock Setup Script
@@ -613,6 +680,11 @@ Options:
   --region=REGION        AWS region (default: us-west-2)
   --model=ID             Custom primary model (use "default" to reset)
   --fast-model=ID        Custom fast model (use "default" to reset)
+  --opus-model=ID        Custom opus model (use "default" to reset)
+  --sonnet-model=ID      Custom sonnet model (use "default" to reset)
+  --haiku-model=ID       Custom haiku model (use "default" to reset)
+  --global               Use global inference profiles (default)
+  --model-prefix=PREFIX  Inference profile prefix (e.g., us, eu, ap)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
   --version, -v          Show version
@@ -684,6 +756,14 @@ CUSTOM_MODEL=""
 CUSTOM_FAST_MODEL=""
 MODEL_EXPLICIT=false
 FAST_MODEL_EXPLICIT=false
+CUSTOM_OPUS_MODEL=""
+CUSTOM_SONNET_MODEL=""
+CUSTOM_HAIKU_MODEL=""
+OPUS_MODEL_EXPLICIT=false
+SONNET_MODEL_EXPLICIT=false
+HAIKU_MODEL_EXPLICIT=false
+MODEL_PREFIX=""
+USE_GLOBAL=false
 
 parse_arguments() {
     for arg in "$@"; do
@@ -718,6 +798,24 @@ parse_arguments() {
             --fast-model=*)
                 CUSTOM_FAST_MODEL="${arg#--fast-model=}"
                 FAST_MODEL_EXPLICIT=true
+                ;;
+            --opus-model=*)
+                CUSTOM_OPUS_MODEL="${arg#--opus-model=}"
+                OPUS_MODEL_EXPLICIT=true
+                ;;
+            --sonnet-model=*)
+                CUSTOM_SONNET_MODEL="${arg#--sonnet-model=}"
+                SONNET_MODEL_EXPLICIT=true
+                ;;
+            --haiku-model=*)
+                CUSTOM_HAIKU_MODEL="${arg#--haiku-model=}"
+                HAIKU_MODEL_EXPLICIT=true
+                ;;
+            --global)
+                USE_GLOBAL=true
+                ;;
+            --model-prefix=*)
+                MODEL_PREFIX="${arg#--model-prefix=}"
                 ;;
             --version|-v)
                 cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
@@ -1066,6 +1164,33 @@ main() {
         fi
     fi
 
+    if [[ "$OPUS_MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
+        local existing_opus_model
+        existing_opus_model=$(detect_existing_opus_model "$config_file")
+        if [[ -n "$existing_opus_model" ]]; then
+            CUSTOM_OPUS_MODEL="$existing_opus_model"
+            echo "Preserving existing custom opus model: $CUSTOM_OPUS_MODEL"
+        fi
+    fi
+
+    if [[ "$SONNET_MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
+        local existing_sonnet_model
+        existing_sonnet_model=$(detect_existing_sonnet_model "$config_file")
+        if [[ -n "$existing_sonnet_model" ]]; then
+            CUSTOM_SONNET_MODEL="$existing_sonnet_model"
+            echo "Preserving existing custom sonnet model: $CUSTOM_SONNET_MODEL"
+        fi
+    fi
+
+    if [[ "$HAIKU_MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
+        local existing_haiku_model
+        existing_haiku_model=$(detect_existing_haiku_model "$config_file")
+        if [[ -n "$existing_haiku_model" ]]; then
+            CUSTOM_HAIKU_MODEL="$existing_haiku_model"
+            echo "Preserving existing custom haiku model: $CUSTOM_HAIKU_MODEL"
+        fi
+    fi
+
     # Detect existing storage mode if user didn't explicitly specify
     if [[ "$STORAGE_MODE_EXPLICIT" != true && -f "$config_file" ]]; then
         local existing_storage
@@ -1127,6 +1252,18 @@ main() {
         CUSTOM_FAST_MODEL=""
         echo "Resetting fast model to default from bedrock-config.json"
     fi
+    if [[ "$CUSTOM_OPUS_MODEL" == "default" ]]; then
+        CUSTOM_OPUS_MODEL=""
+        echo "Resetting opus model to default from bedrock-config.json"
+    fi
+    if [[ "$CUSTOM_SONNET_MODEL" == "default" ]]; then
+        CUSTOM_SONNET_MODEL=""
+        echo "Resetting sonnet model to default from bedrock-config.json"
+    fi
+    if [[ "$CUSTOM_HAIKU_MODEL" == "default" ]]; then
+        CUSTOM_HAIKU_MODEL=""
+        echo "Resetting haiku model to default from bedrock-config.json"
+    fi
 
     # Validate and warn for custom models
     if [[ -n "$CUSTOM_MODEL" ]]; then
@@ -1137,6 +1274,61 @@ main() {
     if [[ -n "$CUSTOM_FAST_MODEL" ]]; then
         validate_model_id "$CUSTOM_FAST_MODEL" "fast-model" || exit 1
         warn_custom_model "$CUSTOM_FAST_MODEL" "fast"
+        # --fast-model sets ANTHROPIC_DEFAULT_HAIKU_MODEL (ANTHROPIC_SMALL_FAST_MODEL was removed)
+        if [[ -z "$CUSTOM_HAIKU_MODEL" ]]; then
+            CUSTOM_HAIKU_MODEL="$CUSTOM_FAST_MODEL"
+        fi
+    fi
+
+    if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" ]]; then
+        validate_model_id "$CUSTOM_OPUS_MODEL" "opus-model" || exit 1
+        warn_custom_model "$CUSTOM_OPUS_MODEL" "opus"
+    fi
+    if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" ]]; then
+        validate_model_id "$CUSTOM_SONNET_MODEL" "sonnet-model" || exit 1
+        warn_custom_model "$CUSTOM_SONNET_MODEL" "sonnet"
+    fi
+    if [[ -n "$CUSTOM_HAIKU_MODEL" && "$CUSTOM_HAIKU_MODEL" != "default" ]]; then
+        validate_model_id "$CUSTOM_HAIKU_MODEL" "haiku-model" || exit 1
+        warn_custom_model "$CUSTOM_HAIKU_MODEL" "haiku"
+    fi
+
+    # Apply --global or --model-prefix to all model env vars
+    if [[ "$USE_GLOBAL" == true ]]; then
+        MODEL_PREFIX="global"
+    fi
+
+    if [[ -n "$MODEL_PREFIX" ]]; then
+        local transform_keys=(
+            ANTHROPIC_MODEL
+            ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL
+        )
+        for key in "${transform_keys[@]}"; do
+            if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+                BEDROCK_CONFIG["$key"]=$(apply_model_prefix "${BEDROCK_CONFIG[$key]}" "$MODEL_PREFIX")
+            fi
+        done
+
+        # Update friendly names and descriptions to match the prefix
+        if [[ "$MODEL_PREFIX" != "global" ]]; then
+            local prefix_label="${MODEL_PREFIX^^}"
+            local name_keys=(
+                ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
+            )
+            for key in "${name_keys[@]}"; do
+                if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+                    BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Bedrock Global/Bedrock ${prefix_label}}"
+                fi
+            done
+            local desc_keys=(
+                ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
+            )
+            for key in "${desc_keys[@]}"; do
+                if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+                    BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Global inference profile/${prefix_label} inference profile}"
+                fi
+            done
+        fi
     fi
 
     validate_inputs

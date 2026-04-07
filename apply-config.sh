@@ -74,7 +74,7 @@ _JUGGERNAUT_JSON_CONTENT=$(cat "$_JUGGERNAUT_CONFIG_FILE")
 _juggernaut_get_json_value() {
     local key=$1
     if command -v jq >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key // empty"
+        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key // empty" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "
 import sys,json,functools
@@ -82,7 +82,7 @@ d=json.load(sys.stdin)
 keys=[k for k in sys.argv[1].split('.') if k]
 val=functools.reduce(lambda d,k: d[k], keys, d)
 print('' if val is None else val)
-" "$key" 2>/dev/null
+" "$key" 2>/dev/null | tr -d '\r'
     else
         echo "Error: jq or python3 required to parse config" >&2
         return 1
@@ -93,7 +93,7 @@ print('' if val is None else val)
 _juggernaut_get_json_keys() {
     local key=$1
     if command -v jq >/dev/null 2>&1; then
-        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key | keys[]"
+        echo "$_JUGGERNAUT_JSON_CONTENT" | jq -r "$key | keys[]" 2>/dev/null | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
         echo "$_JUGGERNAUT_JSON_CONTENT" | python3 -c "
 import sys,json,functools
@@ -101,7 +101,7 @@ d=json.load(sys.stdin)
 keys=[k for k in sys.argv[1].split('.') if k]
 obj=functools.reduce(lambda d,k: d[k], keys, d)
 print('\n'.join(obj.keys()))
-" "$key" 2>/dev/null
+" "$key" 2>/dev/null | tr -d '\r'
     else
         echo "Error: jq or python3 required to parse config" >&2
         return 1
@@ -120,6 +120,9 @@ _JUGGERNAUT_ENV_KEYS=$(_juggernaut_get_json_keys '.environment')
 if [[ -n "$_JUGGERNAUT_ENV_KEYS" ]]; then
     while IFS= read -r _JUGGERNAUT_KEY; do
         _JUGGERNAUT_VAL="$(_juggernaut_get_json_value ".environment.$_JUGGERNAUT_KEY")"
+        if [[ -z "$_JUGGERNAUT_VAL" ]]; then
+            echo "Warning: empty value for $_JUGGERNAUT_KEY in config" >&2
+        fi
         export "$_JUGGERNAUT_KEY=$_JUGGERNAUT_VAL"
     done <<< "$_JUGGERNAUT_ENV_KEYS"
 else
