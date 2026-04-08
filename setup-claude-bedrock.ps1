@@ -155,8 +155,11 @@ function Test-ModelIdFormat {
         return $false
     }
 
+    # Strip [1m] suffix before validation
+    $checkId = $ModelId -replace '\[1m\]$', ''
+
     # Basic format check (Bedrock model ID patterns)
-    if ($ModelId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
+    if ($checkId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
         Write-Host "Warning: '$ModelId' doesn't match expected Bedrock model ID format" -ForegroundColor Yellow
         Write-Host "Expected patterns: anthropic.claude-*, global.anthropic.claude-*, us.anthropic.claude-*" -ForegroundColor Yellow
     }
@@ -635,12 +638,12 @@ if ($OneM) {
         }
     }
 
-    # Apply to custom overrides
+    # Apply to custom overrides (idempotent - skip if already suffixed)
     if (-not [string]::IsNullOrEmpty($OpusModel) -and $OpusModel -ne "default") {
-        $OpusModel = "$OpusModel[1m]"
+        if ($OpusModel -notmatch '\[1m\]$') { $OpusModel = "$OpusModel[1m]" }
     }
     if (-not [string]::IsNullOrEmpty($SonnetModel) -and $SonnetModel -ne "default") {
-        $SonnetModel = "$SonnetModel[1m]"
+        if ($SonnetModel -notmatch '\[1m\]$') { $SonnetModel = "$SonnetModel[1m]" }
     }
 }
 

@@ -611,6 +611,9 @@ test_1m_context() {
     run_test "--1m-context updates opus description with 1M Context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_DESCRIPTION' | grep -q '1M Context'"
 
+    run_test "--1m-context updates sonnet description with 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'SONNET_MODEL_DESCRIPTION' | grep -q '1M Context'"
+
     # Prefix combination
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
@@ -621,6 +624,9 @@ test_1m_context() {
     # Persistence
     run_test "--1m-context persists in config comment" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '# 1MContext: true'"
+
+    run_test "fish shell 1M context uses correct syntax" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --1m-context --dry-run --force 2>&1 | grep -q 'set -gx ANTHROPIC_DEFAULT_OPUS_MODEL.*\[1m\]'"
 
     # Help text
     run_test "help shows --1m-context" \

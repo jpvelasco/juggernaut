@@ -1382,11 +1382,11 @@ main() {
             fi
         done
 
-        # Apply to custom opus/sonnet overrides if set
-        if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" ]]; then
+        # Apply to custom opus/sonnet overrides if set (idempotent — skip if already suffixed)
+        if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" && ! "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL}[1m]"
         fi
-        if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" ]]; then
+        if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL}[1m]"
         fi
     fi
