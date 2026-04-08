@@ -16,6 +16,10 @@ param(
     [string]$HaikuModel = "",
     [switch]$Global,
     [string]$ModelPrefix = "",
+    [Alias("1m-context")]
+    [switch]$OneM,
+    [Alias("standard-context")]
+    [switch]$NoOneM,
     [switch]$Force,
     [switch]$DryRun,
     [switch]$Help,
@@ -153,8 +157,17 @@ function Test-ModelIdFormat {
         return $false
     }
 
+    # Strip [1m] suffix before validation
+    $checkId = $ModelId -replace '\[1m\]$', ''
+
+    # Reject bare [1m] with no model ID
+    if ([string]::IsNullOrEmpty($checkId)) {
+        Write-Host "Error: -$ModelType requires a model ID, not just '[1m]'" -ForegroundColor Red
+        return $false
+    }
+
     # Basic format check (Bedrock model ID patterns)
-    if ($ModelId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
+    if ($checkId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
         Write-Host "Warning: '$ModelId' doesn't match expected Bedrock model ID format" -ForegroundColor Yellow
         Write-Host "Expected patterns: anthropic.claude-*, global.anthropic.claude-*, us.anthropic.claude-*" -ForegroundColor Yellow
     }
@@ -278,6 +291,15 @@ if (-not $StorageExplicit) {
     if ($existingStorage -eq "keychain") {
         $Storage = "keychain"
         Write-Host "Preserving existing storage mode: keychain"
+    }
+}
+
+# Detect existing 1M context flag
+if (-not $OneM -and -not $NoOneM) {
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    if ($profileContent -match '# 1MContext: true') {
+        $OneM = $true
+        Write-Host "Preserving existing 1M context setting"
     }
 }
 
@@ -443,6 +465,8 @@ if ($Help) {
     Write-Host "  -HaikuModel <ID>   Custom Haiku model (use 'default' to reset)"
     Write-Host "  -Global            Use global inference profiles (default)"
     Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'ap')"
+    Write-Host "  -OneM              Enable 1M token context window (Opus & Sonnet only)"
+    Write-Host "  -NoOneM            Disable 1M context (revert to standard ~200K)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
@@ -597,6 +621,40 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
     }
 }
 
+# Apply 1M context (Opus & Sonnet only)
+if ($OneM) {
+    # Append [1m] suffix (idempotent)
+    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL")) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop -and $prop.Value -notmatch '\[1m\]') {
+            $prop.Value = "$($prop.Value)[1m]"
+        }
+    }
+
+    # Update names and descriptions (fully idempotent - never duplicate "1M Context")
+    foreach ($key in @(
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"
+    )) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop -and $prop.Value -notlike '*1M Context*') {
+            $prop.Value = "$($prop.Value), 1M Context"
+        }
+    }
+
+    # Apply to custom overrides (idempotent - skip if already suffixed)
+    if (-not [string]::IsNullOrEmpty($OpusModel) -and $OpusModel -ne "default") {
+        if ($OpusModel -notmatch '\[1m\]$') { $OpusModel = "$OpusModel[1m]" }
+    }
+    if (-not [string]::IsNullOrEmpty($SonnetModel) -and $SonnetModel -ne "default") {
+        if ($SonnetModel -notmatch '\[1m\]$') { $SonnetModel = "$SonnetModel[1m]" }
+    }
+} else {
+    # Strip [1m] from custom models persisted from a previous -OneM run
+    if ($OpusModel -match '\[1m\]$') { $OpusModel = $OpusModel -replace '\[1m\]$', '' }
+    if ($SonnetModel -match '\[1m\]$') { $SonnetModel = $SonnetModel -replace '\[1m\]$', '' }
+}
+
 # Build configuration block from JSON config or fallback to defaults
 $ConfigBlock = "`n# BEGIN: Claude Code Bedrock Configuration`n# Auth mode: $Auth`n"
 if (-not [string]::IsNullOrEmpty($Model)) {
@@ -613,6 +671,9 @@ if (-not [string]::IsNullOrEmpty($SonnetModel)) {
 }
 if (-not [string]::IsNullOrEmpty($HaikuModel)) {
     $ConfigBlock += "# HaikuModel: $HaikuModel`n"
+}
+if ($OneM) {
+    $ConfigBlock += "# 1MContext: true`n"
 }
 if ($Storage -eq "keychain") {
     $ConfigBlock += "# Storage: keychain (encrypted)`n"

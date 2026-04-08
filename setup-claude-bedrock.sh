@@ -412,6 +412,9 @@ generate_config_block() {
     if [[ "$storage_mode" == "keychain" ]]; then
         config+="# Storage: keychain (encrypted)"$'\n'
     fi
+    if [[ "$USE_1M_CONTEXT" == true ]]; then
+        config+="# 1MContext: true"$'\n'
+    fi
 
     # Unset conflicting auth variables to prevent credential conflicts
     if [[ "$auth_mode" == "api-key" ]]; then
@@ -593,6 +596,14 @@ detect_existing_sonnet_model() {
     fi
 }
 
+# Detect existing 1M context setting from config file
+detect_existing_1m_context() {
+    local profile_file=$1
+    if grep -q "# 1MContext: true" "$profile_file" 2>/dev/null; then
+        echo "true"
+    fi
+}
+
 # Detect existing custom haiku model from config file
 detect_existing_haiku_model() {
     local config_file=$1
@@ -617,8 +628,17 @@ validate_model_id() {
         return 1
     fi
 
+    # Strip [1m] suffix before validation
+    local check_id="${model_id%\[1m\]}"
+
+    # Reject bare [1m] with no model ID
+    if [[ -z "$check_id" ]]; then
+        echo "Error: --$model_type requires a model ID, not just '[1m]'" >&2
+        return 1
+    fi
+
     # Basic format check (Bedrock model ID patterns)
-    if [[ ! "$model_id" =~ ^([a-z][-a-z0-9]*\.)?anthropic\. ]]; then
+    if [[ ! "$check_id" =~ ^([a-z][-a-z0-9]*\.)?anthropic\. ]]; then
         echo "Warning: '$model_id' doesn't match expected Bedrock model ID format" >&2
         echo "Expected patterns: anthropic.claude-*, global.anthropic.claude-*, us.anthropic.claude-*" >&2
     fi
@@ -685,6 +705,8 @@ Options:
   --haiku-model=ID       Custom haiku model (use "default" to reset)
   --global               Use global inference profiles (default)
   --model-prefix=PREFIX  Inference profile prefix (e.g., us, eu, ap)
+  --1m-context           Enable 1M token context window (Opus & Sonnet only)
+  --no-1m-context        Disable 1M context (revert to standard ~200K)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
   --version, -v          Show version
@@ -764,6 +786,8 @@ SONNET_MODEL_EXPLICIT=false
 HAIKU_MODEL_EXPLICIT=false
 MODEL_PREFIX=""
 USE_GLOBAL=false
+USE_1M_CONTEXT=false
+EXPLICIT_NO_1M=false
 
 parse_arguments() {
     for arg in "$@"; do
@@ -810,6 +834,13 @@ parse_arguments() {
             --haiku-model=*)
                 CUSTOM_HAIKU_MODEL="${arg#--haiku-model=}"
                 HAIKU_MODEL_EXPLICIT=true
+                ;;
+            --1m-context)
+                USE_1M_CONTEXT=true
+                ;;
+            --no-1m-context|--standard-context)
+                USE_1M_CONTEXT=false
+                EXPLICIT_NO_1M=true
                 ;;
             --global)
                 USE_GLOBAL=true
@@ -1191,6 +1222,15 @@ main() {
         fi
     fi
 
+    # Detect existing 1M context setting if user didn't explicitly specify
+    if [[ "$USE_1M_CONTEXT" != true && "$EXPLICIT_NO_1M" != true ]]; then
+        local existing_1m
+        existing_1m=$(detect_existing_1m_context "$config_file")
+        if [[ "$existing_1m" == "true" ]]; then
+            USE_1M_CONTEXT=true
+        fi
+    fi
+
     # Detect existing storage mode if user didn't explicitly specify
     if [[ "$STORAGE_MODE_EXPLICIT" != true && -f "$config_file" ]]; then
         local existing_storage
@@ -1328,6 +1368,41 @@ main() {
                     BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Global inference profile/${prefix_label} inference profile}"
                 fi
             done
+        fi
+    fi
+
+    # Apply 1M context: suffix model IDs, update names and descriptions (Opus & Sonnet only)
+    if [[ "$USE_1M_CONTEXT" == true ]]; then
+        # Append [1m] suffix to Opus and Sonnet model IDs (idempotent)
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+            if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"[1m]"* ]]; then
+                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]}[1m]"
+            fi
+        done
+
+        # Update names and descriptions (fully idempotent - never duplicate "1M Context")
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME \
+                   ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
+            if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"1M Context"* ]]; then
+                # Clean append: add ", 1M Context" only if not already present
+                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%, 1M Context}, 1M Context"
+            fi
+        done
+
+        # Apply to custom opus/sonnet overrides if set (idempotent — skip if already suffixed)
+        if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" && ! "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
+            CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL}[1m]"
+        fi
+        if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
+            CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL}[1m]"
+        fi
+    else
+        # Strip [1m] from custom models persisted from a previous --1m-context run
+        if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
+            CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL%\[1m\]}"
+        fi
+        if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
+            CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL%\[1m\]}"
         fi
     fi
 

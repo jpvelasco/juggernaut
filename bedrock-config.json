@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "models": {
     "default": "global.anthropic.claude-opus-4-6-v1",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -12,16 +12,23 @@
     "CLAUDE_CODE_USE_BEDROCK": "1",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
+
     "ANTHROPIC_MODEL": "global.anthropic.claude-opus-4-6-v1",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-6-v1",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+
     "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.6 (Bedrock Global)",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Bedrock Global)",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Bedrock Global)",
+
     "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model - Global inference profile - Complex reasoning & long sessions",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed & intelligence - Global inference profile",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model - Global inference profile - Quick tasks",
+
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,thinking,adaptive_thinking,interleaved_thinking",
+
     "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
     "ENABLE_PROMPT_CACHING_1H_BEDROCK": "1",
     "DISABLE_ERROR_REPORTING": "1",
@@ -42,6 +49,8 @@
     "fast_model": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
   "notes": {
-    "fast_model": "Fast/background model defaults to Haiku 4.5 using ANTHROPIC_DEFAULT_HAIKU_MODEL (Anthropic recommendation for cost & speed on subagents, exploration, etc.). ANTHROPIC_SMALL_FAST_MODEL was removed because it is officially deprecated. See: https://code.claude.com/docs/en/model-config"
+    "fast_model": "Fast/background model defaults to Haiku 4.5 using ANTHROPIC_DEFAULT_HAIKU_MODEL (Anthropic recommendation for cost & speed on subagents, exploration, etc.). ANTHROPIC_SMALL_FAST_MODEL was removed because it is officially deprecated. See: https://code.claude.com/docs/en/model-config",
+    "1m_context": "Use --1m-context to enable 1M token context for Opus and Sonnet. This appends [1m] to the model IDs (Claude Code strips the suffix before sending to Bedrock). Standard context remains the default.",
+    "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config"
   }
 }
