@@ -19,7 +19,7 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ## What's New in v1.7.0
 
-- **1M Context Windows**: `--1m-context` / `-OneM` enables 1 million token context for Opus and Sonnet
+- **1M Context Windows**: `--1m-context` / `-OneM` enables 1 million token context for Opus and Sonnet (revert with `--no-1m-context`)
 - **Model Capabilities**: Automatically declares effort levels, adaptive thinking, and extended thinking for Bedrock models
 
 ## What's New in v1.6.0
@@ -404,11 +404,20 @@ Opus 4.6 and Sonnet 4.6 support a 1 million token context window. Enable it with
 
 This appends `[1m]` to the Opus and Sonnet model IDs. Claude Code strips the suffix before sending to Bedrock — no changes needed on the AWS side. Standard context (~200K) remains the default.
 
+This setting persists across re-runs. To revert to standard context:
+
+```bash
+./setup --no-1m-context
+.\setup-claude-bedrock.ps1 -NoOneM
+```
+
 **What it sets:**
 - `ANTHROPIC_DEFAULT_OPUS_MODEL` -> `global.anthropic.claude-opus-4-6-v1[1m]`
 - `ANTHROPIC_DEFAULT_SONNET_MODEL` -> `global.anthropic.claude-sonnet-4-6[1m]`
 - Model names updated to include "1M Context"
 - Haiku is not affected (does not support 1M context)
+
+> **Tip:** For large codebases, `--1m-context` lets Opus and Sonnet work with up to 1M tokens while Haiku stays fast at ~200K.
 
 ### Model Capabilities (v1.7+)
 
