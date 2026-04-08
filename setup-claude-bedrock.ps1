@@ -617,22 +617,22 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
 
 # Apply 1M context (Opus & Sonnet only)
 if ($OneM) {
-    # Append [1m] to model IDs
+    # Append [1m] suffix (idempotent)
     foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL")) {
         $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop) {
+        if ($prop -and $prop.Value -notmatch '\[1m\]') {
             $prop.Value = "$($prop.Value)[1m]"
         }
     }
 
-    # Update names and descriptions to indicate 1M context (idempotent)
+    # Update names and descriptions (fully idempotent)
     foreach ($key in @(
         "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
         "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"
     )) {
         $prop = $Config.environment.PSObject.Properties[$key]
         if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = "$($prop.Value), 1M Context"
+            $prop.Value = ("$($prop.Value), 1M Context").TrimStart(', ')
         }
     }
 

@@ -1373,17 +1373,18 @@ main() {
 
     # Apply 1M context: suffix model IDs, update names and descriptions (Opus & Sonnet only)
     if [[ "$USE_1M_CONTEXT" == true ]]; then
-        # Append [1m] to model IDs
+        # Append [1m] suffix to Opus and Sonnet model IDs (idempotent)
         for key in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
-            if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+            if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"[1m]"* ]]; then
                 BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]}[1m]"
             fi
         done
 
-        # Update names and descriptions to indicate 1M context (idempotent)
+        # Update names and descriptions (fully idempotent - never duplicate "1M Context")
         for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME \
                    ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
             if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"1M Context"* ]]; then
+                # Clean append: add ", 1M Context" only if not already present
                 BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%, 1M Context}, 1M Context"
             fi
         done
