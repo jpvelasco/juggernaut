@@ -71,6 +71,7 @@ for arg in "$@"; do
         echo "  --global             Use global inference profiles (default)"
         echo "  --model-prefix=PFX   Inference profile prefix (us, eu, ap)"
         echo "  --1m-context         Enable 1M token context (Opus & Sonnet)"
+        echo "  --no-1m-context      Disable 1M context (standard ~200K)"
         echo "  --version, -v        Show version"
         echo "  --help, -h           Show this help message"
         echo ""

@@ -18,6 +18,8 @@ param(
     [string]$ModelPrefix = "",
     [Alias("1m-context")]
     [switch]$OneM,
+    [Alias("standard-context")]
+    [switch]$NoOneM,
     [switch]$Force,
     [switch]$DryRun,
     [switch]$Help,
@@ -287,7 +289,7 @@ if (-not $StorageExplicit) {
 }
 
 # Detect existing 1M context flag
-if (-not $OneM) {
+if (-not $OneM -and -not $NoOneM) {
     $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
     if ($profileContent -match '# 1MContext: true') {
         $OneM = $true
@@ -458,6 +460,7 @@ if ($Help) {
     Write-Host "  -Global            Use global inference profiles (default)"
     Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'ap')"
     Write-Host "  -OneM              Enable 1M token context window (Opus & Sonnet only)"
+    Write-Host "  -NoOneM            Disable 1M context (revert to standard ~200K)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
@@ -625,7 +628,7 @@ if ($OneM) {
     # Update names: append ", 1M Context" before closing paren
     foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME")) {
         $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop) {
+        if ($prop -and $prop.Value -notlike '*1M Context*') {
             $prop.Value = $prop.Value -replace '\)$', ', 1M Context)'
         }
     }

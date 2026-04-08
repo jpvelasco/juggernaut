@@ -631,6 +631,10 @@ test_1m_context() {
     # Help text
     run_test "help shows --1m-context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q '1m-context'"
+
+    # Disable flag
+    run_test "--no-1m-context disables 1M context" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --dry-run --force 2>&1 | grep -q '\[1m\]'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────

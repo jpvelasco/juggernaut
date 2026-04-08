@@ -700,6 +700,7 @@ Options:
   --global               Use global inference profiles (default)
   --model-prefix=PREFIX  Inference profile prefix (e.g., us, eu, ap)
   --1m-context           Enable 1M token context window (Opus & Sonnet only)
+  --no-1m-context        Disable 1M context (revert to standard ~200K)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
   --version, -v          Show version
@@ -780,6 +781,7 @@ HAIKU_MODEL_EXPLICIT=false
 MODEL_PREFIX=""
 USE_GLOBAL=false
 USE_1M_CONTEXT=false
+EXPLICIT_NO_1M=false
 
 parse_arguments() {
     for arg in "$@"; do
@@ -829,6 +831,10 @@ parse_arguments() {
                 ;;
             --1m-context)
                 USE_1M_CONTEXT=true
+                ;;
+            --no-1m-context|--standard-context)
+                USE_1M_CONTEXT=false
+                EXPLICIT_NO_1M=true
                 ;;
             --global)
                 USE_GLOBAL=true
@@ -1211,7 +1217,7 @@ main() {
     fi
 
     # Detect existing 1M context setting if user didn't explicitly specify
-    if [[ "$USE_1M_CONTEXT" != true ]]; then
+    if [[ "$USE_1M_CONTEXT" != true && "$EXPLICIT_NO_1M" != true ]]; then
         local existing_1m
         existing_1m=$(detect_existing_1m_context "$config_file")
         if [[ "$existing_1m" == "true" ]]; then
@@ -1370,7 +1376,7 @@ main() {
 
         # Update names: "Opus 4.6 (Bedrock Global)" -> "Opus 4.6 (Bedrock Global, 1M Context)"
         for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
-            if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
+            if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"1M Context"* ]]; then
                 BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]/)/,\ 1M Context)}"
             fi
         done
