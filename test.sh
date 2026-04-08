@@ -618,8 +618,8 @@ test_1m_context() {
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
 
-    run_test "--1m-context + prefix: name says Bedrock US, 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'Bedrock US, 1M Context'"
+    run_test "--1m-context + prefix: name has Bedrock US and 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep 'Bedrock US' | grep -q '1M Context'"
 
     # Persistence
     run_test "--1m-context persists in config comment" \

@@ -625,19 +625,14 @@ if ($OneM) {
         }
     }
 
-    # Update names: append ", 1M Context" before closing paren
-    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME")) {
+    # Update names and descriptions to indicate 1M context (idempotent)
+    foreach ($key in @(
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"
+    )) {
         $prop = $Config.environment.PSObject.Properties[$key]
         if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = $prop.Value -replace '\)$', ', 1M Context)'
-        }
-    }
-
-    # Update descriptions: append "(1M Context)"
-    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION")) {
-        $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop) {
-            $prop.Value = "$($prop.Value) (1M Context)"
+            $prop.Value = "$($prop.Value), 1M Context"
         }
     }
 

@@ -631,6 +631,12 @@ validate_model_id() {
     # Strip [1m] suffix before validation
     local check_id="${model_id%\[1m\]}"
 
+    # Reject bare [1m] with no model ID
+    if [[ -z "$check_id" ]]; then
+        echo "Error: --$model_type requires a model ID, not just '[1m]'" >&2
+        return 1
+    fi
+
     # Basic format check (Bedrock model ID patterns)
     if [[ ! "$check_id" =~ ^([a-z][-a-z0-9]*\.)?anthropic\. ]]; then
         echo "Warning: '$model_id' doesn't match expected Bedrock model ID format" >&2
@@ -1374,17 +1380,11 @@ main() {
             fi
         done
 
-        # Update names: "Opus 4.6 (Bedrock Global)" -> "Opus 4.6 (Bedrock Global, 1M Context)"
-        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
+        # Update names and descriptions to indicate 1M context (idempotent)
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME \
+                   ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
             if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"1M Context"* ]]; then
-                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]/)/,\ 1M Context)}"
-            fi
-        done
-
-        # Update descriptions: append "(1M Context)"
-        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
-            if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
-                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]} (1M Context)"
+                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%, 1M Context}, 1M Context"
             fi
         done
 
