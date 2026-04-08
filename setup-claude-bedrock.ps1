@@ -160,6 +160,12 @@ function Test-ModelIdFormat {
     # Strip [1m] suffix before validation
     $checkId = $ModelId -replace '\[1m\]$', ''
 
+    # Reject bare [1m] with no model ID
+    if ([string]::IsNullOrEmpty($checkId)) {
+        Write-Host "Error: -$ModelType requires a model ID, not just '[1m]'" -ForegroundColor Red
+        return $false
+    }
+
     # Basic format check (Bedrock model ID patterns)
     if ($checkId -notmatch "^([a-z][-a-z0-9]*\.)?anthropic\.") {
         Write-Host "Warning: '$ModelId' doesn't match expected Bedrock model ID format" -ForegroundColor Yellow
@@ -625,14 +631,14 @@ if ($OneM) {
         }
     }
 
-    # Update names and descriptions (fully idempotent)
+    # Update names and descriptions (fully idempotent - never duplicate "1M Context")
     foreach ($key in @(
         "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
         "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"
     )) {
         $prop = $Config.environment.PSObject.Properties[$key]
         if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = ("$($prop.Value), 1M Context").TrimStart(', ')
+            $prop.Value = "$($prop.Value), 1M Context"
         }
     }
 

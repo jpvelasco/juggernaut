@@ -642,6 +642,13 @@ test_1m_context() {
 
     run_test "--no-1m-context strips [1m] from custom sonnet model" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --sonnet-model='custom.sonnet[1m]' --dry-run --force 2>&1 | grep 'SonnetModel:' | grep -q '\[1m\]'"
+
+    # Idempotency regression tests
+    run_test "--1m-context does not create double [1m] suffix" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '\[1m\]\[1m\]'"
+
+    run_test "--1m-context does not duplicate 1M Context in name" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '1M Context.*1M Context'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
