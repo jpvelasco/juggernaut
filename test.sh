@@ -635,6 +635,13 @@ test_1m_context() {
     # Disable flag
     run_test "--no-1m-context disables 1M context" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --dry-run --force 2>&1 | grep -q '\[1m\]'"
+
+    # Custom model + --no-1m-context strips persisted [1m]
+    run_test "--no-1m-context strips [1m] from custom opus model" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --opus-model='custom.opus[1m]' --dry-run --force 2>&1 | grep 'OpusModel:' | grep -q '\[1m\]'"
+
+    run_test "--no-1m-context strips [1m] from custom sonnet model" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --sonnet-model='custom.sonnet[1m]' --dry-run --force 2>&1 | grep 'SonnetModel:' | grep -q '\[1m\]'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────

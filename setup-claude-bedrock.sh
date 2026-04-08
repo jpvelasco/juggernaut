@@ -1395,6 +1395,14 @@ main() {
         if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL}[1m]"
         fi
+    else
+        # Strip [1m] from custom models persisted from a previous --1m-context run
+        if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
+            CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL%\[1m\]}"
+        fi
+        if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
+            CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL%\[1m\]}"
+        fi
     fi
 
     validate_inputs

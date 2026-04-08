@@ -643,6 +643,10 @@ if ($OneM) {
     if (-not [string]::IsNullOrEmpty($SonnetModel) -and $SonnetModel -ne "default") {
         if ($SonnetModel -notmatch '\[1m\]$') { $SonnetModel = "$SonnetModel[1m]" }
     }
+} else {
+    # Strip [1m] from custom models persisted from a previous -OneM run
+    if ($OpusModel -match '\[1m\]$') { $OpusModel = $OpusModel -replace '\[1m\]$', '' }
+    if ($SonnetModel -match '\[1m\]$') { $SonnetModel = $SonnetModel -replace '\[1m\]$', '' }
 }
 
 # Build configuration block from JSON config or fallback to defaults
