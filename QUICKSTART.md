@@ -111,7 +111,7 @@ Enable 1M token context for Opus and Sonnet: `./setup --1m-context`. Standard co
 - **Model not found**: Ensure you're using global inference profiles (Juggernaut does this by default)
 
 ### Only One Model in /model Picker?
-Update to Juggernaut v1.6.0+ — it maps all model tiers (Opus, Sonnet, Haiku) to Bedrock.
+Update to Juggernaut **v1.7.0+** — it fully maps all model tiers (Opus, Sonnet, Haiku) to Bedrock with friendly names, clear descriptions, and **1M context support** for Opus and Sonnet.
 
 ## Need Help?
 
