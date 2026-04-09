@@ -22,9 +22,9 @@
     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Recommended)",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
 
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model - Complex reasoning & long sessions",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Balanced speed & intelligence - Default model",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model - Quick tasks",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model for complex reasoning",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks",
 
     "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,thinking,adaptive_thinking,interleaved_thinking",

@@ -19,8 +19,8 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ## What's New in v1.7.1
 
-- **Default Model → Sonnet 4.6**: The default primary model is now Sonnet 4.6, matching Claude Code's recommended default for most users
-- **Official-Style Model Labels**: `/model` picker names now match Claude Code's UX — "Sonnet 4.6 (Recommended)", "Opus 4.6 (Most capable)", "Haiku 4.5 (Fast)"
+- **Default Model**: Changed default from Opus 4.6 to Sonnet 4.6 (Recommended) to better match official Claude Code UX
+- **Official-Style Model Labels**: `/model` picker names now match Claude Code — "Sonnet 4.6 (Recommended)", "Opus 4.6 (Most capable)", "Haiku 4.5 (Fast)"
 - **1M Context Labels**: When `--1m-context` is enabled, names update to "Opus 4.6 (Most capable, 1M Context)" and "Sonnet 4.6 (Recommended, 1M Context)"
 
 ## What's New in v1.7.0
@@ -476,9 +476,9 @@ Juggernaut maps all Claude models to Bedrock global inference profiles. The `/mo
 
 | Picker Entry | Bedrock Model ID | Description |
 |-------------|-----------------|-------------|
-| Opus 4.6 (Most capable) | `global.anthropic.claude-opus-4-6-v1` | Most capable - complex reasoning |
-| Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Balanced speed & intelligence - default |
-| Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest - quick tasks |
+| Opus 4.6 (Most capable) | `global.anthropic.claude-opus-4-6-v1` | Most capable model for complex reasoning |
+| Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Best balance of speed and intelligence |
+| Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest model for everyday tasks |
 
 Override individual models:
 ```bash
