@@ -440,6 +440,9 @@ test_model_picker_env_vars() {
     run_test "config has HAIKU model description" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION'"
 
+    run_test "default ANTHROPIC_MODEL is sonnet" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_MODEL=' | head -1 | grep -q 'claude-sonnet'"
+
     run_test "fish config has model picker vars" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh fish --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL'"
 }
