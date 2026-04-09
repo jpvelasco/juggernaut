@@ -440,6 +440,9 @@ test_model_picker_env_vars() {
     run_test "config has HAIKU model description" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION'"
 
+    run_test "default ANTHROPIC_MODEL is sonnet" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_MODEL=' | head -1 | grep -q 'claude-sonnet'"
+
     run_test "fish config has model picker vars" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh fish --dry-run 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL'"
 }
@@ -518,13 +521,13 @@ test_model_prefix_regex() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.us.anthropic.claude-haiku-4-5-20251001-v1:0'"
 
     run_test "prefix=eu: primary model keeps anthropic segment" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'ANTHROPIC_MODEL=.eu.anthropic.claude-opus-4-6-v1'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'ANTHROPIC_MODEL=.eu.anthropic.claude-sonnet-4-6'"
 
     run_test "prefix=ap: haiku model keeps anthropic segment" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=ap --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL=.ap.anthropic.claude-haiku-4-5-20251001-v1:0'"
 
     run_test "prefix=global: no double-global prefix" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_MODEL' | head -1 | grep -q 'global.anthropic.claude-opus-4-6-v1'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_MODEL' | head -1 | grep -q 'global.anthropic.claude-sonnet-4-6'"
 
     run_test "--global flag: equivalent to prefix=global" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --global --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.global.anthropic.claude-sonnet-4-6'"
@@ -536,15 +539,15 @@ test_model_prefix_regex() {
     run_test "prefix=eu: no bare 'eu.claude-' in output" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'eu\.claude-'"
 
-    # Verify friendly names update with prefix
-    run_test "prefix=us: opus name says Bedrock US" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Bedrock US'"
+    # Verify friendly names stay clean regardless of prefix
+    run_test "prefix=us: name stays Most capable" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Most capable'"
 
-    run_test "prefix=eu: description says EU inference" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION' | grep -q 'EU inference profile'"
+    run_test "prefix=eu: name stays Recommended" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME' | grep -q 'Recommended'"
 
-    run_test "prefix=global: name stays Bedrock Global" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Bedrock Global'"
+    run_test "prefix=global: name stays Most capable" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Most capable'"
 }
 
 test_install_script() {
@@ -618,8 +621,8 @@ test_1m_context() {
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
 
-    run_test "--1m-context + prefix: name has Bedrock US and 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep 'Bedrock US' | grep -q '1M Context'"
+    run_test "--1m-context + prefix: name has Most capable, 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'Most capable, 1M Context'"
 
     # Persistence
     run_test "--1m-context persists in config comment" \

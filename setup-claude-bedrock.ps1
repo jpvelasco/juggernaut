@@ -601,24 +601,8 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
         }
     }
 
-    # Update friendly names and descriptions to match the prefix
-    if ($ModelPrefix -ne "global") {
-        $prefixLabel = $ModelPrefix.ToUpper()
-        $nameKeys = @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME")
-        foreach ($key in $nameKeys) {
-            $prop = $Config.environment.PSObject.Properties[$key]
-            if ($prop) {
-                $prop.Value = $prop.Value -replace 'Bedrock Global', "Bedrock $prefixLabel"
-            }
-        }
-        $descKeys = @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION")
-        foreach ($key in $descKeys) {
-            $prop = $Config.environment.PSObject.Properties[$key]
-            if ($prop) {
-                $prop.Value = $prop.Value -replace 'Global inference profile', "$prefixLabel inference profile"
-            }
-        }
-    }
+    # Note: names and descriptions stay clean regardless of prefix.
+    # The prefix is reflected in the model IDs themselves.
 }
 
 # Apply 1M context (Opus & Sonnet only)
@@ -631,11 +615,16 @@ if ($OneM) {
         }
     }
 
-    # Update names and descriptions (fully idempotent - never duplicate "1M Context")
-    foreach ($key in @(
-        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"
-    )) {
+    # Update names for 1M context — insert ", 1M Context" inside parens (idempotent)
+    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME")) {
+        $prop = $Config.environment.PSObject.Properties[$key]
+        if ($prop -and $prop.Value -notlike '*1M Context*') {
+            $prop.Value = $prop.Value -replace '\)', ', 1M Context)'
+        }
+    }
+
+    # Update descriptions for 1M context — append (idempotent)
+    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION")) {
         $prop = $Config.environment.PSObject.Properties[$key]
         if ($prop -and $prop.Value -notlike '*1M Context*') {
             $prop.Value = "$($prop.Value), 1M Context"

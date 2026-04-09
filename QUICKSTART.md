@@ -71,7 +71,7 @@ claude
 echo $CLAUDE_CODE_USE_BEDROCK          # Should output: 1
 echo $AWS_REGION                       # Should output: us-west-2
 echo $CLAUDE_CODE_MAX_OUTPUT_TOKENS    # Should output: 32768
-echo $ANTHROPIC_MODEL                  # Should output: global.anthropic.claude-opus-4-6-v1
+echo $ANTHROPIC_MODEL                  # Should output: global.anthropic.claude-sonnet-4-6
 
 # Test Bedrock access
 aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
@@ -81,7 +81,7 @@ aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 
 Your setup includes:
 - ✅ Bedrock integration enabled
-- ✅ Claude Opus 4.6 as primary model (Global CRIS)
+- ✅ Claude Sonnet 4.6 as primary model (Global CRIS)
 - ✅ Claude Haiku 4.5 as fast/background model (Global CRIS)
 - ✅ Claude Haiku 4.5 available via /model picker (Global CRIS)
 - ✅ All three model tiers visible in `/model` selector
