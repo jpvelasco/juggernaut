@@ -17,6 +17,12 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Cost Control**: Route through your AWS account for billing/governance
 - **Enterprise Ready**: Works with AWS SSO, IAM roles, and corporate identity providers
 
+## What's New in v1.7.1
+
+- **Default Model → Sonnet 4.6**: The default primary model is now Sonnet 4.6, matching Claude Code's recommended default for most users
+- **Official-Style Model Labels**: `/model` picker names now match Claude Code's UX — "Sonnet 4.6 (Recommended)", "Opus 4.6 (Most capable)", "Haiku 4.5 (Fast)"
+- **1M Context Labels**: When `--1m-context` is enabled, names update to "Opus 4.6 (Most capable, 1M Context)" and "Sonnet 4.6 (Recommended, 1M Context)"
+
 ## What's New in v1.7.0
 
 - **1M Context Windows**: `--1m-context` / `-OneM` enables 1 million token context for Opus and Sonnet (revert with `--no-1m-context`)
@@ -102,7 +108,7 @@ claude
 
 # Manual checks
 echo $CLAUDE_CODE_USE_BEDROCK     # Should show: 1
-echo $ANTHROPIC_MODEL             # Should show: global.anthropic.claude-opus-4-6-v1
+echo $ANTHROPIC_MODEL             # Should show: global.anthropic.claude-sonnet-4-6
 ```
 
 ## Detailed Setup Steps
@@ -316,7 +322,7 @@ claude
 │  # BEGIN: Claude Code Bedrock Configuration                         │
 │  export CLAUDE_CODE_USE_BEDROCK=1                                   │
 │  export AWS_REGION=us-west-2                                        │
-│  export ANTHROPIC_MODEL=global.anthropic.claude-opus-4-6-...        │
+│  export ANTHROPIC_MODEL=global.anthropic.claude-sonnet-4-6          │
 │  ...                                                                │
 │  # END: Claude Code Bedrock Configuration                           │
 └─────────────────────────────────────────────────────────────────────┘
@@ -342,7 +348,7 @@ The setup adds these environment variables:
 - `AWS_REGION=us-west-2` - Default region (change as needed)
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32768` - **Required for Bedrock** (allows longer responses)
 - `MAX_THINKING_TOKENS=65536` - Extended reasoning for complex tasks
-- `ANTHROPIC_MODEL=global.anthropic.claude-opus-4-6-v1` - Global CRIS primary model
+- `ANTHROPIC_MODEL=global.anthropic.claude-sonnet-4-6` - Global CRIS primary model (Sonnet 4.6, recommended)
 - `DISABLE_ERROR_REPORTING=1` - Disable error reporting to Anthropic
 - `DISABLE_TELEMETRY=1` - Disable telemetry collection
 - `DISABLE_AUTOUPDATE=1` - Disable automatic updates
@@ -361,7 +367,7 @@ The setup adds these environment variables:
 
 | Tier | Model | Global CRIS Profile |
 |------|-------|-------------------|
-| **Primary** | Claude Opus 4.6 | `global.anthropic.claude-opus-4-6-v1` |
+| **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 | **Haiku** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
@@ -371,11 +377,11 @@ Claude Code uses multiple models for different purposes:
 
 | Variable | Model | Usage | Visible in `/model`? |
 |----------|-------|-------|---------------------|
-| `ANTHROPIC_MODEL` | Opus 4.6 | Primary conversation model - all direct interactions | Yes |
+| `ANTHROPIC_MODEL` | Sonnet 4.6 | Primary conversation model - all direct interactions | Yes |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku 4.5 | Background tasks, subagents, and quick tasks via /model | Yes |
 
 **What this means in practice:**
-- When you chat with Claude Code, you're talking to Opus 4.6
+- When you chat with Claude Code, you're talking to Sonnet 4.6 (recommended default)
 - When Claude Code spawns background agents, it uses Haiku 4.5 (fastest, lowest cost)
 - The `/model` command shows all three tiers (Opus, Sonnet, Haiku) — you can switch between them
 - For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`
@@ -470,9 +476,9 @@ Juggernaut maps all Claude models to Bedrock global inference profiles. The `/mo
 
 | Picker Entry | Bedrock Model ID | Description |
 |-------------|-----------------|-------------|
-| Opus 4.6 (Bedrock Global) | `global.anthropic.claude-opus-4-6-v1` | Most capable - complex reasoning |
-| Sonnet 4.6 (Bedrock Global) | `global.anthropic.claude-sonnet-4-6` | Best speed/intelligence balance |
-| Haiku 4.5 (Bedrock Global) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest - quick tasks |
+| Opus 4.6 (Most capable) | `global.anthropic.claude-opus-4-6-v1` | Most capable - complex reasoning |
+| Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Balanced speed & intelligence - default |
+| Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest - quick tasks |
 
 Override individual models:
 ```bash

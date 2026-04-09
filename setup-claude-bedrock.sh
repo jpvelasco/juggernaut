@@ -1349,26 +1349,8 @@ main() {
             fi
         done
 
-        # Update friendly names and descriptions to match the prefix
-        if [[ "$MODEL_PREFIX" != "global" ]]; then
-            local prefix_label="${MODEL_PREFIX^^}"
-            local name_keys=(
-                ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
-            )
-            for key in "${name_keys[@]}"; do
-                if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
-                    BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Bedrock Global/Bedrock ${prefix_label}}"
-                fi
-            done
-            local desc_keys=(
-                ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
-            )
-            for key in "${desc_keys[@]}"; do
-                if [[ -n "${BEDROCK_CONFIG[$key]}" ]]; then
-                    BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]//Global inference profile/${prefix_label} inference profile}"
-                fi
-            done
-        fi
+        # Note: names and descriptions stay clean regardless of prefix.
+        # The prefix is reflected in the model IDs themselves.
     fi
 
     # Apply 1M context: suffix model IDs, update names and descriptions (Opus & Sonnet only)
@@ -1380,12 +1362,18 @@ main() {
             fi
         done
 
-        # Update names and descriptions (fully idempotent - never duplicate "1M Context")
-        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME \
-                   ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
+        # Update names for 1M context — insert ", 1M Context" inside parens (idempotent)
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
+            local val="${BEDROCK_CONFIG[$key]}"
+            if [[ -n "$val" && "$val" != *"1M Context"* ]]; then
+                BEDROCK_CONFIG["$key"]="${val/)/, 1M Context)}"
+            fi
+        done
+
+        # Update descriptions for 1M context — append (idempotent)
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
             if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"1M Context"* ]]; then
-                # Clean append: add ", 1M Context" only if not already present
-                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%, 1M Context}, 1M Context"
+                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]}, 1M Context"
             fi
         done
 
