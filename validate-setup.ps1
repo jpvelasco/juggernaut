@@ -221,7 +221,7 @@ function Test-ApiKeyValidity {
             --region $region `
             --model-id $testModel `
             --messages '[{"role":"user","content":[{"text":"hi"}]}]' `
-            --max-tokens 1 2>&1
+            --inference-config '{"maxTokens":1}' 2>&1
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "PASS" -ForegroundColor Green -NoNewline
