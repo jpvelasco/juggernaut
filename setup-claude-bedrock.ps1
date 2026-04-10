@@ -674,6 +674,7 @@ if ($Auth -eq "api-key") {
     $ConfigBlock += "Remove-Item Env:AWS_ACCESS_KEY_ID -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue`n"
+    $ConfigBlock += "Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue`n"
 } else {
     # Using IAM/SSO - unset API key that might interfere
     $ConfigBlock += "Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue`n"
