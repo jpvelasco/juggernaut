@@ -473,11 +473,12 @@ generate_config_block() {
                 config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$keychain_cmd"$'\n'
             fi
         else
-            # Store directly in profile (legacy behavior)
+            # Store directly in profile — quote to prevent shell metacharacter interpretation
+            local escaped_api_key="${api_key//\"/\\\"}"
             if [[ "$shell" == "fish" ]]; then
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK $api_key"$'\n'
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK \"$escaped_api_key\""$'\n'
             else
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$api_key"$'\n'
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=\"$escaped_api_key\""$'\n'
             fi
         fi
     fi

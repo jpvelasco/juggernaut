@@ -655,6 +655,26 @@ test_1m_context() {
 }
 
 #───────────────────────────────────────────────────────────────────────────────
+# API Key Quoting Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_api_key_quoting() {
+    section "API Key Quoting in Config Block"
+
+    run_test "bash config block quotes API key value" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK=\"br-test123\"'"
+
+    run_test "zsh config block quotes API key value" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK=\"br-test123\"'"
+
+    run_test "bash config block quotes API key with dollar sign" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$var' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\"'"
+
+    run_test "fish config block quotes API key value" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK \"br-test123\"'"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -686,6 +706,7 @@ main() {
     test_install_script
     test_capabilities
     test_1m_context
+    test_api_key_quoting
     test_required_files
     test_json_validity
     test_unified_entry_point
