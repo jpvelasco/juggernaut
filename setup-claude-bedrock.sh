@@ -600,8 +600,10 @@ detect_existing_sonnet_model() {
 # Detect existing 1M context setting from config file
 detect_existing_1m_context() {
     local profile_file=$1
-    if grep -q "# 1MContext: true" "$profile_file" 2>/dev/null; then
-        echo "true"
+    if [[ -f "$profile_file" ]]; then
+        if grep -q "# 1MContext: true" "$profile_file" 2>/dev/null; then
+            echo "true"
+        fi
     fi
 }
 
