@@ -504,11 +504,13 @@ generate_config_block() {
             fi
         else
             # Store directly in profile — single-quote to prevent all shell expansion
-            # Escape embedded single quotes: ' → '\'' (end quote, escaped quote, start quote)
-            local escaped_api_key="${api_key//\'/\'\\\'\'}"
             if [[ "$shell" == "fish" ]]; then
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK '$escaped_api_key'"$'\n'
+                # Fish 3.0+ supports \' inside single quotes
+                local fish_escaped_key="${api_key//\'/\\\'}"
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK '$fish_escaped_key'"$'\n'
             else
+                # POSIX/bash: escape embedded single quotes: ' → '\'' (end quote, escaped quote, start quote)
+                local escaped_api_key="${api_key//\'/\'\\\'\'}"
                 config+="$syntax AWS_BEARER_TOKEN_BEDROCK='$escaped_api_key'"$'\n'
             fi
         fi

@@ -36,8 +36,9 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 
-# Script directory
+# Script directory (and an eval-safe quoted version for run_test)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR_Q="$(printf '%q' "$SCRIPT_DIR")"
 
 #───────────────────────────────────────────────────────────────────────────────
 # Test Framework
@@ -46,6 +47,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 run_test() {
     local test_name=$1
     local test_command=$2
+
+    # Auto-quote SCRIPT_DIR paths so eval handles spaces correctly
+    test_command="${test_command//"$SCRIPT_DIR"/$SCRIPT_DIR_Q}"
 
     printf "  %-45s " "$test_name"
     if eval "$test_command" >/dev/null 2>&1; then
@@ -700,6 +704,25 @@ test_api_key_quoting() {
     # Backtick must NOT be expanded in the generated config
     run_test "bash config preserves literal backtick" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\`id\`' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\`id\`'"
+
+    # Embedded single quote must be escaped correctly — verify by evaluating the output
+    # Use helper functions to avoid eval quoting nightmares with nested single quotes
+
+    # bash/zsh: eval the export line and confirm the variable round-trips correctly
+    _test_bash_quote_escape() {
+        local line
+        line=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 | grep '^export AWS_BEARER_TOKEN_BEDROCK=')
+        eval "$line"
+        [[ "$AWS_BEARER_TOKEN_BEDROCK" == "br-te'st" ]]
+    }
+    run_test "bash config escapes embedded single quote" "_test_bash_quote_escape"
+
+    # fish: verify the output contains \' (backslash-quote) escape for the embedded quote
+    _test_fish_quote_escape() {
+        "$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 \
+            | grep 'AWS_BEARER_TOKEN_BEDROCK' | grep -qF "\'"
+    }
+    run_test "fish config escapes embedded single quote" "_test_fish_quote_escape"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -848,6 +871,10 @@ test_credential_conflict_prevention() {
 
     run_test "fish api-key erases AWS_PROFILE" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_PROFILE'"
+
+    # Fish IAM mode should erase API key var
+    run_test "fish iam erases AWS_BEARER_TOKEN_BEDROCK" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=iam --dry-run --force 2>&1 | grep -q 'set -e AWS_BEARER_TOKEN_BEDROCK'"
 
     # api-key mode should warn (not fail) when aws is missing
     if command -v aws &>/dev/null; then

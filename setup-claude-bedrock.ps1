@@ -56,7 +56,7 @@ if (Test-Path $ConfigFile) {
 }
 
 #───────────────────────────────────────────────────────────────────────────────
-# Pre-flight Dependency Checks
+# Helpers
 #───────────────────────────────────────────────────────────────────────────────
 
 function ConvertFrom-SecureStringPlainText {
@@ -708,7 +708,7 @@ if ($Storage -eq "keychain") {
 
 # Unset conflicting auth variables to prevent credential conflicts
 if ($Auth -eq "api-key") {
-    # Using API key - unset AWS STS credentials that might interfere
+    # Using API key - unset IAM/profile variables that might interfere
     $ConfigBlock += "Remove-Item Env:AWS_ACCESS_KEY_ID -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue`n"
@@ -755,7 +755,7 @@ if ($Auth -eq "api-key") {
         $retrievalCmd = Get-KeychainRetrievalCommand
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = $retrievalCmd`n"
     } else {
-        # Store directly in profile (legacy behavior)
+        # Store directly in profile
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
     }
 }
