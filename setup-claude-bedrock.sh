@@ -655,7 +655,7 @@ warn_custom_model() {
     local model_type=$2
 
     echo ""
-    echo "⚠️  Custom $model_type model: $model_id"
+    echo "Warning: Custom $model_type model: $model_id"
     echo "   Cannot validate without working AWS credentials."
     echo "   Ensure this model is available in your Bedrock region."
     echo ""

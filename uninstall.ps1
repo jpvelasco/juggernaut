@@ -4,13 +4,13 @@
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🗑️  Removing Claude Code Bedrock configuration..." -ForegroundColor Cyan
+Write-Host "Removing Claude Code Bedrock configuration..." -ForegroundColor Cyan
 
 # Determine PowerShell profile path
 $ProfilePath = $PROFILE.CurrentUserAllHosts
 
 if (-not (Test-Path $ProfilePath)) {
-    Write-Host "⏭️  PowerShell profile not found ($ProfilePath)" -ForegroundColor Yellow
+    Write-Host "PowerShell profile not found ($ProfilePath)" -ForegroundColor Yellow
     exit 0
 }
 
@@ -30,14 +30,14 @@ if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
     $ProfileContent = $ProfileContent -replace "(\r?\n){3,}", "`n`n"
     Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline
     Add-Content -Path $ProfilePath -Value ""
-    Write-Host "✅ Configuration removed from $ProfilePath" -ForegroundColor Green
+    Write-Host "Configuration removed from $ProfilePath" -ForegroundColor Green
 } else {
-    Write-Host "⏭️  No configuration found in $ProfilePath" -ForegroundColor Yellow
+    Write-Host "No configuration found in $ProfilePath" -ForegroundColor Yellow
 }
 
 Write-Host ""
-Write-Host "📋 Next steps:" -ForegroundColor Cyan
+Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "1. Restart PowerShell or run: . `$PROFILE"
 Write-Host "2. Claude Code will now use Anthropic's direct API (requires login)"
 Write-Host ""
-Write-Host "✨ Uninstall complete!" -ForegroundColor Green
+Write-Host "Uninstall complete!" -ForegroundColor Green
