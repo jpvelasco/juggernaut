@@ -35,7 +35,7 @@ for arg in "$@"; do
             ;;
         --version|-v)
             cat "$_JUGGERNAUT_SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
-            # exit 0 is fallback when script is executed, not sourced
+            # return fails when not sourced, so exit is the reachable fallback
             # shellcheck disable=SC2317
             return 0 2>/dev/null || exit 0
             ;;
@@ -57,7 +57,7 @@ Examples:
   source apply-config.sh
   source apply-config.sh --region=us-east-1
 EOF
-            # exit 0 is fallback when script is executed, not sourced
+            # return fails when not sourced, so exit is the reachable fallback
             # shellcheck disable=SC2317
             return 0 2>/dev/null || exit 0
             ;;
@@ -70,7 +70,7 @@ done
 
 if [[ ! -f "$_JUGGERNAUT_CONFIG_FILE" ]]; then
     echo "Error: Config file not found: $_JUGGERNAUT_CONFIG_FILE" >&2
-    # exit 1 is fallback when script is executed, not sourced
+    # return fails when not sourced, so exit is the reachable fallback
     # shellcheck disable=SC2317
     return 1 2>/dev/null || exit 1
 fi
@@ -135,7 +135,7 @@ if [[ -n "$_JUGGERNAUT_ENV_KEYS" ]]; then
     done <<< "$_JUGGERNAUT_ENV_KEYS"
 else
     echo "Error: Could not load environment variables from config" >&2
-    # exit 1 is fallback when script is executed, not sourced
+    # return fails when not sourced, so exit is the reachable fallback
     # shellcheck disable=SC2317
     return 1 2>/dev/null || exit 1
 fi

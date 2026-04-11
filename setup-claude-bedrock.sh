@@ -170,6 +170,16 @@ load_config() {
     DEFAULT_AUTH=$(json_get "$CONFIG_FILE" '.defaults.auth_mode')
 }
 
+# Check JSON parser availability before loading config
+if ! command -v jq &>/dev/null && ! command -v python3 &>/dev/null; then
+    echo "Error: jq or python3 is required for JSON parsing" >&2
+    echo "  Install jq:      https://jqlang.github.io/jq/download/" >&2
+    echo "  Or python3:      https://www.python.org/downloads/" >&2
+    exit 1
+elif ! command -v jq &>/dev/null; then
+    echo "Note: jq not found, using python3 for JSON parsing (jq is faster)" >&2
+fi
+
 # Initialize config arrays
 declare -A BEDROCK_CONFIG
 declare -a CONFIG_KEY_ORDER=(AWS_REGION)  # AWS_REGION always first, rest loaded from JSON
@@ -182,33 +192,17 @@ load_config
 # Pre-flight Dependency Checks
 #───────────────────────────────────────────────────────────────────────────────
 
-preflight_checks() {
+preflight_check_aws() {
     local auth_mode=$1
-    local errors=0
 
-    # JSON parser: need jq or python3
-    if ! command -v jq &>/dev/null && ! command -v python3 &>/dev/null; then
-        echo "Error: jq or python3 is required for JSON parsing" >&2
-        echo "  Install jq:      https://jqlang.github.io/jq/download/" >&2
-        echo "  Or python3:      https://www.python.org/downloads/" >&2
-        errors=1
-    elif ! command -v jq &>/dev/null; then
-        echo "Note: jq not found, using python3 for JSON parsing (jq is faster)" >&2
-    fi
-
-    # AWS CLI: required for IAM mode
     if [[ "$auth_mode" == "iam" ]] && ! command -v aws &>/dev/null; then
         echo "Error: aws CLI is required for IAM authentication mode" >&2
         echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2
-        errors=1
-    elif ! command -v aws &>/dev/null; then
-        echo "Note: aws CLI not found (needed if you switch to IAM mode later)" >&2
-    fi
-
-    if [[ "$errors" -gt 0 ]]; then
         echo "" >&2
         echo "Missing required dependencies. Install them and try again." >&2
         exit 1
+    elif ! command -v aws &>/dev/null; then
+        echo "Note: aws CLI not found (needed if you switch to IAM mode later)" >&2
     fi
 }
 
@@ -509,12 +503,13 @@ generate_config_block() {
                 config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$keychain_cmd"$'\n'
             fi
         else
-            # Store directly in profile — quote to prevent shell metacharacter interpretation
-            local escaped_api_key="${api_key//\"/\\\"}"
+            # Store directly in profile — single-quote to prevent all shell expansion
+            # Escape embedded single quotes: ' → '\'' (end quote, escaped quote, start quote)
+            local escaped_api_key="${api_key//\'/\'\\\'\'}"
             if [[ "$shell" == "fish" ]]; then
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK \"$escaped_api_key\""$'\n'
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK '$escaped_api_key'"$'\n'
             else
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=\"$escaped_api_key\""$'\n'
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK='$escaped_api_key'"$'\n'
             fi
         fi
     fi
@@ -1215,7 +1210,7 @@ main() {
     fi
 
     # Check dependencies before proceeding
-    preflight_checks "$AUTH_MODE"
+    preflight_check_aws "$AUTH_MODE"
 
     # Detect existing custom models if user didn't explicitly specify
     local config_file="${SHELL_CONFIGS[$SHELL_TYPE]}"

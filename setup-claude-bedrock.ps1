@@ -567,11 +567,14 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
                 Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
                 Write-Host ""
                 $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-                $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
+                $bstr = [IntPtr]::Zero
                 try {
+                    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
                     $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
                 } finally {
-                    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+                    if ($bstr -ne [IntPtr]::Zero) {
+                        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+                    }
                 }
                 if ([string]::IsNullOrEmpty($BedrockKey)) {
                     Write-Host "Error: API key cannot be empty" -ForegroundColor Red
@@ -594,11 +597,14 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
         Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
         Write-Host ""
         $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
+        $bstr = [IntPtr]::Zero
         try {
+            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
             $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
         } finally {
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+            if ($bstr -ne [IntPtr]::Zero) {
+                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+            }
         }
 
         if ([string]::IsNullOrEmpty($BedrockKey)) {
