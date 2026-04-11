@@ -675,6 +675,51 @@ test_api_key_quoting() {
 }
 
 #───────────────────────────────────────────────────────────────────────────────
+# Version Sync Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_version_sync() {
+    section "Version Sync"
+
+    local file_version json_version
+
+    file_version=$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')
+
+    # Use jq if available, fall back to python3
+    if command -v jq &>/dev/null; then
+        json_version=$(jq -r '.version' "$SCRIPT_DIR/bedrock-config.json" | tr -d '[:space:]')
+    elif command -v python3 &>/dev/null; then
+        json_version=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" "$SCRIPT_DIR/bedrock-config.json" | tr -d '[:space:]')
+    else
+        skip_test "VERSION matches bedrock-config.json" "jq or python3 required"
+        return
+    fi
+
+    run_test "VERSION matches bedrock-config.json" \
+        "[[ '$file_version' == '$json_version' ]]"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Pre-flight Check Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_preflight_checks() {
+    section "Pre-flight Dependency Checks"
+
+    # When both jq and python3 are missing, setup should fail
+    run_test "fails when neither jq nor python3 available" \
+        "! PATH=/usr/bin:/bin env -u JQ_PATH bash -c 'export PATH=\$(echo \$PATH | tr \":\" \"\n\" | grep -v -E \"(jq|python)\" | tr \"\n\" \":\"); $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force' 2>&1"
+
+    # When --auth=iam and aws CLI is missing, setup should fail
+    run_test "fails when --auth=iam and aws CLI missing" \
+        "! PATH=\$(echo \$PATH | tr ':' '\n' | grep -v aws | tr '\n' ':') $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1"
+
+    # Normal invocation should pass preflight (jq or python3 exists in CI)
+    run_test "passes preflight with normal PATH" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -710,6 +755,8 @@ main() {
     test_required_files
     test_json_validity
     test_unified_entry_point
+    test_version_sync
+    test_preflight_checks
 
     # Summary
     echo ""
