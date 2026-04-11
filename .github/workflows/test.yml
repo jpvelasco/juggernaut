@@ -9,9 +9,34 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
+
+      - name: Verify version sync
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          JSON_VERSION=$(jq -r '.version' bedrock-config.json | tr -d '[:space:]')
+          if [[ "$FILE_VERSION" != "$JSON_VERSION" ]]; then
+            echo "ERROR: VERSION ($FILE_VERSION) != bedrock-config.json ($JSON_VERSION)"
+            exit 1
+          fi
+          echo "Version sync OK: $FILE_VERSION"
+
   test-unix:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: lint
     strategy:
       fail-fast: false
       matrix:
@@ -111,6 +136,7 @@ jobs:
   test-windows-powershell:
     name: Test on Windows (PowerShell)
     runs-on: windows-latest
+    needs: lint
 
     steps:
       - name: Checkout
@@ -175,6 +201,7 @@ jobs:
   test-windows-gitbash:
     name: Test on Windows (Git Bash)
     runs-on: windows-latest
+    needs: lint
 
     steps:
       - name: Checkout
