@@ -55,6 +55,33 @@ if (Test-Path $ConfigFile) {
     }
 }
 
+#───────────────────────────────────────────────────────────────────────────────
+# Pre-flight Dependency Checks
+#───────────────────────────────────────────────────────────────────────────────
+
+function Test-Prerequisites {
+    param(
+        [string]$AuthMode
+    )
+
+    $errors = 0
+
+    # AWS CLI: required for IAM mode
+    if ($AuthMode -eq "iam" -and -not (Get-Command aws -ErrorAction SilentlyContinue)) {
+        Write-Host "Error: aws CLI is required for IAM authentication mode" -ForegroundColor Red
+        Write-Host "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+        $errors++
+    } elseif (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+        Write-Host "Note: aws CLI not found (needed if you switch to IAM mode later)" -ForegroundColor Yellow
+    }
+
+    if ($errors -gt 0) {
+        Write-Host ""
+        Write-Host "Missing required dependencies. Install them and try again." -ForegroundColor Red
+        exit 1
+    }
+}
+
 # Detect existing auth mode from profile file
 # Returns: "iam", "api-key", or $null if not found
 function Get-ExistingAuthMode {
@@ -494,6 +521,9 @@ if ($Help) {
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"
     exit 0
 }
+
+# Pre-flight dependency checks
+Test-Prerequisites -AuthMode $Auth
 
 # Handle API key for api-key auth mode
 if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
