@@ -117,6 +117,8 @@ json_get_array() {
     local result
 
     if command -v jq >/dev/null 2>&1; then
+        # $query[] is jq syntax, not bash array expansion
+        # shellcheck disable=SC1087
         result=$(jq -r "$query[]" "$file" 2>/dev/null) || return 1
         printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
@@ -279,7 +281,7 @@ KEYCHAIN_ACCOUNT="api-key"
 
 # Detect if keychain is available on this system
 keychain_available() {
-    local os=$(detect_os)
+    local os; os=$(detect_os)
     case "$os" in
         macos)
             command -v security >/dev/null 2>&1
@@ -300,7 +302,7 @@ keychain_available() {
 # Store API key in system keychain
 keychain_store() {
     local key=$1
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     case "$os" in
         macos)
@@ -327,7 +329,7 @@ keychain_store() {
 
 # Retrieve API key from system keychain
 keychain_get() {
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     case "$os" in
         macos)
@@ -372,7 +374,7 @@ keychain_get() {
 
 # Delete API key from system keychain
 keychain_delete() {
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     case "$os" in
         macos)
@@ -390,7 +392,7 @@ keychain_delete() {
 # Generate the shell command to retrieve key from keychain
 keychain_get_command() {
     local shell=$1
-    local os=$(detect_os)
+    local os; os=$(detect_os)
     local cmd=""
 
     case "$os" in
@@ -536,7 +538,7 @@ sed_inplace() {
 
 backup_config_file() {
     local config_file=$1
-    local backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+    local backup_file; backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
 
     if [[ -f "$config_file" ]]; then
         if cp "$config_file" "$backup_file" 2>/dev/null; then
@@ -937,7 +939,7 @@ validate_inputs() {
     # Check keychain availability when using keychain storage
     if [[ "$STORAGE_MODE" == "keychain" ]]; then
         if ! keychain_available; then
-            local os=$(detect_os)
+            local os; os=$(detect_os)
             echo "Error: Keychain storage not available on this system" >&2
             echo "" >&2
             case "$os" in
@@ -1001,7 +1003,7 @@ validate_inputs() {
                     echo "Get your Bedrock API key from:"
                     echo "  AWS Console → Amazon Bedrock → API keys"
                     echo ""
-                    read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
+                    read -rs -p "Enter your Bedrock API key: " BEDROCK_API_KEY
                     echo ""
                     BEDROCK_API_KEY="${BEDROCK_API_KEY%"${BEDROCK_API_KEY##*[![:space:]]}"}"
                     BEDROCK_API_KEY="${BEDROCK_API_KEY#"${BEDROCK_API_KEY%%[![:space:]]*}"}"
@@ -1025,7 +1027,7 @@ validate_inputs() {
             echo "Get your Bedrock API key from:"
             echo "  AWS Console → Amazon Bedrock → API keys"
             echo ""
-            read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
+            read -rs -p "Enter your Bedrock API key: " BEDROCK_API_KEY
             echo ""  # newline after hidden input
 
             # Strip any trailing whitespace/carriage returns (common from copy-paste)
@@ -1060,7 +1062,7 @@ setup_shell() {
     local shell=$1
     local config_file="${SHELL_CONFIGS[$shell]}"
     local display_name="${SHELL_DISPLAY_NAMES[$shell]}"
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     # Create parent directory for fish
     if [[ "$shell" == "fish" && "$DRY_RUN" == false ]]; then
@@ -1283,7 +1285,7 @@ main() {
 
     # Platform-aware storage default for new installs (macOS/Windows default to keychain)
     if [[ "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
-        local os=$(detect_os)
+        local os; os=$(detect_os)
         if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
             # Only change default if there's no existing config (new install)
             if ! grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
@@ -1296,7 +1298,7 @@ main() {
 
     # Offer to migrate plaintext API keys to keychain on macOS/Windows
     if [[ "$AUTH_MODE" == "api-key" && "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
-        local os=$(detect_os)
+        local os; os=$(detect_os)
         if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
             if [[ -f "$config_file" ]] && grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
                 if ! grep -q "# Storage: keychain" "$config_file" 2>/dev/null && keychain_available; then

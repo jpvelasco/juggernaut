@@ -86,7 +86,7 @@ cleanup_keychain() {
         return 0
     fi
 
-    local os=$(detect_os)
+    local os; os=$(detect_os)
     case "$os" in
         macos)
             security delete-generic-password -s "$keychain_service" -a "$keychain_account" 2>/dev/null || true
