@@ -177,6 +177,40 @@ declare -a VALID_REGIONS
 load_config
 
 #───────────────────────────────────────────────────────────────────────────────
+# Pre-flight Dependency Checks
+#───────────────────────────────────────────────────────────────────────────────
+
+preflight_checks() {
+    local auth_mode=$1
+    local errors=0
+
+    # JSON parser: need jq or python3
+    if ! command -v jq &>/dev/null && ! command -v python3 &>/dev/null; then
+        echo "Error: jq or python3 is required for JSON parsing" >&2
+        echo "  Install jq:      https://jqlang.github.io/jq/download/" >&2
+        echo "  Or python3:      https://www.python.org/downloads/" >&2
+        errors=1
+    elif ! command -v jq &>/dev/null; then
+        echo "Note: jq not found, using python3 for JSON parsing (jq is faster)" >&2
+    fi
+
+    # AWS CLI: required for IAM mode
+    if [[ "$auth_mode" == "iam" ]] && ! command -v aws &>/dev/null; then
+        echo "Error: aws CLI is required for IAM authentication mode" >&2
+        echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2
+        errors=1
+    elif ! command -v aws &>/dev/null; then
+        echo "Note: aws CLI not found (needed if you switch to IAM mode later)" >&2
+    fi
+
+    if [[ "$errors" -gt 0 ]]; then
+        echo "" >&2
+        echo "Missing required dependencies. Install them and try again." >&2
+        exit 1
+    fi
+}
+
+#───────────────────────────────────────────────────────────────────────────────
 # Detection Functions
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -1177,6 +1211,9 @@ main() {
     if [[ -z "$AUTH_MODE" ]]; then
         AUTH_MODE="${DEFAULT_AUTH:-iam}"
     fi
+
+    # Check dependencies before proceeding
+    preflight_checks "$AUTH_MODE"
 
     # Detect existing custom models if user didn't explicitly specify
     local config_file="${SHELL_CONFIGS[$SHELL_TYPE]}"
