@@ -89,6 +89,9 @@ _tmpbin_cleanup() {
     unset _TMPBIN _REAL_BASH
 }
 
+# Core tools needed by setup-claude-bedrock.sh in restricted-PATH tests
+_TMPBIN_CORE_CMDS=(grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename)
+
 #───────────────────────────────────────────────────────────────────────────────
 # Test Cases
 #───────────────────────────────────────────────────────────────────────────────
@@ -727,9 +730,8 @@ test_preflight_checks() {
     section "Pre-flight Dependency Checks"
 
     # When both jq and python3 are missing, setup should fail with clear error
-    # Uses _tmpbin_create wrapper pattern — deliberately excludes jq and python3
     run_test "fails when neither jq nor python3 available" \
-        "_tmpbin_create grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename &&
+        "_tmpbin_create \"\${_TMPBIN_CORE_CMDS[@]}\" &&
          PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1 |
          grep -q 'jq or python3 is required';
          rc=\$?; _tmpbin_cleanup; [ \$rc -eq 0 ]"
@@ -737,7 +739,7 @@ test_preflight_checks() {
     # When --auth=iam and aws CLI is missing, setup should fail
     if command -v aws &>/dev/null; then
         run_test "fails when --auth=iam and aws CLI missing" \
-            "_tmpbin_create jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename &&
+            "_tmpbin_create jq python3 \"\${_TMPBIN_CORE_CMDS[@]}\" &&
              PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1;
              rc=\$?; _tmpbin_cleanup; [ \$rc -ne 0 ]"
     else
@@ -845,7 +847,7 @@ test_credential_conflict_prevention() {
     # api-key mode should warn (not fail) when aws is missing
     if command -v aws &>/dev/null; then
         run_test "api-key mode warns (not fails) without aws" \
-            "_tmpbin_create jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename &&
+            "_tmpbin_create jq python3 \"\${_TMPBIN_CORE_CMDS[@]}\" &&
              PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1;
              rc=\$?; _tmpbin_cleanup; [ \$rc -eq 0 ]"
     else

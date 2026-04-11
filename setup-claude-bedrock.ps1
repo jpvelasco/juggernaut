@@ -59,26 +59,34 @@ if (Test-Path $ConfigFile) {
 # Pre-flight Dependency Checks
 #───────────────────────────────────────────────────────────────────────────────
 
+function ConvertFrom-SecureStringPlainText {
+    param([SecureString]$Secure)
+    $bstr = [IntPtr]::Zero
+    try {
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
+        return [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+    }
+}
+
 function Test-Prerequisites {
     param(
         [string]$AuthMode
     )
 
-    $errors = 0
+    $hasAws = [bool](Get-Command aws -ErrorAction SilentlyContinue)
 
-    # AWS CLI: required for IAM mode
-    if ($AuthMode -eq "iam" -and -not (Get-Command aws -ErrorAction SilentlyContinue)) {
+    if ($AuthMode -eq "iam" -and -not $hasAws) {
         Write-Host "Error: aws CLI is required for IAM authentication mode" -ForegroundColor Red
         Write-Host "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
-        $errors++
-    } elseif (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
-        Write-Host "Note: aws CLI not found (needed if you switch to IAM mode later)" -ForegroundColor Yellow
-    }
-
-    if ($errors -gt 0) {
         Write-Host ""
         Write-Host "Missing required dependencies. Install them and try again." -ForegroundColor Red
         exit 1
+    } elseif (-not $hasAws) {
+        Write-Host "Note: aws CLI not found (needed if you switch to IAM mode later)" -ForegroundColor Yellow
     }
 }
 
@@ -567,15 +575,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
                 Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
                 Write-Host ""
                 $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-                $bstr = [IntPtr]::Zero
-                try {
-                    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
-                    $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-                } finally {
-                    if ($bstr -ne [IntPtr]::Zero) {
-                        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-                    }
-                }
+                $BedrockKey = ConvertFrom-SecureStringPlainText $SecureKey
                 if ([string]::IsNullOrEmpty($BedrockKey)) {
                     Write-Host "Error: API key cannot be empty" -ForegroundColor Red
                     exit 1
@@ -597,15 +597,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
         Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
         Write-Host ""
         $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-        $bstr = [IntPtr]::Zero
-        try {
-            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
-            $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-        } finally {
-            if ($bstr -ne [IntPtr]::Zero) {
-                [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-            }
-        }
+        $BedrockKey = ConvertFrom-SecureStringPlainText $SecureKey
 
         if ([string]::IsNullOrEmpty($BedrockKey)) {
             Write-Host "Error: API key cannot be empty" -ForegroundColor Red
