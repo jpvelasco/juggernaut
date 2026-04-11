@@ -165,11 +165,15 @@ print('\n'.join(obj.keys()))
     echo "To make it permanent, run: ./setup-claude-bedrock.sh"
 }
 
-# Run and clean up
-_juggernaut_apply_config "$@"
-_juggernaut_rc=$?
-unset -f _juggernaut_apply_config _juggernaut_get_json_value _juggernaut_get_json_keys
-return "$_juggernaut_rc" 2>/dev/null
-# Reached only when executed directly (not sourced) — return fails, so exit runs
-# shellcheck disable=SC2317
-exit "$_juggernaut_rc"
+# Run and clean up — avoid temp variable that would leak into user's shell when sourced
+if _juggernaut_apply_config "$@"; then
+    unset -f _juggernaut_apply_config _juggernaut_get_json_value _juggernaut_get_json_keys
+    return 0 2>/dev/null
+    # shellcheck disable=SC2317
+    exit 0
+else
+    unset -f _juggernaut_apply_config _juggernaut_get_json_value _juggernaut_get_json_keys
+    return 1 2>/dev/null
+    # shellcheck disable=SC2317
+    exit 1
+fi
