@@ -11,9 +11,11 @@
 #───────────────────────────────────────────────────────────────────────────────
 
 # Get script directory (works when sourced)
-if [[ -n "$BASH_SOURCE" ]]; then
+if [[ -n "${BASH_SOURCE[0]+x}" ]]; then
     _JUGGERNAUT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 elif [[ -n "$ZSH_VERSION" ]]; then
+    # ${(%):-%x} is zsh syntax for current script path
+    # shellcheck disable=SC2296
     _JUGGERNAUT_SCRIPT_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
 else
     _JUGGERNAUT_SCRIPT_DIR="$(pwd)"
@@ -33,6 +35,8 @@ for arg in "$@"; do
             ;;
         --version|-v)
             cat "$_JUGGERNAUT_SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
+            # exit 0 is fallback when script is executed, not sourced
+            # shellcheck disable=SC2317
             return 0 2>/dev/null || exit 0
             ;;
         --help|-h)
@@ -53,6 +57,8 @@ Examples:
   source apply-config.sh
   source apply-config.sh --region=us-east-1
 EOF
+            # exit 0 is fallback when script is executed, not sourced
+            # shellcheck disable=SC2317
             return 0 2>/dev/null || exit 0
             ;;
     esac
@@ -64,6 +70,8 @@ done
 
 if [[ ! -f "$_JUGGERNAUT_CONFIG_FILE" ]]; then
     echo "Error: Config file not found: $_JUGGERNAUT_CONFIG_FILE" >&2
+    # exit 1 is fallback when script is executed, not sourced
+    # shellcheck disable=SC2317
     return 1 2>/dev/null || exit 1
 fi
 
@@ -127,6 +135,8 @@ if [[ -n "$_JUGGERNAUT_ENV_KEYS" ]]; then
     done <<< "$_JUGGERNAUT_ENV_KEYS"
 else
     echo "Error: Could not load environment variables from config" >&2
+    # exit 1 is fallback when script is executed, not sourced
+    # shellcheck disable=SC2317
     return 1 2>/dev/null || exit 1
 fi
 
@@ -134,7 +144,8 @@ fi
 if [[ -n "$_JUGGERNAUT_REGION" ]]; then
     export AWS_REGION="$_JUGGERNAUT_REGION"
 else
-    export AWS_REGION="$(_juggernaut_get_json_value '.defaults.region')"
+    _JUGGERNAUT_DEFAULT_REGION="$(_juggernaut_get_json_value '.defaults.region')"
+    export AWS_REGION="$_JUGGERNAUT_DEFAULT_REGION"
 fi
 
 # Display applied configuration
@@ -142,6 +153,8 @@ echo "Configuration applied:"
 echo "  AWS_REGION=$AWS_REGION"
 while IFS= read -r _JUGGERNAUT_KEY; do
     if [[ -n "$ZSH_VERSION" ]]; then
+        # ${(P)...} is zsh indirect expansion
+        # shellcheck disable=SC2296
         echo "  ${_JUGGERNAUT_KEY}=${(P)_JUGGERNAUT_KEY}"
     else
         echo "  ${_JUGGERNAUT_KEY}=${!_JUGGERNAUT_KEY}"
