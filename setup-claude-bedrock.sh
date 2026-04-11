@@ -1212,6 +1212,8 @@ main() {
     # Check dependencies before proceeding
     preflight_check_aws "$AUTH_MODE"
 
+    local os; os=$(detect_os)
+
     # Detect existing custom models if user didn't explicitly specify
     local config_file="${SHELL_CONFIGS[$SHELL_TYPE]}"
     if [[ "$MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
@@ -1280,7 +1282,6 @@ main() {
 
     # Platform-aware storage default for new installs (macOS/Windows default to keychain)
     if [[ "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
-        local os; os=$(detect_os)
         if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
             # Only change default if there's no existing config (new install)
             if ! grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
@@ -1293,7 +1294,6 @@ main() {
 
     # Offer to migrate plaintext API keys to keychain on macOS/Windows
     if [[ "$AUTH_MODE" == "api-key" && "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
-        local os; os=$(detect_os)
         if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
             if [[ -f "$config_file" ]] && grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
                 if ! grep -q "# Storage: keychain" "$config_file" 2>/dev/null && keychain_available; then
