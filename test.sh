@@ -709,6 +709,7 @@ test_api_key_quoting() {
     # Use helper functions to avoid eval quoting nightmares with nested single quotes
 
     # bash/zsh: eval the export line and confirm the variable round-trips correctly
+    # shellcheck disable=SC2317
     _test_bash_quote_escape() {
         local line
         line=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 | grep '^export AWS_BEARER_TOKEN_BEDROCK=')
@@ -718,6 +719,7 @@ test_api_key_quoting() {
     run_test "bash config escapes embedded single quote" "_test_bash_quote_escape"
 
     # fish: verify the output contains \' (backslash-quote) escape for the embedded quote
+    # shellcheck disable=SC2317
     _test_fish_quote_escape() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 \
             | grep 'AWS_BEARER_TOKEN_BEDROCK' | grep -qF "\'"
