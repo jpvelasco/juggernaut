@@ -706,15 +706,22 @@ test_preflight_checks() {
     section "Pre-flight Dependency Checks"
 
     # When both jq and python3 are missing, setup should fail with clear error
+    # Use TMPBIN with symlinks to essential tools, deliberately excluding jq and python3
     run_test "fails when neither jq nor python3 available" \
-        "PATH=/usr/bin:/bin env -u JQ_PATH bash -c 'export PATH=\$(echo \$PATH | tr \":\" \"\n\" | grep -v -E \"(jq|python)\" | tr \"\n\" \":\"); $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1' 2>&1 | grep -q 'jq or python3 is required'"
+        "TMPBIN=\$(mktemp -d) &&
+         for cmd in bash grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename; do
+             p=\$(command -v \$cmd 2>/dev/null) && [ -n \"\$p\" ] && ln -sf \"\$p\" \"\$TMPBIN/\$cmd\" 2>/dev/null;
+         done &&
+         PATH=\"\$TMPBIN\" \"\$TMPBIN/bash\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1 |
+         grep -q 'jq or python3 is required';
+         rc=\$?; rm -rf \"\$TMPBIN\"; [ \$rc -eq 0 ]"
 
     # When --auth=iam and aws CLI is missing, setup should fail
     # Create a temp PATH that has essential tools but not aws
     if command -v aws &>/dev/null; then
         run_test "fails when --auth=iam and aws CLI missing" \
             "TMPBIN=\$(mktemp -d) &&
-             for cmd in bash jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink command id uname; do
+             for cmd in bash jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink command id uname basename; do
                  p=\$(command -v \$cmd 2>/dev/null) && [ -n \"\$p\" ] && ln -sf \"\$p\" \"\$TMPBIN/\$cmd\" 2>/dev/null;
              done &&
              PATH=\"\$TMPBIN\" \"\$TMPBIN/bash\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1;
@@ -825,7 +832,7 @@ test_credential_conflict_prevention() {
     if command -v aws &>/dev/null; then
         run_test "api-key mode warns (not fails) without aws" \
             "TMPBIN=\$(mktemp -d) &&
-             for cmd in bash jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink command id uname; do
+             for cmd in bash jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink command id uname basename; do
                  p=\$(command -v \$cmd 2>/dev/null) && [ -n \"\$p\" ] && ln -sf \"\$p\" \"\$TMPBIN/\$cmd\" 2>/dev/null;
              done &&
              PATH=\"\$TMPBIN\" \"\$TMPBIN/bash\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1;
