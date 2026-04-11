@@ -792,21 +792,22 @@ test_credential_conflict_prevention() {
     section "Credential Conflict Prevention in Config Block"
 
     # API key mode should unset all IAM-related vars
+    # All four vars are on one unset line, so grep for the unset line then check each var
     run_test "api-key mode unsets AWS_ACCESS_KEY_ID" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_ACCESS_KEY_ID'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_ACCESS_KEY_ID'"
 
     run_test "api-key mode unsets AWS_SECRET_ACCESS_KEY" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_SECRET_ACCESS_KEY'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_SECRET_ACCESS_KEY'"
 
     run_test "api-key mode unsets AWS_SESSION_TOKEN" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_SESSION_TOKEN'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_SESSION_TOKEN'"
 
     run_test "api-key mode unsets AWS_PROFILE" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_PROFILE'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_PROFILE'"
 
     # IAM mode should unset API key var
     run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep -q 'unset AWS_BEARER_TOKEN_BEDROCK'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_BEARER_TOKEN_BEDROCK'"
 
     # Fish uses different syntax
     run_test "fish api-key mode erases IAM vars" \
