@@ -74,7 +74,7 @@ section() {
 # Create a temporary bin directory with wrapper scripts for specified commands.
 # Uses wrappers (not symlinks) because ln -sf creates broken copies on MSYS/Git Bash.
 # Sets globals: _TMPBIN (temp directory path), _REAL_BASH (path to real bash binary).
-# shellcheck disable=SC2329 # invoked indirectly via eval in run_test
+# shellcheck disable=SC2317,SC2329 # invoked indirectly via eval in run_test
 _tmpbin_create() {
     _REAL_BASH=$(command -v bash)
     _TMPBIN=$(mktemp -d)
@@ -88,7 +88,7 @@ _tmpbin_create() {
     done
 }
 
-# shellcheck disable=SC2329 # invoked indirectly via eval in run_test
+# shellcheck disable=SC2317,SC2329 # invoked indirectly via eval in run_test
 _tmpbin_cleanup() {
     rm -rf "$_TMPBIN"
     unset _TMPBIN _REAL_BASH
