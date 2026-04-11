@@ -683,7 +683,7 @@ test_version_sync() {
 
     local file_version json_version
 
-    file_version=$(cat "$SCRIPT_DIR/VERSION" | tr -d '[:space:]')
+    file_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")
 
     # Use jq if available, fall back to python3
     if command -v jq &>/dev/null; then
