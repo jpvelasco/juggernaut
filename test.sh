@@ -654,17 +654,23 @@ test_1m_context() {
 test_api_key_quoting() {
     section "API Key Quoting in Config Block"
 
-    run_test "bash config block quotes API key value" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK=\"br-test123\"'"
+    # Single quotes prevent all shell expansion ($, backticks, etc.)
+    run_test "bash config block single-quotes API key" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q \"AWS_BEARER_TOKEN_BEDROCK='br-test123'\""
 
-    run_test "zsh config block quotes API key value" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK=\"br-test123\"'"
+    run_test "zsh config block single-quotes API key" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q \"AWS_BEARER_TOKEN_BEDROCK='br-test123'\""
 
-    run_test "bash config block quotes API key with dollar sign" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$var' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\"'"
+    run_test "fish config block single-quotes API key" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q \"AWS_BEARER_TOKEN_BEDROCK 'br-test123'\""
 
-    run_test "fish config block quotes API key value" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK \"br-test123\"'"
+    # Dollar sign must NOT be expanded in the generated config
+    run_test "bash config preserves literal dollar sign" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$var' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\\\$var'"
+
+    # Backtick must NOT be expanded in the generated config
+    run_test "bash config preserves literal backtick" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\`id\`' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\`id\`'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -699,9 +705,9 @@ test_version_sync() {
 test_preflight_checks() {
     section "Pre-flight Dependency Checks"
 
-    # When both jq and python3 are missing, setup should fail
+    # When both jq and python3 are missing, setup should fail with clear error
     run_test "fails when neither jq nor python3 available" \
-        "! PATH=/usr/bin:/bin env -u JQ_PATH bash -c 'export PATH=\$(echo \$PATH | tr \":\" \"\n\" | grep -v -E \"(jq|python)\" | tr \"\n\" \":\"); $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force' 2>&1"
+        "PATH=/usr/bin:/bin env -u JQ_PATH bash -c 'export PATH=\$(echo \$PATH | tr \":\" \"\n\" | grep -v -E \"(jq|python)\" | tr \"\n\" \":\"); $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1' 2>&1 | grep -q 'jq or python3 is required'"
 
     # When --auth=iam and aws CLI is missing, setup should fail
     # Create a temp PATH that has essential tools but not aws
@@ -802,12 +808,31 @@ test_credential_conflict_prevention() {
     run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_BEARER_TOKEN_BEDROCK'"
 
-    # Fish uses different syntax
-    run_test "fish api-key mode erases IAM vars" \
+    # Fish uses different syntax — verify all four vars
+    run_test "fish api-key erases AWS_ACCESS_KEY_ID" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_ACCESS_KEY_ID'"
 
-    run_test "fish api-key mode erases AWS_PROFILE" \
+    run_test "fish api-key erases AWS_SECRET_ACCESS_KEY" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_SECRET_ACCESS_KEY'"
+
+    run_test "fish api-key erases AWS_SESSION_TOKEN" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_SESSION_TOKEN'"
+
+    run_test "fish api-key erases AWS_PROFILE" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_PROFILE'"
+
+    # api-key mode should warn (not fail) when aws is missing
+    if command -v aws &>/dev/null; then
+        run_test "api-key mode warns (not fails) without aws" \
+            "TMPBIN=\$(mktemp -d) &&
+             for cmd in bash jq python3 grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink command id uname; do
+                 p=\$(command -v \$cmd 2>/dev/null) && [ -n \"\$p\" ] && ln -sf \"\$p\" \"\$TMPBIN/\$cmd\" 2>/dev/null;
+             done &&
+             PATH=\"\$TMPBIN\" \"\$TMPBIN/bash\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1;
+             rc=\$?; rm -rf \"\$TMPBIN\"; [ \$rc -eq 0 ]"
+    else
+        skip_test "api-key mode warns (not fails) without aws" "aws CLI not installed"
+    fi
 }
 
 #───────────────────────────────────────────────────────────────────────────────
