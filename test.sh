@@ -341,13 +341,6 @@ test_config_block_integrity() {
     run_test "config has ANTHROPIC_MODEL" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_MODEL'"
 
-    # Test: IAM mode unsets API key
-    run_test "iam mode unsets API key var" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run 2>&1 | grep -q 'unset AWS_BEARER_TOKEN_BEDROCK'"
-
-    # Test: API key mode unsets IAM vars
-    run_test "api-key mode unsets IAM vars" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q 'unset AWS_ACCESS_KEY_ID'"
 }
 
 test_error_handling() {
@@ -792,22 +785,22 @@ test_credential_conflict_prevention() {
     section "Credential Conflict Prevention in Config Block"
 
     # API key mode should unset all IAM-related vars
-    # All four vars are on one unset line, so grep for the unset line then check each var
+    # All four vars are on one unset line; match unset + var in one grep to avoid false positives
     run_test "api-key mode unsets AWS_ACCESS_KEY_ID" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_ACCESS_KEY_ID'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_ACCESS_KEY_ID'"
 
     run_test "api-key mode unsets AWS_SECRET_ACCESS_KEY" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_SECRET_ACCESS_KEY'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_SECRET_ACCESS_KEY'"
 
     run_test "api-key mode unsets AWS_SESSION_TOKEN" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_SESSION_TOKEN'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_SESSION_TOKEN'"
 
     run_test "api-key mode unsets AWS_PROFILE" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_PROFILE'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_PROFILE'"
 
     # IAM mode should unset API key var
     run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep 'unset' | grep -q 'AWS_BEARER_TOKEN_BEDROCK'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_BEARER_TOKEN_BEDROCK'"
 
     # Fish uses different syntax
     run_test "fish api-key mode erases IAM vars" \
@@ -824,15 +817,11 @@ test_credential_conflict_prevention() {
 test_uninstall() {
     section "Uninstall Script"
 
-    run_test "uninstall.sh --help works" \
-        "$SCRIPT_DIR/uninstall.sh --help"
-
-    run_test "uninstall.sh syntax valid" \
-        "bash -n $SCRIPT_DIR/uninstall.sh"
+    # Syntax and help already covered by test_syntax and test_help_flags
 
     # Running uninstall with no profile should exit gracefully
     run_test "uninstall handles missing profile" \
-        "HOME=/nonexistent $SCRIPT_DIR/uninstall.sh 2>&1; [[ \$? -eq 0 ]]"
+        "HOME=/nonexistent $SCRIPT_DIR/uninstall.sh 2>&1"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
