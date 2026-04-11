@@ -730,6 +730,111 @@ test_preflight_checks() {
 }
 
 #───────────────────────────────────────────────────────────────────────────────
+# Shellcheck Compliance Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_shellcheck_compliance() {
+    section "Shellcheck Compliance"
+
+    if ! command -v shellcheck &>/dev/null; then
+        skip_test "shellcheck all scripts" "shellcheck not installed"
+        return
+    fi
+
+    local scripts=(
+        "$SCRIPT_DIR/setup-claude-bedrock.sh"
+        "$SCRIPT_DIR/uninstall.sh"
+        "$SCRIPT_DIR/validate-setup.sh"
+        "$SCRIPT_DIR/apply-config.sh"
+        "$SCRIPT_DIR/install.sh"
+        "$SCRIPT_DIR/setup"
+    )
+
+    for script in "${scripts[@]}"; do
+        local name
+        name=$(basename "$script")
+        run_test "shellcheck $name" \
+            "shellcheck '$script'"
+    done
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Version Flag Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_version_flags() {
+    section "Version Flags"
+
+    local expected_version
+    expected_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")
+
+    run_test "setup --version shows version" \
+        "$SCRIPT_DIR/setup --version 2>&1 | grep -q '$expected_version'"
+
+    run_test "setup-claude-bedrock.sh --version" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --version 2>&1 | grep -q '$expected_version'"
+
+    run_test "validate-setup.sh --version" \
+        "$SCRIPT_DIR/validate-setup.sh --version 2>&1 | grep -q '$expected_version'"
+
+    run_test "apply-config.sh --version" \
+        "bash -c 'source $SCRIPT_DIR/apply-config.sh --version' 2>&1 | grep -q '$expected_version'"
+
+    run_test "uninstall.sh --version" \
+        "$SCRIPT_DIR/uninstall.sh --version 2>&1 | grep -q '$expected_version'"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Credential Conflict Prevention Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_credential_conflict_prevention() {
+    section "Credential Conflict Prevention in Config Block"
+
+    # API key mode should unset all IAM-related vars
+    run_test "api-key mode unsets AWS_ACCESS_KEY_ID" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_ACCESS_KEY_ID'"
+
+    run_test "api-key mode unsets AWS_SECRET_ACCESS_KEY" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_SECRET_ACCESS_KEY'"
+
+    run_test "api-key mode unsets AWS_SESSION_TOKEN" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_SESSION_TOKEN'"
+
+    run_test "api-key mode unsets AWS_PROFILE" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'unset AWS_PROFILE'"
+
+    # IAM mode should unset API key var
+    run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep -q 'unset AWS_BEARER_TOKEN_BEDROCK'"
+
+    # Fish uses different syntax
+    run_test "fish api-key mode erases IAM vars" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_ACCESS_KEY_ID'"
+
+    run_test "fish api-key mode erases AWS_PROFILE" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_PROFILE'"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Uninstall Script Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_uninstall() {
+    section "Uninstall Script"
+
+    run_test "uninstall.sh --help works" \
+        "$SCRIPT_DIR/uninstall.sh --help"
+
+    run_test "uninstall.sh syntax valid" \
+        "bash -n $SCRIPT_DIR/uninstall.sh"
+
+    # Running uninstall with no profile should exit gracefully
+    run_test "uninstall handles missing profile" \
+        "HOME=/nonexistent $SCRIPT_DIR/uninstall.sh 2>&1; [[ \$? -eq 0 ]]"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -767,6 +872,10 @@ main() {
     test_unified_entry_point
     test_version_sync
     test_preflight_checks
+    test_shellcheck_compliance
+    test_version_flags
+    test_credential_conflict_prevention
+    test_uninstall
 
     # Summary
     echo ""
