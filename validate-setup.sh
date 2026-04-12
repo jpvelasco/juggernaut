@@ -200,6 +200,8 @@ check_credential_conflicts() {
             conflicts+=("AWS_PROFILE=$AWS_PROFILE")
         fi
         if [[ "$has_aws_creds_file" == true ]]; then
+            # SC2088: tilde is intentional in user-facing display string, not a path to expand
+            # shellcheck disable=SC2088
             conflicts+=("~/.aws/credentials file exists")
         fi
 
@@ -217,6 +219,8 @@ check_credential_conflicts() {
     else
         # IAM mode - check for credentials file
         if [[ "$has_aws_creds_file" == true ]]; then
+            # SC2088: tilde is intentional in user-facing display string, not a path to expand
+            # shellcheck disable=SC2088
             echo -e "${GREEN}INFO${NC} ~/.aws/credentials file found (may be used for auth)"
         fi
         if [[ "$has_aws_profile" == true ]]; then
@@ -267,7 +271,6 @@ check_api_key_validity() {
     # Make a minimal Bedrock API call to test the key
     # Using converse API with minimal input to test authentication
     local test_result
-    local http_code
 
     # Try to invoke the model with a minimal request
     # This will fail fast if the key is invalid

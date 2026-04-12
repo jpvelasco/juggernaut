@@ -117,6 +117,8 @@ json_get_array() {
     local result
 
     if command -v jq >/dev/null 2>&1; then
+        # $query[] is jq syntax, not bash array expansion — shellcheck misreads it
+        # shellcheck disable=SC1087  # SC1087: Use braces when expanding arrays
         result=$(jq -r "$query[]" "$file" 2>/dev/null) || return 1
         printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
@@ -168,6 +170,33 @@ load_config() {
     DEFAULT_AUTH=$(json_get "$CONFIG_FILE" '.defaults.auth_mode')
 }
 
+# Check JSON parser availability before loading config (hard requirement, not skippable)
+if ! command -v jq &>/dev/null && ! command -v python3 &>/dev/null; then
+    echo "Error: jq or python3 is required for JSON parsing" >&2
+    echo "" >&2
+    case "$OSTYPE" in
+        darwin*)
+            echo "  Install jq:  brew install jq" >&2
+            echo "  Or python3:  brew install python3" >&2
+            ;;
+        linux*)
+            echo "  Install jq:  sudo apt install jq" >&2
+            echo "  Or python3:  sudo apt install python3" >&2
+            ;;
+        msys*|mingw*|cygwin*)
+            echo "  Install jq:  winget install jqlang.jq" >&2
+            echo "  Or python3:  winget install Python.Python.3" >&2
+            ;;
+        *)
+            echo "  Install jq:  https://jqlang.github.io/jq/download/" >&2
+            echo "  Or python3:  https://www.python.org/downloads/" >&2
+            ;;
+    esac
+    exit 1
+elif ! command -v jq &>/dev/null; then
+    echo "Note: jq not found, using python3 for JSON parsing (jq is faster)" >&2
+fi
+
 # Initialize config arrays
 declare -A BEDROCK_CONFIG
 declare -a CONFIG_KEY_ORDER=(AWS_REGION)  # AWS_REGION always first, rest loaded from JSON
@@ -175,6 +204,37 @@ declare -a VALID_REGIONS
 
 # Load configuration from JSON
 load_config
+
+#───────────────────────────────────────────────────────────────────────────────
+# Pre-flight Dependency Checks
+#───────────────────────────────────────────────────────────────────────────────
+
+preflight_check_aws() {
+    local auth_mode=$1
+
+    # Allow skipping via flag or env var (for CI or advanced users)
+    [[ "$SKIP_PREFLIGHT" == true || "${JUGGERNAUT_SKIP_PREFLIGHT:-}" == "1" ]] && return 0
+
+    if [[ "$auth_mode" == "iam" ]] && ! command -v aws &>/dev/null; then
+        echo "Error: aws CLI is required for IAM authentication mode" >&2
+        echo "" >&2
+        case "$OSTYPE" in
+            darwin*)
+                echo "  Install: brew install awscli" >&2 ;;
+            linux*)
+                echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2 ;;
+            msys*|mingw*|cygwin*)
+                echo "  Install: winget install Amazon.AWSCLI" >&2 ;;
+            *)
+                echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2 ;;
+        esac
+        echo "" >&2
+        echo "Or skip this check: --skip-preflight" >&2
+        exit 1
+    elif ! command -v aws &>/dev/null; then
+        echo "Note: aws CLI not found (needed if you switch to IAM mode later)" >&2
+    fi
+}
 
 #───────────────────────────────────────────────────────────────────────────────
 # Detection Functions
@@ -245,7 +305,7 @@ KEYCHAIN_ACCOUNT="api-key"
 
 # Detect if keychain is available on this system
 keychain_available() {
-    local os=$(detect_os)
+    local os; os=$(detect_os)
     case "$os" in
         macos)
             command -v security >/dev/null 2>&1
@@ -266,7 +326,7 @@ keychain_available() {
 # Store API key in system keychain
 keychain_store() {
     local key=$1
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     case "$os" in
         macos)
@@ -293,7 +353,7 @@ keychain_store() {
 
 # Retrieve API key from system keychain
 keychain_get() {
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     case "$os" in
         macos)
@@ -338,7 +398,7 @@ keychain_get() {
 
 # Delete API key from system keychain
 keychain_delete() {
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     case "$os" in
         macos)
@@ -356,7 +416,7 @@ keychain_delete() {
 # Generate the shell command to retrieve key from keychain
 keychain_get_command() {
     local shell=$1
-    local os=$(detect_os)
+    local os; os=$(detect_os)
     local cmd=""
 
     case "$os" in
@@ -473,12 +533,15 @@ generate_config_block() {
                 config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$keychain_cmd"$'\n'
             fi
         else
-            # Store directly in profile — quote to prevent shell metacharacter interpretation
-            local escaped_api_key="${api_key//\"/\\\"}"
+            # Store directly in profile — single-quote to prevent all shell expansion
             if [[ "$shell" == "fish" ]]; then
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK \"$escaped_api_key\""$'\n'
+                # Fish 3.0+ supports \' inside single quotes
+                local fish_escaped_key="${api_key//\'/\\\'}"
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK '$fish_escaped_key'"$'\n'
             else
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=\"$escaped_api_key\""$'\n'
+                # POSIX/bash: escape embedded single quotes: ' → '\'' (end quote, escaped quote, start quote)
+                local escaped_api_key="${api_key//\'/\'\\\'\'}"
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK='$escaped_api_key'"$'\n'
             fi
         fi
     fi
@@ -502,7 +565,7 @@ sed_inplace() {
 
 backup_config_file() {
     local config_file=$1
-    local backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+    local backup_file; backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
 
     if [[ -f "$config_file" ]]; then
         if cp "$config_file" "$backup_file" 2>/dev/null; then
@@ -712,6 +775,7 @@ Options:
   --no-1m-context        Disable 1M context (revert to standard ~200K)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
+  --skip-preflight       Skip dependency checks (also: JUGGERNAUT_SKIP_PREFLIGHT=1)
   --version, -v          Show version
   --help, -h             Show this help message
 
@@ -769,6 +833,7 @@ EOF
 
 DRY_RUN=false
 FORCE=false
+SKIP_PREFLIGHT=false
 PRESERVE_KEY=false
 AWS_REGION="${DEFAULT_REGION:-us-west-2}"
 SHELL_TYPE=""
@@ -800,6 +865,9 @@ parse_arguments() {
                 ;;
             --force|-f)
                 FORCE=true
+                ;;
+            --skip-preflight)
+                SKIP_PREFLIGHT=true
                 ;;
             --region=*)
                 AWS_REGION="${arg#--region=}"
@@ -903,7 +971,7 @@ validate_inputs() {
     # Check keychain availability when using keychain storage
     if [[ "$STORAGE_MODE" == "keychain" ]]; then
         if ! keychain_available; then
-            local os=$(detect_os)
+            local os; os=$(detect_os)
             echo "Error: Keychain storage not available on this system" >&2
             echo "" >&2
             case "$os" in
@@ -967,7 +1035,7 @@ validate_inputs() {
                     echo "Get your Bedrock API key from:"
                     echo "  AWS Console → Amazon Bedrock → API keys"
                     echo ""
-                    read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
+                    read -rs -p "Enter your Bedrock API key: " BEDROCK_API_KEY
                     echo ""
                     BEDROCK_API_KEY="${BEDROCK_API_KEY%"${BEDROCK_API_KEY##*[![:space:]]}"}"
                     BEDROCK_API_KEY="${BEDROCK_API_KEY#"${BEDROCK_API_KEY%%[![:space:]]*}"}"
@@ -991,7 +1059,7 @@ validate_inputs() {
             echo "Get your Bedrock API key from:"
             echo "  AWS Console → Amazon Bedrock → API keys"
             echo ""
-            read -s -p "Enter your Bedrock API key: " BEDROCK_API_KEY
+            read -rs -p "Enter your Bedrock API key: " BEDROCK_API_KEY
             echo ""  # newline after hidden input
 
             # Strip any trailing whitespace/carriage returns (common from copy-paste)
@@ -1026,7 +1094,7 @@ setup_shell() {
     local shell=$1
     local config_file="${SHELL_CONFIGS[$shell]}"
     local display_name="${SHELL_DISPLAY_NAMES[$shell]}"
-    local os=$(detect_os)
+    local os; os=$(detect_os)
 
     # Create parent directory for fish
     if [[ "$shell" == "fish" && "$DRY_RUN" == false ]]; then
@@ -1178,6 +1246,10 @@ main() {
         AUTH_MODE="${DEFAULT_AUTH:-iam}"
     fi
 
+    preflight_check_aws "$AUTH_MODE"
+
+    local os; os=$(detect_os)
+
     # Detect existing custom models if user didn't explicitly specify
     local config_file="${SHELL_CONFIGS[$SHELL_TYPE]}"
     if [[ "$MODEL_EXPLICIT" != true && -f "$config_file" ]]; then
@@ -1246,7 +1318,6 @@ main() {
 
     # Platform-aware storage default for new installs (macOS/Windows default to keychain)
     if [[ "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
-        local os=$(detect_os)
         if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
             # Only change default if there's no existing config (new install)
             if ! grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
@@ -1259,7 +1330,6 @@ main() {
 
     # Offer to migrate plaintext API keys to keychain on macOS/Windows
     if [[ "$AUTH_MODE" == "api-key" && "$STORAGE_MODE_EXPLICIT" != true && "$STORAGE_MODE" == "profile" ]]; then
-        local os=$(detect_os)
         if [[ "$os" == "macos" || "$os" == "gitbash" || "$os" == "cygwin" ]]; then
             if [[ -f "$config_file" ]] && grep -q "CLAUDE_CODE_USE_BEDROCK" "$config_file" 2>/dev/null; then
                 if ! grep -q "# Storage: keychain" "$config_file" 2>/dev/null && keychain_available; then

@@ -1,5 +1,5 @@
 # Claude Code - Amazon Bedrock Setup Script for Windows
-# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-Force] [-DryRun]
+# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-Force] [-SkipPreflight] [-DryRun]
 
 param(
     [ValidateSet("iam", "api-key")]
@@ -21,6 +21,7 @@ param(
     [Alias("standard-context")]
     [switch]$NoOneM,
     [switch]$Force,
+    [switch]$SkipPreflight,
     [switch]$DryRun,
     [switch]$Help,
     [Alias("v")]
@@ -52,6 +53,45 @@ if (Test-Path $ConfigFile) {
         $Config = Get-Content $ConfigFile -Raw | ConvertFrom-Json
     } catch {
         Write-Host "Warning: Could not parse config file: $ConfigFile" -ForegroundColor Yellow
+    }
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Helpers
+#───────────────────────────────────────────────────────────────────────────────
+
+function ConvertFrom-SecureStringPlainText {
+    param([SecureString]$Secure)
+    $bstr = [IntPtr]::Zero
+    try {
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
+        return [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+    }
+}
+
+function Test-Prerequisites {
+    param(
+        [string]$AuthMode
+    )
+
+    # Allow skipping via flag or env var (for CI or advanced users)
+    if ($SkipPreflight -or $env:JUGGERNAUT_SKIP_PREFLIGHT -eq "1") { return }
+
+    $hasAws = [bool](Get-Command aws -ErrorAction SilentlyContinue)
+
+    if ($AuthMode -eq "iam" -and -not $hasAws) {
+        Write-Host "Error: aws CLI is required for IAM authentication mode" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  Install: winget install Amazon.AWSCLI"
+        Write-Host ""
+        Write-Host "Or skip this check: -SkipPreflight" -ForegroundColor Yellow
+        exit 1
+    } elseif (-not $hasAws) {
+        Write-Host "Note: aws CLI not found (needed if you switch to IAM mode later)" -ForegroundColor Yellow
     }
 }
 
@@ -468,6 +508,7 @@ if ($Help) {
     Write-Host "  -OneM              Enable 1M token context window (Opus & Sonnet only)"
     Write-Host "  -NoOneM            Disable 1M context (revert to standard ~200K)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
+    Write-Host "  -SkipPreflight     Skip dependency checks (also: `$env:JUGGERNAUT_SKIP_PREFLIGHT=1)"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
     Write-Host ""
@@ -494,6 +535,9 @@ if ($Help) {
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"
     exit 0
 }
+
+# Pre-flight dependency checks
+Test-Prerequisites -AuthMode $Auth
 
 # Handle API key for api-key auth mode
 if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
@@ -537,12 +581,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
                 Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
                 Write-Host ""
                 $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-                $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
-                try {
-                    $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-                } finally {
-                    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-                }
+                $BedrockKey = ConvertFrom-SecureStringPlainText $SecureKey
                 if ([string]::IsNullOrEmpty($BedrockKey)) {
                     Write-Host "Error: API key cannot be empty" -ForegroundColor Red
                     exit 1
@@ -564,12 +603,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
         Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
         Write-Host ""
         $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
-        try {
-            $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-        } finally {
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        }
+        $BedrockKey = ConvertFrom-SecureStringPlainText $SecureKey
 
         if ([string]::IsNullOrEmpty($BedrockKey)) {
             Write-Host "Error: API key cannot be empty" -ForegroundColor Red
@@ -680,7 +714,7 @@ if ($Storage -eq "keychain") {
 
 # Unset conflicting auth variables to prevent credential conflicts
 if ($Auth -eq "api-key") {
-    # Using API key - unset AWS STS credentials that might interfere
+    # Using API key - unset IAM/profile variables that might interfere
     $ConfigBlock += "Remove-Item Env:AWS_ACCESS_KEY_ID -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue`n"
@@ -727,8 +761,9 @@ if ($Auth -eq "api-key") {
         $retrievalCmd = Get-KeychainRetrievalCommand
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = $retrievalCmd`n"
     } else {
-        # Store directly in profile (legacy behavior)
-        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
+        # Store directly in profile — single-quote to prevent backtick expansion
+        $escapedKey = $BedrockKey -replace "'", "''"
+        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = '$escapedKey'`n"
     }
 }
 

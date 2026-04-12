@@ -70,6 +70,7 @@ See [Model Switching on Bedrock](#model-switching-on-bedrock-v16) for details.
 3. Claude Code installed
 4. Valid AWS credentials
 5. Bash 4.0+ (macOS users: `brew install bash`)
+6. `jq` or `python3` (for JSON parsing — the setup script checks this automatically)
 
 ## Quick Setup (New Machine)
 
@@ -200,6 +201,15 @@ Use the provided setup script for your operating system:
 ./setup --region=us-east-1                 # Override default region
 .\setup-claude-bedrock.ps1 -Region us-east-1  # Windows PowerShell
 ```
+
+**Skip pre-flight dependency checks:**
+```bash
+./setup --skip-preflight                   # Unix/macOS/Linux
+.\setup-claude-bedrock.ps1 -SkipPreflight  # Windows PowerShell
+JUGGERNAUT_SKIP_PREFLIGHT=1 ./setup        # Environment variable (useful for CI)
+```
+
+The setup script checks for required tools (`jq`/`python3`, `aws` CLI) before running. Use `--skip-preflight` to bypass the `aws` CLI check if you know your environment is configured correctly or you're using API key authentication.
 
 ### API Key Authentication (Alternative)
 
@@ -557,6 +567,10 @@ When using Bedrock, Claude Code follows this precedence:
    - Check file permissions on your shell profile
    - On Windows, try running PowerShell as Administrator
    - A backup is automatically created before modifications
+
+7. **"jq or python3 is required" error**
+   - Install jq: `brew install jq` (macOS), `sudo apt install jq` (Linux), `winget install jqlang.jq` (Windows)
+   - Or install python3 as a fallback
 
 ## Uninstalling
 

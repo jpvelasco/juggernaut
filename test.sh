@@ -3,6 +3,10 @@
 # Juggernaut Test Suite
 # Runs tests to verify scripts work correctly
 
+# SC2288 false positives: test commands use operators (!, |, &&) that shellcheck
+# misreads as argument-position typos because they're inside eval'd strings
+# shellcheck disable=SC2288
+
 #───────────────────────────────────────────────────────────────────────────────
 # Bash Check
 #───────────────────────────────────────────────────────────────────────────────
@@ -33,8 +37,9 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 
-# Script directory
+# Script directory (and an eval-safe quoted version for run_test)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR_Q="$(printf '%q' "$SCRIPT_DIR")"
 
 #───────────────────────────────────────────────────────────────────────────────
 # Test Framework
@@ -43,6 +48,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 run_test() {
     local test_name=$1
     local test_command=$2
+
+    # Auto-quote SCRIPT_DIR paths so eval handles spaces correctly
+    test_command="${test_command//"$SCRIPT_DIR"/$SCRIPT_DIR_Q}"
 
     printf "  %-45s " "$test_name"
     if eval "$test_command" >/dev/null 2>&1; then
@@ -67,6 +75,38 @@ section() {
     echo ""
     echo -e "${CYAN}$1${NC}"
 }
+
+# Create a temporary bin directory with wrapper scripts for specified commands.
+# Uses wrappers (not symlinks) because ln -sf creates broken copies on MSYS/Git Bash.
+# Sets globals: _TMPBIN (temp directory path), _REAL_BASH (path to real bash binary).
+# SC2317: appears unreachable — invoked indirectly via eval in run_test
+# SC2329: unused function — same reason, eval-invoked
+# shellcheck disable=SC2317,SC2329
+_tmpbin_create() {
+    _REAL_BASH=$(command -v bash)
+    _TMPBIN=$(mktemp -d)
+    for cmd in "$@"; do
+        local p
+        p=$(command -v "$cmd" 2>/dev/null)
+        if [ -n "$p" ]; then
+            printf '#!/bin/bash\nexec "%s" "$@"\n' "$p" > "$_TMPBIN/$cmd"
+            chmod +x "$_TMPBIN/$cmd"
+        fi
+    done
+}
+
+# SC2317: appears unreachable — invoked indirectly via eval in run_test
+# SC2329: unused function — same reason, eval-invoked
+# shellcheck disable=SC2317,SC2329
+_tmpbin_cleanup() {
+    rm -rf "$_TMPBIN"
+    unset _TMPBIN _REAL_BASH
+}
+
+# Core tools needed by setup-claude-bedrock.sh in restricted-PATH tests.
+# Includes bash/python because some tools (e.g. python3) may be #!/usr/bin/env bash wrappers
+# that exec python (without the 3).
+_TMPBIN_CORE_CMDS=(bash python grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename)
 
 #───────────────────────────────────────────────────────────────────────────────
 # Test Cases
@@ -341,13 +381,6 @@ test_config_block_integrity() {
     run_test "config has ANTHROPIC_MODEL" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ANTHROPIC_MODEL'"
 
-    # Test: IAM mode unsets API key
-    run_test "iam mode unsets API key var" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run 2>&1 | grep -q 'unset AWS_BEARER_TOKEN_BEDROCK'"
-
-    # Test: API key mode unsets IAM vars
-    run_test "api-key mode unsets IAM vars" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run 2>&1 | grep -q 'unset AWS_ACCESS_KEY_ID'"
 }
 
 test_error_handling() {
@@ -661,17 +694,261 @@ test_1m_context() {
 test_api_key_quoting() {
     section "API Key Quoting in Config Block"
 
-    run_test "bash config block quotes API key value" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK=\"br-test123\"'"
+    # Single quotes prevent all shell expansion ($, backticks, etc.)
+    run_test "bash config block single-quotes API key" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q \"AWS_BEARER_TOKEN_BEDROCK='br-test123'\""
 
-    run_test "zsh config block quotes API key value" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK=\"br-test123\"'"
+    run_test "zsh config block single-quotes API key" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh zsh --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q \"AWS_BEARER_TOKEN_BEDROCK='br-test123'\""
 
-    run_test "bash config block quotes API key with dollar sign" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$var' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\"'"
+    run_test "fish config block single-quotes API key" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q \"AWS_BEARER_TOKEN_BEDROCK 'br-test123'\""
 
-    run_test "fish config block quotes API key value" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key='br-test123' --storage=profile --dry-run --force 2>&1 | grep -q 'AWS_BEARER_TOKEN_BEDROCK \"br-test123\"'"
+    # Dollar sign must NOT be expanded in the generated config
+    run_test "bash config preserves literal dollar sign" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\$var' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\\\$var'"
+
+    # Backtick must NOT be expanded in the generated config
+    run_test "bash config preserves literal backtick" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test\`id\`' --storage=profile --dry-run --force 2>&1 | grep 'AWS_BEARER_TOKEN_BEDROCK=' | grep -q '\`id\`'"
+
+    # Embedded single quote must be escaped correctly — verify by evaluating the output
+    # Use helper functions to avoid eval quoting nightmares with nested single quotes
+
+    # bash/zsh: eval the export line and confirm the variable round-trips correctly
+    # SC2317: appears unreachable — invoked by name via run_test
+    # shellcheck disable=SC2317
+    _test_bash_quote_escape() {
+        local line
+        line=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 | grep '^export AWS_BEARER_TOKEN_BEDROCK=')
+        eval "$line"
+        [[ "$AWS_BEARER_TOKEN_BEDROCK" == "br-te'st" ]]
+    }
+    run_test "bash config escapes embedded single quote" "_test_bash_quote_escape"
+
+    # fish: verify the output contains \' (backslash-quote) escape for the embedded quote
+    # SC2317: appears unreachable — invoked by name via run_test
+    # shellcheck disable=SC2317
+    _test_fish_quote_escape() {
+        "$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 \
+            | grep 'AWS_BEARER_TOKEN_BEDROCK' | grep -qF "\'"
+    }
+    run_test "fish config escapes embedded single quote" "_test_fish_quote_escape"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Version Sync Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_version_sync() {
+    section "Version Sync"
+
+    local file_version json_version
+
+    file_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")
+
+    # Use jq if available, fall back to python3
+    if command -v jq &>/dev/null; then
+        json_version=$(jq -r '.version' "$SCRIPT_DIR/bedrock-config.json" | tr -d '[:space:]')
+    elif command -v python3 &>/dev/null; then
+        json_version=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" "$SCRIPT_DIR/bedrock-config.json" | tr -d '[:space:]')
+    else
+        skip_test "VERSION matches bedrock-config.json" "jq or python3 required"
+        return
+    fi
+
+    run_test "VERSION matches bedrock-config.json" \
+        "[[ '$file_version' == '$json_version' ]]"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Pre-flight Check Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_preflight_checks() {
+    section "Pre-flight Dependency Checks"
+
+    # When both jq and python3 are missing, setup should fail with clear error
+    run_test "fails when neither jq nor python3 available" \
+        "_tmpbin_create \"\${_TMPBIN_CORE_CMDS[@]}\" &&
+         PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1 |
+         grep -q 'jq or python3 is required';
+         rc=\$?; _tmpbin_cleanup; [ \$rc -eq 0 ]"
+
+    # When --auth=iam and aws CLI is missing, setup should fail
+    if command -v aws &>/dev/null; then
+        run_test "fails when --auth=iam and aws CLI missing" \
+            "_tmpbin_create jq python3 \"\${_TMPBIN_CORE_CMDS[@]}\" &&
+             PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1;
+             rc=\$?; _tmpbin_cleanup; [ \$rc -ne 0 ]"
+    else
+        skip_test "fails when --auth=iam and aws CLI missing" "aws CLI not installed"
+    fi
+
+    # Normal invocation should pass preflight (jq or python3 exists in CI)
+    run_test "passes preflight with normal PATH" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1"
+
+    # --skip-preflight bypasses aws CLI check (IAM mode would normally fail without aws)
+    if command -v aws &>/dev/null; then
+        run_test "--skip-preflight bypasses aws check" \
+            "_tmpbin_create jq python3 \"\${_TMPBIN_CORE_CMDS[@]}\" &&
+             PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --skip-preflight --dry-run --force 2>&1;
+             rc=\$?; _tmpbin_cleanup; [ \$rc -eq 0 ]"
+    else
+        skip_test "--skip-preflight bypasses aws check" "aws CLI not installed"
+    fi
+
+    # JUGGERNAUT_SKIP_PREFLIGHT=1 env var works the same as --skip-preflight
+    run_test "JUGGERNAUT_SKIP_PREFLIGHT=1 skips checks" \
+        "JUGGERNAUT_SKIP_PREFLIGHT=1 $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1"
+
+    # help text mentions --skip-preflight
+    run_test "help shows --skip-preflight" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'skip-preflight'"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Shellcheck Compliance Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_shellcheck_compliance() {
+    section "Shellcheck Compliance"
+
+    if ! command -v shellcheck &>/dev/null; then
+        skip_test "shellcheck all scripts" "shellcheck not installed"
+        return
+    fi
+
+    local scripts=(
+        "$SCRIPT_DIR/setup-claude-bedrock.sh"
+        "$SCRIPT_DIR/uninstall.sh"
+        "$SCRIPT_DIR/validate-setup.sh"
+        "$SCRIPT_DIR/apply-config.sh"
+        "$SCRIPT_DIR/install.sh"
+        "$SCRIPT_DIR/setup"
+    )
+
+    for script in "${scripts[@]}"; do
+        local name
+        name=$(basename "$script")
+        run_test "shellcheck $name" \
+            "shellcheck '$script'"
+    done
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Version Flag Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_version_flags() {
+    section "Version Flags"
+
+    local expected_version
+    expected_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")
+
+    run_test "setup --version shows version" \
+        "$SCRIPT_DIR/setup --version 2>&1 | grep -q '$expected_version'"
+
+    run_test "setup-claude-bedrock.sh --version" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --version 2>&1 | grep -q '$expected_version'"
+
+    run_test "validate-setup.sh --version" \
+        "$SCRIPT_DIR/validate-setup.sh --version 2>&1 | grep -q '$expected_version'"
+
+    run_test "apply-config.sh --version" \
+        "bash -c 'source $SCRIPT_DIR/apply-config.sh --version' 2>&1 | grep -q '$expected_version'"
+
+    run_test "uninstall.sh --version" \
+        "$SCRIPT_DIR/uninstall.sh --version 2>&1 | grep -q '$expected_version'"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Credential Conflict Prevention Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_credential_conflict_prevention() {
+    section "Credential Conflict Prevention in Config Block"
+
+    # Capture output once per invocation variant (avoids spawning setup 10 times)
+    local _bash_apikey _bash_iam _fish_apikey _fish_iam
+    _bash_apikey=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1)
+    _bash_iam=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=iam --dry-run --force 2>&1)
+    _fish_apikey=$("$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1)
+    _fish_iam=$("$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=iam --dry-run --force 2>&1)
+
+    # API key mode should unset all IAM-related vars
+    run_test "api-key mode unsets AWS_ACCESS_KEY_ID" \
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_ACCESS_KEY_ID'"
+
+    run_test "api-key mode unsets AWS_SECRET_ACCESS_KEY" \
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_SECRET_ACCESS_KEY'"
+
+    run_test "api-key mode unsets AWS_SESSION_TOKEN" \
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_SESSION_TOKEN'"
+
+    run_test "api-key mode unsets AWS_PROFILE" \
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_PROFILE'"
+
+    # IAM mode should unset API key var
+    run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
+        "echo \"\$_bash_iam\" | grep -qE 'unset[^#]*AWS_BEARER_TOKEN_BEDROCK'"
+
+    # Fish uses different syntax — verify all four vars
+    run_test "fish api-key erases AWS_ACCESS_KEY_ID" \
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_ACCESS_KEY_ID'"
+
+    run_test "fish api-key erases AWS_SECRET_ACCESS_KEY" \
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_SECRET_ACCESS_KEY'"
+
+    run_test "fish api-key erases AWS_SESSION_TOKEN" \
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_SESSION_TOKEN'"
+
+    run_test "fish api-key erases AWS_PROFILE" \
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_PROFILE'"
+
+    # Fish IAM mode should erase API key var
+    run_test "fish iam erases AWS_BEARER_TOKEN_BEDROCK" \
+        "echo \"\$_fish_iam\" | grep -q 'set -e AWS_BEARER_TOKEN_BEDROCK'"
+
+    # api-key mode should warn (not fail) when aws is missing
+    if command -v aws &>/dev/null; then
+        run_test "api-key mode warns (not fails) without aws" \
+            "_tmpbin_create jq python3 \"\${_TMPBIN_CORE_CMDS[@]}\" &&
+             PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1;
+             rc=\$?; _tmpbin_cleanup; [ \$rc -eq 0 ]"
+    else
+        skip_test "api-key mode warns (not fails) without aws" "aws CLI not installed"
+    fi
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# Uninstall Script Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_uninstall() {
+    section "Uninstall Script"
+
+    # Syntax and help already covered by test_syntax and test_help_flags
+
+    # Running uninstall with no profile should exit gracefully
+    run_test "uninstall handles missing profile" \
+        "HOME=/nonexistent $SCRIPT_DIR/uninstall.sh 2>&1"
+}
+
+test_apply_config() {
+    section "Apply Config Script"
+
+    # SC2317: appears unreachable — invoked by name via run_test
+    # shellcheck disable=SC2317
+    _test_apply_config_no_leak() {
+        # After sourcing apply-config.sh, internal helper functions should be cleaned up
+        local output
+        output=$(bash -c "source '$SCRIPT_DIR/apply-config.sh' 2>&1; type _juggernaut_apply_config 2>&1")
+        # Should NOT find the function (it was unset after running)
+        echo "$output" | grep -q "not found"
+    }
+    run_test "apply-config cleans up helper functions" "_test_apply_config_no_leak"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -710,6 +987,13 @@ main() {
     test_required_files
     test_json_validity
     test_unified_entry_point
+    test_version_sync
+    test_preflight_checks
+    test_shellcheck_compliance
+    test_version_flags
+    test_credential_conflict_prevention
+    test_uninstall
+    test_apply_config
 
     # Summary
     echo ""
