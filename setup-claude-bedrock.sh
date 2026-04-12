@@ -117,8 +117,8 @@ json_get_array() {
     local result
 
     if command -v jq >/dev/null 2>&1; then
-        # $query[] is jq syntax, not bash array expansion
-        # shellcheck disable=SC1087
+        # $query[] is jq syntax, not bash array expansion — shellcheck misreads it
+        # shellcheck disable=SC1087  # SC1087: Use braces when expanding arrays
         result=$(jq -r "$query[]" "$file" 2>/dev/null) || return 1
         printf '%s\n' "$result" | tr -d '\r'
     elif command -v python3 >/dev/null 2>&1; then
@@ -170,11 +170,28 @@ load_config() {
     DEFAULT_AUTH=$(json_get "$CONFIG_FILE" '.defaults.auth_mode')
 }
 
-# Check JSON parser availability before loading config
+# Check JSON parser availability before loading config (hard requirement, not skippable)
 if ! command -v jq &>/dev/null && ! command -v python3 &>/dev/null; then
     echo "Error: jq or python3 is required for JSON parsing" >&2
-    echo "  Install jq:      https://jqlang.github.io/jq/download/" >&2
-    echo "  Or python3:      https://www.python.org/downloads/" >&2
+    echo "" >&2
+    case "$OSTYPE" in
+        darwin*)
+            echo "  Install jq:  brew install jq" >&2
+            echo "  Or python3:  brew install python3" >&2
+            ;;
+        linux*)
+            echo "  Install jq:  sudo apt install jq" >&2
+            echo "  Or python3:  sudo apt install python3" >&2
+            ;;
+        msys*|mingw*|cygwin*)
+            echo "  Install jq:  winget install jqlang.jq" >&2
+            echo "  Or python3:  winget install Python.Python.3" >&2
+            ;;
+        *)
+            echo "  Install jq:  https://jqlang.github.io/jq/download/" >&2
+            echo "  Or python3:  https://www.python.org/downloads/" >&2
+            ;;
+    esac
     exit 1
 elif ! command -v jq &>/dev/null; then
     echo "Note: jq not found, using python3 for JSON parsing (jq is faster)" >&2
@@ -195,11 +212,24 @@ load_config
 preflight_check_aws() {
     local auth_mode=$1
 
+    # Allow skipping via flag or env var (for CI or advanced users)
+    [[ "$SKIP_PREFLIGHT" == true || "${JUGGERNAUT_SKIP_PREFLIGHT:-}" == "1" ]] && return 0
+
     if [[ "$auth_mode" == "iam" ]] && ! command -v aws &>/dev/null; then
         echo "Error: aws CLI is required for IAM authentication mode" >&2
-        echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2
         echo "" >&2
-        echo "Missing required dependencies. Install them and try again." >&2
+        case "$OSTYPE" in
+            darwin*)
+                echo "  Install: brew install awscli" >&2 ;;
+            linux*)
+                echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2 ;;
+            msys*|mingw*|cygwin*)
+                echo "  Install: winget install Amazon.AWSCLI" >&2 ;;
+            *)
+                echo "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2 ;;
+        esac
+        echo "" >&2
+        echo "Or skip this check: --skip-preflight" >&2
         exit 1
     elif ! command -v aws &>/dev/null; then
         echo "Note: aws CLI not found (needed if you switch to IAM mode later)" >&2
@@ -745,6 +775,7 @@ Options:
   --no-1m-context        Disable 1M context (revert to standard ~200K)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
+  --skip-preflight       Skip dependency checks (also: JUGGERNAUT_SKIP_PREFLIGHT=1)
   --version, -v          Show version
   --help, -h             Show this help message
 
@@ -802,6 +833,7 @@ EOF
 
 DRY_RUN=false
 FORCE=false
+SKIP_PREFLIGHT=false
 PRESERVE_KEY=false
 AWS_REGION="${DEFAULT_REGION:-us-west-2}"
 SHELL_TYPE=""
@@ -833,6 +865,9 @@ parse_arguments() {
                 ;;
             --force|-f)
                 FORCE=true
+                ;;
+            --skip-preflight)
+                SKIP_PREFLIGHT=true
                 ;;
             --region=*)
                 AWS_REGION="${arg#--region=}"

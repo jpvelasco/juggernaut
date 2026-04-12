@@ -16,8 +16,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Install lint dependencies
+        run: sudo apt-get update && sudo apt-get install -y shellcheck jq
 
       - name: Run shellcheck
         run: shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup

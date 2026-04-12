@@ -18,6 +18,7 @@ _juggernaut_apply_config() {
         _JUGGERNAUT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     elif [[ -n "$ZSH_VERSION" ]]; then
         # ${(%):-%x} is zsh syntax for current script path
+        # SC2296: shellcheck doesn't understand zsh parameter expansion syntax
         # shellcheck disable=SC2296
         _JUGGERNAUT_SCRIPT_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
     else
@@ -153,6 +154,7 @@ print('\n'.join(obj.keys()))
     while IFS= read -r _JUGGERNAUT_KEY; do
         if [[ -n "$ZSH_VERSION" ]]; then
             # ${(P)...} is zsh indirect expansion
+            # SC2296: shellcheck doesn't understand zsh parameter expansion syntax
             # shellcheck disable=SC2296
             echo "  ${_JUGGERNAUT_KEY}=${(P)_JUGGERNAUT_KEY}"
         else
@@ -169,11 +171,13 @@ print('\n'.join(obj.keys()))
 if _juggernaut_apply_config "$@"; then
     unset -f _juggernaut_apply_config _juggernaut_get_json_value _juggernaut_get_json_keys
     return 0 2>/dev/null
+    # SC2317: exit is the fallback when script is executed (not sourced); return exits first when sourced
     # shellcheck disable=SC2317
     exit 0
 else
     unset -f _juggernaut_apply_config _juggernaut_get_json_value _juggernaut_get_json_keys
     return 1 2>/dev/null
+    # SC2317: exit is the fallback when script is executed (not sourced); return exits first when sourced
     # shellcheck disable=SC2317
     exit 1
 fi

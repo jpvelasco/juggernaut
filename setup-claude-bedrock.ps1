@@ -21,6 +21,7 @@ param(
     [Alias("standard-context")]
     [switch]$NoOneM,
     [switch]$Force,
+    [switch]$SkipPreflight,
     [switch]$DryRun,
     [switch]$Help,
     [Alias("v")]
@@ -77,13 +78,17 @@ function Test-Prerequisites {
         [string]$AuthMode
     )
 
+    # Allow skipping via flag or env var (for CI or advanced users)
+    if ($SkipPreflight -or $env:JUGGERNAUT_SKIP_PREFLIGHT -eq "1") { return }
+
     $hasAws = [bool](Get-Command aws -ErrorAction SilentlyContinue)
 
     if ($AuthMode -eq "iam" -and -not $hasAws) {
         Write-Host "Error: aws CLI is required for IAM authentication mode" -ForegroundColor Red
-        Write-Host "  Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
         Write-Host ""
-        Write-Host "Missing required dependencies. Install them and try again." -ForegroundColor Red
+        Write-Host "  Install: winget install Amazon.AWSCLI"
+        Write-Host ""
+        Write-Host "Or skip this check: -SkipPreflight" -ForegroundColor Yellow
         exit 1
     } elseif (-not $hasAws) {
         Write-Host "Note: aws CLI not found (needed if you switch to IAM mode later)" -ForegroundColor Yellow
@@ -755,8 +760,9 @@ if ($Auth -eq "api-key") {
         $retrievalCmd = Get-KeychainRetrievalCommand
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = $retrievalCmd`n"
     } else {
-        # Store directly in profile
-        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = `"$BedrockKey`"`n"
+        # Store directly in profile — single-quote to prevent backtick expansion
+        $escapedKey = $BedrockKey -replace "'", "''"
+        $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = '$escapedKey'`n"
     }
 }
 
