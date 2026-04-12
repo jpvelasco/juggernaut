@@ -473,11 +473,12 @@ generate_config_block() {
                 config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$keychain_cmd"$'\n'
             fi
         else
-            # Store directly in profile (legacy behavior)
+            # Store directly in profile — quote to prevent shell metacharacter interpretation
+            local escaped_api_key="${api_key//\"/\\\"}"
             if [[ "$shell" == "fish" ]]; then
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK $api_key"$'\n'
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK \"$escaped_api_key\""$'\n'
             else
-                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=$api_key"$'\n'
+                config+="$syntax AWS_BEARER_TOKEN_BEDROCK=\"$escaped_api_key\""$'\n'
             fi
         fi
     fi
@@ -599,8 +600,10 @@ detect_existing_sonnet_model() {
 # Detect existing 1M context setting from config file
 detect_existing_1m_context() {
     local profile_file=$1
-    if grep -q "# 1MContext: true" "$profile_file" 2>/dev/null; then
-        echo "true"
+    if [[ -f "$profile_file" ]]; then
+        if grep -q "# 1MContext: true" "$profile_file" 2>/dev/null; then
+            echo "true"
+        fi
     fi
 }
 
@@ -652,7 +655,7 @@ warn_custom_model() {
     local model_type=$2
 
     echo ""
-    echo "⚠️  Custom $model_type model: $model_id"
+    echo "Warning: Custom $model_type model: $model_id"
     echo "   Cannot validate without working AWS credentials."
     echo "   Ensure this model is available in your Bedrock region."
     echo ""

@@ -537,7 +537,12 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
                 Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
                 Write-Host ""
                 $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-                $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey))
+                $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
+                try {
+                    $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                } finally {
+                    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+                }
                 if ([string]::IsNullOrEmpty($BedrockKey)) {
                     Write-Host "Error: API key cannot be empty" -ForegroundColor Red
                     exit 1
@@ -559,7 +564,12 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
         Write-Host "  AWS Console -> Amazon Bedrock -> API keys"
         Write-Host ""
         $SecureKey = Read-Host "Enter your Bedrock API key" -AsSecureString
-        $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey))
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureKey)
+        try {
+            $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+        } finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
 
         if ([string]::IsNullOrEmpty($BedrockKey)) {
             Write-Host "Error: API key cannot be empty" -ForegroundColor Red
@@ -674,6 +684,7 @@ if ($Auth -eq "api-key") {
     $ConfigBlock += "Remove-Item Env:AWS_ACCESS_KEY_ID -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SECRET_ACCESS_KEY -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue`n"
+    $ConfigBlock += "Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue`n"
 } else {
     # Using IAM/SSO - unset API key that might interfere
     $ConfigBlock += "Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue`n"
