@@ -3,7 +3,8 @@
 # Juggernaut Test Suite
 # Runs tests to verify scripts work correctly
 
-# run_test passes command strings to eval — shellcheck can't trace into eval'd strings
+# SC2288 false positives: test commands use operators (!, |, &&) that shellcheck
+# misreads as argument-position typos because they're inside eval'd strings
 # shellcheck disable=SC2288
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -78,7 +79,9 @@ section() {
 # Create a temporary bin directory with wrapper scripts for specified commands.
 # Uses wrappers (not symlinks) because ln -sf creates broken copies on MSYS/Git Bash.
 # Sets globals: _TMPBIN (temp directory path), _REAL_BASH (path to real bash binary).
-# shellcheck disable=SC2317,SC2329 # invoked indirectly via eval in run_test
+# SC2317: appears unreachable — invoked indirectly via eval in run_test
+# SC2329: unused function — same reason, eval-invoked
+# shellcheck disable=SC2317,SC2329
 _tmpbin_create() {
     _REAL_BASH=$(command -v bash)
     _TMPBIN=$(mktemp -d)
@@ -92,14 +95,18 @@ _tmpbin_create() {
     done
 }
 
-# shellcheck disable=SC2317,SC2329 # invoked indirectly via eval in run_test
+# SC2317: appears unreachable — invoked indirectly via eval in run_test
+# SC2329: unused function — same reason, eval-invoked
+# shellcheck disable=SC2317,SC2329
 _tmpbin_cleanup() {
     rm -rf "$_TMPBIN"
     unset _TMPBIN _REAL_BASH
 }
 
-# Core tools needed by setup-claude-bedrock.sh in restricted-PATH tests
-_TMPBIN_CORE_CMDS=(grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename)
+# Core tools needed by setup-claude-bedrock.sh in restricted-PATH tests.
+# Includes bash/python because some tools (e.g. python3) may be #!/usr/bin/env bash wrappers
+# that exec python (without the 3).
+_TMPBIN_CORE_CMDS=(bash python grep sed cat date dirname pwd mkdir cp chmod tr head printf readlink id uname basename)
 
 #───────────────────────────────────────────────────────────────────────────────
 # Test Cases
@@ -709,6 +716,7 @@ test_api_key_quoting() {
     # Use helper functions to avoid eval quoting nightmares with nested single quotes
 
     # bash/zsh: eval the export line and confirm the variable round-trips correctly
+    # SC2317: appears unreachable — invoked by name via run_test
     # shellcheck disable=SC2317
     _test_bash_quote_escape() {
         local line
@@ -719,6 +727,7 @@ test_api_key_quoting() {
     run_test "bash config escapes embedded single quote" "_test_bash_quote_escape"
 
     # fish: verify the output contains \' (backslash-quote) escape for the embedded quote
+    # SC2317: appears unreachable — invoked by name via run_test
     # shellcheck disable=SC2317
     _test_fish_quote_escape() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=api-key --bedrock-key="br-te'st" --storage=profile --dry-run --force 2>&1 \
@@ -779,6 +788,24 @@ test_preflight_checks() {
     # Normal invocation should pass preflight (jq or python3 exists in CI)
     run_test "passes preflight with normal PATH" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1"
+
+    # --skip-preflight bypasses aws CLI check (IAM mode would normally fail without aws)
+    if command -v aws &>/dev/null; then
+        run_test "--skip-preflight bypasses aws check" \
+            "_tmpbin_create jq python3 \"\${_TMPBIN_CORE_CMDS[@]}\" &&
+             PATH=\"\$_TMPBIN\" \"\$_REAL_BASH\" $SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --skip-preflight --dry-run --force 2>&1;
+             rc=\$?; _tmpbin_cleanup; [ \$rc -eq 0 ]"
+    else
+        skip_test "--skip-preflight bypasses aws check" "aws CLI not installed"
+    fi
+
+    # JUGGERNAUT_SKIP_PREFLIGHT=1 env var works the same as --skip-preflight
+    run_test "JUGGERNAUT_SKIP_PREFLIGHT=1 skips checks" \
+        "JUGGERNAUT_SKIP_PREFLIGHT=1 $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run --force 2>&1"
+
+    # help text mentions --skip-preflight
+    run_test "help shows --skip-preflight" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'skip-preflight'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -903,6 +930,21 @@ test_uninstall() {
         "HOME=/nonexistent $SCRIPT_DIR/uninstall.sh 2>&1"
 }
 
+test_apply_config() {
+    section "Apply Config Script"
+
+    # SC2317: appears unreachable — invoked by name via run_test
+    # shellcheck disable=SC2317
+    _test_apply_config_no_leak() {
+        # After sourcing apply-config.sh, internal helper functions should be cleaned up
+        local output
+        output=$(bash -c "source '$SCRIPT_DIR/apply-config.sh' 2>&1; type _juggernaut_apply_config 2>&1")
+        # Should NOT find the function (it was unset after running)
+        echo "$output" | grep -q "not found"
+    }
+    run_test "apply-config cleans up helper functions" "_test_apply_config_no_leak"
+}
+
 #───────────────────────────────────────────────────────────────────────────────
 # Main
 #───────────────────────────────────────────────────────────────────────────────
@@ -945,6 +987,7 @@ main() {
     test_version_flags
     test_credential_conflict_prevention
     test_uninstall
+    test_apply_config
 
     # Summary
     echo ""

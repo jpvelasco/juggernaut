@@ -200,7 +200,7 @@ check_credential_conflicts() {
             conflicts+=("AWS_PROFILE=$AWS_PROFILE")
         fi
         if [[ "$has_aws_creds_file" == true ]]; then
-            # Tilde is intentional in user-facing display string
+            # SC2088: tilde is intentional in user-facing display string, not a path to expand
             # shellcheck disable=SC2088
             conflicts+=("~/.aws/credentials file exists")
         fi
@@ -219,7 +219,7 @@ check_credential_conflicts() {
     else
         # IAM mode - check for credentials file
         if [[ "$has_aws_creds_file" == true ]]; then
-            # Tilde is intentional in user-facing display string
+            # SC2088: tilde is intentional in user-facing display string, not a path to expand
             # shellcheck disable=SC2088
             echo -e "${GREEN}INFO${NC} ~/.aws/credentials file found (may be used for auth)"
         fi
