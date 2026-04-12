@@ -25,7 +25,11 @@ jobs:
       - name: Verify version sync
         run: |
           FILE_VERSION=$(tr -d '[:space:]' < VERSION)
-          JSON_VERSION=$(jq -r '.version' bedrock-config.json | tr -d '[:space:]')
+          if command -v jq &>/dev/null; then
+            JSON_VERSION=$(jq -r '.version' bedrock-config.json | tr -d '[:space:]')
+          else
+            JSON_VERSION=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['version'])" bedrock-config.json | tr -d '[:space:]')
+          fi
           if [[ "$FILE_VERSION" != "$JSON_VERSION" ]]; then
             echo "ERROR: VERSION ($FILE_VERSION) != bedrock-config.json ($JSON_VERSION)"
             exit 1
