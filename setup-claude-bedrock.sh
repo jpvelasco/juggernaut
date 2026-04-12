@@ -1246,7 +1246,6 @@ main() {
         AUTH_MODE="${DEFAULT_AUTH:-iam}"
     fi
 
-    # Check dependencies before proceeding
     preflight_check_aws "$AUTH_MODE"
 
     local os; os=$(detect_os)

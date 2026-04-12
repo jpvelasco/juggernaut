@@ -870,40 +870,46 @@ test_version_flags() {
 test_credential_conflict_prevention() {
     section "Credential Conflict Prevention in Config Block"
 
+    # Capture output once per invocation variant (avoids spawning setup 10 times)
+    local _bash_apikey _bash_iam _fish_apikey _fish_iam
+    _bash_apikey=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1)
+    _bash_iam=$("$SCRIPT_DIR/setup-claude-bedrock.sh" bash --auth=iam --dry-run --force 2>&1)
+    _fish_apikey=$("$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1)
+    _fish_iam=$("$SCRIPT_DIR/setup-claude-bedrock.sh" fish --auth=iam --dry-run --force 2>&1)
+
     # API key mode should unset all IAM-related vars
-    # All four vars are on one unset line; match unset + var in one grep to avoid false positives
     run_test "api-key mode unsets AWS_ACCESS_KEY_ID" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_ACCESS_KEY_ID'"
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_ACCESS_KEY_ID'"
 
     run_test "api-key mode unsets AWS_SECRET_ACCESS_KEY" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_SECRET_ACCESS_KEY'"
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_SECRET_ACCESS_KEY'"
 
     run_test "api-key mode unsets AWS_SESSION_TOKEN" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_SESSION_TOKEN'"
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_SESSION_TOKEN'"
 
     run_test "api-key mode unsets AWS_PROFILE" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_PROFILE'"
+        "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_PROFILE'"
 
     # IAM mode should unset API key var
     run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --auth=iam --dry-run --force 2>&1 | grep -qE 'unset[^#]*AWS_BEARER_TOKEN_BEDROCK'"
+        "echo \"\$_bash_iam\" | grep -qE 'unset[^#]*AWS_BEARER_TOKEN_BEDROCK'"
 
     # Fish uses different syntax — verify all four vars
     run_test "fish api-key erases AWS_ACCESS_KEY_ID" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_ACCESS_KEY_ID'"
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_ACCESS_KEY_ID'"
 
     run_test "fish api-key erases AWS_SECRET_ACCESS_KEY" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_SECRET_ACCESS_KEY'"
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_SECRET_ACCESS_KEY'"
 
     run_test "fish api-key erases AWS_SESSION_TOKEN" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_SESSION_TOKEN'"
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_SESSION_TOKEN'"
 
     run_test "fish api-key erases AWS_PROFILE" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=api-key --bedrock-key=br-test --dry-run --force 2>&1 | grep -q 'set -e AWS_PROFILE'"
+        "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_PROFILE'"
 
     # Fish IAM mode should erase API key var
     run_test "fish iam erases AWS_BEARER_TOKEN_BEDROCK" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --auth=iam --dry-run --force 2>&1 | grep -q 'set -e AWS_BEARER_TOKEN_BEDROCK'"
+        "echo \"\$_fish_iam\" | grep -q 'set -e AWS_BEARER_TOKEN_BEDROCK'"
 
     # api-key mode should warn (not fail) when aws is missing
     if command -v aws &>/dev/null; then
