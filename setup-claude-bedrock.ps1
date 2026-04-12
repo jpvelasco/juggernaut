@@ -1,5 +1,5 @@
 # Claude Code - Amazon Bedrock Setup Script for Windows
-# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-Force] [-DryRun]
+# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-Force] [-SkipPreflight] [-DryRun]
 
 param(
     [ValidateSet("iam", "api-key")]
@@ -508,6 +508,7 @@ if ($Help) {
     Write-Host "  -OneM              Enable 1M token context window (Opus & Sonnet only)"
     Write-Host "  -NoOneM            Disable 1M context (revert to standard ~200K)"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
+    Write-Host "  -SkipPreflight     Skip dependency checks (also: `$env:JUGGERNAUT_SKIP_PREFLIGHT=1)"
     Write-Host "  -DryRun            Preview changes without modifying files"
     Write-Host "  -Help              Show this help message"
     Write-Host ""
