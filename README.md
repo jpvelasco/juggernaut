@@ -17,6 +17,14 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Cost Control**: Route through your AWS account for billing/governance
 - **Enterprise Ready**: Works with AWS SSO, IAM roles, and corporate identity providers
 
+## What's New in v1.7.2
+
+- **Pre-flight dependency checks** — setup validates required tools (`jq`/`python3`, `aws` CLI) before running, with platform-specific install instructions when something is missing
+- **`--skip-preflight`** (`-SkipPreflight` / `JUGGERNAUT_SKIP_PREFLIGHT=1`) to bypass checks in CI or advanced environments
+- **Security fixes** — API key quoting hardened across bash, zsh, fish, and PowerShell to prevent shell expansion
+- **Shellcheck CI** — all bash scripts linted on every PR with zero warnings
+- **173 tests** covering pre-flight checks, credential conflicts, version sync, and more
+
 ## What's New in v1.7.1
 
 - **Default Model**: Changed default from Opus 4.6 to Sonnet 4.6 (Recommended) to better match official Claude Code UX
