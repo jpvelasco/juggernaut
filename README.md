@@ -17,6 +17,14 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Cost Control**: Route through your AWS account for billing/governance
 - **Enterprise Ready**: Works with AWS SSO, IAM roles, and corporate identity providers
 
+## What's New in v1.7.3
+
+Added support for Claude Opus 4.7 — released April 16, 2026 — as the default Opus on Amazon Bedrock.
+
+- **Claude Opus 4.7** (`global.anthropic.claude-opus-4-7`) — new flagship model in the `/model` picker
+- 1M context window, high-res vision (up to 2576px / ~3.75MP), new `xhigh` effort level, stronger agentic reasoning, self-verification, and improved long-running task performance
+- If you see a model-not-found error, try `--opus-model=us.anthropic.claude-opus-4-7` while global rollout completes
+
 ## What's New in v1.7.2
 
 - **Pre-flight dependency checks** — setup validates required tools (`jq`/`python3`, `aws` CLI) before running, with platform-specific install instructions when something is missing
@@ -74,7 +82,7 @@ See [Model Switching on Bedrock](#model-switching-on-bedrock-v16) for details.
 ## Prerequisites
 
 1. AWS account with Bedrock access enabled
-2. Access to Claude models (Opus 4.6, Sonnet 4.6, Haiku 4.5) in Bedrock
+2. Access to Claude models (Opus 4.7, Sonnet 4.6, Haiku 4.5) in Bedrock
 3. Claude Code installed
 4. Valid AWS credentials
 5. Bash 4.0+ (macOS users: `brew install bash`)
@@ -419,7 +427,7 @@ Official Anthropic docs: https://code.claude.com/docs/en/model-config
 
 ### 1M Context Windows (v1.7+)
 
-Opus 4.6 and Sonnet 4.6 support a 1 million token context window. Enable it with:
+Opus 4.7 and Sonnet 4.6 support a 1 million token context window. Enable it with:
 
 ```bash
 ./setup --1m-context
@@ -436,7 +444,7 @@ This setting persists across re-runs. To revert to standard context:
 ```
 
 **What it sets:**
-- `ANTHROPIC_DEFAULT_OPUS_MODEL` -> `global.anthropic.claude-opus-4-6-v1[1m]`
+- `ANTHROPIC_DEFAULT_OPUS_MODEL` -> `global.anthropic.claude-opus-4-7[1m]`
 - `ANTHROPIC_DEFAULT_SONNET_MODEL` -> `global.anthropic.claude-sonnet-4-6[1m]`
 - Model names updated to include "1M Context"
 - Haiku is not affected (does not support 1M context)
@@ -447,7 +455,7 @@ This setting persists across re-runs. To revert to standard context:
 
 Juggernaut sets `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` for Opus and Sonnet. This enables features that Claude Code can't auto-detect from Bedrock inference profile IDs:
 
-| Feature | Opus 4.6 | Sonnet 4.6 | Haiku 4.5 |
+| Feature | Opus 4.7 | Sonnet 4.6 | Haiku 4.5 |
 |---------|----------|------------|-----------|
 | Effort levels | Yes | Yes | No |
 | Max effort | Yes | No | No |
@@ -494,13 +502,13 @@ Juggernaut maps all Claude models to Bedrock global inference profiles. The `/mo
 
 | Picker Entry | Bedrock Model ID | Description |
 |-------------|-----------------|-------------|
-| Opus 4.6 (Most capable) | `global.anthropic.claude-opus-4-6-v1` | Most capable model for complex reasoning |
+| Opus 4.7 (New flagship – most capable) | `global.anthropic.claude-opus-4-7` | Most capable model yet — stronger long-running tasks, better instruction following, self-verification, improved vision (3x resolution), and 1M context window |
 | Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Best balance of speed and intelligence |
 | Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest model for everyday tasks |
 
 Override individual models:
 ```bash
-./setup --opus-model=us.anthropic.claude-opus-4-6-v1
+./setup --opus-model=us.anthropic.claude-opus-4-7
 ./setup --sonnet-model=eu.anthropic.claude-sonnet-4-6
 ./setup --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
 ```

@@ -494,7 +494,7 @@ test_per_model_flags() {
     section "Per-Model CLI Flags"
 
     run_test "--opus-model override" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opus-model=us.anthropic.claude-opus-4-6-v1 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-6-v1'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opus-model=us.anthropic.claude-opus-4-7 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-7'"
 
     run_test "--sonnet-model override" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --sonnet-model=us.anthropic.claude-sonnet-4-6 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.us.anthropic.claude-sonnet-4-6'"
@@ -545,7 +545,7 @@ test_model_prefix_regex() {
 
     # Verify prefix transform preserves anthropic.* segment for all model vars
     run_test "prefix=us: opus keeps anthropic segment" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-6-v1'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-7'"
 
     run_test "prefix=us: sonnet keeps anthropic segment" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.us.anthropic.claude-sonnet-4-6'"
@@ -574,13 +574,13 @@ test_model_prefix_regex() {
 
     # Verify friendly names stay clean regardless of prefix
     run_test "prefix=us: name stays Most capable" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Most capable'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'most capable'"
 
     run_test "prefix=eu: name stays Recommended" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME' | grep -q 'Recommended'"
 
     run_test "prefix=global: name stays Most capable" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Most capable'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'most capable'"
 }
 
 test_install_script() {
@@ -622,6 +622,9 @@ test_1m_context() {
     run_test "--1m-context appends [1m] to opus model" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
+    run_test "--1m-context opus model is claude-opus-4-7[1m]" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'claude-opus-4-7\[1m\]'"
+
     run_test "--1m-context appends [1m] to sonnet model" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL=' | grep -q '\[1m\]'"
 
@@ -654,8 +657,8 @@ test_1m_context() {
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
 
-    run_test "--1m-context + prefix: name has Most capable, 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'Most capable, 1M Context'"
+    run_test "--1m-context + prefix: name has most capable, 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'most capable, 1M Context'"
 
     # Persistence
     run_test "--1m-context persists in config comment" \
