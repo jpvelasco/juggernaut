@@ -1481,6 +1481,14 @@ main() {
     fi
     echo ""
 
+    # Opus 4.7 is brand new -- warn in case Bedrock rollout is still in progress
+    local effective_opus="${CUSTOM_OPUS_MODEL:-${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_OPUS_MODEL]}}"
+    if [[ "$effective_opus" == *"claude-opus-4-7"* ]]; then
+        echo "Note: Opus 4.7 was released April 16, 2026. If you see a model-not-found error,"
+        echo "      wait a few minutes for Bedrock rollout or use: --opus-model=us.anthropic.claude-opus-4-7"
+        echo ""
+    fi
+
     # Detect current shell
     local current_shell
     current_shell=$(basename "$SHELL")

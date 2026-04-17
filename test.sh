@@ -574,13 +574,13 @@ test_model_prefix_regex() {
 
     # Verify friendly names stay clean regardless of prefix
     run_test "prefix=us: name stays Most capable" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Most capable'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'most capable'"
 
     run_test "prefix=eu: name stays Recommended" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME' | grep -q 'Recommended'"
 
     run_test "prefix=global: name stays Most capable" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'Most capable'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'most capable'"
 }
 
 test_install_script() {
@@ -654,8 +654,8 @@ test_1m_context() {
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
 
-    run_test "--1m-context + prefix: name has Most capable, 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'Most capable, 1M Context'"
+    run_test "--1m-context + prefix: name has most capable, 1M Context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'most capable, 1M Context'"
 
     # Persistence
     run_test "--1m-context persists in config comment" \

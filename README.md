@@ -19,10 +19,11 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ## What's New in v1.7.3
 
-Added support for the newly released Claude Opus 4.7 on Amazon Bedrock (1M context, flagship model).
+Added support for Claude Opus 4.7 — released April 16, 2026 — as the default Opus on Amazon Bedrock.
 
-- **Claude Opus 4.7** — new flagship model, now the default Opus in the `/model` picker (`global.anthropic.claude-opus-4-7`)
-- Stronger long-running tasks, better instruction following, self-verification, and 3x improved vision resolution
+- **Claude Opus 4.7** (`global.anthropic.claude-opus-4-7`) — new flagship model in the `/model` picker
+- 1M context window, high-res vision (up to 2576px / ~3.75MP), new `xhigh` effort level, stronger agentic reasoning, self-verification, and improved long-running task performance
+- If you see a model-not-found error, try `--opus-model=us.anthropic.claude-opus-4-7` while global rollout completes
 
 ## What's New in v1.7.2
 
