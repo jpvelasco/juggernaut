@@ -622,6 +622,9 @@ test_1m_context() {
     run_test "--1m-context appends [1m] to opus model" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
+    run_test "--1m-context opus model is claude-opus-4-7[1m]" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'claude-opus-4-7\[1m\]'"
+
     run_test "--1m-context appends [1m] to sonnet model" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL=' | grep -q '\[1m\]'"
 
