@@ -31,9 +31,9 @@ Correctness fixes and new Claude Code feature support.
 
 Added support for Claude Opus 4.7 — released April 16, 2026 — as the default Opus on Amazon Bedrock.
 
-- **Claude Opus 4.7** (`global.anthropic.claude-opus-4-7`) — new flagship model in the `/model` picker
+- **Claude Opus 4.7** (`global.anthropic.claude-opus-4-7[1m]`) — new flagship model in the `/model` picker; 1M context is the default
 - 1M context window, high-res vision (up to 2576px / ~3.75MP), new `xhigh` effort level, stronger agentic reasoning, self-verification, and improved long-running task performance
-- If you see a model-not-found error, try `--opus-model=us.anthropic.claude-opus-4-7` while global rollout completes
+- If you see a model-not-found error, try `--opus-model=us.anthropic.claude-opus-4-7[1m]` while global rollout completes
 
 ## What's New in v1.7.2
 
@@ -503,7 +503,7 @@ Override the default model IDs from `bedrock-config.json`:
 | `--model=ID` | `-Model ID` | Custom primary model |
 | `--fast-model=ID` | `-FastModel ID` | Custom fast model |
 | `--model=default` | `-Model default` | Reset to bedrock-config.json default |
-| `--opusplan` | `-OpusPlan` | Use Opus during plan mode, Sonnet during execution |
+| `--opusplan` | `-OpusPlan` | Use Opus during plan mode, Sonnet during execution — keeps costs down while getting Opus-quality plans |
 | `--no-opusplan` | `-NoOpusPlan` | Disable opusplan mode |
 | `--effort=LEVEL` | `-Effort LEVEL` | Set effort level: `low`, `medium`, `high`, `xhigh` (default), `max` |
 
@@ -521,7 +521,7 @@ Juggernaut maps all Claude models to Bedrock global inference profiles. The `/mo
 
 Override individual models:
 ```bash
-./setup --opus-model=us.anthropic.claude-opus-4-7
+./setup --opus-model=us.anthropic.claude-opus-4-7[1m]
 ./setup --sonnet-model=eu.anthropic.claude-sonnet-4-6
 ./setup --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
 ```
