@@ -33,29 +33,54 @@ function Test-SettingsExists {
     (Test-Path $Path) -and ((Get-Item $Path).Length -gt 0)
 }
 
+function ConvertTo-HashtableRecursive {
+    # PS 5.1 has no ConvertFrom-Json -AsHashtable. Walk PSCustomObject → [ordered]@{}
+    param([Parameter(Mandatory)][AllowNull()]$InputObject)
+    if ($null -eq $InputObject) { return $null }
+    if ($InputObject -is [System.Collections.IList]) {
+        return ,@($InputObject | ForEach-Object { ConvertTo-HashtableRecursive $_ })
+    }
+    if ($InputObject -is [PSCustomObject]) {
+        $out = [ordered]@{}
+        foreach ($p in $InputObject.PSObject.Properties) {
+            $out[$p.Name] = ConvertTo-HashtableRecursive $p.Value
+        }
+        return $out
+    }
+    return $InputObject
+}
+
 function Read-Settings {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-SettingsExists -Path $Path)) { return [ordered]@{} }
+    $raw = Get-Content -Path $Path -Raw -Encoding utf8
     try {
-        $raw = Get-Content -Path $Path -Raw -Encoding utf8
-        return $raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
     } catch {
         throw "Read-Settings: $Path is not valid JSON: $_"
     }
+    # Force hashtable/ordered-dict shape so callers can .Contains() / .Remove() uniformly on PS 5.1+.
+    $result = ConvertTo-HashtableRecursive $parsed
+    if ($null -eq $result) { return [ordered]@{} }
+    return $result
 }
 
 function Test-HasJuggernautBlock {
     param([Parameter(Mandatory)]$Settings)
     if (-not $Settings) { return $false }
+    $hasKey = $false
     if ($Settings -is [hashtable] -or $Settings -is [System.Collections.Specialized.OrderedDictionary]) {
-        return $Settings.Contains('juggernaut') -and $Settings.juggernaut.meta.managedBy -eq 'juggernaut'
+        $hasKey = $Settings.Contains('juggernaut')
+    } else {
+        $hasKey = [bool]($Settings.PSObject.Properties.Name -contains 'juggernaut')
     }
-    return ($Settings.juggernaut -and $Settings.juggernaut.meta.managedBy -eq 'juggernaut')
+    if (-not $hasKey) { return $false }
+    return ($Settings['juggernaut'].meta.managedBy -eq 'juggernaut')
 }
 
 function Get-JuggernautBlockFromSettings {
     param([Parameter(Mandatory)]$Settings)
-    if (Test-HasJuggernautBlock -Settings $Settings) { return $Settings.juggernaut }
+    if (Test-HasJuggernautBlock -Settings $Settings) { return $Settings['juggernaut'] }
     return $null
 }
 
@@ -75,8 +100,13 @@ function Merge-JuggernautBlock {
 
 function Remove-JuggernautBlockFromSettings {
     param([Parameter(Mandatory)]$Existing)
+    if (-not $Existing) { return [ordered]@{} }
     foreach ($k in @('juggernaut','env','model','modelOverrides','availableModels')) {
-        if ($Existing.Contains($k)) { $Existing.Remove($k) | Out-Null }
+        if ($Existing -is [hashtable] -or $Existing -is [System.Collections.Specialized.OrderedDictionary]) {
+            if ($Existing.Contains($k)) { $Existing.Remove($k) | Out-Null }
+        } elseif ($Existing.PSObject.Properties.Name -contains $k) {
+            $Existing.PSObject.Properties.Remove($k) | Out-Null
+        }
     }
     return $Existing
 }

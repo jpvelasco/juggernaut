@@ -187,10 +187,12 @@ schema_validate() {
     errors+="  - meta.managedBy must be 'juggernaut' (got: '$managed_by')"$'\n'
   fi
 
-  # Region must be in supported list
+  # Region is required and must be in supported list
   local region
   region="$(echo "$block" | jq -r '.auth.region // ""')"
-  if [[ -n "$region" ]] && ! schema_is_supported_region "$region"; then
+  if [[ -z "$region" ]]; then
+    errors+="  - auth.region is required"$'\n'
+  elif ! schema_is_supported_region "$region"; then
     errors+="  - auth.region '$region' is not in bedrock-config.json .regions"$'\n'
   fi
 

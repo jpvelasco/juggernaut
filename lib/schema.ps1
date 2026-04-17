@@ -146,7 +146,9 @@ function Test-JuggernautBlock {
     }
 
     $region = $Block.auth.region
-    if ($region -and -not (Test-SchemaSupportedRegion -Region $region)) {
+    if ([string]::IsNullOrEmpty($region)) {
+        $errors.Add("auth.region is required")
+    } elseif (-not (Test-SchemaSupportedRegion -Region $region)) {
         $errors.Add("auth.region '$region' is not in bedrock-config.json .regions")
     }
 

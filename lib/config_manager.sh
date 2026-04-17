@@ -12,14 +12,15 @@ config_user_settings_path() {
 }
 
 config_project_settings_path() {
-  # Walks up from CWD looking for .claude/settings.json, stops at $HOME or /
+  # Walks up from CWD looking for .claude/settings.json, stops at $HOME or /.
+  # Optional $1 = start dir (default: $PWD). Returns 1 if not found.
   local dir="${1:-$PWD}"
   while [[ "$dir" != "/" && "$dir" != "$HOME" ]]; do
     if [[ -f "$dir/.claude/settings.json" ]]; then
       echo "$dir/.claude/settings.json"
       return 0
     fi
-    dir="$(dirname "$dir")"
+    dir="$(dirname -- "$dir")"
   done
   return 1
 }
@@ -119,10 +120,24 @@ config_backup() {
 
 config_rotate_backups() {
   local path="$1"
-  local pattern="${path}.backup.*"
-  # shellcheck disable=SC2012
-  ls -1t ${pattern} 2>/dev/null | tail -n +$((CONFIG_BACKUP_RETAIN + 1)) | while read -r old; do
-    rm -f -- "$old"
+  local dir base
+  dir="$(dirname -- "$path")"
+  base="$(basename -- "$path")"
+
+  # Use find + mtime-sort to avoid parsing ls and to handle names with spaces.
+  local -a backups=()
+  while IFS= read -r -d '' f; do
+    backups+=("$f")
+  done < <(find "$dir" -maxdepth 1 -name "${base}.backup.*" -printf '%T@ %p\0' 2>/dev/null \
+             | sort -z -rn \
+             | cut -z -d' ' -f2-)
+
+  local i=0
+  for f in "${backups[@]}"; do
+    i=$((i + 1))
+    if (( i > CONFIG_BACKUP_RETAIN )); then
+      rm -f -- "$f"
+    fi
   done
 }
 
@@ -160,32 +175,48 @@ config_write_atomic() {
   fi
 
   # Best-effort fsync (not all OSes / all shells support sync -f).
-  command -v sync >/dev/null 2>&1 && sync "$tmp" 2>/dev/null || true
+  if command -v sync >/dev/null 2>&1; then
+    sync "$tmp" 2>/dev/null || true
+  fi
 
-  mv -f "$tmp" "$path"
+  mv -f -- "$tmp" "$path"
 }
 
 # config_with_lock <path> <command...>
-# Run command under an exclusive flock on path.lock. Falls back to no-op if flock missing.
+# Runs command under an exclusive flock on path.lock with a 10s timeout.
+# Falls back to a directory-based mkdir lock when flock is absent (macOS by default,
+# Git Bash on Windows). On fallback, caller gets the same blocking semantics.
 config_with_lock() {
   local path="$1"; shift
   local lockfile="${path}.lock"
-  mkdir -p "$(dirname "$lockfile")"
+  mkdir -p -- "$(dirname -- "$lockfile")"
 
   if command -v flock >/dev/null 2>&1; then
-    exec 9>"$lockfile"
-    if ! flock -x -w 5 9; then
-      echo "config_with_lock: could not acquire lock on $lockfile within 5s" >&2
+    local rc
+    {
+      if ! flock -x -w 10 9; then
+        echo "config_with_lock: could not acquire flock on $lockfile within 10s" >&2
+        return 1
+      fi
+      "$@"
+      rc=$?
+    } 9>"$lockfile"
+    return "$rc"
+  fi
+
+  # Fallback: mkdir-based mutex (POSIX, atomic on all filesystems we care about).
+  local lockdir="${path}.lockdir"
+  local waited=0
+  until mkdir -- "$lockdir" 2>/dev/null; do
+    if (( waited >= 10 )); then
+      echo "config_with_lock: could not acquire mkdir lock on $lockdir within 10s" >&2
       return 1
     fi
-    "$@"
-    local rc=$?
-    exec 9>&-
-    return $rc
-  else
-    # No flock → run unlocked. Acceptable for interactive setup; risky for concurrent CI.
-    "$@"
-  fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  trap 'rmdir -- "$lockdir" 2>/dev/null || true' RETURN
+  "$@"
 }
 
 # config_load_effective
@@ -194,7 +225,7 @@ config_with_lock() {
 config_load_effective() {
   local user_path project_path user_json project_json
   user_path="$(config_user_settings_path)"
-  project_path="$(config_project_settings_path 2>/dev/null || true)"
+  project_path="$(config_project_settings_path "$PWD" 2>/dev/null || true)"
 
   user_json="$(config_read "$user_path")"
   if [[ -n "$project_path" ]]; then
