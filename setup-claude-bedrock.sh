@@ -916,6 +916,12 @@ parse_arguments() {
             --skip-preflight)
                 SKIP_PREFLIGHT=true
                 ;;
+            --v2)
+                # Hidden v2 feature flag. Accepted in v1.7.6+ so users and CI
+                # can opt into the v2 codepath once it ships. Today it's a no-op
+                # beyond acknowledging the flag — v1 apply flow continues below.
+                export JUGGERNAUT_USE_V2=1
+                ;;
             --region=*)
                 AWS_REGION="${arg#--region=}"
                 ;;

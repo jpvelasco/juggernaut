@@ -29,8 +29,17 @@ param(
     [switch]$DryRun,
     [switch]$Help,
     [Alias("v")]
-    [switch]$Version
+    [switch]$Version,
+    # Hidden v2 feature flag. Accepted so users/CI can opt into the v2 codepath
+    # once it ships. Today this is a no-op beyond recording the intent — v1
+    # apply flow continues unchanged.
+    [switch]$V2
 )
+
+if ($V2 -or $env:JUGGERNAUT_USE_V2 -eq '1') {
+    $env:JUGGERNAUT_USE_V2 = '1'
+    Write-Host "[v2] Juggernaut v2 mode enabled (experimental). Phase 1 foundations only — continuing with v1 apply flow." -ForegroundColor DarkYellow
+}
 
 # Track if parameters were explicitly provided by the user
 $AuthExplicit = $PSBoundParameters.ContainsKey('Auth')
