@@ -475,6 +475,12 @@ generate_config_block() {
     if [[ "$USE_1M_CONTEXT" == true ]]; then
         config+="# 1MContext: true"$'\n'
     fi
+    if [[ "$USE_OPUSPLAN" == true ]]; then
+        config+="# OpusPlan: true"$'\n'
+    fi
+    if [[ -n "$EFFORT_LEVEL" ]]; then
+        config+="# EffortLevel: $EFFORT_LEVEL"$'\n'
+    fi
 
     # Unset conflicting auth variables to prevent credential conflicts
     if [[ "$auth_mode" == "api-key" ]]; then
@@ -500,8 +506,16 @@ generate_config_block() {
         local value
         if [[ "$key" == "AWS_REGION" ]]; then
             value="$region"
+        elif [[ "$key" == "ANTHROPIC_MODEL" && "$USE_OPUSPLAN" == true ]]; then
+            value="opusplan"
         elif [[ "$key" == "ANTHROPIC_MODEL" && -n "$CUSTOM_MODEL" ]]; then
             value="$CUSTOM_MODEL"
+        elif [[ "$key" == "CLAUDE_CODE_EFFORT_LEVEL" ]]; then
+            if [[ -n "$EFFORT_LEVEL" ]]; then
+                value="$EFFORT_LEVEL"
+            else
+                value="${BEDROCK_CONFIG[$key]}"
+            fi
         elif [[ "$key" == "ANTHROPIC_DEFAULT_OPUS_MODEL" && -n "$CUSTOM_OPUS_MODEL" ]]; then
             value="$CUSTOM_OPUS_MODEL"
         elif [[ "$key" == "ANTHROPIC_DEFAULT_SONNET_MODEL" && -n "$CUSTOM_SONNET_MODEL" ]]; then
@@ -670,6 +684,24 @@ detect_existing_1m_context() {
     fi
 }
 
+# Detect existing opusplan setting from config file
+detect_existing_opusplan() {
+    local profile_file=$1
+    if [[ -f "$profile_file" ]]; then
+        if grep -q "# OpusPlan: true" "$profile_file" 2>/dev/null; then
+            echo "true"
+        fi
+    fi
+}
+
+# Detect existing effort level from config file
+detect_existing_effort() {
+    local config_file=$1
+    if [[ -f "$config_file" ]]; then
+        grep "^# EffortLevel:" "$config_file" 2>/dev/null | head -1 | sed 's/^# EffortLevel: //'
+    fi
+}
+
 # Detect existing custom haiku model from config file
 detect_existing_haiku_model() {
     local config_file=$1
@@ -771,8 +803,12 @@ Options:
   --haiku-model=ID       Custom haiku model (use "default" to reset)
   --global               Use global inference profiles (default)
   --model-prefix=PREFIX  Inference profile prefix (e.g., us, eu, ap)
-  --1m-context           Enable 1M token context window (Opus & Sonnet only)
-  --no-1m-context        Disable 1M context (revert to standard ~200K)
+  --1m-context           Enable 1M token context window for Sonnet (Opus 4.7 always uses 1M)
+  --no-1m-context        Disable 1M context for Sonnet
+  --opusplan             Use Opus during plan mode, Sonnet during execution (cost-efficient)
+  --no-opusplan          Disable opusplan (use single model for all tasks)
+  --effort=LEVEL         Set default effort level: low, medium, high, xhigh, max
+                         Default: xhigh (Opus 4.7 recommendation)
   --dry-run              Preview changes without modifying files
   --force, -f            Skip confirmation prompts
   --skip-preflight       Skip dependency checks (also: JUGGERNAUT_SKIP_PREFLIGHT=1)
@@ -821,6 +857,13 @@ Examples:
   # Reset custom model back to bedrock-config.json default
   ./setup-claude-bedrock.sh --model=default
 
+  # OpusPlan: Opus for planning, Sonnet for execution (cost-efficient)
+  ./setup-claude-bedrock.sh --opusplan
+
+  # Effort level: tune reasoning depth vs cost
+  ./setup-claude-bedrock.sh --effort=high
+  ./setup-claude-bedrock.sh --effort=xhigh   # default for Opus 4.7
+
   # Preview changes
   ./setup-claude-bedrock.sh --dry-run
   ./setup-claude-bedrock.sh --auth=api-key --bedrock-key=br-xxx --dry-run
@@ -856,6 +899,10 @@ MODEL_PREFIX=""
 USE_GLOBAL=false
 USE_1M_CONTEXT=false
 EXPLICIT_NO_1M=false
+USE_OPUSPLAN=false
+OPUSPLAN_EXPLICIT=false
+EFFORT_LEVEL=""
+EFFORT_EXPLICIT=false
 
 parse_arguments() {
     for arg in "$@"; do
@@ -912,6 +959,18 @@ parse_arguments() {
             --no-1m-context|--standard-context)
                 USE_1M_CONTEXT=false
                 EXPLICIT_NO_1M=true
+                ;;
+            --opusplan)
+                USE_OPUSPLAN=true
+                OPUSPLAN_EXPLICIT=true
+                ;;
+            --no-opusplan)
+                USE_OPUSPLAN=false
+                OPUSPLAN_EXPLICIT=true
+                ;;
+            --effort=*)
+                EFFORT_LEVEL="${arg#--effort=}"
+                EFFORT_EXPLICIT=true
                 ;;
             --global)
                 USE_GLOBAL=true
@@ -1306,6 +1365,25 @@ main() {
         fi
     fi
 
+    # Detect existing opusplan setting if user didn't explicitly specify
+    if [[ "$OPUSPLAN_EXPLICIT" != true ]]; then
+        local existing_opusplan
+        existing_opusplan=$(detect_existing_opusplan "$config_file")
+        if [[ "$existing_opusplan" == "true" ]]; then
+            USE_OPUSPLAN=true
+        fi
+    fi
+
+    # Detect existing effort level if user didn't explicitly specify
+    if [[ "$EFFORT_EXPLICIT" != true ]]; then
+        local existing_effort
+        existing_effort=$(detect_existing_effort "$config_file")
+        if [[ -n "$existing_effort" ]]; then
+            EFFORT_LEVEL="$existing_effort"
+            echo "Preserving existing effort level: $EFFORT_LEVEL"
+        fi
+    fi
+
     # Detect existing storage mode if user didn't explicitly specify
     if [[ "$STORAGE_MODE_EXPLICIT" != true && -f "$config_file" ]]; then
         local existing_storage
@@ -1393,6 +1471,13 @@ main() {
         fi
     fi
 
+    if [[ -n "$EFFORT_LEVEL" ]]; then
+        case "$EFFORT_LEVEL" in
+            low|medium|high|xhigh|max) ;;
+            *) echo "Error: --effort must be one of: low, medium, high, xhigh, max" >&2; exit 1 ;;
+        esac
+    fi
+
     if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" ]]; then
         validate_model_id "$CUSTOM_OPUS_MODEL" "opus-model" || exit 1
         warn_custom_model "$CUSTOM_OPUS_MODEL" "opus"
@@ -1435,18 +1520,21 @@ main() {
             fi
         done
 
-        # Update names for 1M context — insert ", 1M Context" inside parens (idempotent)
+        # Update names for 1M context — insert ", 1M Context" inside parens (idempotent, case-insensitive)
         for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
             local val="${BEDROCK_CONFIG[$key]}"
-            if [[ -n "$val" && "$val" != *"1M Context"* ]]; then
+            local val_lower="${val,,}"
+            if [[ -n "$val" && "$val_lower" != *"1m context"* ]]; then
                 BEDROCK_CONFIG["$key"]="${val/)/, 1M Context)}"
             fi
         done
 
-        # Update descriptions for 1M context — append (idempotent)
+        # Update descriptions for 1M context — append (idempotent, case-insensitive)
         for key in ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
-            if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"1M Context"* ]]; then
-                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]}, 1M Context"
+            local desc="${BEDROCK_CONFIG[$key]}"
+            local desc_lower="${desc,,}"
+            if [[ -n "$desc" && "$desc_lower" != *"1m context"* ]]; then
+                BEDROCK_CONFIG["$key"]="$desc, 1M Context"
             fi
         done
 
@@ -1457,7 +1545,13 @@ main() {
         if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL}[1m]"
         fi
-    else
+    elif [[ "$EXPLICIT_NO_1M" == true ]]; then
+        # Strip [1m] from base config model IDs (Opus 4.7 defaults to [1m])
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+            if [[ "${BEDROCK_CONFIG[$key]}" == *"[1m]"* ]]; then
+                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%\[1m\]}"
+            fi
+        done
         # Strip [1m] from custom models persisted from a previous --1m-context run
         if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL%\[1m\]}"

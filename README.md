@@ -17,6 +17,16 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - **Cost Control**: Route through your AWS account for billing/governance
 - **Enterprise Ready**: Works with AWS SSO, IAM roles, and corporate identity providers
 
+## What's New in v1.7.4
+
+Correctness fixes and new Claude Code feature support.
+
+- **Opus 4.7 defaults to 1M context** — `[1m]` suffix is now the default for Opus 4.7 (eliminates duplicate picker entries)
+- **`--opusplan` mode** — sets `ANTHROPIC_MODEL=opusplan` so Claude uses Opus during `/plan` and Sonnet during execution
+- **`--effort=low|medium|high|xhigh|max`** — sets `CLAUDE_CODE_EFFORT_LEVEL` for all models; `xhigh` is now the default
+- **`CLAUDE_CODE_SUBAGENT_MODEL`** — background/subagent work now explicitly routed to Haiku 4.5 for cost efficiency
+- **Prompt caching fix** — replaced deprecated `ENABLE_PROMPT_CACHING_1H_BEDROCK` with `ENABLE_PROMPT_CACHING_1H`
+
 ## What's New in v1.7.3
 
 Added support for Claude Opus 4.7 — released April 16, 2026 — as the default Opus on Amazon Bedrock.
@@ -493,6 +503,9 @@ Override the default model IDs from `bedrock-config.json`:
 | `--model=ID` | `-Model ID` | Custom primary model |
 | `--fast-model=ID` | `-FastModel ID` | Custom fast model |
 | `--model=default` | `-Model default` | Reset to bedrock-config.json default |
+| `--opusplan` | `-OpusPlan` | Use Opus during plan mode, Sonnet during execution |
+| `--no-opusplan` | `-NoOpusPlan` | Disable opusplan mode |
+| `--effort=LEVEL` | `-Effort LEVEL` | Set effort level: `low`, `medium`, `high`, `xhigh` (default), `max` |
 
 Custom models are persisted via comments in the config block and preserved on re-run, just like auth mode. Use `--model=default` to revert.
 
@@ -502,9 +515,9 @@ Juggernaut maps all Claude models to Bedrock global inference profiles. The `/mo
 
 | Picker Entry | Bedrock Model ID | Description |
 |-------------|-----------------|-------------|
-| Opus 4.7 (New flagship – most capable) | `global.anthropic.claude-opus-4-7` | Most capable model yet — stronger long-running tasks, better instruction following, self-verification, improved vision (3x resolution), and 1M context window |
+| Opus 4.7 (New flagship – 1M context) | `global.anthropic.claude-opus-4-7[1m]` | Most capable model yet — 1M context, high-res vision, xhigh effort by default, stronger agentic reasoning and self-verification |
 | Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Best balance of speed and intelligence |
-| Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest model for everyday tasks |
+| Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest model for everyday tasks and subagents |
 
 Override individual models:
 ```bash

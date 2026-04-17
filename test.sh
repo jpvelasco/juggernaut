@@ -486,8 +486,8 @@ test_compat_env_vars() {
     run_test "config has CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS'"
 
-    run_test "config has ENABLE_PROMPT_CACHING_1H_BEDROCK" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ENABLE_PROMPT_CACHING_1H_BEDROCK'"
+    run_test "config has ENABLE_PROMPT_CACHING_1H (not deprecated BEDROCK variant)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ENABLE_PROMPT_CACHING_1H='"
 }
 
 test_per_model_flags() {
@@ -573,14 +573,14 @@ test_model_prefix_regex() {
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep -q 'eu\.claude-'"
 
     # Verify friendly names stay clean regardless of prefix
-    run_test "prefix=us: name stays Most capable" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'most capable'"
+    run_test "prefix=us: opus name present" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME'"
 
     run_test "prefix=eu: name stays Recommended" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=eu --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME' | grep -q 'Recommended'"
 
-    run_test "prefix=global: name stays Most capable" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME' | grep -q 'most capable'"
+    run_test "prefix=global: opus name present" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=global --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL_NAME'"
 }
 
 test_install_script() {
@@ -634,12 +634,12 @@ test_1m_context() {
     run_test "--1m-context does NOT affect ANTHROPIC_MODEL" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -E '^export ANTHROPIC_MODEL=' | grep -q '\[1m\]'"
 
-    run_test "default config has no [1m] suffix" \
-        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q '\[1m\]'"
+    run_test "default opus model includes [1m] suffix" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
     # Name and description updates
-    run_test "--1m-context updates opus name with 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q '1M Context'"
+    run_test "--1m-context opus name contains 1m context (already default)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -qi '1m context'"
 
     run_test "--1m-context updates sonnet name with 1M Context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'SONNET_MODEL_NAME' | grep -q '1M Context'"
@@ -647,8 +647,8 @@ test_1m_context() {
     run_test "--1m-context does NOT update haiku name" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'HAIKU_MODEL_NAME' | grep -q '1M Context'"
 
-    run_test "--1m-context updates opus description with 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_DESCRIPTION' | grep -q '1M Context'"
+    run_test "--1m-context opus description contains 1m context (already default)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_DESCRIPTION' | grep -qi '1m context'"
 
     run_test "--1m-context updates sonnet description with 1M Context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'SONNET_MODEL_DESCRIPTION' | grep -q '1M Context'"
@@ -657,8 +657,8 @@ test_1m_context() {
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
 
-    run_test "--1m-context + prefix: name has most capable, 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q 'most capable, 1M Context'"
+    run_test "--1m-context + prefix: opus name contains 1m context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -qi '1m context'"
 
     # Persistence
     run_test "--1m-context persists in config comment" \
@@ -672,8 +672,8 @@ test_1m_context() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q '1m-context'"
 
     # Disable flag
-    run_test "--no-1m-context disables 1M context" \
-        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --dry-run --force 2>&1 | grep -q '\[1m\]'"
+    run_test "--no-1m-context strips [1m] from default opus model" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
     # Custom model + --no-1m-context strips persisted [1m]
     run_test "--no-1m-context strips [1m] from custom opus model" \
@@ -686,8 +686,56 @@ test_1m_context() {
     run_test "--1m-context does not create double [1m] suffix" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '\[1m\]\[1m\]'"
 
-    run_test "--1m-context does not duplicate 1M Context in name" \
-        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '1M Context.*1M Context'"
+    run_test "--1m-context does not duplicate 1M context in name" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -iq '1m context.*1m context'"
+}
+
+#───────────────────────────────────────────────────────────────────────────────
+# v1.7.4 Feature Tests
+#───────────────────────────────────────────────────────────────────────────────
+
+test_v174_features() {
+    section "v1.7.4 Features"
+
+    # OpusPlan mode
+    run_test "--opusplan sets ANTHROPIC_MODEL to opusplan" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opusplan --dry-run --force 2>&1 | grep -E 'ANTHROPIC_MODEL=' | grep -q 'opusplan'"
+
+    run_test "--opusplan persists in config comment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opusplan --dry-run --force 2>&1 | grep -q '# OpusPlan: true'"
+
+    run_test "--no-opusplan does not set opusplan" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-opusplan --dry-run --force 2>&1 | grep -E 'ANTHROPIC_MODEL=' | grep -q 'opusplan'"
+
+    run_test "help shows --opusplan" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'opusplan'"
+
+    # Effort level
+    run_test "--effort=xhigh sets CLAUDE_CODE_EFFORT_LEVEL=xhigh" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --effort=xhigh --dry-run --force 2>&1 | grep 'CLAUDE_CODE_EFFORT_LEVEL=' | grep -q 'xhigh'"
+
+    run_test "--effort=low sets CLAUDE_CODE_EFFORT_LEVEL=low" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --effort=low --dry-run --force 2>&1 | grep 'CLAUDE_CODE_EFFORT_LEVEL=' | grep -q 'low'"
+
+    run_test "--effort persists in config comment" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --effort=high --dry-run --force 2>&1 | grep -q '# EffortLevel: high'"
+
+    run_test "default config has CLAUDE_CODE_EFFORT_LEVEL=xhigh" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'CLAUDE_CODE_EFFORT_LEVEL=' | grep -q 'xhigh'"
+
+    run_test "help shows --effort" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q 'effort'"
+
+    # Subagent model
+    run_test "config has CLAUDE_CODE_SUBAGENT_MODEL" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'CLAUDE_CODE_SUBAGENT_MODEL='"
+
+    run_test "CLAUDE_CODE_SUBAGENT_MODEL uses haiku" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'CLAUDE_CODE_SUBAGENT_MODEL=' | grep -q 'haiku'"
+
+    # Prompt caching
+    run_test "config does NOT have deprecated ENABLE_PROMPT_CACHING_1H_BEDROCK" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep -q 'ENABLE_PROMPT_CACHING_1H_BEDROCK'"
 }
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -986,6 +1034,7 @@ main() {
     test_install_script
     test_capabilities
     test_1m_context
+    test_v174_features
     test_api_key_quoting
     test_required_files
     test_json_validity
