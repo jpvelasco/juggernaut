@@ -2,6 +2,25 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [1.7.4] - 2026-04-16
+
+### Added
+
+- **`--opusplan` / `-OpusPlan`** — sets `ANTHROPIC_MODEL=opusplan` to use Opus during plan mode and Sonnet during execution; persisted via `# OpusPlan: true` metadata comment
+- **`--effort=LEVEL` / `-Effort LEVEL`** — sets `CLAUDE_CODE_EFFORT_LEVEL` (values: `low`, `medium`, `high`, `xhigh`, `max`); persisted via `# EffortLevel:` metadata comment
+- **`CLAUDE_CODE_SUBAGENT_MODEL`** — explicitly routes background/subagent work to Haiku 4.5 for cost efficiency
+
+### Changed
+
+- **Opus 4.7 defaults to `[1m]`** — `ANTHROPIC_DEFAULT_OPUS_MODEL` now uses `global.anthropic.claude-opus-4-7[1m]` by default, eliminating duplicate picker entries (regular + 1M)
+- **Default effort is `xhigh`** — `CLAUDE_CODE_EFFORT_LEVEL=xhigh` is now the default per Anthropic's recommendation for Opus 4.7
+- **Opus 4.7 picker label** — updated to "Opus 4.7 (New flagship – 1M context)" to reflect the 1M default
+
+### Fixed
+
+- Replaced deprecated `ENABLE_PROMPT_CACHING_1H_BEDROCK` with `ENABLE_PROMPT_CACHING_1H`
+- Removed invalid `vision_highres` from model supported capabilities (not a valid Claude Code capability value)
+
 ## [1.7.3] - 2026-04-16
 
 ### Added

@@ -1,5 +1,5 @@
 # Claude Code - Amazon Bedrock Setup Script for Windows
-# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-Force] [-SkipPreflight] [-DryRun]
+# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-OpusPlan] [-Effort <level>] [-Force] [-SkipPreflight] [-DryRun]
 
 param(
     [ValidateSet("iam", "api-key")]
@@ -20,6 +20,10 @@ param(
     [switch]$OneM,
     [Alias("standard-context")]
     [switch]$NoOneM,
+    [switch]$OpusPlan,
+    [switch]$NoOpusPlan,
+    [ValidateSet("low", "medium", "high", "xhigh", "max")]
+    [string]$Effort = "",
     [switch]$Force,
     [switch]$SkipPreflight,
     [switch]$DryRun,
@@ -37,6 +41,8 @@ $SonnetModelExplicit = $PSBoundParameters.ContainsKey('SonnetModel')
 $HaikuModelExplicit = $PSBoundParameters.ContainsKey('HaikuModel')
 
 $StorageExplicit = $PSBoundParameters.ContainsKey('Storage')
+$OpusPlanExplicit = $PSBoundParameters.ContainsKey('OpusPlan') -or $PSBoundParameters.ContainsKey('NoOpusPlan')
+$EffortExplicit = $PSBoundParameters.ContainsKey('Effort')
 
 $ErrorActionPreference = "Stop"
 
@@ -340,6 +346,24 @@ if (-not $OneM -and -not $NoOneM) {
     if ($profileContent -match '# 1MContext: true') {
         $OneM = $true
         Write-Host "Preserving existing 1M context setting"
+    }
+}
+
+# Detect existing opusplan setting
+if (-not $OpusPlanExplicit) {
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    if ($profileContent -match '# OpusPlan: true') {
+        $OpusPlan = $true
+        Write-Host "Preserving existing opusplan setting"
+    }
+}
+
+# Detect existing effort level
+if (-not $EffortExplicit) {
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    if ($profileContent -match '# EffortLevel: (.+)') {
+        $Effort = $Matches[1].Trim()
+        Write-Host "Preserving existing effort level: $Effort"
     }
 }
 
@@ -708,6 +732,12 @@ if (-not [string]::IsNullOrEmpty($HaikuModel)) {
 if ($OneM) {
     $ConfigBlock += "# 1MContext: true`n"
 }
+if ($OpusPlan) {
+    $ConfigBlock += "# OpusPlan: true`n"
+}
+if (-not [string]::IsNullOrEmpty($Effort)) {
+    $ConfigBlock += "# EffortLevel: $Effort`n"
+}
 if ($Storage -eq "keychain") {
     $ConfigBlock += "# Storage: keychain (encrypted)`n"
 }
@@ -732,8 +762,15 @@ if ($Config -and $Config.environment) {
     $Config.environment.PSObject.Properties | ForEach-Object {
         $value = $_.Value
         # Use custom model if specified
-        if ($_.Name -eq "ANTHROPIC_MODEL" -and -not [string]::IsNullOrEmpty($Model)) {
-            $value = $Model
+        if ($_.Name -eq "ANTHROPIC_MODEL") {
+            if ($OpusPlan) {
+                $value = "opusplan"
+            } elseif (-not [string]::IsNullOrEmpty($Model)) {
+                $value = $Model
+            }
+        }
+        if ($_.Name -eq "CLAUDE_CODE_EFFORT_LEVEL" -and -not [string]::IsNullOrEmpty($Effort)) {
+            $value = $Effort
         }
         if ($_.Name -eq "ANTHROPIC_DEFAULT_OPUS_MODEL" -and -not [string]::IsNullOrEmpty($OpusModel)) {
             $value = $OpusModel
