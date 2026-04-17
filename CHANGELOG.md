@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [1.7.5] - 2026-04-17
+
+### Fixed
+
+- **PowerShell profile encoding on Windows** — fixes a `ParseException` that prevented the PowerShell profile from loading after running the installer. Non-ASCII en/em dashes in model display names were written to the profile without an explicit encoding, and Windows PowerShell 5.1 defaults to the system ANSI code page (Windows-1252), where UTF-8 byte `0x93` (part of the en dash sequence) decodes as a curly quote — closing the `$env:` string assignment early.
+- Replaced en/em dashes with ASCII hyphens in `ANTHROPIC_DEFAULT_OPUS_MODEL_NAME` and `ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION`
+- Added `-Encoding utf8` to every `Set-Content`, `Add-Content`, and `Get-Content` profile I/O in `setup-claude-bedrock.ps1` and `uninstall.ps1` so reads and writes stay symmetric on both PS 5.1 and PS 7+
+
 ## [1.7.4] - 2026-04-16
 
 ### Added
