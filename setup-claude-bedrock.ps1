@@ -107,7 +107,7 @@ function Get-ExistingAuthMode {
     param([string]$ProfilePath)
 
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# Auth mode: (iam|api-key)") {
             return $Matches[1]
         }
@@ -120,7 +120,7 @@ function Get-ExistingModel {
     param([string]$ProfilePath)
 
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# Model: (.+)$" ) {
             return $Matches[1].Trim()
         }
@@ -133,7 +133,7 @@ function Get-ExistingFastModel {
     param([string]$ProfilePath)
 
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# FastModel: (.+)$") {
             return $Matches[1].Trim()
         }
@@ -144,7 +144,7 @@ function Get-ExistingFastModel {
 function Get-ExistingOpusModel {
     param([string]$ProfilePath)
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# OpusModel: (.+)$") {
             return $Matches[1].Trim()
         }
@@ -155,7 +155,7 @@ function Get-ExistingOpusModel {
 function Get-ExistingSonnetModel {
     param([string]$ProfilePath)
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# SonnetModel: (.+)$") {
             return $Matches[1].Trim()
         }
@@ -166,7 +166,7 @@ function Get-ExistingSonnetModel {
 function Get-ExistingHaikuModel {
     param([string]$ProfilePath)
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# HaikuModel: (.+)$") {
             return $Matches[1].Trim()
         }
@@ -180,7 +180,7 @@ function Get-ExistingStorageMode {
     param([string]$ProfilePath)
 
     if (Test-Path $ProfilePath) {
-        $content = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+        $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
         if ($content -match "# Storage: keychain") {
             return "keychain"
         }
@@ -342,7 +342,7 @@ if (-not $StorageExplicit) {
 
 # Detect existing 1M context flag
 if (-not $OneM -and -not $NoOneM) {
-    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if ($profileContent -match '# 1MContext: true') {
         $OneM = $true
         Write-Host "Preserving existing 1M context setting"
@@ -351,7 +351,7 @@ if (-not $OneM -and -not $NoOneM) {
 
 # Detect existing opusplan setting
 if (-not $OpusPlanExplicit) {
-    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if ($profileContent -match '# OpusPlan: true') {
         $OpusPlan = $true
         Write-Host "Preserving existing opusplan setting"
@@ -360,7 +360,7 @@ if (-not $OpusPlanExplicit) {
 
 # Detect existing effort level
 if (-not $EffortExplicit) {
-    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if ($profileContent -match '# EffortLevel: (.+)') {
         $Effort = $Matches[1].Trim()
         Write-Host "Preserving existing effort level: $Effort"
@@ -370,7 +370,7 @@ if (-not $EffortExplicit) {
 # Platform-aware storage default for new installs (Windows defaults to keychain)
 if (-not $StorageExplicit -and $Storage -eq "profile") {
     # On Windows, Credential Manager is always available
-    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if (-not ($profileContent -match "CLAUDE_CODE_USE_BEDROCK")) {
         # New install — default to keychain on Windows
         $Storage = "keychain"
@@ -379,7 +379,7 @@ if (-not $StorageExplicit -and $Storage -eq "profile") {
 
 # Offer to migrate plaintext API keys to Credential Manager
 if ($Auth -eq "api-key" -and -not $StorageExplicit -and $Storage -eq "profile") {
-    $profileContent = Get-Content $ProfilePathForDetection -Raw -ErrorAction SilentlyContinue
+    $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if ($profileContent -match "CLAUDE_CODE_USE_BEDROCK" -and $profileContent -notmatch "# Storage: keychain") {
         if ($Force) {
             $Storage = "keychain"
@@ -852,7 +852,7 @@ if ((Test-Path $ProfilePath) -and -not $DryRun) {
 }
 
 # Check if configuration already exists
-$ProfileContent = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+$ProfileContent = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
 if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
     Write-Host "Existing configuration found" -ForegroundColor Yellow
 

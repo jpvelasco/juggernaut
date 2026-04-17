@@ -14,7 +14,7 @@ if (-not (Test-Path $ProfilePath)) {
     exit 0
 }
 
-$ProfileContent = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+$ProfileContent = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
 
 if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
     # Clean up keychain credentials before removing config (needs the markers to detect storage mode)
@@ -28,8 +28,8 @@ if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
     $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# Claude Code - Amazon Bedrock Configuration.*?`$env:ANTHROPIC_(?:SMALL_FAST_)?MODEL = `"[^`"]+`"\r?\n?", "`n"
     # Remove multiple consecutive blank lines
     $ProfileContent = $ProfileContent -replace "(\r?\n){3,}", "`n`n"
-    Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline
-    Add-Content -Path $ProfilePath -Value ""
+    Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline -Encoding utf8
+    Add-Content -Path $ProfilePath -Value "" -Encoding utf8
     Write-Host "Configuration removed from $ProfilePath" -ForegroundColor Green
 } else {
     Write-Host "No configuration found in $ProfilePath" -ForegroundColor Yellow
