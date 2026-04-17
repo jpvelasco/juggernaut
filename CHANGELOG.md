@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [1.7.3] - 2026-04-16
+
+### Added
+
+- **Claude Opus 4.7 support** — new flagship model now available as `global.anthropic.claude-opus-4-7` on Amazon Bedrock
+- Updated `/model` picker: "Opus 4.7 (New flagship – most capable)" with description highlighting improved vision, instruction following, and self-verification
+- Updated `ANTHROPIC_DEFAULT_OPUS_MODEL` default to `global.anthropic.claude-opus-4-7`
+
 ## [1.7.2] - 2026-04-12
 
 Reliability, security, and developer experience improvements across the entire setup pipeline.
@@ -51,6 +59,7 @@ Reliability, security, and developer experience improvements across the entire s
 - `--model-prefix=us|eu|ap` for region-specific inference profiles
 - One-line install: `curl | bash` (Unix) and `irm | iex` (PowerShell)
 
+[1.7.3]: https://github.com/jpvelasco/juggernaut/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/jpvelasco/juggernaut/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/jpvelasco/juggernaut/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/jpvelasco/juggernaut/compare/v1.6.0...v1.7.0

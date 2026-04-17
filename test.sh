@@ -494,7 +494,7 @@ test_per_model_flags() {
     section "Per-Model CLI Flags"
 
     run_test "--opus-model override" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opus-model=us.anthropic.claude-opus-4-6-v1 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-6-v1'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --opus-model=us.anthropic.claude-opus-4-7 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-7'"
 
     run_test "--sonnet-model override" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --sonnet-model=us.anthropic.claude-sonnet-4-6 --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.us.anthropic.claude-sonnet-4-6'"
@@ -545,7 +545,7 @@ test_model_prefix_regex() {
 
     # Verify prefix transform preserves anthropic.* segment for all model vars
     run_test "prefix=us: opus keeps anthropic segment" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-6-v1'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL=.us.anthropic.claude-opus-4-7'"
 
     run_test "prefix=us: sonnet keeps anthropic segment" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --model-prefix=us --dry-run --force 2>&1 | grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL=.us.anthropic.claude-sonnet-4-6'"

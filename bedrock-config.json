@@ -1,10 +1,10 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "opus": "global.anthropic.claude-opus-4-6-v1",
+    "opus": "global.anthropic.claude-opus-4-7",
     "sonnet": "global.anthropic.claude-sonnet-4-6",
     "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
@@ -14,15 +14,15 @@
     "MAX_THINKING_TOKENS": "65536",
 
     "ANTHROPIC_MODEL": "global.anthropic.claude-sonnet-4-6",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-6-v1",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-7",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.6 (Most capable)",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.7 (New flagship – most capable)",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Recommended)",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
 
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model for complex reasoning",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model yet — stronger long-running tasks, better instruction following, self-verification, improved vision (3x resolution), and 1M context window.",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks",
 
