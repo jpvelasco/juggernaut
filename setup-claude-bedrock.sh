@@ -1545,7 +1545,13 @@ main() {
         if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL}[1m]"
         fi
-    else
+    elif [[ "$EXPLICIT_NO_1M" == true ]]; then
+        # Strip [1m] from base config model IDs (Opus 4.7 defaults to [1m])
+        for key in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+            if [[ "${BEDROCK_CONFIG[$key]}" == *"[1m]"* ]]; then
+                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%\[1m\]}"
+            fi
+        done
         # Strip [1m] from custom models persisted from a previous --1m-context run
         if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL%\[1m\]}"

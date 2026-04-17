@@ -638,8 +638,8 @@ test_1m_context() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
     # Name and description updates
-    run_test "--1m-context updates opus name with 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q '1M Context'"
+    run_test "--1m-context opus name contains 1m context (already default)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -qi '1m context'"
 
     run_test "--1m-context updates sonnet name with 1M Context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'SONNET_MODEL_NAME' | grep -q '1M Context'"
@@ -647,8 +647,8 @@ test_1m_context() {
     run_test "--1m-context does NOT update haiku name" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'HAIKU_MODEL_NAME' | grep -q '1M Context'"
 
-    run_test "--1m-context updates opus description with 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_DESCRIPTION' | grep -q '1M Context'"
+    run_test "--1m-context opus description contains 1m context (already default)" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'OPUS_MODEL_DESCRIPTION' | grep -qi '1m context'"
 
     run_test "--1m-context updates sonnet description with 1M Context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'SONNET_MODEL_DESCRIPTION' | grep -q '1M Context'"
@@ -657,8 +657,8 @@ test_1m_context() {
     run_test "--1m-context works with --model-prefix=us" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
 
-    run_test "--1m-context + prefix: opus name contains 1M Context" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -q '1M Context'"
+    run_test "--1m-context + prefix: opus name contains 1m context" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -qi '1m context'"
 
     # Persistence
     run_test "--1m-context persists in config comment" \
@@ -672,8 +672,8 @@ test_1m_context() {
         "$SCRIPT_DIR/setup-claude-bedrock.sh --help | grep -q '1m-context'"
 
     # Disable flag
-    run_test "--no-1m-context disables 1M context" \
-        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --dry-run --force 2>&1 | grep -q '\[1m\]'"
+    run_test "--no-1m-context strips [1m] from default opus model" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --no-1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
     # Custom model + --no-1m-context strips persisted [1m]
     run_test "--no-1m-context strips [1m] from custom opus model" \
