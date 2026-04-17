@@ -872,8 +872,8 @@ if ($ProfileContent -match "CLAUDE_CODE_USE_BEDROCK") {
         $ProfileContent = $ProfileContent -replace "(?ms)\r?\n?# Claude Code - Amazon Bedrock Configuration.*?`$env:ANTHROPIC_(?:SMALL_FAST_)?MODEL = `"[^`"]+`"\r?\n?", "`n"
         # Remove multiple consecutive blank lines
         $ProfileContent = $ProfileContent -replace "(\r?\n){3,}", "`n`n"
-        Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline
-        Add-Content -Path $ProfilePath -Value ""
+        Set-Content -Path $ProfilePath -Value $ProfileContent.TrimEnd() -NoNewline -Encoding utf8
+        Add-Content -Path $ProfilePath -Value "" -Encoding utf8
         Write-Host "Removed existing configuration" -ForegroundColor Gray
     }
 }
@@ -908,7 +908,7 @@ if ($DryRun) {
 }
 
 try {
-    Add-Content -Path $ProfilePath -Value $ConfigBlock -ErrorAction Stop
+    Add-Content -Path $ProfilePath -Value $ConfigBlock -Encoding utf8 -ErrorAction Stop
 } catch {
     Write-Host "" -ForegroundColor Red
     Write-Host "ERROR: Cannot write to $ProfilePath" -ForegroundColor Red

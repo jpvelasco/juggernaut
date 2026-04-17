@@ -19,11 +19,11 @@
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_SUBAGENT_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.7 (New flagship – 1M context)",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.7 (New flagship - 1M context)",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Recommended)",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
 
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model yet — 1M context, high-res vision (up to 2576px / ~3.75MP), xhigh effort by default, stronger agentic reasoning and self-verification.",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model yet - 1M context, high-res vision (up to 2576px / ~3.75MP), xhigh effort by default, stronger agentic reasoning and self-verification.",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
 
