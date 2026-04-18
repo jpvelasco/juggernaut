@@ -211,6 +211,7 @@ jobs:
       - name: Run v2 Pester tests
         shell: pwsh
         run: |
+          Import-Module Pester -MinimumVersion 5.0.0 -Force
           $config = [PesterConfiguration]::Default
           $config.Run.Path = './tests/v2'
           $config.Run.Exit = $true
