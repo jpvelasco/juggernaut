@@ -237,10 +237,6 @@ profile_writer_annotate() {
     return 0
   fi
 
-  local notice="# Juggernaut v2: PRIMARY config is now in ~/.claude/settings.json."$'\n'\
-"# This block remains as a compatibility fallback."$'\n'\
-"# Run \`juggernaut migrate --clean\` to remove it once Claude Code works."
-
   if [[ "$dry_run" == "true" ]]; then
     echo "[dry-run] would annotate v1 block in $f"
     return 0
