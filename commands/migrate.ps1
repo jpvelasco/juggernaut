@@ -41,29 +41,29 @@ $candidates = @(
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
 
 $found = 0
-foreach ($profile in $candidates) {
-    if (Test-MigratorHasV1Block -ProfileFile $profile) {
+foreach ($profileFile in $candidates) {
+    if (Test-MigratorHasV1Block -ProfileFile $profileFile) {
         $found++
-        Write-Host "Found v1 block: $profile"
+        Write-Host "Found v1 block: $profileFile"
 
         if ($DryRun) {
-            Write-Host "[dry-run] Would migrate $profile → $SettingsPath"
+            Write-Host "[dry-run] Would migrate $profileFile → $SettingsPath"
             continue
         }
 
         $bcPath = Join-Path $RepoRoot 'bedrock-config.json'
-        $ok = Invoke-MigratorRun -ProfileFile $profile -SettingsPath $SettingsPath -BedrockConfigPath $bcPath
+        $ok = Invoke-MigratorRun -ProfileFile $profileFile -SettingsPath $SettingsPath -BedrockConfigPath $bcPath
 
         if ($ok -and $Clean) {
-            $lines = Get-Content -Path $profile
+            $lines = Get-Content -Path $profileFile
             $inBlock = $false
             $filtered = foreach ($line in $lines) {
                 if ($line -eq '# BEGIN: Claude Code Bedrock Configuration') { $inBlock = $true; continue }
                 if ($line -eq '# END: Claude Code Bedrock Configuration')   { $inBlock = $false; continue }
                 if (-not $inBlock) { $line }
             }
-            $filtered | Set-Content -Path $profile -Encoding utf8
-            Write-Host "Removed v1 block from $profile (--clean)"
+            $filtered | Set-Content -Path $profileFile -Encoding utf8
+            Write-Host "Removed v1 block from $profileFile (--clean)"
         }
     }
 }
