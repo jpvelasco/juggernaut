@@ -41,6 +41,8 @@ detect_shell() {
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # v2 feature flag (hidden; dormant in Phase 1). Filters --v2 out of argv.
 JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-0}"
 FILTERED_ARGS=()
@@ -53,8 +55,8 @@ for arg in "$@"; do
 done
 set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
 if [[ "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
-    echo "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." >&2
     export JUGGERNAUT_USE_V2=1
+    exec "$SCRIPT_DIR/juggernaut" apply "$@"
 fi
 
 # Pass through version/help flags
@@ -110,7 +112,6 @@ done
 
 OS=$(detect_os)
 SHELL_TYPE=$(detect_shell)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Detected: $OS / $SHELL_TYPE"
 
