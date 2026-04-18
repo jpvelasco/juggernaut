@@ -24,9 +24,7 @@ set +e
 # Defaults
 # ---------------------------------------------------------------------------
 DRY_RUN=false
-FORCE=false
 J_AUTH_MODE=""          # Populated from existing block or flag; default applied below.
-J_AUTH_MODE_EXPLICIT=false
 J_API_KEY=""
 J_PRESERVE_KEY=false
 J_STORAGE=""            # Populated from existing block or platform default.
@@ -90,9 +88,9 @@ EOF
 for arg in "$@"; do
   case "$arg" in
     --dry-run)              DRY_RUN=true ;;
-    --force|-f)             FORCE=true ;;
+    --force|-f)             ;;   # accepted for UX; confirmation prompts not yet implemented
     --skip-preflight)       J_SKIP_PREFLIGHT=true ;;
-    --auth=*)               J_AUTH_MODE="${arg#--auth=}"; J_AUTH_MODE_EXPLICIT=true ;;
+    --auth=*)               J_AUTH_MODE="${arg#--auth=}" ;;
     --bedrock-key=*)        J_API_KEY="${arg#--bedrock-key=}" ;;
     --preserve-key)         J_PRESERVE_KEY=true ;;
     --storage=*)            J_STORAGE="${arg#--storage=}"; J_STORAGE_EXPLICIT=true ;;
@@ -176,7 +174,6 @@ fi
 # ---------------------------------------------------------------------------
 # Step 2: Implicit migration — if no v2 block, look for v1 profile blocks.
 # ---------------------------------------------------------------------------
-MIGRATED_BLOCK=""
 if [[ "$HAS_V2_BLOCK" == "false" ]]; then
   V1_CANDIDATES=(
     "$HOME/.bashrc"
@@ -191,7 +188,6 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
         # Re-read after migration.
         EXISTING_JSON="$(config_read "$SETTINGS_PATH")"
         HAS_V2_BLOCK=true
-        MIGRATED_BLOCK="$candidate"
         echo "  Migration complete — your configuration is now in $SETTINGS_PATH." >&2
         echo "  Nothing was removed from your shell profile; the old block stays as a fallback." >&2
         echo "  You can remove it later with: juggernaut migrate --clean" >&2

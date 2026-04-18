@@ -291,6 +291,7 @@ migrator_rollback() {
   dir="$(dirname -- "$settings_path")"
   base="$(basename -- "$settings_path")"
 
+  # shellcheck disable=SC2012  # ls -t is portable; backup names contain no spaces
   latest_backup="$(ls -1t "$dir"/"${base}".backup.* 2>/dev/null | head -1)"
 
   if [[ -z "$latest_backup" ]]; then

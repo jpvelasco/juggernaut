@@ -268,5 +268,6 @@ profile_writer_annotate() {
       next
     }
     { print }
-  ' "$f" > "$tmp" && mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+  ' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
 }
