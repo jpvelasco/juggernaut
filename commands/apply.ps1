@@ -116,7 +116,8 @@ if (-not $hasV2Block) {
             $hasMig = $false
             try { $hasMig = Test-MigratorHasV1Block -ProfileFile $candidate } catch {}
             if ($hasMig) {
-                Write-Host "apply: detected v1 block in $candidate — migrating..." -ForegroundColor DarkYellow
+                Write-Host "apply: found an existing v1 block in $candidate." -ForegroundColor DarkYellow
+                Write-Host "apply: migrating it to ~/.claude/settings.json, Claude Code's native config." -ForegroundColor DarkYellow
                 try {
                     $ok = Invoke-MigratorRun -ProfileFile $candidate `
                                              -SettingsPath $SettingsPath `
@@ -124,7 +125,8 @@ if (-not $hasV2Block) {
                     if ($ok) {
                         $existingSettings = Read-Settings -Path $SettingsPath
                         $hasV2Block = $true
-                        Write-Host 'apply: migration complete.' -ForegroundColor Green
+                        Write-Host "apply: migration complete. Your new settings are now in $SettingsPath." -ForegroundColor Green
+                        Write-Host 'apply: your shell profile was left in place as a fallback, so nothing is lost.' -ForegroundColor Green
                     } else {
                         Write-Warning "apply: migration from $candidate returned false — continuing with defaults."
                     }
