@@ -138,13 +138,12 @@ config_rotate_backups() {
   dir="$(dirname -- "$path")"
   base="$(basename -- "$path")"
 
-  # Use find + mtime-sort to avoid parsing ls and to handle names with spaces.
+  # Sort backups by mtime descending. Use ls -t (portable) on the glob pattern;
+  # names will not contain newlines or spaces because the backup stamp is YYYYMMDD_HHMMSS.
   local -a backups=()
-  while IFS= read -r -d '' f; do
-    backups+=("$f")
-  done < <(find "$dir" -maxdepth 1 -name "${base}.backup.*" -printf '%T@ %p\0' 2>/dev/null \
-             | sort -z -rn \
-             | cut -z -d' ' -f2-)
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && backups+=("$f")
+  done < <(ls -1t "$dir"/"${base}".backup.* 2>/dev/null)
 
   local i=0
   for f in "${backups[@]}"; do
@@ -270,8 +269,11 @@ config_with_lock() {
     sleep 1
     waited=$((waited + 1))
   done
-  trap 'rmdir -- "$lockdir" 2>/dev/null || true' RETURN
-  "$@"
+  # Run the action and always release the lock, even on failure.
+  local rc=0
+  "$@" || rc=$?
+  rmdir -- "$lockdir" 2>/dev/null || true
+  return "$rc"
 }
 
 # config_load_effective

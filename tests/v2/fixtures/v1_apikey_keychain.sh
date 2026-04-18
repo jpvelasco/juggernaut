@@ -27,5 +27,6 @@ export DISABLE_ERROR_REPORTING="1"
 export DISABLE_TELEMETRY="1"
 export DISABLE_AUTOUPDATE="1"
 export DISABLE_BUG_COMMAND="1"
+# shellcheck disable=SC2155
 export AWS_BEARER_TOKEN_BEDROCK=$(secret-tool lookup service juggernaut-bedrock account api-key 2>/dev/null)
 # END: Claude Code Bedrock Configuration

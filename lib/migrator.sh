@@ -267,8 +267,7 @@ migrator_rollback() {
   dir="$(dirname -- "$settings_path")"
   base="$(basename -- "$settings_path")"
 
-  latest_backup="$(find "$dir" -maxdepth 1 -name "${base}.backup.*" -printf '%T@ %p\n' 2>/dev/null \
-    | sort -rn | head -1 | cut -d' ' -f2-)"
+  latest_backup="$(ls -1t "$dir"/"${base}".backup.* 2>/dev/null | head -1)"
 
   if [[ -z "$latest_backup" ]]; then
     echo "migrator_rollback: no backup found for $settings_path" >&2
