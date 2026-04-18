@@ -251,12 +251,13 @@ profile_writer_annotate() {
   tmp="$(mktemp)"
 
   awk -v begin_marker="$PROFILE_WRITER_BEGIN_MARKER" \
-      -v end_marker="$PROFILE_WRITER_END_MARKER" \
-      -v notice="$notice" '
+      -v end_marker="$PROFILE_WRITER_END_MARKER" '
     $0 == begin_marker {
       in_block=1
       print begin_marker
-      print notice
+      print "# Juggernaut v2: PRIMARY config is now in ~/.claude/settings.json."
+      print "# This block remains as a compatibility fallback."
+      print "# Run `juggernaut migrate --clean` to remove it once Claude Code works."
       next
     }
     $0 == end_marker {

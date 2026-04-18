@@ -128,8 +128,29 @@ function Get-KeychainRetrievalExpression {
         'macos'             { "security find-generic-password -s '$svc' -a '$acc' -w 2>/dev/null" }
         { $_ -in 'linux','wsl' } { "secret-tool lookup service '$svc' account '$acc' 2>/dev/null" }
         'windows'           {
-            # Same single-line PS block used in keychain.sh.
-            "powershell.exe -NoProfile -Command `"Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport(\`\`\`\"advapi32.dll\`\`\`\", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport(\`\`\`\"advapi32.dll\`\`\`\")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }'; `$p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('$svc',1,0,[ref]`$p)){ `$c=[Runtime.InteropServices.Marshal]::PtrToStructure(`$p,[Type][Win32.Cred+CREDENTIAL]); if(`$c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::PtrToStringUni(`$c.CredentialBlob,`$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree(`$p) }`" 2>/dev/null | tr -d '``r'"
+            # Build the P/Invoke command using a here-string to avoid escaping hell.
+            $memberDef = @'
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredRead(string t, int ty, int f, out IntPtr c);
+[DllImport("advapi32.dll")]
+public static extern void CredFree(IntPtr c);
+[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+public struct CREDENTIAL {
+    public int Flags; public int Type; public string TargetName; public string Comment;
+    public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob;
+    public int Persist; public int AttributeCount; public IntPtr Attributes;
+    public string TargetAlias; public string UserName;
+}
+'@
+            # Escape double quotes in the member definition for inline shell embedding.
+            $memberDef = $memberDef -replace '"', '\"'
+            # Build the command: Add-Type + retrieve credential + cleanup.
+            $psCmd = "Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition `"$memberDef`"; " +
+                     "`$p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('$svc',1,0,[ref]`$p)){ " +
+                     "`$c=[Runtime.InteropServices.Marshal]::PtrToStructure(`$p,[Type][Win32.Cred+CREDENTIAL]); " +
+                     "if(`$c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::PtrToStringUni(`$c.CredentialBlob,`$c.CredentialBlobSize/2)}; " +
+                     "[Win32.Cred]::CredFree(`$p) }"
+            "powershell.exe -NoProfile -Command `"$psCmd`" 2>/dev/null | tr -d '`r'"
         }
         default { "echo ''" }
     }
