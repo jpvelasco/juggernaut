@@ -254,8 +254,10 @@ config_with_lock() {
   until mkdir -- "$lockdir" 2>/dev/null; do
     # Check for stale lock before deciding to wait or fail.
     if [[ -d "$lockdir" ]]; then
-      local lockage
-      lockage="$(( $(date +%s) - $(stat -c '%Y' "$lockdir" 2>/dev/null || stat -f '%m' "$lockdir" 2>/dev/null || echo "0") ))"
+      local now mtime lockage
+      now="$(date +%s)"
+      mtime="$(stat -c '%Y' "$lockdir" 2>/dev/null || stat -f '%m' "$lockdir" 2>/dev/null || echo "0")"
+      lockage=$(( now - mtime ))
       if (( lockage > 30 )); then
         rmdir -- "$lockdir" 2>/dev/null || true
         continue
