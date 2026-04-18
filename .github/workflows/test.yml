@@ -136,6 +136,13 @@ jobs:
       - name: Test uninstall help
         run: bash ./uninstall.sh --help
 
+      - name: Run v2 bash tests
+        run: |
+          bash ./tests/v2/test_schema.sh
+          bash ./tests/v2/test_config_manager.sh
+          bash ./tests/v2/test_feature_flag.sh
+          bash ./tests/v2/test_migrator.sh
+
   test-windows-powershell:
     name: Test on Windows (PowerShell)
     runs-on: windows-latest
