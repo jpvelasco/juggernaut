@@ -17,26 +17,27 @@ section "--v2 flag is accepted by ./setup without altering exit code"
 # Use help to exercise the arg parser without running a real setup.
 if bash "$REPO_ROOT/setup" --v2 --help >/dev/null 2>&1; then pass; else fail "./setup --v2 --help should exit 0"; fi
 
-section "--v2 announces itself to stderr"
-announce="$(bash "$REPO_ROOT/setup" --v2 --help 2>&1 1>/dev/null | head -1)"
-if [[ "$announce" == *"Juggernaut v2.0 enabled"* && "$announce" == *"currently dormant"* ]]; then
+section "--v2 delegates to juggernaut apply (apply help shown)"
+apply_help="$(bash "$REPO_ROOT/setup" --v2 --help 2>/dev/null | head -1)"
+if [[ "$apply_help" == *"juggernaut apply"* ]]; then
   pass
 else
-  fail "expected v2 announce on stderr (got: '$announce')"
+  fail "expected apply help on stdout (got: '$apply_help')"
 fi
 
-section "JUGGERNAUT_USE_V2=1 env var also triggers announce"
-announce_env="$(JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/setup" --help 2>&1 1>/dev/null | head -1)"
-if [[ "$announce_env" == *"Juggernaut v2.0 enabled"* ]]; then pass; else fail "env var should trigger announce (got: '$announce_env')"; fi
+section "JUGGERNAUT_USE_V2=1 env var also delegates to juggernaut apply"
+apply_help_env="$(JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/setup" --help 2>/dev/null | head -1)"
+if [[ "$apply_help_env" == *"juggernaut apply"* ]]; then pass; else fail "env var should delegate to apply (got: '$apply_help_env')"; fi
 
 section "Default run (no flag) does NOT announce v2"
 clean_stderr="$(bash "$REPO_ROOT/setup" --help 2>&1 1>/dev/null)"
 if [[ "$clean_stderr" != *"Juggernaut v2"* ]]; then pass; else fail "v1 default run should be silent about v2"; fi
 
-section "--v2 is stripped before delegation (help output byte-identical)"
-with_v2="$(bash "$REPO_ROOT/setup" --v2 --help 2>/dev/null)"
-without_v2="$(bash "$REPO_ROOT/setup" --help 2>/dev/null)"
-if [[ "$with_v2" == "$without_v2" ]]; then pass; else fail "--v2 should not change help output"; fi
+section "--v2 routes to apply; v1 path routes to setup-claude-bedrock (help differs)"
+with_v2="$(bash "$REPO_ROOT/setup" --v2 --help 2>/dev/null | head -1)"
+without_v2="$(bash "$REPO_ROOT/setup" --help 2>/dev/null | head -1)"
+# v2 path shows apply help; v1 path shows v1 help — they must differ.
+if [[ "$with_v2" != "$without_v2" ]]; then pass; else fail "--v2 and v1 help should differ (both got: '$with_v2')"; fi
 
 section "--v2 does NOT alter v1 dry-run stdout (behavioral isolation)"
 # Run v1 apply in dry-run twice, once with --v2, once without. The user-visible
