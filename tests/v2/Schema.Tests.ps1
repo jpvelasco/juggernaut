@@ -76,22 +76,22 @@ Describe 'Test-JuggernautBlock — validation' {
     }
 
     It 'accepts a default block' {
-        Test-JuggernautBlock -Block $script:good 2>$null | Should -BeTrue
+        Test-JuggernautBlock -Block $script:good -WarningAction SilentlyContinue | Should -BeTrue
     }
     It 'rejects empty auth.region' {
         $bad = New-JuggernautBlock -BedrockConfigPath $script:BedrockConfigPath
         $bad.auth.region = ''
-        Test-JuggernautBlock -Block $bad 2>$null | Should -BeFalse
+        Test-JuggernautBlock -Block $bad -WarningAction SilentlyContinue | Should -BeFalse
     }
     It 'rejects unsupported auth.region' {
         $bad = New-JuggernautBlock -BedrockConfigPath $script:BedrockConfigPath
         $bad.auth.region = 'mars-central-1'
-        Test-JuggernautBlock -Block $bad 2>$null | Should -BeFalse
+        Test-JuggernautBlock -Block $bad -WarningAction SilentlyContinue | Should -BeFalse
     }
     It 'rejects bad managedBy' {
         $bad = New-JuggernautBlock -BedrockConfigPath $script:BedrockConfigPath
         $bad.meta.managedBy = 'someoneElse'
-        Test-JuggernautBlock -Block $bad 2>$null | Should -BeFalse
+        Test-JuggernautBlock -Block $bad -WarningAction SilentlyContinue | Should -BeFalse
     }
 }
 

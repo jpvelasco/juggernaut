@@ -36,10 +36,16 @@ function Test-SettingsExists {
 
 function ConvertTo-HashtableRecursive {
     # PS 5.1 has no ConvertFrom-Json -AsHashtable. Walk PSCustomObject → [ordered]@{}
+    # and keep arrays as [object[]] so indexing like $x[0] returns an element.
     param([Parameter(Mandatory)][AllowNull()]$InputObject)
     if ($null -eq $InputObject) { return $null }
-    if ($InputObject -is [System.Collections.IList]) {
-        return ,@($InputObject | ForEach-Object { ConvertTo-HashtableRecursive $_ })
+    if ($InputObject -is [System.Collections.IList] -and -not ($InputObject -is [string])) {
+        $list = New-Object System.Collections.Generic.List[object]
+        foreach ($item in $InputObject) {
+            $list.Add((ConvertTo-HashtableRecursive $item))
+        }
+        # Return as [object[]] so Pester's $x[0] indexing works naturally.
+        return ,$list.ToArray()
     }
     if ($InputObject -is [PSCustomObject]) {
         $out = [ordered]@{}

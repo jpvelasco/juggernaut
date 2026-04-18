@@ -163,7 +163,10 @@ function Test-JuggernautBlock {
     }
 
     if ($errors.Count -gt 0) {
-        Write-Error ("Schema validation failed:`n  - " + ($errors -join "`n  - "))
+        # Surface errors via Write-Warning so callers that use ` | Should -BeFalse`
+        # still observe a clean $false. Use -ErrorVariable or check the return
+        # directly when you need structured error access.
+        Write-Warning ("Schema validation failed:`n  - " + ($errors -join "`n  - "))
         return $false
     }
     return $true
