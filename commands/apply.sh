@@ -1,0 +1,435 @@
+#!/usr/bin/env bash
+# commands/apply.sh — Juggernaut v2 apply subcommand.
+# Configures Claude Code to use Amazon Bedrock via settings.json (+ optional shell fallback).
+#
+# Requires: bash 4+, jq, lib/schema.sh, lib/config_manager.sh,
+#           lib/migrator.sh, lib/keychain.sh, lib/profile_writer.sh
+
+set -uo pipefail
+set +e   # Manual error handling — we want to warn and continue on non-fatal failures.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BEDROCK_CONFIG_PATH="${BEDROCK_CONFIG_PATH:-$SCRIPT_DIR/bedrock-config.json}"
+export BEDROCK_CONFIG_PATH
+
+. "$SCRIPT_DIR/lib/schema.sh"
+. "$SCRIPT_DIR/lib/config_manager.sh"
+. "$SCRIPT_DIR/lib/migrator.sh"
+. "$SCRIPT_DIR/lib/keychain.sh"
+. "$SCRIPT_DIR/lib/profile_writer.sh"
+# Lib files call `set -euo pipefail`; restore manual error handling.
+set +e
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+DRY_RUN=false
+J_AUTH_MODE=""          # Populated from existing block or flag; default applied below.
+J_API_KEY=""
+J_PRESERVE_KEY=false
+J_STORAGE=""            # Populated from existing block or platform default.
+J_STORAGE_EXPLICIT=false
+J_REGION=""
+J_MODEL=""
+J_OPUS_MODEL=""
+J_SONNET_MODEL=""
+J_HAIKU_MODEL=""
+J_EFFORT=""
+J_OPUSPLAN=""           # Tri-state: ""=unset, "true", "false"
+J_1M_CONTEXT=""
+J_USE_MANTLE=false
+J_MANTLE_URL=""
+J_SCOPE="user"
+J_NO_SHELL_FALLBACK=false
+J_SHELL_FALLBACK_ONLY=false
+J_SKIP_PREFLIGHT=false
+SHELL_TYPE=""
+
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+_apply_help() {
+  cat <<'EOF'
+juggernaut apply — configure Claude Code for Amazon Bedrock
+
+Usage: juggernaut apply [options]
+
+Options:
+  --auth=iam|api-key       Authentication mode (auto-detected on re-run)
+  --bedrock-key=KEY        Bedrock API key (api-key mode; prompts if omitted)
+  --preserve-key           Reuse existing key from env/keychain
+  --storage=profile|keychain  API key storage (default: keychain on macOS/Win)
+  --region=REGION          AWS region (default: us-west-2)
+  --model=ID               Primary model ID
+  --opus-model=ID          Opus model override
+  --sonnet-model=ID        Sonnet model override
+  --haiku-model=ID         Haiku model override
+  --effort=LEVEL           Effort: low|medium|high|xhigh|max (default: xhigh)
+  --opusplan               Use Opus for planning, Sonnet for execution
+  --no-opusplan            Disable opusplan
+  --1m-context             Enable 1M token context
+  --no-1m-context          Disable 1M token context
+  --mantle                 Enable Mantle routing
+  --mantle-url=URL         Mantle base URL
+  --scope=user|project     Write target (default: user)
+  --no-shell-fallback      Write settings.json only
+  --shell-fallback-only    Write profile block only
+  --dry-run                Preview without writing
+  --force, -f              Skip confirmation prompts
+  --skip-preflight         Skip dependency checks
+  --help, -h               Show this help
+
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Flag parsing
+# ---------------------------------------------------------------------------
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)              DRY_RUN=true ;;
+    --force|-f)             ;;   # accepted for UX; confirmation prompts not yet implemented
+    --skip-preflight)       J_SKIP_PREFLIGHT=true ;;
+    --auth=*)               J_AUTH_MODE="${arg#--auth=}" ;;
+    --bedrock-key=*)        J_API_KEY="${arg#--bedrock-key=}" ;;
+    --preserve-key)         J_PRESERVE_KEY=true ;;
+    --storage=*)            J_STORAGE="${arg#--storage=}"; J_STORAGE_EXPLICIT=true ;;
+    --region=*)             J_REGION="${arg#--region=}" ;;
+    --model=*)              J_MODEL="${arg#--model=}" ;;
+    --opus-model=*)         J_OPUS_MODEL="${arg#--opus-model=}" ;;
+    --sonnet-model=*)       J_SONNET_MODEL="${arg#--sonnet-model=}" ;;
+    --haiku-model=*)        J_HAIKU_MODEL="${arg#--haiku-model=}" ;;
+    --effort=*)             J_EFFORT="${arg#--effort=}" ;;
+    --opusplan)             J_OPUSPLAN=true ;;
+    --no-opusplan)          J_OPUSPLAN=false ;;
+    --1m-context)           J_1M_CONTEXT=true ;;
+    --no-1m-context)        J_1M_CONTEXT=false ;;
+    --mantle)               J_USE_MANTLE=true ;;
+    --mantle-url=*)         J_MANTLE_URL="${arg#--mantle-url=}"; J_USE_MANTLE=true ;;
+    --scope=*)              J_SCOPE="${arg#--scope=}" ;;
+    --no-shell-fallback)    J_NO_SHELL_FALLBACK=true ;;
+    --shell-fallback-only)  J_SHELL_FALLBACK_ONLY=true ;;
+    bash|zsh|fish)          SHELL_TYPE="$arg" ;;
+    --version|-v)
+      cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"; exit 0 ;;
+    --help|-h)
+      _apply_help; exit 0 ;;
+    *)
+      echo "apply: unknown option '$arg' (ignored)" >&2 ;;
+  esac
+done
+
+# Validate scope
+case "$J_SCOPE" in
+  user|project) ;;
+  *) echo "apply: --scope must be 'user' or 'project' (got: '$J_SCOPE')" >&2; exit 1 ;;
+esac
+
+# Validate --shell-fallback-only and --no-shell-fallback are mutually exclusive.
+if [[ "$J_NO_SHELL_FALLBACK" == "true" && "$J_SHELL_FALLBACK_ONLY" == "true" ]]; then
+  echo "apply: --no-shell-fallback and --shell-fallback-only are mutually exclusive" >&2
+  exit 1
+fi
+
+# Auto-detect shell if not provided.
+if [[ -z "$SHELL_TYPE" ]]; then
+  if [[ -n "${ZSH_VERSION:-}" ]];  then SHELL_TYPE="zsh"
+  elif [[ -n "${BASH_VERSION:-}" ]]; then SHELL_TYPE="bash"
+  elif [[ -n "${FISH_VERSION:-}" ]]; then SHELL_TYPE="fish"
+  else SHELL_TYPE="$(basename "${SHELL:-bash}")"
+  fi
+fi
+
+# Determine shell fallback mode for schema.
+if [[ "$J_NO_SHELL_FALLBACK" == "true" ]]; then
+  J_SHELL_FALLBACK_MODE="settings-only"
+elif [[ "$J_SHELL_FALLBACK_ONLY" == "true" ]]; then
+  J_SHELL_FALLBACK_MODE="shell-only"
+else
+  J_SHELL_FALLBACK_MODE="both"
+fi
+export J_SHELL_FALLBACK_MODE
+
+# ---------------------------------------------------------------------------
+# Resolve settings.json target path
+# ---------------------------------------------------------------------------
+SETTINGS_PATH="$(config_resolve_target "$J_SCOPE")"
+
+# ---------------------------------------------------------------------------
+# Step 1: Read existing settings and detect state
+# ---------------------------------------------------------------------------
+EXISTING_JSON="{}"
+if config_exists "$SETTINGS_PATH"; then
+  EXISTING_JSON="$(config_read "$SETTINGS_PATH")" || {
+    echo "apply: cannot read $SETTINGS_PATH — file may be corrupted" >&2
+    exit 1
+  }
+fi
+
+HAS_V2_BLOCK=false
+if config_has_juggernaut_block "$EXISTING_JSON"; then
+  HAS_V2_BLOCK=true
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2: Implicit migration — if no v2 block, look for v1 profile blocks.
+# ---------------------------------------------------------------------------
+if [[ "$HAS_V2_BLOCK" == "false" ]]; then
+  V1_CANDIDATES=(
+    "$HOME/.bashrc"
+    "$HOME/.zshrc"
+    "$HOME/.config/fish/config.fish"
+  )
+  for candidate in "${V1_CANDIDATES[@]}"; do
+    if migrator_has_v1_block "$candidate" 2>/dev/null; then
+      echo "Juggernaut: found a v1 profile block in $candidate." >&2
+      echo "  Moving your configuration to ~/.claude/settings.json (Claude Code's native config)." >&2
+      if migrator_run "$candidate" "$SETTINGS_PATH" "$BEDROCK_CONFIG_PATH"; then
+        # Re-read after migration.
+        EXISTING_JSON="$(config_read "$SETTINGS_PATH")"
+        HAS_V2_BLOCK=true
+        echo "  Migration complete — your configuration is now in $SETTINGS_PATH." >&2
+        echo "  Nothing was removed from your shell profile; the old block stays as a fallback." >&2
+        echo "  You can remove it later with: juggernaut migrate --clean" >&2
+      else
+        echo "  Migration encountered an error — continuing with defaults. Your profile block is unchanged." >&2
+      fi
+      break
+    fi
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# Step 3: Load existing block (if any) and overlay CLI flags.
+# Fields not specified on the CLI carry over from the stored block.
+# ---------------------------------------------------------------------------
+if [[ "$HAS_V2_BLOCK" == "true" ]]; then
+  EXISTING_BLOCK="$(config_get_juggernaut_block "$EXISTING_JSON")"
+
+  # Carry over stored values for fields not provided on CLI.
+  [[ -z "$J_AUTH_MODE" ]]  && J_AUTH_MODE="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.mode // ""')"
+  [[ -z "$J_STORAGE" ]]    && J_STORAGE="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.storage // ""')"
+  [[ -z "$J_REGION" ]]     && J_REGION="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.region // ""')"
+  [[ -z "$J_MODEL" ]]      && J_MODEL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.model // ""')"
+  [[ -z "$J_OPUS_MODEL" ]] && J_OPUS_MODEL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.modelOverrides.opus // ""')"
+  [[ -z "$J_SONNET_MODEL" ]] && J_SONNET_MODEL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.modelOverrides.sonnet // ""')"
+  [[ -z "$J_HAIKU_MODEL" ]] && J_HAIKU_MODEL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.modelOverrides.haiku // ""')"
+  [[ -z "$J_EFFORT" ]]     && J_EFFORT="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.effortLevel // ""')"
+  [[ -z "$J_OPUSPLAN" ]]   && J_OPUSPLAN="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.opusplan | tostring')"
+  [[ -z "$J_1M_CONTEXT" ]] && J_1M_CONTEXT="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.context.use1MContext | tostring')"
+  if [[ "$J_USE_MANTLE" == "false" ]]; then
+    J_USE_MANTLE="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.useMantle | tostring')"
+  fi
+  [[ -z "$J_MANTLE_URL" ]] && J_MANTLE_URL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.mantle.baseUrl // ""')"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 4: Apply hard defaults for anything still unset.
+# ---------------------------------------------------------------------------
+: "${J_AUTH_MODE:=iam}"
+: "${J_REGION:=$(jq -r '.defaults.region // "us-west-2"' "$BEDROCK_CONFIG_PATH" 2>/dev/null || echo "us-west-2")}"
+: "${J_EFFORT:=xhigh}"
+: "${J_OPUSPLAN:=false}"
+: "${J_1M_CONTEXT:=true}"
+: "${J_USE_MANTLE:=false}"
+
+# Platform-aware storage default: keychain on macOS/Windows, profile on Linux.
+if [[ -z "$J_STORAGE" && "$J_STORAGE_EXPLICIT" == "false" ]]; then
+  _os="$(keychain_detect_os)"
+  case "$_os" in
+    macos|gitbash|cygwin)
+      if keychain_available 2>/dev/null; then J_STORAGE="keychain"; else J_STORAGE="profile"; fi ;;
+    *) J_STORAGE="profile" ;;
+  esac
+fi
+: "${J_STORAGE:=profile}"
+
+# Validate auth mode.
+case "$J_AUTH_MODE" in
+  iam|api-key) ;;
+  *) echo "apply: --auth must be 'iam' or 'api-key' (got: '$J_AUTH_MODE')" >&2; exit 1 ;;
+esac
+
+# Validate effort.
+case "$J_EFFORT" in
+  low|medium|high|xhigh|max) ;;
+  *) echo "apply: --effort must be one of low|medium|high|xhigh|max (got: '$J_EFFORT')" >&2; exit 1 ;;
+esac
+
+# Preflight: warn if aws CLI missing in IAM mode.
+if [[ "$J_SKIP_PREFLIGHT" != "true" && "$J_AUTH_MODE" == "iam" ]]; then
+  if ! command -v aws >/dev/null 2>&1; then
+    echo "apply: warning — aws CLI not found; IAM auth requires it at runtime." >&2
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 5: Resolve API key for api-key mode.
+# ---------------------------------------------------------------------------
+API_KEY_EXPR=""   # Shell expression to embed in profile block; empty for IAM.
+
+if [[ "$J_AUTH_MODE" == "api-key" ]]; then
+  if [[ "$J_PRESERVE_KEY" == "true" ]]; then
+    if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
+      J_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
+    elif [[ "$J_STORAGE" == "keychain" ]] && keychain_available 2>/dev/null; then
+      J_API_KEY="$(keychain_get 2>/dev/null || true)"
+    fi
+    if [[ -z "$J_API_KEY" ]]; then
+      echo "apply: --preserve-key specified but no existing key found in env or keychain" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ -z "$J_API_KEY" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      J_API_KEY="dry-run-placeholder"
+    elif [[ ! -t 0 ]]; then
+      echo "apply: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
+      exit 1
+    else
+      echo "Get your Bedrock API key from: AWS Console → Amazon Bedrock → API keys"
+      read -rs -p "Enter your Bedrock API key: " J_API_KEY
+      echo
+      J_API_KEY="${J_API_KEY%"${J_API_KEY##*[![:space:]]}"}"
+      J_API_KEY="${J_API_KEY#"${J_API_KEY%%[![:space:]]*}"}"
+      if [[ -z "$J_API_KEY" ]]; then
+        echo "apply: API key cannot be empty" >&2
+        exit 1
+      fi
+    fi
+  fi
+
+  if [[ "$J_STORAGE" == "keychain" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "[dry-run] would store API key in system keychain"
+    elif ! keychain_store "$J_API_KEY" 2>/dev/null; then
+      echo "apply: warning — failed to store API key in keychain; falling back to profile storage" >&2
+      J_STORAGE="profile"
+    fi
+    API_KEY_EXPR="$(keychain_get_command "$SHELL_TYPE")"
+  else
+    # Profile storage: single-quote the key.
+    _J_ESCAPED="${J_API_KEY//\'/\'\\\'\'}"
+    if [[ "$SHELL_TYPE" == "fish" ]]; then
+      API_KEY_EXPR="'${J_API_KEY//\'/\\\'}'"
+    else
+      API_KEY_EXPR="'$_J_ESCAPED'"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 6: Export J_* vars for schema_new_juggernaut_block.
+# ---------------------------------------------------------------------------
+export J_PROVIDER="bedrock"
+export J_AUTH_MODE J_STORAGE J_REGION J_EFFORT
+export J_USE_MANTLE
+export J_MANTLE_BASE_URL="$J_MANTLE_URL"
+export J_OPUSPLAN
+export J_USE_1M="$J_1M_CONTEXT"
+export J_SCOPE
+export J_VERSION="2.0.0"
+
+# Only export model overrides if explicitly set (schema uses bedrock-config.json defaults otherwise).
+[[ -n "$J_MODEL" ]]        && export J_MODEL
+[[ -n "$J_OPUS_MODEL" ]]   && export J_OPUS_MODEL
+[[ -n "$J_SONNET_MODEL" ]] && export J_SONNET_MODEL
+[[ -n "$J_HAIKU_MODEL" ]]  && export J_HAIKU_MODEL
+[[ -n "$J_HAIKU_MODEL" ]]  && export J_SUBAGENT_MODEL="$J_HAIKU_MODEL"
+
+# ---------------------------------------------------------------------------
+# Step 7: Build and validate block.
+# ---------------------------------------------------------------------------
+NEW_BLOCK="$(schema_new_juggernaut_block)" || {
+  echo "apply: failed to build juggernaut block" >&2
+  exit 1
+}
+
+if ! schema_validate "$NEW_BLOCK" 2>/dev/null; then
+  echo "apply: block validation failed — check your options" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Step 8: Merge into full settings.json.
+# ---------------------------------------------------------------------------
+NATIVE_KEYS="$(schema_derive_native_keys "$NEW_BLOCK")"
+MERGED_JSON="$(config_merge_juggernaut_block "$EXISTING_JSON" "$NEW_BLOCK" "$NATIVE_KEYS")"
+
+# ---------------------------------------------------------------------------
+# Step 9: Dry-run exit.
+# ---------------------------------------------------------------------------
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "[dry-run] No files will be written."
+  echo ""
+  echo "Would write to: $SETTINGS_PATH"
+  echo "─────────────────────────────────────────"
+  printf '%s\n' "$MERGED_JSON" | jq '.'
+  echo "─────────────────────────────────────────"
+  if [[ "$J_SHELL_FALLBACK_MODE" != "settings-only" ]]; then
+    _profile="$(profile_writer_detect_shell_config_path "$SHELL_TYPE")"
+    echo ""
+    echo "Would also update shell profile: $_profile"
+  fi
+  echo ""
+  echo "[dry-run] Done."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Step 10: Write settings.json (unless shell-fallback-only mode).
+# ---------------------------------------------------------------------------
+if [[ "$J_SHELL_FALLBACK_ONLY" != "true" ]]; then
+  if ! config_write_atomic "$SETTINGS_PATH" "$MERGED_JSON"; then
+    echo "apply: failed to write $SETTINGS_PATH" >&2
+    exit 1
+  fi
+  echo "Settings written to: $SETTINGS_PATH"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 11: Write shell profile block (unless no-shell-fallback mode).
+# ---------------------------------------------------------------------------
+if [[ "$J_NO_SHELL_FALLBACK" != "true" ]]; then
+  PROFILE_PATH="$(profile_writer_detect_shell_config_path "$SHELL_TYPE")"
+  if [[ -z "$PROFILE_PATH" ]]; then
+    echo "apply: warning — unknown shell '$SHELL_TYPE'; skipping profile block" >&2
+  else
+    BLOCK_CONTENT="$(profile_writer_build_block \
+      "$SHELL_TYPE" "$J_REGION" "$J_AUTH_MODE" "$API_KEY_EXPR" "$J_STORAGE" \
+      "$BEDROCK_CONFIG_PATH" \
+      "$J_MODEL" "$J_OPUS_MODEL" "$J_SONNET_MODEL" "$J_HAIKU_MODEL" \
+      "$J_EFFORT" "$J_OPUSPLAN" "$J_USE_MANTLE" "$J_MANTLE_URL")"
+
+    if ! profile_writer_write "$PROFILE_PATH" "$BLOCK_CONTENT"; then
+      echo "apply: warning — could not write profile block to $PROFILE_PATH" >&2
+    else
+      echo "Profile block written to: $PROFILE_PATH"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 12: Summary
+# ---------------------------------------------------------------------------
+echo ""
+echo "Juggernaut v2 apply complete."
+echo "  Auth:     $J_AUTH_MODE"
+echo "  Region:   $J_REGION"
+echo "  Effort:   $J_EFFORT"
+echo "  Opusplan: $J_OPUSPLAN"
+echo ""
+echo "To apply changes in this shell, restart your terminal or run:"
+case "$SHELL_TYPE" in
+  fish) echo "  source ~/.config/fish/config.fish" ;;
+  *)    echo "  source $(profile_writer_detect_shell_config_path "$SHELL_TYPE")" ;;
+esac
+echo ""
+if [[ "$J_AUTH_MODE" == "iam" ]]; then
+  echo "Verify AWS credentials, then launch Claude Code:"
+  echo "  aws sts get-caller-identity && claude"
+else
+  echo "Launch Claude Code:"
+  echo "  claude"
+fi

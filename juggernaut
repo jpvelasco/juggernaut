@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# juggernaut — v2 subcommand dispatcher.
+# Usage: juggernaut <subcommand> [options]
+# Subcommands: apply, migrate, show, doctor, uninstall
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Always in v2 mode — this dispatcher only exists when v2 is active.
+export JUGGERNAUT_USE_V2=1
+
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+_juggernaut_help() {
+  cat <<'EOF'
+Juggernaut v2 — Claude Code Bedrock configurator
+
+Usage: juggernaut <subcommand> [options]
+
+Subcommands:
+  apply       Configure Claude Code to use Amazon Bedrock (default)
+  migrate     Migrate a v1 profile block to settings.json
+  show        Print current Juggernaut configuration
+  doctor      Verify configuration and connectivity (not yet implemented)
+  uninstall   Remove Juggernaut configuration (not yet implemented)
+
+Common options (apply):
+  --auth=iam|api-key       Authentication mode (default: iam)
+  --bedrock-key=KEY        Bedrock API key (api-key mode)
+  --preserve-key           Reuse existing key from env/keychain
+  --storage=profile|keychain  API key storage (default: keychain on macOS/Windows)
+  --region=REGION          AWS region (default: us-west-2)
+  --model=ID               Primary model override
+  --opus-model=ID          Opus model override
+  --sonnet-model=ID        Sonnet model override
+  --haiku-model=ID         Haiku model override
+  --effort=LEVEL           Effort level: low|medium|high|xhigh|max (default: xhigh)
+  --opusplan               Use Opus for planning, Sonnet for execution
+  --no-opusplan            Disable opusplan
+  --1m-context             Enable 1M token context
+  --no-1m-context          Disable 1M token context
+  --mantle                 Enable Mantle routing
+  --mantle-url=URL         Mantle base URL
+  --scope=user|project     Write target (default: user)
+  --no-shell-fallback      Write settings.json only, skip profile block
+  --shell-fallback-only    Write profile block only, skip settings.json
+  --dry-run                Preview changes without writing files
+  --force, -f              Skip confirmation prompts
+  --version, -v            Show version
+  --help, -h               Show this help message
+
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+SUBCMD="${1:-apply}"
+[[ $# -gt 0 ]] && shift
+
+case "$SUBCMD" in
+  apply)
+    exec "$SCRIPT_DIR/commands/apply.sh" "$@"
+    ;;
+  migrate)
+    exec "$SCRIPT_DIR/commands/migrate.sh" "$@"
+    ;;
+  show)
+    # Phase 4 — stub for now.
+    echo "juggernaut show: not yet implemented in Phase 3" >&2
+    exit 1
+    ;;
+  doctor)
+    echo "juggernaut doctor: not yet implemented in Phase 3" >&2
+    exit 1
+    ;;
+  uninstall)
+    echo "juggernaut uninstall: not yet implemented in Phase 3" >&2
+    exit 1
+    ;;
+  --version|-v)
+    cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
+    exit 0
+    ;;
+  --help|-h|help)
+    _juggernaut_help
+    exit 0
+    ;;
+  *)
+    echo "juggernaut: unknown subcommand '$SUBCMD'" >&2
+    echo "Run 'juggernaut --help' for usage." >&2
+    exit 1
+    ;;
+esac
