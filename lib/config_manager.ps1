@@ -148,7 +148,7 @@ function Write-SettingsAtomic {
     try {
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     } catch {
-        throw "Write-SettingsAtomic: cannot create parent directory $dir: $_"
+        throw "Write-SettingsAtomic: cannot create parent directory ${dir}: $_"
     }
 
     Invoke-WithSettingsLock -Path $Path -Action {
@@ -180,10 +180,10 @@ function Invoke-WithSettingsLock {
             # A prior holder died without releasing; we've now acquired it safely.
             $acquired = $true
         } catch {
-            throw "Invoke-WithSettingsLock: mutex acquisition failed on $lockName: $_"
+            throw "Invoke-WithSettingsLock: mutex acquisition failed on ${lockName}: $_"
         }
         if (-not $acquired) {
-            throw "Invoke-WithSettingsLock: could not acquire lock on $lockName within 5s"
+            throw "Invoke-WithSettingsLock: could not acquire lock on ${lockName} within 5s"
         }
         & $Action
     } finally {

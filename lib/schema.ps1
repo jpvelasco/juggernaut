@@ -119,10 +119,20 @@ function Test-JuggernautBlock {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Block)
 
+    # Works for hashtable / [ordered]@{} (from Read-Settings) AND PSCustomObject
+    # (from ConvertFrom-Json without the converter).
+    $hasField = {
+        param($obj, $name)
+        if ($obj -is [hashtable] -or $obj -is [System.Collections.Specialized.OrderedDictionary]) {
+            return $obj.Contains($name)
+        }
+        return [bool]($obj.PSObject.Properties.Name -contains $name)
+    }
+
     $errors = New-Object System.Collections.Generic.List[string]
     $required = @('schemaVersion','provider','useMantle','model','context','auth','modelOverrides','effortLevel','env','meta')
     foreach ($f in $required) {
-        if (-not $Block.PSObject.Properties[$f] -and -not ($Block -is [hashtable] -and $Block.ContainsKey($f))) {
+        if (-not (& $hasField $Block $f)) {
             $errors.Add("missing required field: $f")
         }
     }
