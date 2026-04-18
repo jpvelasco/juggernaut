@@ -30,13 +30,12 @@ param(
     [switch]$Help,
     [Alias("v")]
     [switch]$Version,
-    # Hidden v2 feature flag; dormant in Phase 1.
     [switch]$V2
 )
 
 if ($V2 -or $env:JUGGERNAUT_USE_V2 -eq '1') {
     $env:JUGGERNAUT_USE_V2 = '1'
-    Write-Host "[v2] Juggernaut v2.0 enabled - dormant in this phase. Continuing with v1 apply flow." -ForegroundColor DarkYellow
+    Write-Host "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." -ForegroundColor DarkYellow
 }
 
 # Track if parameters were explicitly provided by the user

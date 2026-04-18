@@ -903,6 +903,7 @@ USE_OPUSPLAN=false
 OPUSPLAN_EXPLICIT=false
 EFFORT_LEVEL=""
 EFFORT_EXPLICIT=false
+JUGGERNAUT_V2_DIRECT=0
 
 parse_arguments() {
     for arg in "$@"; do
@@ -917,8 +918,8 @@ parse_arguments() {
                 SKIP_PREFLIGHT=true
                 ;;
             --v2)
-                # Hidden v2 feature flag; dormant in Phase 1.
                 export JUGGERNAUT_USE_V2=1
+                JUGGERNAUT_V2_DIRECT=1
                 ;;
             --region=*)
                 AWS_REGION="${arg#--region=}"
@@ -1290,6 +1291,12 @@ show_next_steps() {
 
 main() {
     parse_arguments "$@"
+
+    # Only print the v2 banner when --v2 was passed directly to this script.
+    # When invoked via `setup --v2`, setup already printed it before exec'ing us.
+    if [[ "${JUGGERNAUT_V2_DIRECT:-0}" == "1" ]]; then
+        echo "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." >&2
+    fi
 
     # Detect existing auth mode if user didn't explicitly specify
     if [[ "$AUTH_MODE_EXPLICIT" != true ]]; then

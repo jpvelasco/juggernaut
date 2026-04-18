@@ -69,13 +69,13 @@ config_read() {
 config_has_juggernaut_block() {
   local json="$1"
   local managed
-  managed="$(echo "$json" | jq -r '.juggernaut.meta.managedBy // ""')"
+  managed="$(printf '%s' "$json" | jq -r '.juggernaut.meta.managedBy // ""')"
   [[ "$managed" == "juggernaut" ]]
 }
 
 config_get_juggernaut_block() {
   local json="$1"
-  echo "$json" | jq '.juggernaut // null'
+  printf '%s' "$json" | jq '.juggernaut // null'
 }
 
 # config_merge_juggernaut_block <existing_json> <new_block> <native_keys>
@@ -109,13 +109,13 @@ config_merge_juggernaut_block() {
 # User's other top-level keys (permissions, hooks, theme, ...) are preserved.
 config_remove_juggernaut_block() {
   local existing="$1"
-  jq '
+  printf '%s' "$existing" | jq '
     del(.juggernaut)
     | del(.env)
     | del(.model)
     | del(.modelOverrides)
     | del(.availableModels)
-  ' <<<"$existing"
+  '
 }
 
 # config_backup <path>
@@ -245,10 +245,22 @@ config_with_lock() {
     return "$rc"
   fi
 
-  # Fallback: mkdir-based mutex (POSIX, atomic on all filesystems we care about).
+  # Fallback: mkdir-based mutex (POSIX-atomic: mkdir succeeds only for one caller).
+  # Stale-lock recovery: if the lockdir is older than 30s, assume the prior holder
+  # died without cleanup and remove it. The 30s window is generous enough to cover
+  # any real write, but short enough not to block a manual re-run after a crash.
   local lockdir="${path}.lockdir"
   local waited=0
   until mkdir -- "$lockdir" 2>/dev/null; do
+    # Check for stale lock before deciding to wait or fail.
+    if [[ -d "$lockdir" ]]; then
+      local lockage
+      lockage="$(( $(date +%s) - $(stat -c '%Y' "$lockdir" 2>/dev/null || stat -f '%m' "$lockdir" 2>/dev/null || echo "0") ))"
+      if (( lockage > 30 )); then
+        rmdir -- "$lockdir" 2>/dev/null || true
+        continue
+      fi
+    fi
     if (( waited >= 10 )); then
       echo "config_with_lock: could not acquire mkdir lock on $lockdir within 10s" >&2
       return 1

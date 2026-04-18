@@ -19,7 +19,7 @@ if bash "$REPO_ROOT/setup" --v2 --help >/dev/null 2>&1; then pass; else fail "./
 
 section "--v2 announces itself to stderr"
 announce="$(bash "$REPO_ROOT/setup" --v2 --help 2>&1 1>/dev/null | head -1)"
-if [[ "$announce" == *"Juggernaut v2.0 enabled"* && "$announce" == *"dormant in this phase"* ]]; then
+if [[ "$announce" == *"Juggernaut v2.0 enabled"* && "$announce" == *"currently dormant"* ]]; then
   pass
 else
   fail "expected v2 announce on stderr (got: '$announce')"

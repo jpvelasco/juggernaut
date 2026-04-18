@@ -53,7 +53,7 @@ for arg in "$@"; do
 done
 set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
 if [[ "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
-    echo "[v2] Juggernaut v2.0 enabled — dormant in this phase. Continuing with v1 apply flow." >&2
+    echo "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." >&2
     export JUGGERNAUT_USE_V2=1
 fi
 
