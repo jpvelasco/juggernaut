@@ -45,12 +45,7 @@ function Set-KeychainEntry {
             return $LASTEXITCODE -eq 0
         }
         'windows' {
-            Add-Type -AssemblyName System.Runtime.InteropServices -ErrorAction SilentlyContinue
-            $cred = New-Object PSCredential($acc, (ConvertTo-SecureString $Key -AsPlainText -Force))
-            try {
-                [void][Windows.Security.Credentials.PasswordVault]
-            } catch {}
-            # Prefer cmdkey (always available on Windows) for simplicity.
+            # cmdkey stores to Windows Credential Manager (always available, no plaintext in memory).
             cmdkey /delete:$svc 2>$null | Out-Null
             cmdkey /generic:$svc /user:$acc /pass:$Key 2>$null | Out-Null
             return $LASTEXITCODE -eq 0
