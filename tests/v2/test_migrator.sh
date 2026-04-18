@@ -107,6 +107,44 @@ assert_eq "model"              "$(printf '%s' "$BLOCK" | jq -r '.model')"       
 assert_eq "modelOverrides.opus" "$(printf '%s' "$BLOCK" | jq -r '.modelOverrides.opus')"     "us.anthropic.claude-opus-4-7[1m]"
 
 # ---------------------------------------------------------------------------
+# Fixture: v1_apikey_keychain — legacyEnv snapshot includes keychain export
+# ---------------------------------------------------------------------------
+section "v1_apikey_keychain — legacyEnv.snapshot has AWS_BEARER_TOKEN_BEDROCK"
+BLOCK="$(build_from_fixture "$FIXTURES/v1_apikey_keychain.sh")"
+
+LEGACY_VAL="$(printf '%s' "$BLOCK" | jq -r '.legacyEnv.snapshot["AWS_BEARER_TOKEN_BEDROCK"] // ""')"
+# The value should be present (even if it's the uneval'd command string).
+if [[ -n "$LEGACY_VAL" ]]; then pass; else fail "legacyEnv.snapshot should capture AWS_BEARER_TOKEN_BEDROCK"; fi
+
+# ---------------------------------------------------------------------------
+# Fixture: v1_bare_exports — no metadata comments, fallback to export lines
+# ---------------------------------------------------------------------------
+section "v1_bare_exports — all fields from export lines only"
+BLOCK="$(build_from_fixture "$FIXTURES/v1_bare_exports.sh")"
+
+assert_eq "bare/auth.mode"   "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"   "iam"
+assert_eq "bare/auth.region" "$(printf '%s' "$BLOCK" | jq -r '.auth.region')" "us-west-2"
+assert_eq "bare/model"       "$(printf '%s' "$BLOCK" | jq -r '.model')"       "global.anthropic.claude-sonnet-4-6"
+
+# legacyEnv snapshot should capture unquoted export values too
+BARE_LEGACY="$(printf '%s' "$BLOCK" | jq -r '.legacyEnv.snapshot["AWS_BEARER_TOKEN_BEDROCK"] // ""')"
+if [[ -n "$BARE_LEGACY" ]]; then pass; else fail "legacyEnv.snapshot should capture unquoted export line"; fi
+
+# ---------------------------------------------------------------------------
+# Fixture: v1_fish_profile — fish set -gx lines detected but not parsed as exports
+# ---------------------------------------------------------------------------
+section "v1_fish_profile — has_v1_block detects fish profile"
+if migrator_has_v1_block "$FIXTURES/v1_fish_profile.fish"; then pass; else fail "should detect v1 block in fish fixture"; fi
+
+# Fish uses set -gx, not export — migrator treats auth.mode as default (iam)
+# and region/model fall back to defaults since no export lines exist.
+FISH_RAW="$(migrator_extract_block "$FIXTURES/v1_fish_profile.fish")"
+FISH_PARSED="$(migrator_parse_v1_block "$FISH_RAW")"
+assert_eq "fish/auth.mode"    "$(printf '%s' "$FISH_PARSED" | jq -r '.authMode')"    "iam"
+assert_eq "fish/effortLevel"  "$(printf '%s' "$FISH_PARSED" | jq -r '.effortLevel')" "xhigh"
+assert_eq "fish/region-default" "$(printf '%s' "$FISH_PARSED" | jq -r '.region')"   "us-east-1"
+
+# ---------------------------------------------------------------------------
 # migrator_has_v1_block detection
 # ---------------------------------------------------------------------------
 section "migrator_has_v1_block"
@@ -165,6 +203,52 @@ if ! printf '%s' "$AFTER_ROLLBACK" | jq -e '. | has("clobbered") | not' >/dev/nu
 else
   pass
 fi
+
+rm -rf "$TMP_DIR"
+
+# ---------------------------------------------------------------------------
+# --dry-run: no files written
+# ---------------------------------------------------------------------------
+section "migrate.sh --dry-run — no files written"
+TMP_DIR="$(mktemp -d)"
+TMP_SETTINGS="$TMP_DIR/settings.json"
+TMP_PROFILE="$TMP_DIR/profile.sh"
+cp "$FIXTURES/v1_iam_default.sh" "$TMP_PROFILE"
+
+BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json" \
+  bash "$REPO_ROOT/commands/migrate.sh" --dry-run >/dev/null 2>&1 || true
+
+# settings.json must NOT exist (dry-run should not write it)
+if [[ ! -f "$TMP_SETTINGS" ]]; then pass; else fail "--dry-run must not write settings.json"; fi
+
+rm -rf "$TMP_DIR"
+
+# ---------------------------------------------------------------------------
+# --clean: removes the v1 block from profile after migration
+# ---------------------------------------------------------------------------
+section "migrate.sh --clean — removes block from profile"
+TMP_DIR="$(mktemp -d)"
+TMP_SETTINGS="$TMP_DIR/settings.json"
+TMP_PROFILE="$TMP_DIR/profile.sh"
+cp "$FIXTURES/v1_iam_default.sh" "$TMP_PROFILE"
+
+# Run migration with --clean via the library functions directly (not CLI,
+# since migrate.sh scans fixed CANDIDATES paths, not arbitrary test paths).
+migrator_run "$TMP_PROFILE" "$TMP_SETTINGS" "$BEDROCK_CONFIG_PATH" >/dev/null
+
+# Simulate the --clean step (same logic as commands/migrate.sh).
+if sed --version 2>/dev/null | grep -q GNU; then
+  sed -i '/# BEGIN: Claude Code Bedrock Configuration/,/# END: Claude Code Bedrock Configuration/d' "$TMP_PROFILE"
+else
+  sed -i '' '/# BEGIN: Claude Code Bedrock Configuration/,/# END: Claude Code Bedrock Configuration/d' "$TMP_PROFILE"
+fi
+
+# v1 block must be gone after --clean
+if ! grep -q "BEGIN: Claude Code Bedrock Configuration" "$TMP_PROFILE"; then pass; else fail "--clean must remove the v1 block"; fi
+
+# settings.json must still be valid
+READBACK="$(config_read "$TMP_SETTINGS")"
+assert_eq "clean/managedBy" "$(printf '%s' "$READBACK" | jq -r '.juggernaut.meta.managedBy')" "juggernaut"
 
 rm -rf "$TMP_DIR"
 

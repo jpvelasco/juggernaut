@@ -93,9 +93,10 @@ migrator_parse_v1_block() {
   [[ -z "$region" ]] && region="us-east-1"
 
   # Snapshot all export lines for legacyEnv.
+  # Strip the leading "export " prefix; preserve the raw KEY=VALUE (quoted or unquoted).
   local legacy_env
-  legacy_env="$(printf '%s' "$block" | grep "^export " \
-    | sed 's/^export \([A-Z_][A-Z0-9_]*\)=["'"'"']\(.*\)["'"'"']$/\1=\2/' \
+  legacy_env="$(printf '%s' "$block" | grep "^export [A-Z_][A-Z0-9_]*=" \
+    | sed 's/^export //' \
     | jq -Rn '[inputs | capture("^(?<k>[^=]+)=(?<v>.*)$")] | map({(.k): .v}) | add // {}')"
 
   jq -n \

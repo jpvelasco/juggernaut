@@ -31,6 +31,7 @@ for arg in "$@"; do
 done
 
 SETTINGS_PATH="$(config_resolve_target "$SCOPE")"
+BEDROCK_CONFIG="${BEDROCK_CONFIG_PATH:-$REPO_ROOT/bedrock-config.json}"
 
 # ---------------------------------------------------------------------------
 # Rollback path
@@ -44,6 +45,11 @@ if [[ "$ROLLBACK" == true ]]; then
   exit 0
 fi
 
+if [[ ! -f "$BEDROCK_CONFIG" ]]; then
+  echo "migrate: bedrock-config.json not found at $BEDROCK_CONFIG" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Detect v1 profile blocks across all standard shell profiles
 # ---------------------------------------------------------------------------
@@ -55,7 +61,17 @@ declare -a CANDIDATES=(
   "$HOME/.profile"
 )
 
+# Portable in-place sed: macOS requires a backup extension argument.
+_sed_inplace() {
+  if sed --version 2>/dev/null | grep -q GNU; then
+    sed -i "$@"
+  else
+    sed -i '' "$@"
+  fi
+}
+
 FOUND=0
+ERRORS=0
 for profile in "${CANDIDATES[@]}"; do
   if migrator_has_v1_block "$profile"; then
     FOUND=$((FOUND + 1))
@@ -66,20 +82,14 @@ for profile in "${CANDIDATES[@]}"; do
       continue
     fi
 
-    migrator_run "$profile" "$SETTINGS_PATH" "${BEDROCK_CONFIG_PATH:-$REPO_ROOT/bedrock-config.json}"
-
-    if [[ "$CLEAN" == true ]]; then
-      # Remove the entire v1 block from the profile.
-      sed_inplace() {
-        # Portable in-place: macOS sed requires a backup extension argument.
-        if sed --version 2>/dev/null | grep -q GNU; then
-          sed -i "$@"
-        else
-          sed -i '' "$@"
-        fi
-      }
-      sed_inplace '/# BEGIN: Claude Code Bedrock Configuration/,/# END: Claude Code Bedrock Configuration/d' "$profile"
-      echo "Removed v1 block from $profile (--clean)"
+    if migrator_run "$profile" "$SETTINGS_PATH" "$BEDROCK_CONFIG"; then
+      if [[ "$CLEAN" == true ]]; then
+        _sed_inplace '/# BEGIN: Claude Code Bedrock Configuration/,/# END: Claude Code Bedrock Configuration/d' "$profile"
+        echo "Removed v1 block from $profile (--clean)"
+      fi
+    else
+      echo "migrate: failed to migrate $profile" >&2
+      ERRORS=$((ERRORS + 1))
     fi
   fi
 done
@@ -87,6 +97,11 @@ done
 if (( FOUND == 0 )); then
   echo "No v1 profile blocks found. Nothing to migrate."
   exit 0
+fi
+
+if (( ERRORS > 0 )); then
+  echo "Migration completed with $ERRORS error(s). Check output above." >&2
+  exit 1
 fi
 
 echo "Migration done. Verify with: juggernaut doctor"

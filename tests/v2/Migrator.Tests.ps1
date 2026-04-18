@@ -104,6 +104,54 @@ Describe 'New-MigratorV2Block — opusplan sets ANTHROPIC_MODEL=opusplan' {
 }
 
 # ---------------------------------------------------------------------------
+# legacyEnv snapshot captures keychain export
+# ---------------------------------------------------------------------------
+Describe 'ConvertFrom-MigratorV1Block — legacyEnv captures unquoted export' {
+    It 'AWS_BEARER_TOKEN_BEDROCK present in legacyEnv' {
+        $raw    = Get-MigratorV1BlockRaw -ProfileFile (Join-Path $script:Fixtures 'v1_apikey_keychain.sh')
+        $parsed = ConvertFrom-MigratorV1Block -RawBlock $raw
+        $parsed.legacyEnv.ContainsKey('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Bare exports fixture — no metadata comments
+# ---------------------------------------------------------------------------
+Describe 'ConvertFrom-MigratorV1Block — v1_bare_exports' {
+    BeforeAll {
+        $raw = Get-MigratorV1BlockRaw -ProfileFile (Join-Path $script:Fixtures 'v1_bare_exports.sh')
+        $script:parsedBare = ConvertFrom-MigratorV1Block -RawBlock $raw
+    }
+
+    It 'authMode defaults to iam'       { $script:parsedBare.authMode    | Should -Be 'iam' }
+    It 'region parsed from export line' { $script:parsedBare.region      | Should -Be 'us-west-2' }
+    It 'model parsed from export line'  { $script:parsedBare.model       | Should -Be 'global.anthropic.claude-sonnet-4-6' }
+    It 'legacyEnv has unquoted AWS_BEARER_TOKEN_BEDROCK' {
+        $script:parsedBare.legacyEnv.ContainsKey('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Fish profile fixture — has_v1_block detects fish file
+# ---------------------------------------------------------------------------
+Describe 'Test-MigratorHasV1Block — fish profile' {
+    It 'detects v1 block in fish fixture' {
+        Test-MigratorHasV1Block -ProfileFile (Join-Path $script:Fixtures 'v1_fish_profile.fish') | Should -BeTrue
+    }
+}
+
+Describe 'ConvertFrom-MigratorV1Block — v1_fish_profile' {
+    BeforeAll {
+        $raw = Get-MigratorV1BlockRaw -ProfileFile (Join-Path $script:Fixtures 'v1_fish_profile.fish')
+        $script:parsedFish = ConvertFrom-MigratorV1Block -RawBlock $raw
+    }
+
+    It 'authMode defaults to iam (no export lines)'     { $script:parsedFish.authMode    | Should -Be 'iam' }
+    It 'effortLevel from metadata comment'              { $script:parsedFish.effortLevel | Should -Be 'xhigh' }
+    It 'region defaults to us-east-1 (no export lines)' { $script:parsedFish.region      | Should -Be 'us-east-1' }
+}
+
+# ---------------------------------------------------------------------------
 # Full round-trip: Invoke-MigratorRun
 # ---------------------------------------------------------------------------
 Describe 'Invoke-MigratorRun — full round-trip' {
