@@ -136,13 +136,22 @@ if [[ -n "$BARE_LEGACY" ]]; then pass; else fail "legacyEnv.snapshot should capt
 section "v1_fish_profile — has_v1_block detects fish profile"
 if migrator_has_v1_block "$FIXTURES/v1_fish_profile.fish"; then pass; else fail "should detect v1 block in fish fixture"; fi
 
-# Fish uses set -gx, not export — migrator treats auth.mode as default (iam)
-# and region/model fall back to defaults since no export lines exist.
+# Fish uses set -gx — region and model must be parsed from set -gx lines.
 FISH_RAW="$(migrator_extract_block "$FIXTURES/v1_fish_profile.fish")"
 FISH_PARSED="$(migrator_parse_v1_block "$FISH_RAW")"
-assert_eq "fish/auth.mode"    "$(printf '%s' "$FISH_PARSED" | jq -r '.authMode')"    "iam"
-assert_eq "fish/effortLevel"  "$(printf '%s' "$FISH_PARSED" | jq -r '.effortLevel')" "xhigh"
-assert_eq "fish/region-default" "$(printf '%s' "$FISH_PARSED" | jq -r '.region')"   "us-east-1"
+assert_eq "fish/auth.mode"   "$(printf '%s' "$FISH_PARSED" | jq -r '.authMode')"    "iam"
+assert_eq "fish/effortLevel" "$(printf '%s' "$FISH_PARSED" | jq -r '.effortLevel')" "xhigh"
+assert_eq "fish/region"      "$(printf '%s' "$FISH_PARSED" | jq -r '.region')"      "us-west-2"
+assert_eq "fish/model"       "$(printf '%s' "$FISH_PARSED" | jq -r '.model')"       "global.anthropic.claude-sonnet-4-6"
+
+# v2 block from fish fixture: auth.region must come from set -gx AWS_REGION.
+FISH_BLOCK="$(migrator_build_v2_block "$FISH_PARSED" "$BEDROCK_CONFIG_PATH")"
+assert_eq "fish/v2-auth.region" "$(printf '%s' "$FISH_BLOCK" | jq -r '.auth.region')" "us-west-2"
+assert_eq "fish/v2-env.AWS_REGION" "$(printf '%s' "$FISH_BLOCK" | jq -r '.env.AWS_REGION')" "us-west-2"
+
+# legacyEnv snapshot must include fish set -gx variables.
+FISH_LEGACY_REGION="$(printf '%s' "$FISH_PARSED" | jq -r '.legacyEnv["AWS_REGION"] // ""')"
+if [[ -n "$FISH_LEGACY_REGION" ]]; then pass; else fail "fish/legacyEnv should capture AWS_REGION from set -gx"; fi
 
 # ---------------------------------------------------------------------------
 # migrator_has_v1_block detection
@@ -207,6 +216,25 @@ fi
 rm -rf "$TMP_DIR"
 
 # ---------------------------------------------------------------------------
+# Feature flag gate: migrate.sh exits 0 without JUGGERNAUT_USE_V2=1
+# ---------------------------------------------------------------------------
+section "migrate.sh feature flag — graceful no-op without JUGGERNAUT_USE_V2"
+TMP_DIR="$(mktemp -d)"
+TMP_SETTINGS="$TMP_DIR/settings.json"
+
+JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/migrate.sh" >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "migrate.sh should exit 0 without v2 flag (got $RC)"; fi
+if [[ ! -f "$TMP_SETTINGS" ]]; then pass; else fail "migrate.sh must not write settings.json without v2 flag"; fi
+
+# With flag set: must proceed (will find no profiles in test env but exit cleanly).
+JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/commands/migrate.sh" >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "migrate.sh should exit 0 with v2 flag (got $RC)"; fi
+
+rm -rf "$TMP_DIR"
+
+# ---------------------------------------------------------------------------
 # --dry-run: no files written
 # ---------------------------------------------------------------------------
 section "migrate.sh --dry-run — no files written"
@@ -215,7 +243,7 @@ TMP_SETTINGS="$TMP_DIR/settings.json"
 TMP_PROFILE="$TMP_DIR/profile.sh"
 cp "$FIXTURES/v1_iam_default.sh" "$TMP_PROFILE"
 
-BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json" \
+JUGGERNAUT_USE_V2=1 BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json" \
   bash "$REPO_ROOT/commands/migrate.sh" --dry-run >/dev/null 2>&1 || true
 
 # settings.json must NOT exist (dry-run should not write it)

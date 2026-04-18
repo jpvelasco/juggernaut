@@ -11,6 +11,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Feature flag gate — v2 commands are dormant until explicitly enabled.
+if [[ "${JUGGERNAUT_USE_V2:-0}" != "1" ]]; then
+  echo "migrate: v2 migration is not active. Pass --v2 to ./setup or set JUGGERNAUT_USE_V2=1." >&2
+  exit 0
+fi
+
 . "$REPO_ROOT/lib/schema.sh"
 . "$REPO_ROOT/lib/config_manager.sh"
 . "$REPO_ROOT/lib/migrator.sh"

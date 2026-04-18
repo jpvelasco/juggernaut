@@ -3,7 +3,7 @@
 # Auth mode: iam
 # EffortLevel: xhigh
 set -e AWS_BEARER_TOKEN_BEDROCK 2>/dev/null
-set -gx AWS_REGION us-east-1
+set -gx AWS_REGION us-west-2
 set -gx CLAUDE_CODE_USE_BEDROCK 1
 set -gx CLAUDE_CODE_MAX_OUTPUT_TOKENS 32768
 set -gx MAX_THINKING_TOKENS 65536

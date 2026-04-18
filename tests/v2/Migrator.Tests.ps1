@@ -11,6 +11,20 @@ BeforeAll {
 }
 
 # ---------------------------------------------------------------------------
+# Feature flag gate
+# ---------------------------------------------------------------------------
+Describe 'migrate.ps1 feature flag' {
+    It 'exits 0 without JUGGERNAUT_USE_V2=1' {
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        $migrate  = Join-Path $repoRoot 'commands\migrate.ps1'
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$migrate`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '' }
+        $proc.ExitCode | Should -Be 0
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Detection
 # ---------------------------------------------------------------------------
 Describe 'Test-MigratorHasV1Block' {
@@ -146,9 +160,11 @@ Describe 'ConvertFrom-MigratorV1Block — v1_fish_profile' {
         $script:parsedFish = ConvertFrom-MigratorV1Block -RawBlock $raw
     }
 
-    It 'authMode defaults to iam (no export lines)'     { $script:parsedFish.authMode    | Should -Be 'iam' }
-    It 'effortLevel from metadata comment'              { $script:parsedFish.effortLevel | Should -Be 'xhigh' }
-    It 'region defaults to us-east-1 (no export lines)' { $script:parsedFish.region      | Should -Be 'us-east-1' }
+    It 'authMode from metadata comment'                { $script:parsedFish.authMode    | Should -Be 'iam' }
+    It 'effortLevel from metadata comment'             { $script:parsedFish.effortLevel | Should -Be 'xhigh' }
+    It 'region parsed from set -gx AWS_REGION'         { $script:parsedFish.region      | Should -Be 'us-west-2' }
+    It 'model parsed from set -gx ANTHROPIC_MODEL'     { $script:parsedFish.model       | Should -Be 'global.anthropic.claude-sonnet-4-6' }
+    It 'legacyEnv has AWS_REGION from set -gx'         { $script:parsedFish.legacyEnv.Contains('AWS_REGION') | Should -BeTrue }
 }
 
 # ---------------------------------------------------------------------------

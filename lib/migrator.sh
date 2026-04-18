@@ -36,8 +36,26 @@ _migrator_flag() {
   printf '%s' "$block" | grep -q "^# ${key}: true"
 }
 
+# _migrator_export_val <block> <var_name>
+# Extracts the value of "export VAR=..." (quoted or unquoted) from block text.
+_migrator_export_val() {
+  local block="$1" var="$2"
+  printf '%s' "$block" | grep "^export ${var}=" | head -1 \
+    | sed "s/^export ${var}=[\"']\(.*\)[\"']$/\1/" \
+    | sed "s/^export ${var}=\(.*\)$/\1/"
+}
+
+# _migrator_fish_val <block> <var_name>
+# Extracts the value of "set -gx VAR value" from fish config block text.
+_migrator_fish_val() {
+  local block="$1" var="$2"
+  printf '%s' "$block" | grep "^set -gx ${var} " | head -1 \
+    | sed "s/^set -gx ${var} //"
+}
+
 # migrator_parse_v1_block <raw_block_text>
 # Emits a JSON object with all v1 metadata fields.
+# Handles bash/zsh (export VAR=value) and fish (set -gx VAR value) syntax.
 migrator_parse_v1_block() {
   local block="$1"
 
@@ -66,38 +84,43 @@ migrator_parse_v1_block() {
   sonnet_model="$(_migrator_meta "$block" "SonnetModel")"
   haiku_model="$(_migrator_meta "$block" "HaikuModel")"
 
-  # Fall back to the export lines for model IDs if metadata comments are absent
-  # (older v1 blocks before --model flag existed).
+  # Fall back to export lines, then fish set -gx lines, for model IDs when
+  # metadata comments are absent (older v1 blocks / fish profiles).
   if [[ -z "$model" ]]; then
-    model="$(printf '%s' "$block" | grep "^export ANTHROPIC_MODEL=" | head -1 \
-      | sed 's/^export ANTHROPIC_MODEL="\(.*\)"/\1/' | sed "s/^export ANTHROPIC_MODEL='\\(.*\\)'/\\1/")"
-    # opusplan literal should not be used as the model ID
+    model="$(_migrator_export_val "$block" "ANTHROPIC_MODEL")"
+    [[ -z "$model" ]] && model="$(_migrator_fish_val "$block" "ANTHROPIC_MODEL")"
     [[ "$model" == "opusplan" ]] && model=""
   fi
   if [[ -z "$opus_model" ]]; then
-    opus_model="$(printf '%s' "$block" | grep "^export ANTHROPIC_DEFAULT_OPUS_MODEL=" | head -1 \
-      | sed 's/^export ANTHROPIC_DEFAULT_OPUS_MODEL="\(.*\)"/\1/' | sed "s/^export ANTHROPIC_DEFAULT_OPUS_MODEL='\\(.*\\)'/\\1/")"
+    opus_model="$(_migrator_export_val "$block" "ANTHROPIC_DEFAULT_OPUS_MODEL")"
+    [[ -z "$opus_model" ]] && opus_model="$(_migrator_fish_val "$block" "ANTHROPIC_DEFAULT_OPUS_MODEL")"
   fi
   if [[ -z "$sonnet_model" ]]; then
-    sonnet_model="$(printf '%s' "$block" | grep "^export ANTHROPIC_DEFAULT_SONNET_MODEL=" | head -1 \
-      | sed 's/^export ANTHROPIC_DEFAULT_SONNET_MODEL="\(.*\)"/\1/' | sed "s/^export ANTHROPIC_DEFAULT_SONNET_MODEL='\\(.*\\)'/\\1/")"
+    sonnet_model="$(_migrator_export_val "$block" "ANTHROPIC_DEFAULT_SONNET_MODEL")"
+    [[ -z "$sonnet_model" ]] && sonnet_model="$(_migrator_fish_val "$block" "ANTHROPIC_DEFAULT_SONNET_MODEL")"
   fi
   if [[ -z "$haiku_model" ]]; then
-    haiku_model="$(printf '%s' "$block" | grep "^export ANTHROPIC_DEFAULT_HAIKU_MODEL=" | head -1 \
-      | sed 's/^export ANTHROPIC_DEFAULT_HAIKU_MODEL="\(.*\)"/\1/' | sed "s/^export ANTHROPIC_DEFAULT_HAIKU_MODEL='\\(.*\\)'/\\1/")"
+    haiku_model="$(_migrator_export_val "$block" "ANTHROPIC_DEFAULT_HAIKU_MODEL")"
+    [[ -z "$haiku_model" ]] && haiku_model="$(_migrator_fish_val "$block" "ANTHROPIC_DEFAULT_HAIKU_MODEL")"
   fi
 
-  # Region comes from the export line (not a metadata comment in v1).
-  region="$(printf '%s' "$block" | grep "^export AWS_REGION=" | head -1 \
-    | sed 's/^export AWS_REGION="\(.*\)"/\1/' | sed "s/^export AWS_REGION='\\(.*\\)'/\\1/")"
+  # Region: export line first, fish set -gx fallback, then hardcoded default.
+  # auth.region is the single source of truth in v2; parse it from AWS_REGION.
+  region="$(_migrator_export_val "$block" "AWS_REGION")"
+  [[ -z "$region" ]] && region="$(_migrator_fish_val "$block" "AWS_REGION")"
   [[ -z "$region" ]] && region="us-east-1"
 
-  # Snapshot all export lines for legacyEnv.
-  # Strip the leading "export " prefix; preserve the raw KEY=VALUE (quoted or unquoted).
+  # Snapshot all variable-setting lines for legacyEnv (export and fish set -gx).
   local legacy_env
-  legacy_env="$(printf '%s' "$block" | grep "^export [A-Z_][A-Z0-9_]*=" \
-    | sed 's/^export //' \
-    | jq -Rn '[inputs | capture("^(?<k>[^=]+)=(?<v>.*)$")] | map({(.k): .v}) | add // {}')"
+  legacy_env="$(
+    {
+      # bash/zsh: strip "export " prefix, keep KEY=VALUE
+      printf '%s' "$block" | grep "^export [A-Z_][A-Z0-9_]*=" | sed 's/^export //'
+      # fish: convert "set -gx KEY VALUE" → "KEY=VALUE"
+      printf '%s' "$block" | grep "^set -gx [A-Z_][A-Z0-9_]* " \
+        | sed 's/^set -gx \([A-Z_][A-Z0-9_]*\) \(.*\)$/\1=\2/'
+    } | jq -Rn '[inputs | capture("^(?<k>[^=]+)=(?<v>.*)$")] | map({(.k): .v}) | add // {}'
+  )"
 
   jq -n \
     --arg auth_mode   "$auth_mode" \

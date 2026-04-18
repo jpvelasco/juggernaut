@@ -50,29 +50,51 @@ function ConvertFrom-MigratorV1Block {
     $sonnetModel = ($lines | Where-Object { $_ -match '^# SonnetModel: (.+)' } | Select-Object -First 1) -replace '^# SonnetModel: ', ''
     $haikuModel  = ($lines | Where-Object { $_ -match '^# HaikuModel: (.+)' }  | Select-Object -First 1) -replace '^# HaikuModel: ', ''
 
-    # Fall back to export lines when metadata comments are absent.
-    $exportLines = $lines | Where-Object { $_ -match '^export ([A-Z_][A-Z0-9_]*)=' }
+    # Fall back to export lines (bash/zsh) then fish set -gx lines for values
+    # when metadata comments are absent.
+    $exportLines  = $lines | Where-Object { $_ -match '^export ([A-Z_][A-Z0-9_]*)=' }
+    $fishSetLines = $lines | Where-Object { $_ -match '^set -gx ([A-Z_][A-Z0-9_]*) ' }
 
     $getExport = {
         param($key)
-        $hit = $exportLines | Where-Object { $_ -match "^export ${key}=[`"']?(.+?)[`"']?$" } | Select-Object -First 1
+        $hit = $exportLines | Where-Object { $_ -match "^export ${key}=" } | Select-Object -First 1
         if ($hit -match "^export ${key}=[`"']?(.+?)[`"']?$") { return $Matches[1] }
         return ''
     }
+    $getFish = {
+        param($key)
+        $hit = $fishSetLines | Where-Object { $_ -match "^set -gx ${key} " } | Select-Object -First 1
+        if ($hit -match "^set -gx ${key} (.+)$") { return $Matches[1] }
+        return ''
+    }
 
-    if (-not $model)       { $model       = & $getExport 'ANTHROPIC_MODEL'; if ($model -eq 'opusplan') { $model = '' } }
-    if (-not $opusModel)   { $opusModel   = & $getExport 'ANTHROPIC_DEFAULT_OPUS_MODEL' }
-    if (-not $sonnetModel) { $sonnetModel = & $getExport 'ANTHROPIC_DEFAULT_SONNET_MODEL' }
-    if (-not $haikuModel)  { $haikuModel  = & $getExport 'ANTHROPIC_DEFAULT_HAIKU_MODEL' }
+    if (-not $model) {
+        $model = & $getExport 'ANTHROPIC_MODEL'
+        if (-not $model) { $model = & $getFish 'ANTHROPIC_MODEL' }
+        if ($model -eq 'opusplan') { $model = '' }
+    }
+    if (-not $opusModel)   { $opusModel   = & $getExport 'ANTHROPIC_DEFAULT_OPUS_MODEL';   if (-not $opusModel)   { $opusModel   = & $getFish 'ANTHROPIC_DEFAULT_OPUS_MODEL' } }
+    if (-not $sonnetModel) { $sonnetModel = & $getExport 'ANTHROPIC_DEFAULT_SONNET_MODEL'; if (-not $sonnetModel) { $sonnetModel = & $getFish 'ANTHROPIC_DEFAULT_SONNET_MODEL' } }
+    if (-not $haikuModel)  { $haikuModel  = & $getExport 'ANTHROPIC_DEFAULT_HAIKU_MODEL';  if (-not $haikuModel)  { $haikuModel  = & $getFish 'ANTHROPIC_DEFAULT_HAIKU_MODEL' } }
 
+    # Region: export line → fish set -gx → default.
+    # auth.region is the single source of truth in v2; sourced from AWS_REGION.
     $region = & $getExport 'AWS_REGION'
+    if (-not $region) { $region = & $getFish 'AWS_REGION' }
     if (-not $region) { $region = 'us-east-1' }
 
-    # Build legacyEnv snapshot from all export lines.
+    # Build legacyEnv snapshot from export lines and fish set -gx lines.
     $legacyEnv = [ordered]@{}
     foreach ($line in $exportLines) {
-        if ($line -match "^export ([A-Z_][A-Z0-9_]*)=[`"']?(.+?)[`"']?$") {
-            $legacyEnv[$Matches[1]] = $Matches[2]
+        if ($line -match "^export ([A-Z_][A-Z0-9_]*)=(.+)$") {
+            $legacyEnv[$Matches[1]] = $Matches[2] -replace '^[''"]|[''"]$', ''
+        }
+    }
+    foreach ($line in $fishSetLines) {
+        if ($line -match "^set -gx ([A-Z_][A-Z0-9_]*) (.+)$") {
+            if (-not $legacyEnv.Contains($Matches[1])) {
+                $legacyEnv[$Matches[1]] = $Matches[2]
+            }
         }
     }
 

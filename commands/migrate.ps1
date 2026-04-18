@@ -12,6 +12,12 @@ param(
     [ValidateSet('user','project')][string]$Scope = 'user'
 )
 
+# Feature flag gate — v2 commands are dormant until explicitly enabled.
+if ($env:JUGGERNAUT_USE_V2 -ne '1') {
+    Write-Host "migrate: v2 migration is not active. Set `$env:JUGGERNAUT_USE_V2 = '1' to enable." -ForegroundColor DarkYellow
+    exit 0
+}
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $RepoRoot 'lib/schema.ps1')
 . (Join-Path $RepoRoot 'lib/config_manager.ps1')
