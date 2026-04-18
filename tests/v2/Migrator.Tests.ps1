@@ -110,7 +110,7 @@ Describe 'ConvertFrom-MigratorV1Block — legacyEnv captures unquoted export' {
     It 'AWS_BEARER_TOKEN_BEDROCK present in legacyEnv' {
         $raw    = Get-MigratorV1BlockRaw -ProfileFile (Join-Path $script:Fixtures 'v1_apikey_keychain.sh')
         $parsed = ConvertFrom-MigratorV1Block -RawBlock $raw
-        $parsed.legacyEnv.ContainsKey('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
+        $parsed.legacyEnv.Contains('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
     }
 }
 
@@ -127,7 +127,7 @@ Describe 'ConvertFrom-MigratorV1Block — v1_bare_exports' {
     It 'region parsed from export line' { $script:parsedBare.region      | Should -Be 'us-west-2' }
     It 'model parsed from export line'  { $script:parsedBare.model       | Should -Be 'global.anthropic.claude-sonnet-4-6' }
     It 'legacyEnv has unquoted AWS_BEARER_TOKEN_BEDROCK' {
-        $script:parsedBare.legacyEnv.ContainsKey('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
+        $script:parsedBare.legacyEnv.Contains('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
     }
 }
 
