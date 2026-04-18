@@ -151,7 +151,19 @@ function Write-SettingsAtomic {
         throw "Write-SettingsAtomic: cannot create parent directory ${dir}: $_"
     }
 
-    Invoke-WithSettingsLock -Path $Path -Action {
+    # Acquire the per-file mutex inline. Passing a scriptblock to
+    # Invoke-WithSettingsLock and having it resolve Backup-Settings through
+    # scope chains is fragile on PS 7; inline form keeps everything in the
+    # current module's scope.
+    $lockName = "Global\juggernaut_$([IO.Path]::GetFileName($Path))"
+    $mutex = New-Object System.Threading.Mutex($false, $lockName)
+    $acquired = $false
+    try {
+        try { $acquired = $mutex.WaitOne(5000) }
+        catch [System.Threading.AbandonedMutexException] { $acquired = $true }
+        catch { throw "Write-SettingsAtomic: mutex acquisition failed on ${lockName}: $_" }
+        if (-not $acquired) { throw "Write-SettingsAtomic: could not acquire lock on ${lockName} within 5s" }
+
         if (Test-Path $Path) { Backup-Settings -Path $Path | Out-Null }
         $tmp = "$Path.tmp.$PID"
         try {
@@ -161,7 +173,10 @@ function Write-SettingsAtomic {
             Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
             throw
         }
-    }.GetNewClosure()
+    } finally {
+        if ($acquired) { try { $mutex.ReleaseMutex() | Out-Null } catch {} }
+        $mutex.Dispose()
+    }
 }
 
 function Invoke-WithSettingsLock {
