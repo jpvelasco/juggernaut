@@ -241,7 +241,7 @@ if [[ -z "$J_STORAGE" && "$J_STORAGE_EXPLICIT" == "false" ]]; then
   _os="$(keychain_detect_os)"
   case "$_os" in
     macos|gitbash|cygwin)
-      keychain_available 2>/dev/null && J_STORAGE="keychain" || J_STORAGE="profile" ;;
+      if keychain_available 2>/dev/null; then J_STORAGE="keychain"; else J_STORAGE="profile"; fi ;;
     *) J_STORAGE="profile" ;;
   esac
 fi
