@@ -192,8 +192,9 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
         EXISTING_JSON="$(config_read "$SETTINGS_PATH")"
         HAS_V2_BLOCK=true
         MIGRATED_BLOCK="$candidate"
-        echo "  Migration complete — settings saved to $SETTINGS_PATH." >&2
-        echo "  Your shell profile has been updated with a notice; the old block is kept as a fallback." >&2
+        echo "  Migration complete — your configuration is now in $SETTINGS_PATH." >&2
+        echo "  Nothing was removed from your shell profile; the old block stays as a fallback." >&2
+        echo "  You can remove it later with: juggernaut migrate --clean" >&2
       else
         echo "  Migration encountered an error — continuing with defaults. Your profile block is unchanged." >&2
       fi
