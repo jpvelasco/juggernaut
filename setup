@@ -41,6 +41,22 @@ detect_shell() {
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
+# v2 feature flag (hidden; dormant in Phase 1). Filters --v2 out of argv.
+JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-0}"
+FILTERED_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--v2" ]]; then
+        JUGGERNAUT_V2_ACTIVE=1
+    else
+        FILTERED_ARGS+=("$arg")
+    fi
+done
+set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
+if [[ "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
+    echo "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." >&2
+    export JUGGERNAUT_USE_V2=1
+fi
+
 # Pass through version/help flags
 for arg in "$@"; do
     [[ "$arg" == "--version" || "$arg" == "-v" ]] && {

@@ -29,8 +29,14 @@ param(
     [switch]$DryRun,
     [switch]$Help,
     [Alias("v")]
-    [switch]$Version
+    [switch]$Version,
+    [switch]$V2
 )
+
+if ($V2 -or $env:JUGGERNAUT_USE_V2 -eq '1') {
+    $env:JUGGERNAUT_USE_V2 = '1'
+    Write-Host "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." -ForegroundColor DarkYellow
+}
 
 # Track if parameters were explicitly provided by the user
 $AuthExplicit = $PSBoundParameters.ContainsKey('Auth')
