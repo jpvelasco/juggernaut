@@ -378,7 +378,7 @@ Describe 'settings.json idempotency — second write preserves user keys' {
 
     It 'user permissions key preserved after second write' {
         $s = Read-Settings -Path $script:idemSettings
-        $s.ContainsKey('permissions') | Should -BeTrue
+        $s.Contains('permissions') | Should -BeTrue
     }
     It 'auth.region unchanged after second write' {
         $s = Read-Settings -Path $script:idemSettings
