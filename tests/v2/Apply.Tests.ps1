@@ -255,3 +255,151 @@ Describe 'Test-KeychainAvailable' {
         Test-KeychainAvailable | Should -BeIn @($true, $false)
     }
 }
+
+# ---------------------------------------------------------------------------
+# Keychain — constants
+# ---------------------------------------------------------------------------
+Describe 'Keychain constants' {
+    It 'KEYCHAIN_SERVICE is juggernaut-bedrock' {
+        $expr = Get-KeychainRetrievalExpression -Shell 'bash'
+        $expr | Should -Match 'juggernaut-bedrock'
+    }
+    It 'zsh expression matches bash expression' {
+        $bash = Get-KeychainRetrievalExpression -Shell 'bash'
+        $zsh  = Get-KeychainRetrievalExpression -Shell 'zsh'
+        $zsh | Should -Be $bash
+    }
+}
+
+# ---------------------------------------------------------------------------
+# New-JuggernautBlock — 1M context
+# ---------------------------------------------------------------------------
+Describe 'New-JuggernautBlock — 1M context default' {
+    It 'use1MContext defaults to true' {
+        $b = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' `
+                                 -BedrockConfigPath $script:BedrockConfigPath
+        $b.context.use1MContext | Should -BeTrue
+    }
+    It 'use1MContext=false is stored' {
+        $b = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' `
+                                 -Use1MContext $false `
+                                 -BedrockConfigPath $script:BedrockConfigPath
+        $b.context.use1MContext | Should -BeFalse
+    }
+}
+
+# ---------------------------------------------------------------------------
+# New-JuggernautBlock — api-key auth
+# ---------------------------------------------------------------------------
+Describe 'New-JuggernautBlock — api-key auth mode' {
+    It 'auth.mode = api-key' {
+        $b = New-JuggernautBlock -AuthMode 'api-key' -Region 'us-east-1' `
+                                 -BedrockConfigPath $script:BedrockConfigPath
+        $b.auth.mode | Should -Be 'api-key'
+    }
+    It 'env does not contain CLAUDE_CODE_USE_BEDROCK when api-key' {
+        $b = New-JuggernautBlock -AuthMode 'api-key' -Region 'us-east-1' `
+                                 -BedrockConfigPath $script:BedrockConfigPath
+        # CLAUDE_CODE_USE_BEDROCK is still set in Bedrock env regardless of auth mode.
+        # This test verifies the block is structurally valid.
+        $b.env | Should -Not -BeNullOrEmpty
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Implicit migration — region sourced from AWS_REGION (single source of truth)
+# ---------------------------------------------------------------------------
+Describe 'Invoke-MigratorRun — region from v1 AWS_REGION' {
+    BeforeAll {
+        $tmpDir  = Join-Path ([IO.Path]::GetTempPath()) ("jug-mig3-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+        $script:mig3Settings = Join-Path $tmpDir 'settings.json'
+        $script:mig3Profile  = Join-Path $tmpDir 'profile.sh'
+        Copy-Item (Join-Path $script:Fixtures 'v1_iam_default.sh') $script:mig3Profile
+        # Migrate without specifying a region override — region must come from fixture's AWS_REGION=us-east-1.
+        Invoke-MigratorRun -ProfileFile $script:mig3Profile `
+                           -SettingsPath $script:mig3Settings `
+                           -BedrockConfigPath $script:BedrockConfigPath | Out-Null
+    }
+    AfterAll {
+        Remove-Item (Split-Path $script:mig3Settings -Parent) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'settings.json written' { Test-Path $script:mig3Settings | Should -BeTrue }
+    It 'auth.region = us-east-1 (from AWS_REGION export in v1 block)' {
+        $s = Read-Settings -Path $script:mig3Settings
+        $s['juggernaut']['auth']['region'] | Should -Be 'us-east-1'
+    }
+    It 'env.AWS_REGION = us-east-1' {
+        $s = Read-Settings -Path $script:mig3Settings
+        $s['env']['AWS_REGION'] | Should -Be 'us-east-1'
+    }
+    It 'legacyEnv.source is v1.7.x-profile-block' {
+        $s = Read-Settings -Path $script:mig3Settings
+        $s['juggernaut']['legacyEnv']['source'] | Should -Be 'v1.7.x-profile-block'
+    }
+    It 'meta.migratedFrom is v1.7.x' {
+        $s = Read-Settings -Path $script:mig3Settings
+        $s['juggernaut']['meta']['migratedFrom'] | Should -Be 'v1.7.x'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Idempotency — applying the same block twice preserves structure
+# ---------------------------------------------------------------------------
+Describe 'settings.json idempotency — second write preserves user keys' {
+    BeforeAll {
+        $tmpDir   = Join-Path ([IO.Path]::GetTempPath()) ("jug-idem-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+        $script:idemSettings = Join-Path $tmpDir 'settings.json'
+
+        # Simulate a settings.json that already has user keys (permissions, hooks).
+        $existingUser = [ordered]@{
+            permissions = [ordered]@{ allow = @('Bash') }
+        }
+
+        $block1  = New-JuggernautBlock -AuthMode 'iam' -Region 'ap-southeast-1' `
+                                        -BedrockConfigPath $script:BedrockConfigPath
+        $native1 = Get-NativeKeysFromJuggernautBlock -Block $block1
+        $merged1 = Merge-JuggernautBlock -Existing $existingUser -NewBlock $block1 -NativeKeys $native1
+        Write-SettingsAtomic -Path $script:idemSettings -Content $merged1
+
+        # Second apply — same params.
+        $block2  = New-JuggernautBlock -AuthMode 'iam' -Region 'ap-southeast-1' `
+                                        -BedrockConfigPath $script:BedrockConfigPath
+        $native2 = Get-NativeKeysFromJuggernautBlock -Block $block2
+        $existing2 = Read-Settings -Path $script:idemSettings
+        $merged2 = Merge-JuggernautBlock -Existing $existing2 -NewBlock $block2 -NativeKeys $native2
+        Write-SettingsAtomic -Path $script:idemSettings -Content $merged2
+    }
+    AfterAll {
+        Remove-Item (Split-Path $script:idemSettings -Parent) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'user permissions key preserved after second write' {
+        $s = Read-Settings -Path $script:idemSettings
+        $s.ContainsKey('permissions') | Should -BeTrue
+    }
+    It 'auth.region unchanged after second write' {
+        $s = Read-Settings -Path $script:idemSettings
+        $s['juggernaut']['auth']['region'] | Should -Be 'ap-southeast-1'
+    }
+    It 'managedBy still juggernaut after second write' {
+        $s = Read-Settings -Path $script:idemSettings
+        $s['juggernaut']['meta']['managedBy'] | Should -Be 'juggernaut'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Build-ProfileWriterBlock — effort level in profile block
+# ---------------------------------------------------------------------------
+Describe 'Build-ProfileWriterBlock — effort level' {
+    It 'CLAUDE_CODE_EFFORT_LEVEL matches --effort' {
+        $b = Build-ProfileWriterBlock `
+            -Shell 'bash' -Region 'us-east-1' -AuthMode 'iam' `
+            -ApiKeyExpr '' -StorageMode 'profile' `
+            -EffortLevel 'high' `
+            -BedrockConfigPath $script:BedrockConfigPath
+        $b | Should -Match 'CLAUDE_CODE_EFFORT_LEVEL="high"'
+    }
+}

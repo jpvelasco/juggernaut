@@ -17,6 +17,8 @@ export BEDROCK_CONFIG_PATH
 . "$SCRIPT_DIR/lib/migrator.sh"
 . "$SCRIPT_DIR/lib/keychain.sh"
 . "$SCRIPT_DIR/lib/profile_writer.sh"
+# Lib files call `set -euo pipefail`; restore manual error handling.
+set +e
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -183,15 +185,17 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
   )
   for candidate in "${V1_CANDIDATES[@]}"; do
     if migrator_has_v1_block "$candidate" 2>/dev/null; then
-      echo "apply: detected v1 profile block in $candidate — migrating to settings.json..." >&2
-      if migrator_run "$candidate" "$SETTINGS_PATH" "$BEDROCK_CONFIG_PATH" 2>/dev/null; then
+      echo "Juggernaut: found a v1 profile block in $candidate." >&2
+      echo "  Moving your configuration to ~/.claude/settings.json (Claude Code's native config)." >&2
+      if migrator_run "$candidate" "$SETTINGS_PATH" "$BEDROCK_CONFIG_PATH"; then
         # Re-read after migration.
         EXISTING_JSON="$(config_read "$SETTINGS_PATH")"
         HAS_V2_BLOCK=true
         MIGRATED_BLOCK="$candidate"
-        echo "apply: migration complete. Settings written to $SETTINGS_PATH." >&2
+        echo "  Migration complete — settings saved to $SETTINGS_PATH." >&2
+        echo "  Your shell profile has been updated with a notice; the old block is kept as a fallback." >&2
       else
-        echo "apply: migration from $candidate failed — continuing with defaults." >&2
+        echo "  Migration encountered an error — continuing with defaults. Your profile block is unchanged." >&2
       fi
       break
     fi
@@ -325,7 +329,8 @@ export J_PROVIDER="bedrock"
 export J_AUTH_MODE J_STORAGE J_REGION J_EFFORT
 export J_USE_MANTLE
 export J_MANTLE_BASE_URL="$J_MANTLE_URL"
-export J_OPUSPLAN J_1M_CONTEXT
+export J_OPUSPLAN
+export J_USE_1M="$J_1M_CONTEXT"
 export J_SCOPE
 export J_VERSION="2.0.0"
 

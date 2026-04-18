@@ -59,6 +59,18 @@ profile_writer_remove_block() {
   fi
 }
 
+# _pw_export_line <syntax> <shell> <key> <value>
+# Emits a single shell export/set-gx line with value safely double-quoted.
+_pw_export_line() {
+  local syntax="$1" shell="$2" k="$3" v="$4"
+  local ev="${v//\"/\\\"}"
+  if [[ "$shell" == "fish" ]]; then
+    printf '%s %s "%s"\n' "$syntax" "$k" "$ev"
+  else
+    printf '%s %s="%s"\n' "$syntax" "$k" "$ev"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # profile_writer_build_block <shell> <region> <auth_mode> <api_key_expr>
 #                             <storage_mode> <bedrock_config_path>
@@ -89,8 +101,8 @@ profile_writer_build_block() {
   syntax="$(profile_writer_export_syntax "$shell")"
 
   # Load defaults from bedrock-config.json
-  local default_model default_opus default_sonnet default_haiku default_effort
-  local max_output thinking_tokens prompt_cache
+  local default_model="" default_opus="" default_sonnet="" default_haiku="" default_effort=""
+  local max_output="" thinking_tokens="" prompt_cache=""
   if [[ -f "$bedrock_cfg" ]]; then
     default_model=$(jq -r '.environment.ANTHROPIC_MODEL // empty' "$bedrock_cfg" 2>/dev/null || true)
     default_opus=$(jq -r '.environment.ANTHROPIC_DEFAULT_OPUS_MODEL // empty' "$bedrock_cfg" 2>/dev/null || true)
@@ -145,37 +157,27 @@ profile_writer_build_block() {
     fi
   fi
 
-  # Core env vars
-  _pw_line() {
-    local k="$1" v="$2"
-    local ev="${v//\"/\\\"}"
-    if [[ "$shell" == "fish" ]]; then
-      printf '%s %s "%s"\n' "$syntax" "$k" "$ev"
-    else
-      printf '%s %s="%s"\n' "$syntax" "$k" "$ev"
-    fi
-  }
-
-  block+="$(_pw_line AWS_REGION "$region")"$'\n'
-  block+="$(_pw_line CLAUDE_CODE_USE_BEDROCK "1")"$'\n'
-  block+="$(_pw_line CLAUDE_CODE_MAX_OUTPUT_TOKENS "$eff_max")"$'\n'
-  block+="$(_pw_line MAX_THINKING_TOKENS "$eff_thinking")"$'\n'
-  block+="$(_pw_line ANTHROPIC_MODEL "$eff_model")"$'\n'
-  block+="$(_pw_line ANTHROPIC_DEFAULT_OPUS_MODEL "$eff_opus")"$'\n'
-  block+="$(_pw_line ANTHROPIC_DEFAULT_SONNET_MODEL "$eff_sonnet")"$'\n'
-  block+="$(_pw_line ANTHROPIC_DEFAULT_HAIKU_MODEL "$eff_haiku")"$'\n'
-  block+="$(_pw_line CLAUDE_CODE_SUBAGENT_MODEL "$eff_haiku")"$'\n'
-  block+="$(_pw_line CLAUDE_CODE_EFFORT_LEVEL "$eff_effort")"$'\n'
-  block+="$(_pw_line ENABLE_PROMPT_CACHING_1H "$eff_cache")"$'\n'
-  block+="$(_pw_line DISABLE_ERROR_REPORTING "1")"$'\n'
-  block+="$(_pw_line DISABLE_TELEMETRY "1")"$'\n'
-  block+="$(_pw_line DISABLE_AUTOUPDATE "1")"$'\n'
-  block+="$(_pw_line DISABLE_BUG_COMMAND "1")"$'\n'
+  # Core env vars — use module-level helper _pw_export_line <syntax> <shell> <key> <value>
+  block+="$(_pw_export_line "$syntax" "$shell" AWS_REGION "$region")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" CLAUDE_CODE_USE_BEDROCK "1")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" CLAUDE_CODE_MAX_OUTPUT_TOKENS "$eff_max")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" MAX_THINKING_TOKENS "$eff_thinking")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" ANTHROPIC_MODEL "$eff_model")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" ANTHROPIC_DEFAULT_OPUS_MODEL "$eff_opus")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" ANTHROPIC_DEFAULT_SONNET_MODEL "$eff_sonnet")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" ANTHROPIC_DEFAULT_HAIKU_MODEL "$eff_haiku")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" CLAUDE_CODE_SUBAGENT_MODEL "$eff_haiku")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" CLAUDE_CODE_EFFORT_LEVEL "$eff_effort")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" ENABLE_PROMPT_CACHING_1H "$eff_cache")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" DISABLE_ERROR_REPORTING "1")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" DISABLE_TELEMETRY "1")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" DISABLE_AUTOUPDATE "1")"$'\n'
+  block+="$(_pw_export_line "$syntax" "$shell" DISABLE_BUG_COMMAND "1")"$'\n'
 
   # Mantle
   if [[ "$use_mantle" == "true" ]]; then
-    block+="$(_pw_line CLAUDE_CODE_USE_MANTLE "1")"$'\n'
-    [[ -n "$mantle_url" ]] && block+="$(_pw_line ANTHROPIC_BEDROCK_MANTLE_BASE_URL "$mantle_url")"$'\n'
+    block+="$(_pw_export_line "$syntax" "$shell" CLAUDE_CODE_USE_MANTLE "1")"$'\n'
+    [[ -n "$mantle_url" ]] && block+="$(_pw_export_line "$syntax" "$shell" ANTHROPIC_BEDROCK_MANTLE_BASE_URL "$mantle_url")"$'\n'
   fi
 
   # API key expression (api-key mode only)
@@ -248,13 +250,18 @@ profile_writer_annotate() {
   local tmp
   tmp="$(mktemp)"
 
-  awk -v begin="$PROFILE_WRITER_BEGIN_MARKER" \
-      -v end="$PROFILE_WRITER_END_MARKER" \
+  awk -v begin_marker="$PROFILE_WRITER_BEGIN_MARKER" \
+      -v end_marker="$PROFILE_WRITER_END_MARKER" \
       -v notice="$notice" '
-    /^# BEGIN: Claude Code Bedrock Configuration$/ {
+    $0 == begin_marker {
       in_block=1
-      print begin
+      print begin_marker
       print notice
+      next
+    }
+    $0 == end_marker {
+      in_block=0
+      print end_marker
       next
     }
     in_block && /^# (Auth mode|Storage|Model|FastModel|OpusModel|SonnetModel|HaikuModel|1MContext|OpusPlan|EffortLevel):/ {

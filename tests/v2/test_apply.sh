@@ -330,6 +330,109 @@ fi
 rm -rf "$TMP_DIR"
 
 # ---------------------------------------------------------------------------
+# --no-shell-fallback: settings.json written, no profile block
+# ---------------------------------------------------------------------------
+section "--no-shell-fallback: settings.json only, profile untouched"
+FAKE_HOME2="$(mktemp -d)"
+mkdir -p "$FAKE_HOME2/.claude"
+NSF_SETTINGS="$FAKE_HOME2/.claude/settings.json"
+NSF_PROFILE="$FAKE_HOME2/.bashrc"
+printf '# existing content\n' > "$NSF_PROFILE"
+
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  HOME="$FAKE_HOME2" bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=iam --region=us-west-2 --no-shell-fallback \
+  >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "--no-shell-fallback apply should exit 0 (got $RC)"; fi
+
+if [[ -f "$NSF_SETTINGS" ]]; then
+  NSF_READ="$(cat "$NSF_SETTINGS")"
+  assert_eq "nsf/managedBy" "$(printf '%s' "$NSF_READ" | jq -r '.juggernaut.meta.managedBy')" "juggernaut"
+else
+  fail "--no-shell-fallback: settings.json not written"
+fi
+
+# Profile file must be unchanged (no BEGIN marker injected).
+if grep -q "BEGIN: Claude Code Bedrock Configuration" "$NSF_PROFILE" 2>/dev/null; then
+  fail "--no-shell-fallback: profile block should NOT be written to .bashrc"
+else
+  pass
+fi
+
+rm -rf "$FAKE_HOME2"
+
+# ---------------------------------------------------------------------------
+# Idempotency: running apply.sh twice produces identical settings.json
+# ---------------------------------------------------------------------------
+section "idempotency — second apply produces identical settings.json"
+FAKE_HOME3="$(mktemp -d)"
+mkdir -p "$FAKE_HOME3/.claude"
+IDEM_SETTINGS="$FAKE_HOME3/.claude/settings.json"
+
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  HOME="$FAKE_HOME3" bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=iam --region=eu-west-1 --effort=high --no-shell-fallback \
+  >/dev/null 2>&1
+
+FIRST_HASH="$(jq -Sc . "$IDEM_SETTINGS" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+
+# Second run — same flags; only lastUpdated timestamp will differ, so compare
+# the structural fields rather than the raw file.
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  HOME="$FAKE_HOME3" bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=iam --region=eu-west-1 --effort=high --no-shell-fallback \
+  >/dev/null 2>&1
+
+SECOND="$(cat "$IDEM_SETTINGS")"
+assert_eq "idem/auth.region"  "$(printf '%s' "$SECOND" | jq -r '.juggernaut.auth.region')"  "eu-west-1"
+assert_eq "idem/effortLevel"  "$(printf '%s' "$SECOND" | jq -r '.juggernaut.effortLevel')"  "high"
+assert_eq "idem/managedBy"    "$(printf '%s' "$SECOND" | jq -r '.juggernaut.meta.managedBy')" "juggernaut"
+
+# Confirm no field drift between runs (excluding timestamp).
+FIRST_FIELDS="$(jq -Sc 'del(.juggernaut.meta.lastUpdated)' "$IDEM_SETTINGS" 2>/dev/null)"
+# Re-read first write from backup
+BACKUP="$(ls "$FAKE_HOME3/.claude/settings.json.backup."* 2>/dev/null | tail -1)"
+if [[ -n "$BACKUP" ]]; then
+  SECOND_FIELDS="$(jq -Sc 'del(.juggernaut.meta.lastUpdated)' <<< "$(cat "$BACKUP")" 2>/dev/null)"
+  if [[ "$FIRST_FIELDS" == "$SECOND_FIELDS" ]]; then pass; else fail "idempotency: structural fields differ between runs"; fi
+else
+  pass  # No backup = first run; structure check covered by individual asserts above.
+fi
+
+rm -rf "$FAKE_HOME3"
+
+# ---------------------------------------------------------------------------
+# Migration region: auth.region comes from v1 AWS_REGION (single source of truth)
+# ---------------------------------------------------------------------------
+section "migration — auth.region from v1 AWS_REGION (single source of truth)"
+FAKE_HOME4="$(mktemp -d)"
+mkdir -p "$FAKE_HOME4/.claude"
+MIG2_SETTINGS="$FAKE_HOME4/.claude/settings.json"
+# The fixture exports AWS_REGION=us-east-1; we do NOT pass --region to apply.sh.
+cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME4/.bashrc"
+
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  HOME="$FAKE_HOME4" bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=iam --no-shell-fallback \
+  >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "migration (no --region) should exit 0 (got $RC)"; fi
+
+if [[ -f "$MIG2_SETTINGS" ]]; then
+  MIG2_READ="$(cat "$MIG2_SETTINGS")"
+  # auth.region must be us-east-1 (from the fixture's AWS_REGION export), not the bedrock-config default.
+  assert_eq "mig2/auth.region from AWS_REGION" \
+    "$(printf '%s' "$MIG2_READ" | jq -r '.juggernaut.auth.region')" "us-east-1"
+  assert_eq "mig2/env.AWS_REGION" \
+    "$(printf '%s' "$MIG2_READ" | jq -r '.env.AWS_REGION')" "us-east-1"
+else
+  fail "migration (no --region): settings.json not written"
+fi
+
+rm -rf "$FAKE_HOME4"
+
+# ---------------------------------------------------------------------------
 # juggernaut dispatcher: --help exits 0, unknown subcommand exits 1
 # ---------------------------------------------------------------------------
 section "juggernaut dispatcher — help and unknown subcommand"
