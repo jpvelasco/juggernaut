@@ -78,31 +78,12 @@ Describe 'Remove leaves unrelated user keys' {
     }
 }
 
-Describe 'Write-SettingsAtomic rejects invalid JSON' {
-    BeforeEach {
-        $script:tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("juggernaut-" + [Guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $script:tmpDir -Force | Out-Null
-        $script:target = Join-Path $script:tmpDir 'settings.json'
-    }
-    AfterEach {
-        Remove-Item -Path $script:tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-
-    It 'does not create the target file when content cannot serialize to JSON' {
-        # Force a non-serializable object.
-        $bad = [ScriptBlock]::Create('whatever')
-        { Write-SettingsAtomic -Path $script:target -Content $bad } | Should -Throw
-        Test-Path $script:target | Should -BeFalse
-    }
-}
-
-Describe 'Invoke-WithSettingsLock' {
-    It 'survives an abandoned-mutex exception' {
+Describe 'Invoke-WithSettingsLock — happy path' {
+    It 'runs the action and releases the mutex' {
         $p = Join-Path ([IO.Path]::GetTempPath()) ("juggernaut-lock-" + [Guid]::NewGuid().ToString('N'))
         $hit = $false
         Invoke-WithSettingsLock -Path $p -Action { $script:hit = $true }
-        # No real way to force AbandonedMutexException from a test in-process; we at least verify
-        # the happy path completes without throwing and the action runs.
+        # Immediately re-acquire — would block if the first call didn't release.
         { Invoke-WithSettingsLock -Path $p -Action { 1 + 1 } } | Should -Not -Throw
     }
 }

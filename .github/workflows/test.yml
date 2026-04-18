@@ -209,6 +209,7 @@ jobs:
           Write-Host "Pester version: $((Get-Module Pester).Version)"
 
       - name: Run v2 Pester tests
+        timeout-minutes: 5
         shell: pwsh
         run: |
           Import-Module Pester -MinimumVersion 5.0.0 -Force
