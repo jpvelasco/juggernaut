@@ -917,9 +917,7 @@ parse_arguments() {
                 SKIP_PREFLIGHT=true
                 ;;
             --v2)
-                # Hidden v2 feature flag. Accepted in v1.7.6+ so users and CI
-                # can opt into the v2 codepath once it ships. Today it's a no-op
-                # beyond acknowledging the flag — v1 apply flow continues below.
+                # Hidden v2 feature flag; dormant in Phase 1.
                 export JUGGERNAUT_USE_V2=1
                 ;;
             --region=*)

@@ -6,6 +6,18 @@ set -euo pipefail
 
 JUGGERNAUT_SCHEMA_VERSION=1
 
+# Fail fast with a readable error if jq is not installed. All functions in
+# this module pipe through jq; silent empty output downstream would be worse
+# than dying loudly here.
+schema_require_jq() {
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "juggernaut: jq is required but not found on PATH." >&2
+    echo "  Install: apt-get install jq  |  brew install jq  |  winget install jqlang.jq" >&2
+    return 1
+  fi
+}
+schema_require_jq || exit 1
+
 schema_default_region() { echo "us-east-1"; }
 
 schema_supported_regions() {

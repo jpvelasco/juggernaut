@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
-# lib/config_manager.sh — settings.json read/merge/write operations for Juggernaut v2.
-# All writes atomic. Backups auto-rotated. No schema logic here — that lives in schema.sh.
-# Requires: bash 4+, jq, flock (util-linux; macOS has it via brew or we fall back).
+# lib/config_manager.sh — settings.json read/merge/write for Juggernaut v2.
+# Atomic writes, rotated backups, best-effort locking.
+# Requires: bash 4+, jq.  Optional: flock (mkdir fallback when absent).
 
 set -euo pipefail
 
 CONFIG_BACKUP_RETAIN=5
+
+# Copy the mode from $1 to $2 using a portable stat (GNU or BSD) and chmod.
+# Falls back to 0600 on failure — settings.json may hold keys, err on tighter.
+config_copy_mode() {
+  local src="$1" dst="$2" mode
+  mode="$(stat -c '%a' "$src" 2>/dev/null || stat -f '%Lp' "$src" 2>/dev/null || echo "")"
+  if [[ -n "$mode" ]]; then
+    chmod "$mode" "$dst" 2>/dev/null && return 0
+  fi
+  chmod 0600 "$dst" 2>/dev/null || true
+}
 
 config_user_settings_path() {
   echo "${HOME}/.claude/settings.json"
@@ -91,8 +102,11 @@ config_merge_juggernaut_block() {
 }
 
 # config_remove_juggernaut_block <existing_json>
-# Returns existing_json with .juggernaut and all Juggernaut-owned native keys removed.
-# User's other keys preserved.
+# Strips every key Juggernaut writes: .juggernaut plus the derived natives
+# (.env, .model, .modelOverrides, .availableModels). availableModels is also
+# treated as Juggernaut-managed — users who want to keep it should store it
+# under a different key.
+# User's other top-level keys (permissions, hooks, theme, ...) are preserved.
 config_remove_juggernaut_block() {
   local existing="$1"
   jq '
@@ -142,44 +156,71 @@ config_rotate_backups() {
 }
 
 # config_write_atomic <path> <json_string>
-# Atomic write: create parent dir if missing, write to tmp, fsync, rename over target.
-# Preserves file mode if file exists; sets 0600 on new files (contains keys).
-# Calls config_backup first.
+# Validate → backup → write tmp → rename. Whole body runs under lock so two
+# concurrent callers cannot corrupt each other's tmp file.
+#
+# Atomicity caveats: mv(1) is atomic only within the same filesystem. sync(1)
+# is best-effort; not all OSes support it. On a power failure, settings.json
+# may be the old value or the new value, never a mix.
 config_write_atomic() {
   local path="$1"
   local content="$2"
 
-  local dir
-  dir="$(dirname "$path")"
-  mkdir -p "$dir"
-
-  # Validate JSON before touching anything.
-  if ! echo "$content" | jq -e . >/dev/null 2>&1; then
+  # Validate JSON before doing anything — no lock needed for a pure check.
+  if ! printf '%s' "$content" | jq -e . >/dev/null 2>&1; then
     echo "config_write_atomic: refusing to write invalid JSON to $path" >&2
     return 1
   fi
 
-  if [[ -f "$path" ]]; then
-    config_backup "$path" >/dev/null
+  local dir
+  dir="$(dirname -- "$path")"
+  if ! mkdir -p -- "$dir"; then
+    echo "config_write_atomic: cannot create parent directory $dir" >&2
+    return 1
   fi
 
+  config_with_lock "$path" _config_write_atomic_locked "$path" "$content"
+}
+
+# Internal: the locked critical section of config_write_atomic. Do not call directly.
+_config_write_atomic_locked() {
+  local path="$1"
+  local content="$2"
   local tmp="${path}.tmp.$$"
-  # Pretty-print on write so settings.json is human-readable.
-  echo "$content" | jq '.' >"$tmp"
 
-  # Preserve mode if target exists; otherwise tighten to 0600 (settings may hold keys).
+  # Clean tmp if any earlier run died mid-write.
+  rm -f -- "$tmp"
+
   if [[ -f "$path" ]]; then
-    chmod --reference="$path" "$tmp" 2>/dev/null || true
-  else
-    chmod 0600 "$tmp"
+    if ! config_backup "$path" >/dev/null; then
+      echo "_config_write_atomic_locked: backup failed for $path" >&2
+      return 1
+    fi
   fi
 
-  # Best-effort fsync (not all OSes / all shells support sync -f).
+  # Pretty-print on write so settings.json stays human-readable.
+  if ! printf '%s' "$content" | jq '.' >"$tmp"; then
+    echo "_config_write_atomic_locked: failed to write tmp file $tmp" >&2
+    rm -f -- "$tmp"
+    return 1
+  fi
+
+  if [[ -f "$path" ]]; then
+    config_copy_mode "$path" "$tmp"
+  else
+    chmod 0600 "$tmp" 2>/dev/null || true
+  fi
+
+  # Best-effort fsync. Not every OS supports `sync <file>`; failures are tolerable.
   if command -v sync >/dev/null 2>&1; then
     sync "$tmp" 2>/dev/null || true
   fi
 
-  mv -f -- "$tmp" "$path"
+  if ! mv -f -- "$tmp" "$path"; then
+    echo "_config_write_atomic_locked: rename $tmp → $path failed" >&2
+    rm -f -- "$tmp"
+    return 1
+  fi
 }
 
 # config_with_lock <path> <command...>
@@ -222,14 +263,22 @@ config_with_lock() {
 # config_load_effective
 # Returns a JSON object summarizing what's visible in both scopes.
 # v2.0: no merging — just side-by-side display.
+# Returns 1 if either scope's file exists but is unreadable/malformed so callers
+# (e.g., `juggernaut doctor`) can surface a real error instead of silent empties.
 config_load_effective() {
   local user_path project_path user_json project_json
   user_path="$(config_user_settings_path)"
   project_path="$(config_project_settings_path "$PWD" 2>/dev/null || true)"
 
-  user_json="$(config_read "$user_path")"
+  if ! user_json="$(config_read "$user_path")"; then
+    echo "config_load_effective: failed to read user settings at $user_path" >&2
+    return 1
+  fi
   if [[ -n "$project_path" ]]; then
-    project_json="$(config_read "$project_path")"
+    if ! project_json="$(config_read "$project_path")"; then
+      echo "config_load_effective: failed to read project settings at $project_path" >&2
+      return 1
+    fi
   else
     project_json="null"
   fi

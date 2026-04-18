@@ -41,26 +41,19 @@ detect_shell() {
 # Main
 #───────────────────────────────────────────────────────────────────────────────
 
-# Juggernaut v2 feature flag (hidden; experimental).
-# Accept --v2 on the command line or JUGGERNAUT_USE_V2=1 in the environment.
-# This flag gates the in-progress settings.json pivot. Today it only emits a
-# notice — all v1 behavior is unchanged whether the flag is set or not.
-# Subsequent phases will wire real v2 behavior behind this same flag.
-JUGGERNAUT_V2_ACTIVE=0
-if [[ "${JUGGERNAUT_USE_V2:-0}" == "1" ]]; then
-    JUGGERNAUT_V2_ACTIVE=1
-fi
+# v2 feature flag (hidden; dormant in Phase 1). Filters --v2 out of argv.
+JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-0}"
 FILTERED_ARGS=()
 for arg in "$@"; do
     if [[ "$arg" == "--v2" ]]; then
         JUGGERNAUT_V2_ACTIVE=1
-        continue
+    else
+        FILTERED_ARGS+=("$arg")
     fi
-    FILTERED_ARGS+=("$arg")
 done
-set -- "${FILTERED_ARGS[@]}"
+set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
 if [[ "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
-    echo "[v2] Juggernaut v2 mode enabled (experimental). Phase 1 foundations only — continuing with v1 apply flow." >&2
+    echo "[v2] Juggernaut v2.0 enabled — dormant in this phase. Continuing with v1 apply flow." >&2
     export JUGGERNAUT_USE_V2=1
 fi
 

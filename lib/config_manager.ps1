@@ -1,5 +1,6 @@
 # lib/config_manager.ps1 — settings.json read/merge/write for Juggernaut v2. Mirrors lib/config_manager.sh.
-# UTF-8 throughout (no BOM preferred; PS 5.1 writes UTF-8-with-BOM when -Encoding utf8 is used, acceptable for JSON).
+# UTF-8 throughout. Note: Set-Content -Encoding utf8 emits UTF-8-with-BOM on
+# Windows PowerShell 5.1; all mainstream JSON parsers tolerate a leading BOM.
 
 $Script:ConfigBackupRetain = 5
 
@@ -137,22 +138,30 @@ function Write-SettingsAtomic {
         [Parameter(Mandatory)]$Content
     )
 
-    $dir = Split-Path $Path -Parent
-    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-
     $json = $Content | ConvertTo-Json -Depth 32
-    # Round-trip validation before touching disk.
+    # Round-trip validation before touching disk or taking the lock.
     try { $null = $json | ConvertFrom-Json -ErrorAction Stop } catch {
         throw "Write-SettingsAtomic: refusing to write invalid JSON to $Path"
     }
 
-    if (Test-Path $Path) { Backup-Settings -Path $Path | Out-Null }
+    $dir = Split-Path $Path -Parent
+    try {
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    } catch {
+        throw "Write-SettingsAtomic: cannot create parent directory $dir: $_"
+    }
 
-    $tmp = "$Path.tmp.$PID"
-    Set-Content -Path $tmp -Value $json -NoNewline -Encoding utf8
-
-    # Atomic rename.
-    Move-Item -Path $tmp -Destination $Path -Force
+    Invoke-WithSettingsLock -Path $Path -Action {
+        if (Test-Path $Path) { Backup-Settings -Path $Path | Out-Null }
+        $tmp = "$Path.tmp.$PID"
+        try {
+            Set-Content -Path $tmp -Value $json -NoNewline -Encoding utf8
+            Move-Item -Path $tmp -Destination $Path -Force
+        } catch {
+            Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+            throw
+        }
+    }.GetNewClosure()
 }
 
 function Invoke-WithSettingsLock {
@@ -160,15 +169,27 @@ function Invoke-WithSettingsLock {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][scriptblock]$Action
     )
+    # Per-file named mutex so multiple settings.json files don't serialize against each other.
     $lockName = "Global\juggernaut_$([IO.Path]::GetFileName($Path))"
     $mutex = New-Object System.Threading.Mutex($false, $lockName)
+    $acquired = $false
     try {
-        if (-not $mutex.WaitOne(5000)) {
+        try {
+            $acquired = $mutex.WaitOne(5000)
+        } catch [System.Threading.AbandonedMutexException] {
+            # A prior holder died without releasing; we've now acquired it safely.
+            $acquired = $true
+        } catch {
+            throw "Invoke-WithSettingsLock: mutex acquisition failed on $lockName: $_"
+        }
+        if (-not $acquired) {
             throw "Invoke-WithSettingsLock: could not acquire lock on $lockName within 5s"
         }
         & $Action
     } finally {
-        $mutex.ReleaseMutex() | Out-Null
+        if ($acquired) {
+            try { $mutex.ReleaseMutex() | Out-Null } catch {}
+        }
         $mutex.Dispose()
     }
 }
