@@ -323,7 +323,8 @@ fi
 # ---------------------------------------------------------------------------
 export J_PROVIDER="bedrock"
 export J_AUTH_MODE J_STORAGE J_REGION J_EFFORT
-export J_USE_MANTLE J_MANTLE_URL
+export J_USE_MANTLE
+export J_MANTLE_BASE_URL="$J_MANTLE_URL"
 export J_OPUSPLAN J_1M_CONTEXT
 export J_SCOPE
 export J_VERSION="2.0.0"

@@ -20,7 +20,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck jq
 
       - name: Run shellcheck
-        run: shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
+        run: |
+          shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
+          shellcheck juggernaut commands/apply.sh lib/keychain.sh lib/profile_writer.sh lib/schema.sh lib/config_manager.sh lib/migrator.sh
+          shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh
 
       - name: Verify version sync
         run: |
@@ -142,6 +145,8 @@ jobs:
           bash ./tests/v2/test_config_manager.sh
           bash ./tests/v2/test_feature_flag.sh
           bash ./tests/v2/test_migrator.sh
+          bash ./tests/v2/test_keychain.sh
+          bash ./tests/v2/test_apply.sh
 
   test-windows-powershell:
     name: Test on Windows (PowerShell)
