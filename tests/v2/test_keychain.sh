@@ -47,11 +47,7 @@ esac
 section "keychain_available"
 # On CI we just check the function doesn't crash — we don't assert the result
 # since CI runners may or may not have keychain tools installed.
-if keychain_available 2>/dev/null; then
-  AVAIL=true
-else
-  AVAIL=false
-fi
+keychain_available 2>/dev/null || true
 # No assert — just verify it returns 0 or 1 (the call above didn't crash).
 pass
 

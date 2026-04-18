@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # tests/v2/test_apply.sh — golden-file and integration tests for commands/apply.sh.
+# shellcheck disable=SC2317  # helper functions are called indirectly
+# shellcheck disable=SC2034  # J_* vars used as env prefixes for subcommand calls
 
 set -uo pipefail
 set +e
@@ -375,8 +377,6 @@ BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
   --auth=iam --region=eu-west-1 --effort=high --no-shell-fallback \
   >/dev/null 2>&1
 
-FIRST_HASH="$(jq -Sc . "$IDEM_SETTINGS" 2>/dev/null | sha256sum | cut -d' ' -f1)"
-
 # Second run — same flags; only lastUpdated timestamp will differ, so compare
 # the structural fields rather than the raw file.
 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
@@ -392,6 +392,7 @@ assert_eq "idem/managedBy"    "$(printf '%s' "$SECOND" | jq -r '.juggernaut.meta
 # Confirm no field drift between runs (excluding timestamp).
 FIRST_FIELDS="$(jq -Sc 'del(.juggernaut.meta.lastUpdated)' "$IDEM_SETTINGS" 2>/dev/null)"
 # Re-read first write from backup
+# shellcheck disable=SC2012  # backup names contain only alphanum/dots/underscores
 BACKUP="$(ls "$FAKE_HOME3/.claude/settings.json.backup."* 2>/dev/null | tail -1)"
 if [[ -n "$BACKUP" ]]; then
   SECOND_FIELDS="$(jq -Sc 'del(.juggernaut.meta.lastUpdated)' <<< "$(cat "$BACKUP")" 2>/dev/null)"
@@ -436,11 +437,17 @@ rm -rf "$FAKE_HOME4"
 # juggernaut dispatcher: --help exits 0, unknown subcommand exits 1
 # ---------------------------------------------------------------------------
 section "juggernaut dispatcher — help and unknown subcommand"
-JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/juggernaut" --help >/dev/null 2>&1
-if [[ "$?" -eq 0 ]]; then pass; else fail "juggernaut --help should exit 0"; fi
+if JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/juggernaut" --help >/dev/null 2>&1; then
+  pass
+else
+  fail "juggernaut --help should exit 0"
+fi
 
-JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/juggernaut" not-a-subcommand >/dev/null 2>&1
-if [[ "$?" -ne 0 ]]; then pass; else fail "juggernaut unknown subcommand should exit non-zero"; fi
+if ! JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/juggernaut" not-a-subcommand >/dev/null 2>&1; then
+  pass
+else
+  fail "juggernaut unknown subcommand should exit non-zero"
+fi
 
 # ---------------------------------------------------------------------------
 # setup --v2 delegates to juggernaut apply (not setup-claude-bedrock.sh)
