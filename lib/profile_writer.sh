@@ -37,7 +37,7 @@ profile_writer_export_syntax() {
 # ---------------------------------------------------------------------------
 profile_writer_has_block() {
   local f="$1"
-  [[ -f "$f" ]] && grep -q "$PROFILE_WRITER_BEGIN_MARKER" "$f" 2>/dev/null
+  [[ -f "$f" ]] && grep -Fq -- "$PROFILE_WRITER_BEGIN_MARKER" "$f" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ profile_writer_write() {
     return 0
   fi
 
-  mkdir -p "$(dirname "$f")"
+  mkdir -p -- "$(dirname -- "$f")"
   [[ ! -f "$f" ]] && touch "$f"
 
   # Remove existing block first (idempotent).

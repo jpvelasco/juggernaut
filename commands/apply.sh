@@ -182,15 +182,15 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
   )
   for candidate in "${V1_CANDIDATES[@]}"; do
     if migrator_has_v1_block "$candidate" 2>/dev/null; then
-      echo "Juggernaut: found a v1 profile block in $candidate." >&2
-      echo "  Moving your configuration to ~/.claude/settings.json (Claude Code's native config)." >&2
+      echo "Juggernaut found an existing v1 profile block in $candidate." >&2
+      echo "  We are migrating it to ~/.claude/settings.json, Claude Code's native config." >&2
       if migrator_run "$candidate" "$SETTINGS_PATH" "$BEDROCK_CONFIG_PATH"; then
         # Re-read after migration.
         EXISTING_JSON="$(config_read "$SETTINGS_PATH")"
         HAS_V2_BLOCK=true
-        echo "  Migration complete — your configuration is now in $SETTINGS_PATH." >&2
-        echo "  Nothing was removed from your shell profile; the old block stays as a fallback." >&2
-        echo "  You can remove it later with: juggernaut migrate --clean" >&2
+        echo "  Migration complete. Your new settings are now in $SETTINGS_PATH." >&2
+        echo "  Your shell profile was left in place as a fallback, so nothing is lost." >&2
+        echo "  When you are ready, you can remove the old block with: juggernaut migrate --clean" >&2
       else
         echo "  Migration encountered an error — continuing with defaults. Your profile block is unchanged." >&2
       fi
@@ -423,7 +423,10 @@ echo ""
 echo "To apply changes in this shell, restart your terminal or run:"
 case "$SHELL_TYPE" in
   fish) echo "  source ~/.config/fish/config.fish" ;;
-  *)    echo "  source $(profile_writer_detect_shell_config_path "$SHELL_TYPE")" ;;
+  *)
+    _profile_path="$(profile_writer_detect_shell_config_path "$SHELL_TYPE")"
+    printf '  source %s\n' "$_profile_path"
+    ;;
 esac
 echo ""
 if [[ "$J_AUTH_MODE" == "iam" ]]; then
