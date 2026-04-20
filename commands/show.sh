@@ -69,16 +69,12 @@ show_block_view() {
   local block="$1"
   printf '%s' "$block" | jq -r '[
     .meta.scope // "",
-    .meta.version // "",
     .auth.mode // "",
     .auth.region // "",
-    .auth.storage // "",
     .model // "",
     .effortLevel // "",
     (.opusplan|tostring),
-    (.useMantle|tostring),
-    (.mantle.baseUrl // ""),
-    (.meta.lastUpdated // "")
+    (.useMantle|tostring)
   ] | @tsv'
 }
 
@@ -90,8 +86,8 @@ show_current_block() {
     return 0
   fi
 
-  local scope version auth_mode region storage model effort opusplan use_mantle mantle_url last_updated
-  IFS=$'\t' read -r scope version auth_mode region storage model effort opusplan use_mantle mantle_url last_updated <<EOF
+  local scope auth_mode region model effort opusplan use_mantle
+  IFS=$'\t' read -r scope auth_mode region model effort opusplan use_mantle <<EOF
 $(show_block_view "$block")
 EOF
 

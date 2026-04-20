@@ -91,19 +91,15 @@ function Get-ShowBlock {
     }
 
     [ordered]@{
-        Scope         = $Block.meta.scope
-        Version       = $Block.meta.version
-        AuthMode      = $Block.auth.mode
-        Region        = $Block.auth.region
-        Storage       = $Block.auth.storage
-        Model         = $Block.model
-        Effort        = $Block.effortLevel
-        UseMantle     = [bool]$Block.useMantle
-        MantleUrl     = $Block.mantle.baseUrl
-        LastUpdated   = $Block.meta.lastUpdated
-        OpusPlan      = $Block.opusplan
-        ShellEnabled  = [bool]$Block.shellFallback.enabled
-        ShellMode     = $Block.shellFallback.mode
+        Scope        = $Block.meta.scope
+        AuthMode     = $Block.auth.mode
+        Region       = $Block.auth.region
+        Model        = $Block.model
+        Effort       = $Block.effortLevel
+        UseMantle    = [bool]$Block.useMantle
+        OpusPlan     = $Block.opusplan
+        Storage      = $Block.auth.storage
+        ShellEnabled = [bool]$Block.shellFallback.enabled
         ShellProfiles = $profiles
     }
 }
