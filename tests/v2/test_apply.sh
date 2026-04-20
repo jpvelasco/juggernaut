@@ -231,21 +231,33 @@ fi
 rm -rf "$TMP_DIR" "$FAKE_HOME"
 
 # ---------------------------------------------------------------------------
-# scope=project: write target changes but content is the same
+# scope=project + implicit migration
 # ---------------------------------------------------------------------------
-section "scope=project writes to \$PWD/.claude/settings.json"
-TMP_DIR="$(mktemp -d)"
-mkdir -p "$TMP_DIR/.claude"
+section "--scope=project with implicit migration"
+TMP_PROJECT="$(mktemp -d)"
+FAKE_HOME2="$(mktemp -d)"
+mkdir -p "$TMP_PROJECT/.claude"
+cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME2/.bashrc"
 
-# Build a block and write it directly — tests the config_resolve_target logic.
-SCOPE_PATH="$(J_SCOPE=project bash -c '. "$0"/lib/config_manager.sh && config_resolve_target project' "$REPO_ROOT" 2>/dev/null || echo "")"
-# config_resolve_target project uses $PWD, so just verify the suffix is right.
-if [[ -n "$SCOPE_PATH" ]]; then
-  assert_eq "project path suffix" "${SCOPE_PATH##*/}" "settings.json"
+(
+  cd "$TMP_PROJECT" &&
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$FAKE_HOME2" bash "$REPO_ROOT/commands/apply.sh" \
+    --auth=iam --scope=project --no-shell-fallback \
+    >/dev/null 2>&1
+)
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "--scope=project implicit migration should exit 0 (got $RC)"; fi
+
+if [[ -f "$TMP_PROJECT/.claude/settings.json" ]]; then
+  PROJECT_READ="$(cat "$TMP_PROJECT/.claude/settings.json")"
+  assert_eq "project/mig managedBy" "$(printf '%s' "$PROJECT_READ" | jq -r '.juggernaut.meta.managedBy')" "juggernaut"
+  assert_eq "project/mig auth.region" "$(printf '%s' "$PROJECT_READ" | jq -r '.juggernaut.auth.region')" "us-east-1"
+else
+  fail "--scope=project implicit migration did not write project settings.json"
 fi
-pass  # Non-fatal: scope path depends on CWD at runtime.
 
-rm -rf "$TMP_DIR"
+rm -rf "$TMP_PROJECT" "$FAKE_HOME2"
 
 # ---------------------------------------------------------------------------
 # profile_writer_build_block — output contains correct region and auth vars

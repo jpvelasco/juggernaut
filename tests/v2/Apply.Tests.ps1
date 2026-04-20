@@ -2,14 +2,14 @@
 # Run with: Invoke-Pester -Path tests/v2/Apply.Tests.ps1
 
 BeforeAll {
-    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-    . (Join-Path $repoRoot 'lib\schema.ps1')
-    . (Join-Path $repoRoot 'lib\config_manager.ps1')
-    . (Join-Path $repoRoot 'lib\migrator.ps1')
-    . (Join-Path $repoRoot 'lib\keychain.ps1')
-    . (Join-Path $repoRoot 'lib\profile_writer.ps1')
-    $script:BedrockConfigPath = Join-Path $repoRoot 'bedrock-config.json'
-    $script:Fixtures          = Join-Path $repoRoot 'tests\v2\fixtures'
+    $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    . (Join-Path $script:repoRoot 'lib\schema.ps1')
+    . (Join-Path $script:repoRoot 'lib\config_manager.ps1')
+    . (Join-Path $script:repoRoot 'lib\migrator.ps1')
+    . (Join-Path $script:repoRoot 'lib\keychain.ps1')
+    . (Join-Path $script:repoRoot 'lib\profile_writer.ps1')
+    $script:BedrockConfigPath = Join-Path $script:repoRoot 'bedrock-config.json'
+    $script:Fixtures          = Join-Path $script:repoRoot 'tests\v2\fixtures'
     $env:JUGGERNAUT_USE_V2    = '1'
     $env:BEDROCK_CONFIG_PATH  = $script:BedrockConfigPath
 }
@@ -341,6 +341,43 @@ Describe 'Invoke-MigratorRun — region from v1 AWS_REGION' {
     It 'meta.migratedFrom is v1.7.x' {
         $s = Read-Settings -Path $script:mig3Settings
         $s['juggernaut']['meta']['migratedFrom'] | Should -Be 'v1.7.x'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Implicit migration with project scope
+# ---------------------------------------------------------------------------
+Describe 'Invoke-MigratorRun — project scope with v1 profile' {
+    BeforeAll {
+        $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("jug-mig4-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+        $script:mig4Project = Join-Path $tmpDir 'project'
+        $script:mig4Home    = Join-Path $tmpDir 'home'
+        New-Item -ItemType Directory -Path (Join-Path $script:mig4Project '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path $script:mig4Home -Force | Out-Null
+        Copy-Item (Join-Path $script:Fixtures 'v1_iam_default.sh') (Join-Path $script:mig4Home '.bashrc')
+
+        $oldHome = $env:HOME
+        Push-Location $script:mig4Project
+        try {
+            $env:HOME = $script:mig4Home
+            & (Join-Path $script:repoRoot 'commands\apply.ps1') -Auth 'iam' -Scope 'project' -NoShellFallback | Out-Null
+        } finally {
+            Pop-Location
+            $env:HOME = $oldHome
+        }
+    }
+    AfterAll {
+        Remove-Item -Path (Split-Path $script:mig4Project -Parent) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'writes project settings.json' {
+        Test-Path (Join-Path (Join-Path $script:mig4Project '.claude') 'settings.json') | Should -BeTrue
+    }
+    It 'migrates the v1 block into the project settings' {
+        $s = Read-Settings -Path (Join-Path (Join-Path $script:mig4Project '.claude') 'settings.json')
+        $s['juggernaut']['meta']['managedBy'] | Should -Be 'juggernaut'
+        $s['juggernaut']['auth']['region']    | Should -Be 'us-east-1'
     }
 }
 
