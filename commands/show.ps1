@@ -106,12 +106,12 @@ function Show-CurrentBlock {
     )
 
     if (-not $Block) {
-        Show-Kv -Indent 2 -Label 'Status' -Value 'not present'
+        Show-Kv -Indent 2 -Label 'Status' -Value 'no active Juggernaut block'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 2 -Label 'Source' -Value $Path
+    Show-Kv -Indent 2 -Label 'File' -Value $Path
     Show-Kv -Indent 2 -Label 'Scope' -Value $view.Scope
     Show-Kv -Indent 2 -Label 'Version' -Value $view.Version
     Show-Kv -Indent 2 -Label 'Auth mode' -Value $view.AuthMode
@@ -134,12 +134,12 @@ function Show-ScopeSection {
 
     Write-Host "  $Scope"
     if (-not $Block) {
-        Show-Kv -Indent 4 -Label 'Status' -Value 'not present'
+        Show-Kv -Indent 4 -Label 'Status' -Value 'not configured'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 4 -Label 'Source' -Value $Path
+    Show-Kv -Indent 4 -Label 'File' -Value $Path
     Show-Kv -Indent 4 -Label 'Auth mode' -Value $view.AuthMode
     Show-Kv -Indent 4 -Label 'Region' -Value $view.Region
     Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
@@ -160,7 +160,7 @@ function Show-ShellFallback {
     Show-Kv -Indent 2 -Label 'Mode' -Value $view.ShellMode
 
     if ($view.ShellProfiles.Count -eq 0) {
-        Show-Kv -Indent 2 -Label 'Last written profiles' -Value 'none'
+        Show-Kv -Indent 2 -Label 'Last written profiles' -Value 'none recorded'
         return
     }
 

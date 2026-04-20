@@ -56,6 +56,13 @@ show_kv() {
   printf '%*s%-20s %s\n' "$indent" "" "$label" "$value"
 }
 
+show_section_status() {
+  local indent="$1"
+  local label="$2"
+  local value="$3"
+  printf '%*s%-20s %s\n' "$indent" "" "$label" "$value"
+}
+
 show_block_view() {
   local block="$1"
   printf '%s' "$block" | jq -r '[
@@ -78,7 +85,7 @@ show_current_block() {
   local block="$2"
   echo "Current Juggernaut block"
   if [[ -z "$block" || "$block" == "null" ]]; then
-    show_kv 2 "Status" "not present"
+    show_section_status 2 "Status" "no active Juggernaut block"
     return 0
   fi
 
@@ -87,7 +94,7 @@ show_current_block() {
 $(show_block_view "$block")
 EOF
 
-  show_kv 2 "Source" "$path"
+  show_kv 2 "File" "$path"
   show_kv 2 "Scope" "$(show_text "${scope:-}")"
   show_kv 2 "Version" "$(show_text "${version:-}")"
   show_kv 2 "Auth mode" "$(show_text "${auth_mode:-}")"
@@ -108,9 +115,9 @@ EOF
 show_text() {
   local value="${1:-}"
   if [[ -n "$value" && "$value" != "null" ]]; then
-    echo "$value"
+    printf '%s\n' "$value"
   else
-    echo "—"
+    printf '%s\n' "—"
   fi
 }
 
@@ -119,9 +126,9 @@ show_scope_section() {
   local path="$2"
   local block="$3"
   local auth_mode region storage model effort use_mantle
-  echo "  $scope"
+  printf '  %s\n' "$scope"
   if [[ -z "$block" || "$block" == "null" ]]; then
-    show_kv 4 "Status" "not present"
+    show_section_status 4 "Status" "not configured"
     return 0
   fi
 
@@ -129,7 +136,7 @@ show_scope_section() {
 $(printf '%s' "$block" | jq -r '[.auth.mode // "", .auth.region // "", .auth.storage // "", .model // "", .effortLevel // "", (.useMantle|tostring)] | @tsv')
 EOF
 
-  show_kv 4 "Source" "$path"
+  show_kv 4 "File" "$path"
   show_kv 4 "Auth mode" "$(show_text "${auth_mode:-}")"
   show_kv 4 "Region" "$(show_text "${region:-}")"
   show_kv 4 "Storage" "$(show_text "${storage:-}")"
@@ -161,7 +168,7 @@ EOF
   show_kv 2 "Enabled" "$(show_bool "${enabled:-}")"
   show_kv 2 "Mode" "$(show_text "${mode:-}")"
   if [[ "$count" == "0" ]]; then
-    show_kv 2 "Last written profiles" "none"
+    show_kv 2 "Last written profiles" "none recorded"
     return 0
   fi
 
