@@ -1,16 +1,16 @@
 # tests/v2/Show.Tests.ps1 — Pester tests for commands/show.ps1.
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-. (Join-Path $repoRoot 'lib\schema.ps1')
-. (Join-Path $repoRoot 'lib\config_manager.ps1')
-. (Join-Path $repoRoot 'lib\profile_writer.ps1')
+$script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $script:RepoRoot 'lib\schema.ps1')
+. (Join-Path $script:RepoRoot 'lib\config_manager.ps1')
+. (Join-Path $script:RepoRoot 'lib\profile_writer.ps1')
 
 Describe 'show.ps1' {
     It 'prints a calm inactive message when v2 is off' {
-        $oldFlag = $env:JUGGERNAUT_USE_V2
+            $oldFlag = $env:JUGGERNAUT_USE_V2
         try {
             $env:JUGGERNAUT_USE_V2 = '0'
-            $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
+            $output = & (Join-Path $script:RepoRoot 'commands\show.ps1') 2>&1 | Out-String
             $output | Should Match 'Juggernaut v2 is not active'
         } finally {
             $env:JUGGERNAUT_USE_V2 = $oldFlag
@@ -31,7 +31,7 @@ Describe 'show.ps1' {
         try {
             $env:USERPROFILE = $tmpHome
             $env:JUGGERNAUT_USE_V2 = '1'
-            $env:BEDROCK_CONFIG_PATH = Join-Path $repoRoot 'bedrock-config.json'
+            $env:BEDROCK_CONFIG_PATH = Join-Path $script:RepoRoot 'bedrock-config.json'
 
             $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
                                              -EffortLevel 'high' -UseMantle $false -OpusPlan $false `
@@ -47,7 +47,7 @@ Describe 'show.ps1' {
 
             Push-Location $projectWork
             try {
-                $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
+                $output = & (Join-Path $script:RepoRoot 'commands\show.ps1') 2>&1 | Out-String
                 $output | Should Match 'Juggernaut show'
                 $output | Should Match 'Current Juggernaut Block'
                 $output | Should Match 'Scope'
