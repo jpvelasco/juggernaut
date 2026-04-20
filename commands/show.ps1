@@ -30,23 +30,24 @@ Usage: juggernaut.ps1 show
 Displays the current Juggernaut block, the effective user/project scopes, and
 shell fallback details when present.
 '@
-    exit 0
+    return
 }
 
 if ($Version) {
     $repoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
     $vf = Join-Path $repoRoot 'VERSION'
     if (Test-Path $vf) { Get-Content $vf -Raw } else { 'unknown' }
-    exit 0
+    return
 }
 
 if (-not $v2Active) {
-    Write-Host 'show: v2 is not active yet. Run ./setup --v2 or set JUGGERNAUT_USE_V2=1 to continue.'
-    exit 0
+    Write-Output 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
+    return
 }
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 . (Join-Path $RepoRoot 'lib\config_manager.ps1')
+. (Join-Path $RepoRoot 'lib\profile_writer.ps1')
 
 function Show-Value {
     param([AllowNull()]$Value)
@@ -62,6 +63,14 @@ function Show-Bool {
     return '—'
 }
 
+function Show-State {
+    param([AllowNull()]$Value)
+    if ($Value -is [bool]) { return $(if ($Value) { 'enabled' } else { 'disabled' }) }
+    if ($Value -eq 'true') { return 'enabled' }
+    if ($Value -eq 'false') { return 'disabled' }
+    return '—'
+}
+
 function Show-Kv {
     param(
         [int]$Indent = 0,
@@ -69,7 +78,7 @@ function Show-Kv {
         [AllowNull()]$Value
     )
     $prefix = ' ' * $Indent
-    Write-Host ("{0}{1,-20} {2}" -f $prefix, $Label, (Show-Value $Value))
+    Write-Output ("{0}{1,-20} {2}" -f $prefix, $Label, (Show-Value $Value))
 }
 
 function Get-ShowBlock {
@@ -100,52 +109,42 @@ function Get-ShowBlock {
 }
 
 function Show-CurrentBlock {
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [AllowNull()]$Block
-    )
+    param([AllowNull()]$Block)
+
+    Write-Output 'Current Juggernaut Block'
 
     if (-not $Block) {
-        Show-Kv -Indent 2 -Label 'Status' -Value 'no active Juggernaut block'
+        Show-Kv -Label 'Status' -Value 'no active Juggernaut block'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 2 -Label 'File' -Value $Path
-    Show-Kv -Indent 2 -Label 'Scope' -Value $view.Scope
-    Show-Kv -Indent 2 -Label 'Version' -Value $view.Version
-    Show-Kv -Indent 2 -Label 'Auth mode' -Value $view.AuthMode
-    Show-Kv -Indent 2 -Label 'Region' -Value $view.Region
-    Show-Kv -Indent 2 -Label 'Storage' -Value $view.Storage
-    Show-Kv -Indent 2 -Label 'Model' -Value $view.Model
-    Show-Kv -Indent 2 -Label 'Effort level' -Value $view.Effort
-    Show-Kv -Indent 2 -Label 'Opus plan' -Value (Show-Bool $view.OpusPlan)
-    Show-Kv -Indent 2 -Label 'Mantle' -Value (Show-Bool $view.UseMantle)
-    if ($view.MantleUrl)   { Show-Kv -Indent 2 -Label 'Mantle URL' -Value $view.MantleUrl }
-    if ($view.LastUpdated) { Show-Kv -Indent 2 -Label 'Last updated' -Value $view.LastUpdated }
+    Show-Kv -Label 'Scope' -Value $view.Scope
+    Show-Kv -Label 'Auth' -Value $view.AuthMode
+    Show-Kv -Label 'Region' -Value $view.Region
+    Show-Kv -Label 'Model' -Value $view.Model
+    Show-Kv -Label 'Effort' -Value $view.Effort
+    Show-Kv -Label 'Opus Plan' -Value (Show-State $view.OpusPlan)
+    Show-Kv -Label 'Mantle' -Value (Show-State $view.UseMantle)
 }
 
-function Show-ScopeSection {
+function Show-EffectiveConfig {
     param(
-        [Parameter(Mandatory)][string]$Scope,
         [Parameter(Mandatory)][string]$Path,
         [AllowNull()]$Block
     )
 
-    Write-Host "  $Scope"
+    Write-Output 'Effective Config'
+    Write-Output (Show-HomePath $Path)
     if (-not $Block) {
-        Show-Kv -Indent 4 -Label 'Status' -Value 'not configured'
+        Show-Kv -Label 'Region' -Value '—'
+        Show-Kv -Label 'Model' -Value '—'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 4 -Label 'File' -Value $Path
-    Show-Kv -Indent 4 -Label 'Auth mode' -Value $view.AuthMode
-    Show-Kv -Indent 4 -Label 'Region' -Value $view.Region
-    Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
-    Show-Kv -Indent 4 -Label 'Model' -Value $view.Model
-    Show-Kv -Indent 4 -Label 'Effort level' -Value $view.Effort
-    Show-Kv -Indent 4 -Label 'Mantle' -Value (Show-Bool $view.UseMantle)
+    Show-Kv -Label 'Region' -Value $view.Region
+    Show-Kv -Label 'Model' -Value $view.Model
 }
 
 function Show-ShellFallback {
@@ -155,19 +154,24 @@ function Show-ShellFallback {
     $view = Get-ShowBlock -Block $Block
     if (-not $view.ShellEnabled -and $view.ShellProfiles.Count -eq 0) { return }
 
-    Write-Host 'Shell fallback'
-    Show-Kv -Indent 2 -Label 'Enabled' -Value (Show-Bool $view.ShellEnabled)
-    Show-Kv -Indent 2 -Label 'Mode' -Value $view.ShellMode
-
-    if ($view.ShellProfiles.Count -eq 0) {
-        Show-Kv -Indent 2 -Label 'Last written profiles' -Value 'none recorded'
-        return
+    Write-Output 'Shell Fallback'
+    $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
+    $shellPath = Get-ProfileWriterShellConfigPath -Shell $shellName
+    if ($shellPath) {
+        Write-Output (Show-HomePath $shellPath)
     }
+    Show-Kv -Label 'Present' -Value (Show-Bool $view.ShellEnabled)
+    Show-Kv -Label 'Storage' -Value $view.Storage
+}
 
-    Show-Kv -Indent 2 -Label 'Last written profiles' -Value ("{0} item(s)" -f $view.ShellProfiles.Count)
-    foreach ($profile in $view.ShellProfiles) {
-        Show-Kv -Indent 4 -Label '-' -Value $profile
+function Show-HomePath {
+    param([AllowNull()][string]$Path)
+    if (-not $Path) { return '' }
+    $homePath = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { '' }
+    if ($homePath -and $Path.StartsWith($homePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return '~' + $Path.Substring($homePath.Length)
     }
+    return $Path
 }
 
 $effective = Get-EffectiveSettings
@@ -195,17 +199,12 @@ if ($projectBlock) {
     $activeBlock = $userBlock
 }
 
-Write-Host 'Juggernaut show'
-Write-Host ''
-Write-Host 'Current Juggernaut block'
-Show-CurrentBlock -Path $activePath -Block $activeBlock
-Write-Host ''
-Write-Host 'Effective config'
-Show-ScopeSection -Scope 'User scope' -Path $userPath -Block $userBlock
-if ($effective.project) {
-    Show-ScopeSection -Scope 'Project scope' -Path $projectPath -Block $projectBlock
-}
+Write-Output 'Juggernaut show'
+Write-Output ''
+Show-CurrentBlock -Block $activeBlock
+Write-Output ''
+Show-EffectiveConfig -Path $activePath -Block $activeBlock
 if ($activeBlock) {
-    Write-Host ''
+    Write-Output ''
     Show-ShellFallback -Block $activeBlock
 }

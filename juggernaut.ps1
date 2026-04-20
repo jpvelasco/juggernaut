@@ -46,7 +46,7 @@ if (-not $v2Active) {
             exit 0
         }
         default {
-            Write-Host 'juggernaut: v2 is not active yet. Run ./setup --v2 or set JUGGERNAUT_USE_V2=1 to continue.'
+            Write-Host 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
             exit 0
         }
     }

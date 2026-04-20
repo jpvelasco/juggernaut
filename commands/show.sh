@@ -30,11 +30,12 @@ EOF
 done
 
 if [[ "$v2_active" != "1" ]]; then
-  echo "show: v2 is not active yet. Run ./setup --v2 or set JUGGERNAUT_USE_V2=1 to continue." >&2
+  echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
   exit 0
 fi
 
 . "$SCRIPT_DIR/lib/config_manager.sh"
+. "$SCRIPT_DIR/lib/profile_writer.sh"
 
 if ! effective_json="$(config_load_effective)"; then
   echo "show: failed to load effective settings" >&2
@@ -49,14 +50,15 @@ show_bool() {
   esac
 }
 
-show_kv() {
-  local indent="$1"
-  local label="$2"
-  local value="$3"
-  printf '%*s%-20s %s\n' "$indent" "" "$label" "$value"
+show_state() {
+  case "$1" in
+    true) echo "enabled" ;;
+    false) echo "disabled" ;;
+    *) echo "—" ;;
+  esac
 }
 
-show_section_status() {
+show_kv() {
   local indent="$1"
   local label="$2"
   local value="$3"
@@ -81,11 +83,10 @@ show_block_view() {
 }
 
 show_current_block() {
-  local path="$1"
-  local block="$2"
-  echo "Current Juggernaut block"
+  local block="$1"
+  echo "Current Juggernaut Block"
   if [[ -z "$block" || "$block" == "null" ]]; then
-    show_section_status 2 "Status" "no active Juggernaut block"
+    show_kv 0 "Status" "no active Juggernaut block"
     return 0
   fi
 
@@ -94,22 +95,13 @@ show_current_block() {
 $(show_block_view "$block")
 EOF
 
-  show_kv 2 "File" "$path"
-  show_kv 2 "Scope" "$(show_text "${scope:-}")"
-  show_kv 2 "Version" "$(show_text "${version:-}")"
-  show_kv 2 "Auth mode" "$(show_text "${auth_mode:-}")"
-  show_kv 2 "Region" "$(show_text "${region:-}")"
-  show_kv 2 "Storage" "$(show_text "${storage:-}")"
-  show_kv 2 "Model" "$(show_text "${model:-}")"
-  show_kv 2 "Effort level" "$(show_text "${effort:-}")"
-  show_kv 2 "Opus plan" "$(show_bool "${opusplan:-}")"
-  show_kv 2 "Mantle" "$(show_bool "${use_mantle:-}")"
-  if [[ -n "$mantle_url" ]]; then
-    show_kv 2 "Mantle URL" "$mantle_url"
-  fi
-  if [[ -n "$last_updated" ]]; then
-    show_kv 2 "Last updated" "$last_updated"
-  fi
+  show_kv 0 "Scope" "$(show_text "${scope:-}")"
+  show_kv 0 "Auth" "$(show_text "${auth_mode:-}")"
+  show_kv 0 "Region" "$(show_text "${region:-}")"
+  show_kv 0 "Model" "$(show_text "${model:-}")"
+  show_kv 0 "Effort" "$(show_text "${effort:-}")"
+  show_kv 0 "Opus Plan" "$(show_state "${opusplan:-}")"
+  show_kv 0 "Mantle" "$(show_state "${use_mantle:-}")"
 }
 
 show_text() {
@@ -121,28 +113,35 @@ show_text() {
   fi
 }
 
-show_scope_section() {
-  local scope="$1"
-  local path="$2"
-  local block="$3"
-  local auth_mode region storage model effort use_mantle
-  printf '  %s\n' "$scope"
+show_home_path() {
+  local path="$1"
+  local home="${HOME:-}"
+  if [[ -n "$home" && "$path" == "$home"* ]]; then
+    printf '~%s\n' "${path#"$home"}"
+  else
+    printf '%s\n' "$path"
+  fi
+}
+
+show_effective_config() {
+  local path="$1"
+  local block="$2"
+  local region model
+  echo "Effective Config"
   if [[ -z "$block" || "$block" == "null" ]]; then
-    show_section_status 4 "Status" "not configured"
+    printf '%s\n' "$(show_home_path "$path")"
+    show_kv 0 "Region" "—"
+    show_kv 0 "Model" "—"
     return 0
   fi
 
-  IFS=$'\t' read -r auth_mode region storage model effort use_mantle <<EOF
-$(printf '%s' "$block" | jq -r '[.auth.mode // "", .auth.region // "", .auth.storage // "", .model // "", .effortLevel // "", (.useMantle|tostring)] | @tsv')
+  IFS=$'\t' read -r region model <<EOF
+$(printf '%s' "$block" | jq -r '[.auth.region // "", .model // ""] | @tsv')
 EOF
 
-  show_kv 4 "File" "$path"
-  show_kv 4 "Auth mode" "$(show_text "${auth_mode:-}")"
-  show_kv 4 "Region" "$(show_text "${region:-}")"
-  show_kv 4 "Storage" "$(show_text "${storage:-}")"
-  show_kv 4 "Model" "$(show_text "${model:-}")"
-  show_kv 4 "Effort level" "$(show_text "${effort:-}")"
-  show_kv 4 "Mantle" "$(show_bool "${use_mantle:-}")"
+  printf '%s\n' "$(show_home_path "$path")"
+  show_kv 0 "Region" "$(show_text "${region:-}")"
+  show_kv 0 "Model" "$(show_text "${model:-}")"
 }
 
 show_shell_fallback() {
@@ -151,11 +150,11 @@ show_shell_fallback() {
     return 0
   fi
 
-  local enabled mode count
-  IFS=$'\t' read -r enabled mode count <<EOF
+  local enabled storage count
+  IFS=$'\t' read -r enabled storage count <<EOF
 $(printf '%s' "$block" | jq -r '[
   (.shellFallback.enabled|tostring),
-  (.shellFallback.mode // ""),
+  (.auth.storage // ""),
   ((.shellFallback.lastWrittenProfiles // []) | length | tostring)
 ] | @tsv')
 EOF
@@ -164,18 +163,16 @@ EOF
     return 0
   fi
 
-  echo "Shell fallback"
-  show_kv 2 "Enabled" "$(show_bool "${enabled:-}")"
-  show_kv 2 "Mode" "$(show_text "${mode:-}")"
-  if [[ "$count" == "0" ]]; then
-    show_kv 2 "Last written profiles" "none recorded"
-    return 0
-  fi
+  local shell_name shell_path
+  shell_name="$(basename -- "${SHELL:-bash}")"
+  shell_path="$(profile_writer_detect_shell_config_path "$shell_name")"
 
-  show_kv 2 "Last written profiles" "${count} item(s)"
-  printf '%s' "$block" | jq -r '.shellFallback.lastWrittenProfiles[]?' | while IFS= read -r profile; do
-    [[ -n "$profile" ]] && show_kv 4 "-" "$profile"
-  done
+  echo "Shell Fallback"
+  if [[ -n "$shell_path" ]]; then
+    show_home_path "$shell_path"
+  fi
+  show_kv 0 "Present" "$(show_bool "${enabled:-}")"
+  show_kv 0 "Storage" "$(show_text "${storage:-}")"
 }
 
 user_path="$(config_user_settings_path)"
@@ -203,14 +200,9 @@ elif [[ "$user_block" != "null" && -n "$user_block" ]]; then
 fi
 
 echo "Juggernaut show"
+show_current_block "$active_block"
 echo
-show_current_block "$active_path" "$active_block"
-echo
-echo "Effective config"
-show_scope_section "User scope" "$user_path" "$user_block"
-if [[ "$project_json" != "null" ]]; then
-  show_scope_section "Project scope" "$project_path" "$project_block"
-fi
+show_effective_config "$active_path" "$active_block"
 if [[ "$active_block" != "null" && -n "$active_block" ]]; then
   echo
   show_shell_fallback "$active_block"

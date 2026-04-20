@@ -13,7 +13,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Feature flag gate — v2 commands are dormant until explicitly enabled.
 if [[ "${JUGGERNAUT_USE_V2:-0}" != "1" ]]; then
-  echo "migrate: v2 is not active yet. Run ./setup --v2 or set JUGGERNAUT_USE_V2=1 to continue." >&2
+  echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
   exit 0
 fi
 
