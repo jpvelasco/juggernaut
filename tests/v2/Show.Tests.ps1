@@ -18,7 +18,7 @@ Describe 'show.ps1 v2 gate' {
     It 'prints an inactive message when the flag is absent' {
         $env:JUGGERNAUT_USE_V2 = '0'
         $output = & (Join-Path $script:RepoRoot 'commands\show.ps1') 2>&1 | Out-String
-        $output | Should -Match 'v2 is not active'
+        $output | Should -Match 'v2 is not active yet'
         $env:JUGGERNAUT_USE_V2 = '1'
     }
 }
@@ -58,11 +58,12 @@ Describe 'show.ps1 output' {
         try {
             $output = & (Join-Path $script:RepoRoot 'commands\show.ps1') 2>&1 | Out-String
             $output | Should -Match 'Juggernaut show'
-            $output | Should -Match 'Current block'
+            $output | Should -Match 'Current Juggernaut block'
             $output | Should -Match 'Effective config'
-            $output | Should -Match 'User'
-            $output | Should -Match 'Project'
+            $output | Should -Match 'User scope'
+            $output | Should -Match 'Project scope'
             $output | Should -Match 'Mantle'
+            $output | Should -Match 'Shell fallback'
         } finally {
             Pop-Location
         }

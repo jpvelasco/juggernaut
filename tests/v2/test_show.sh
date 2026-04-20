@@ -15,7 +15,7 @@ section() { echo; echo "== $1 =="; }
 
 section "v2 gate"
 if output="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"; then
-  if [[ "$output" == *"v2 is not active"* ]]; then
+  if [[ "$output" == *"v2 is not active yet"* ]]; then
     pass
   else
     fail "expected inactive message, got: $output"
@@ -54,7 +54,7 @@ config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut
     PROJECT_BLOCK="$(schema_new_juggernaut_block)"
   config_write_atomic "$TMP_WORK/project/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"
   OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
-  if [[ "$OUTPUT" == *"Juggernaut show"* && "$OUTPUT" == *"Current block"* && "$OUTPUT" == *"Effective config"* && "$OUTPUT" == *"User"* && "$OUTPUT" == *"Project"* ]]; then
+  if [[ "$OUTPUT" == *"Juggernaut show"* && "$OUTPUT" == *"Current Juggernaut block"* && "$OUTPUT" == *"Effective config"* && "$OUTPUT" == *"User scope"* && "$OUTPUT" == *"Project scope"* && "$OUTPUT" == *"Shell fallback"* ]]; then
     pass
   else
     fail "expected show output to contain the main sections"

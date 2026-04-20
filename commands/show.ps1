@@ -27,8 +27,8 @@ juggernaut show — print the current Juggernaut configuration
 
 Usage: juggernaut.ps1 show
 
-Displays the active Juggernaut block plus a side-by-side summary of user and
-project scope settings when present.
+Displays the current Juggernaut block, the effective user/project scopes, and
+shell fallback details when present.
 '@
     exit 0
 }
@@ -41,7 +41,7 @@ if ($Version) {
 }
 
 if (-not $v2Active) {
-    Write-Host "show: v2 is not active. Set `$env:JUGGERNAUT_USE_V2 = '1' or pass --v2 to ./setup."
+    Write-Host 'show: v2 is not active yet. Run ./setup --v2 or set JUGGERNAUT_USE_V2=1 to continue.'
     exit 0
 }
 
@@ -62,68 +62,112 @@ function Show-Bool {
     return '—'
 }
 
+function Show-Kv {
+    param(
+        [int]$Indent = 0,
+        [Parameter(Mandatory)][string]$Label,
+        [AllowNull()]$Value
+    )
+    $prefix = ' ' * $Indent
+    Write-Host ("{0}{1,-20} {2}" -f $prefix, $Label, (Show-Value $Value))
+}
+
 function Get-ShowBlock {
     param([AllowNull()]$Block)
     if (-not $Block) { return $null }
+
+    $profiles = @()
+    if ($Block.shellFallback.lastWrittenProfiles) {
+        $profiles = @($Block.shellFallback.lastWrittenProfiles)
+    }
+
     [ordered]@{
-        AuthMode   = $Block.auth.mode
-        Region     = $Block.auth.region
-        Storage    = $Block.auth.storage
-        Model      = $Block.model
-        Effort     = $Block.effortLevel
-        UseMantle  = [bool]$Block.useMantle
-        MantleUrl  = $Block.mantle.baseUrl
-        LastUpdated = $Block.meta.lastUpdated
-        OpusPlan   = $Block.opusplan
+        Scope         = $Block.meta.scope
+        Version       = $Block.meta.version
+        AuthMode      = $Block.auth.mode
+        Region        = $Block.auth.region
+        Storage       = $Block.auth.storage
+        Model         = $Block.model
+        Effort        = $Block.effortLevel
+        UseMantle     = [bool]$Block.useMantle
+        MantleUrl     = $Block.mantle.baseUrl
+        LastUpdated   = $Block.meta.lastUpdated
+        OpusPlan      = $Block.opusplan
+        ShellEnabled  = [bool]$Block.shellFallback.enabled
+        ShellMode     = $Block.shellFallback.mode
+        ShellProfiles = $profiles
     }
 }
 
-function Show-Block {
+function Show-CurrentBlock {
     param(
-        [Parameter(Mandatory)][string]$Title,
         [Parameter(Mandatory)][string]$Path,
         [AllowNull()]$Block
     )
 
-    Write-Host $Title
     if (-not $Block) {
-        Write-Host '  not present'
+        Show-Kv -Indent 2 -Label 'Status' -Value 'not present'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Write-Host "  File: $Path"
-    Write-Host ("  Auth: {0}" -f (Show-Value $view.AuthMode))
-    Write-Host ("  Region: {0}" -f (Show-Value $view.Region))
-    Write-Host ("  Storage: {0}" -f (Show-Value $view.Storage))
-    Write-Host ("  Model: {0}" -f (Show-Value $view.Model))
-    Write-Host ("  Effort: {0}" -f (Show-Value $view.Effort))
-    Write-Host ("  Opus plan: {0}" -f (Show-Value $view.OpusPlan))
-    Write-Host ("  Mantle: {0}" -f (Show-Bool $view.UseMantle))
-    if ($view.MantleUrl)  { Write-Host ("  Mantle URL: {0}" -f $view.MantleUrl) }
-    if ($view.LastUpdated){ Write-Host ("  Last updated: {0}" -f $view.LastUpdated) }
+    Show-Kv -Indent 2 -Label 'Source' -Value $Path
+    Show-Kv -Indent 2 -Label 'Scope' -Value $view.Scope
+    Show-Kv -Indent 2 -Label 'Version' -Value $view.Version
+    Show-Kv -Indent 2 -Label 'Auth mode' -Value $view.AuthMode
+    Show-Kv -Indent 2 -Label 'Region' -Value $view.Region
+    Show-Kv -Indent 2 -Label 'Storage' -Value $view.Storage
+    Show-Kv -Indent 2 -Label 'Model' -Value $view.Model
+    Show-Kv -Indent 2 -Label 'Effort level' -Value $view.Effort
+    Show-Kv -Indent 2 -Label 'Opus plan' -Value (Show-Bool $view.OpusPlan)
+    Show-Kv -Indent 2 -Label 'Mantle' -Value (Show-Bool $view.UseMantle)
+    if ($view.MantleUrl)   { Show-Kv -Indent 2 -Label 'Mantle URL' -Value $view.MantleUrl }
+    if ($view.LastUpdated) { Show-Kv -Indent 2 -Label 'Last updated' -Value $view.LastUpdated }
 }
 
-function Show-SummaryRow {
+function Show-ScopeSection {
     param(
         [Parameter(Mandatory)][string]$Scope,
+        [Parameter(Mandatory)][string]$Path,
         [AllowNull()]$Block
     )
 
+    Write-Host "  $Scope"
     if (-not $Block) {
-        Write-Host ("  {0,-8} {1,-7} {2,-12} {3,-9} {4,-36} {5,-7} {6,-7}" -f $Scope, '—', '—', '—', '—', '—', '—')
+        Show-Kv -Indent 4 -Label 'Status' -Value 'not present'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Write-Host ("  {0,-8} {1,-7} {2,-12} {3,-9} {4,-36} {5,-7} {6,-7}" -f `
-        $Scope,
-        (Show-Value $view.AuthMode),
-        (Show-Value $view.Region),
-        (Show-Value $view.Storage),
-        (Show-Value $view.Model),
-        (Show-Value $view.Effort),
-        (Show-Bool $view.UseMantle))
+    Show-Kv -Indent 4 -Label 'Source' -Value $Path
+    Show-Kv -Indent 4 -Label 'Auth mode' -Value $view.AuthMode
+    Show-Kv -Indent 4 -Label 'Region' -Value $view.Region
+    Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
+    Show-Kv -Indent 4 -Label 'Model' -Value $view.Model
+    Show-Kv -Indent 4 -Label 'Effort level' -Value $view.Effort
+    Show-Kv -Indent 4 -Label 'Mantle' -Value (Show-Bool $view.UseMantle)
+}
+
+function Show-ShellFallback {
+    param([AllowNull()]$Block)
+    if (-not $Block) { return }
+
+    $view = Get-ShowBlock -Block $Block
+    if (-not $view.ShellEnabled -and $view.ShellProfiles.Count -eq 0) { return }
+
+    Write-Host 'Shell fallback'
+    Show-Kv -Indent 2 -Label 'Enabled' -Value (Show-Bool $view.ShellEnabled)
+    Show-Kv -Indent 2 -Label 'Mode' -Value $view.ShellMode
+
+    if ($view.ShellProfiles.Count -eq 0) {
+        Show-Kv -Indent 2 -Label 'Last written profiles' -Value 'none'
+        return
+    }
+
+    Show-Kv -Indent 2 -Label 'Last written profiles' -Value ("{0} item(s)" -f $view.ShellProfiles.Count)
+    foreach ($profile in $view.ShellProfiles) {
+        Show-Kv -Indent 4 -Label '-' -Value $profile
+    }
 }
 
 $effective = Get-EffectiveSettings
@@ -153,11 +197,15 @@ if ($projectBlock) {
 
 Write-Host 'Juggernaut show'
 Write-Host ''
-Show-Block -Title 'Current block' -Path $activePath -Block $activeBlock
+Write-Host 'Current Juggernaut block'
+Show-CurrentBlock -Path $activePath -Block $activeBlock
 Write-Host ''
 Write-Host 'Effective config'
-Write-Host ("  {0,-8} {1,-7} {2,-12} {3,-9} {4,-36} {5,-7} {6,-7}" -f 'Scope', 'Auth', 'Region', 'Storage', 'Model', 'Effort', 'Mantle')
-Show-SummaryRow -Scope 'User' -Block $userBlock
+Show-ScopeSection -Scope 'User scope' -Path $userPath -Block $userBlock
 if ($effective.project) {
-    Show-SummaryRow -Scope 'Project' -Block $projectBlock
+    Show-ScopeSection -Scope 'Project scope' -Path $projectPath -Block $projectBlock
+}
+if ($activeBlock) {
+    Write-Host ''
+    Show-ShellFallback -Block $activeBlock
 }

@@ -28,7 +28,7 @@ if [[ "$JUGGERNAUT_V2_ACTIVE" != "1" ]]; then
       exit 0
       ;;
     *)
-      echo "juggernaut: v2 is not active. Pass --v2 to ./setup or set JUGGERNAUT_USE_V2=1." >&2
+      echo "juggernaut: v2 is not active yet. Run ./setup --v2 or set JUGGERNAUT_USE_V2=1 to continue." >&2
       exit 0
       ;;
   esac
