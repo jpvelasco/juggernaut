@@ -20,7 +20,9 @@ Describe 'show.ps1' {
         try {
             $env:JUGGERNAUT_USE_V2 = '0'
             $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
-            $output | Should Match 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
+            if ($output -notmatch 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.') {
+                throw "Expected inactive message, got: $output"
+            }
         } finally {
             $env:JUGGERNAUT_USE_V2 = $oldFlag
         }
@@ -57,19 +59,25 @@ Describe 'show.ps1' {
             Push-Location $projectWork
             try {
                 $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
-                $output | Should Match 'Juggernaut show'
-                $output | Should Match 'Current Juggernaut Block'
-                $output | Should Match 'Scope:'
-                $output | Should Match 'Auth:'
-                $output | Should Match 'Region:'
-                $output | Should Match 'Model:'
-                $output | Should Match 'Effort:'
-                $output | Should Match 'Opus Plan:'
-                $output | Should Match 'Mantle:'
-                $output | Should Match 'Effective Config'
-                $output | Should Match 'Shell Fallback'
-                $output | Should Match 'Present:'
-                $output | Should Match 'Storage:'
+                @(
+                    'Juggernaut show',
+                    'Current Juggernaut Block',
+                    'Scope:',
+                    'Auth:',
+                    'Region:',
+                    'Model:',
+                    'Effort:',
+                    'Opus Plan:',
+                    'Mantle:',
+                    'Effective Config',
+                    'Shell Fallback',
+                    'Present:',
+                    'Storage:'
+                ) | ForEach-Object {
+                    if ($output -notmatch [regex]::Escape($_)) {
+                        throw "Expected show output to contain '$($_)', got: $output"
+                    }
+                }
             } finally {
                 Pop-Location
             }

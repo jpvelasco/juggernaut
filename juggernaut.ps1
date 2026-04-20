@@ -13,7 +13,7 @@ foreach ($arg in $args) {
         $filteredArgs += $arg
     }
 }
-$args = $filteredArgs
+$subcommandArgs = $filteredArgs
 
 $PSScriptRoot_ = $PSScriptRoot
 
@@ -57,17 +57,17 @@ $env:JUGGERNAUT_USE_V2 = '1'
 switch ($Subcommand) {
     'apply' {
         $applyScript = Join-Path $PSScriptRoot_ 'commands\apply.ps1'
-        & $applyScript @args
+        & $applyScript @subcommandArgs
         exit $LASTEXITCODE
     }
     'migrate' {
         $migrateScript = Join-Path $PSScriptRoot_ 'commands\migrate.ps1'
-        & $migrateScript @args
+        & $migrateScript @subcommandArgs
         exit $LASTEXITCODE
     }
     'show' {
         $showScript = Join-Path $PSScriptRoot_ 'commands\show.ps1'
-        & $showScript @args
+        & $showScript @subcommandArgs
         exit $LASTEXITCODE
     }
     { $_ -in 'doctor','uninstall' } {

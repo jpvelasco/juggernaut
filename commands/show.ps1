@@ -8,7 +8,6 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $v2Active = $env:JUGGERNAUT_USE_V2 -eq '1'
-$remaining = @()
 foreach ($arg in $args) {
     switch ($arg) {
         '--v2'      { $v2Active = $true }
@@ -16,10 +15,9 @@ foreach ($arg in $args) {
         '-h'        { $Help = $true }
         '--version' { $Version = $true }
         '-v'        { $Version = $true }
-        default     { $remaining += $arg }
+        default     { }
     }
 }
-$args = $remaining
 
 if ($Help) {
     @'

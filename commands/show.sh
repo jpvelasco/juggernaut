@@ -86,10 +86,9 @@ show_current_block() {
     return 0
   fi
 
-  local scope auth_mode region model effort opusplan use_mantle
-  IFS=$'\t' read -r scope auth_mode region model effort opusplan use_mantle <<EOF
-$(show_block_view "$block")
-EOF
+  local scope auth_mode region model effort opusplan use_mantle block_view
+  block_view="$(show_block_view "$block")"
+  IFS=$'\t' read -r scope auth_mode region model effort opusplan use_mantle <<< "$block_view"
 
   show_kv 0 "Scope" "$(show_text "${scope:-}")"
   show_kv 0 "Auth" "$(show_text "${auth_mode:-}")"
@@ -131,9 +130,9 @@ show_effective_config() {
     return 0
   fi
 
-  IFS=$'\t' read -r region model <<EOF
-$(printf '%s' "$block" | jq -r '[.auth.region // "", .model // ""] | @tsv')
-EOF
+  local effective_view
+  effective_view="$(printf '%s' "$block" | jq -r '[.auth.region // "", .model // ""] | @tsv')"
+  IFS=$'\t' read -r region model <<< "$effective_view"
 
   show_kv 0 "Region" "$(show_text "${region:-}")"
   show_kv 0 "Model" "$(show_text "${model:-}")"
@@ -145,14 +144,13 @@ show_shell_fallback() {
     return 0
   fi
 
-  local enabled storage count
-  IFS=$'\t' read -r enabled storage count <<EOF
-$(printf '%s' "$block" | jq -r '[
+  local enabled storage count fallback_view
+  fallback_view="$(printf '%s' "$block" | jq -r '[
   (.shellFallback.enabled|tostring),
   (.auth.storage // ""),
   ((.shellFallback.lastWrittenProfiles // []) | length | tostring)
-] | @tsv')
-EOF
+] | @tsv')"
+  IFS=$'\t' read -r enabled storage count <<< "$fallback_view"
 
   if [[ "$enabled" != "true" && "$count" == "0" ]]; then
     return 0
