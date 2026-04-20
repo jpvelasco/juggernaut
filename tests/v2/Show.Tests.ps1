@@ -2,7 +2,14 @@
 
 Describe 'show.ps1' {
     BeforeAll {
-        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        function Get-RepoRoot {
+            if ($env:GITHUB_WORKSPACE) {
+                return $env:GITHUB_WORKSPACE
+            }
+            return (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        }
+
+        $repoRoot = Get-RepoRoot
         . (Join-Path $repoRoot 'lib\schema.ps1')
         . (Join-Path $repoRoot 'lib\config_manager.ps1')
         . (Join-Path $repoRoot 'lib\profile_writer.ps1')
