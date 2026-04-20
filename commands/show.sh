@@ -62,7 +62,7 @@ show_kv() {
   local indent="$1"
   local label="$2"
   local value="$3"
-  printf '%*s%-20s %s\n' "$indent" "" "$label" "$value"
+  printf '%*s%s: %s\n' "$indent" "" "$label" "$value"
 }
 
 show_block_view() {
@@ -82,7 +82,7 @@ show_current_block() {
   local block="$1"
   echo "Current Juggernaut Block"
   if [[ -z "$block" || "$block" == "null" ]]; then
-    show_kv 0 "Status" "no active Juggernaut block"
+    show_kv 0 "Status" "No active Juggernaut block"
     return 0
   fi
 
@@ -124,8 +124,8 @@ show_effective_config() {
   local block="$2"
   local region model
   echo "Effective Config"
+  printf '%s\n' "$(show_home_path "$path")"
   if [[ -z "$block" || "$block" == "null" ]]; then
-    printf '%s\n' "$(show_home_path "$path")"
     show_kv 0 "Region" "—"
     show_kv 0 "Model" "—"
     return 0
@@ -135,7 +135,6 @@ show_effective_config() {
 $(printf '%s' "$block" | jq -r '[.auth.region // "", .model // ""] | @tsv')
 EOF
 
-  printf '%s\n' "$(show_home_path "$path")"
   show_kv 0 "Region" "$(show_text "${region:-}")"
   show_kv 0 "Model" "$(show_text "${model:-}")"
 }
@@ -188,7 +187,7 @@ fi
 active_path="—"
 active_block="null"
 if [[ "$project_block" != "null" && -n "$project_block" ]]; then
-  active_path="${project_path:-$PWD/.claude/settings.json}"
+  active_path="${project_path:-${PWD}/.claude/settings.json}"
   active_block="$project_block"
 elif [[ "$user_block" != "null" && -n "$user_block" ]]; then
   active_path="$user_path"

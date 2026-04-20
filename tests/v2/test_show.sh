@@ -54,7 +54,7 @@ config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut
     PROJECT_BLOCK="$(schema_new_juggernaut_block)"
   config_write_atomic "$TMP_WORK/project/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"
   OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
-  if [[ "$OUTPUT" == *"Juggernaut show"* && "$OUTPUT" == *"Current Juggernaut Block"* && "$OUTPUT" == *"Effective Config"* && "$OUTPUT" == *"Shell Fallback"* && "$OUTPUT" == *"Present"* && "$OUTPUT" == *"Storage"* && "$OUTPUT" == *"Region"* && "$OUTPUT" == *"Model"* ]]; then
+  if [[ "$OUTPUT" == *"Juggernaut show"* && "$OUTPUT" == *"Current Juggernaut Block"* && "$OUTPUT" == *"Scope:"* && "$OUTPUT" == *"Auth:"* && "$OUTPUT" == *"Region:"* && "$OUTPUT" == *"Model:"* && "$OUTPUT" == *"Effort:"* && "$OUTPUT" == *"Opus Plan:"* && "$OUTPUT" == *"Mantle:"* && "$OUTPUT" == *"Effective Config"* && "$OUTPUT" == *"Shell Fallback"* && "$OUTPUT" == *"Present:"* && "$OUTPUT" == *"Storage:"* ]]; then
     pass
   else
     fail "expected show output to contain the main sections"

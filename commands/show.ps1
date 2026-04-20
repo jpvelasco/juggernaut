@@ -78,7 +78,7 @@ function Show-Kv {
         [AllowNull()]$Value
     )
     $prefix = ' ' * $Indent
-    Write-Output ("{0}{1,-20} {2}" -f $prefix, $Label, (Show-Value $Value))
+    Write-Output ("{0}{1}: {2}" -f $prefix, $Label, (Show-Value $Value))
 }
 
 function Get-ShowBlock {
@@ -110,7 +110,7 @@ function Show-CurrentBlock {
     Write-Output 'Current Juggernaut Block'
 
     if (-not $Block) {
-        Show-Kv -Label 'Status' -Value 'no active Juggernaut block'
+        Show-Kv -Label 'Status' -Value 'No active Juggernaut block'
         return
     }
 
