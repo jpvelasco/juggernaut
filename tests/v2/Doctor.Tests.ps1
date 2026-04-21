@@ -66,11 +66,15 @@ Describe 'doctor.ps1' {
             $text = (($output -replace '\\', '/') -replace "`r`n", "`n")
 
             foreach ($needle in @(
-                'Scope Awareness',
+                'Session',
                 'selected scope: user',
-                'active scope: project takes precedence for this session',
+                'active scope: project scope is active for this working tree',
                 'User Scope (selected)',
                 'Project Scope (active)',
+                'Settings',
+                'Configuration',
+                'Auth',
+                'Drift',
                 'region: us-west-2',
                 'region: eu-west-1'
             )) {

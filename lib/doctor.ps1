@@ -2,6 +2,7 @@
 
 $script:DoctorFails = 0
 $script:DoctorWarns = 0
+$script:DoctorIndent = 2
 
 function Show-DoctorHomePath {
     param([AllowNull()][string]$Path)
@@ -29,11 +30,17 @@ function Write-DoctorStatus {
         'FAIL' { $script:DoctorFails += 1 }
         'WARN' { $script:DoctorWarns += 1 }
     }
+    $prefix = ' ' * $script:DoctorIndent
     if ($Detail) {
-        Write-Output ('  {0,-5} {1}: {2}' -f $Status, $Label, $Detail)
+        Write-Output ('{0}{1,-5} {2}: {3}' -f $prefix, $Status, $Label, $Detail)
     } else {
-        Write-Output ('  {0,-5} {1}' -f $Status, $Label)
+        Write-Output ('{0}{1,-5} {2}' -f $prefix, $Status, $Label)
     }
+}
+
+function Write-DoctorSubsection {
+    param([Parameter(Mandatory)][string]$Name)
+    Write-Output ('  ' + $Name)
 }
 
 function Show-DoctorBoolState {
@@ -270,6 +277,14 @@ function Invoke-DoctorRegionModelsMantleCheck {
 
     Write-DoctorStatus -Status OK -Label 'effort' -Detail (Show-DoctorValue $effort)
     Write-DoctorStatus -Status OK -Label 'mantle' -Detail (Show-DoctorBoolState $useMantle)
+    if ($useMantle) {
+        $mantleEnv = Get-DoctorNestedProp -Object $Block -Path @('env','CLAUDE_CODE_USE_MANTLE')
+        if ($mantleEnv -eq '1') {
+            Write-DoctorStatus -Status OK -Label 'mantle env' -Detail 'CLAUDE_CODE_USE_MANTLE=1'
+        } else {
+            Write-DoctorStatus -Status WARN -Label 'mantle env' -Detail 'missing CLAUDE_CODE_USE_MANTLE=1'
+        }
+    }
     if ($useMantle -and $mantleUrl) {
         Write-DoctorStatus -Status INFO -Label 'mantle URL' -Detail $mantleUrl
     }
@@ -285,20 +300,25 @@ function Invoke-DoctorScopeCheck {
         [AllowNull()][string]$ProfilePath
     )
     Write-DoctorScopeTitle -Scope $Scope -Active:$Active -Selected:$Selected
+    $script:DoctorIndent = 2
     Write-DoctorStatus -Status INFO -Label 'path' -Detail (Show-DoctorHomePath $Path)
 
     if (-not (Test-Path $Path)) {
         Write-DoctorStatus -Status INFO -Label 'settings.json' -Detail 'not found'
         return
     }
+    Write-DoctorSubsection -Name 'Settings'
+    $script:DoctorIndent = 4
     if (-not $Settings) {
         Write-DoctorStatus -Status FAIL -Label 'settings.json' -Detail 'not valid JSON'
+        $script:DoctorIndent = 2
         return
     }
     Write-DoctorStatus -Status OK -Label 'settings.json' -Detail 'valid JSON'
 
     if (-not (Test-HasJuggernautBlock -Settings $Settings)) {
         Write-DoctorStatus -Status WARN -Label 'juggernaut block' -Detail 'missing'
+        $script:DoctorIndent = 2
         return
     }
 
@@ -309,10 +329,19 @@ function Invoke-DoctorScopeCheck {
         Write-DoctorStatus -Status FAIL -Label 'juggernaut block' -Detail 'present, schema invalid'
     }
 
+    Write-DoctorSubsection -Name 'Configuration'
+    $script:DoctorIndent = 4
     Invoke-DoctorRegionModelsMantleCheck -Block $block
+
+    Write-DoctorSubsection -Name 'Auth'
+    $script:DoctorIndent = 4
     Invoke-DoctorAuthCheck -Block $block -ProfilePath $ProfilePath
+
+    Write-DoctorSubsection -Name 'Drift'
+    $script:DoctorIndent = 4
     Invoke-DoctorNativeDriftCheck -Settings $Settings -Block $block
     Invoke-DoctorShellDriftCheck -Block $block -ProfilePath $ProfilePath
+    $script:DoctorIndent = 2
 }
 
 function Write-DoctorSummary {

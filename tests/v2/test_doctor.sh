@@ -54,11 +54,15 @@ write_scope_settings project "$TMP_WORK/.claude/settings.json" eu-west-1
 
 section "shows both scopes and explicit selected scope"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
-if [[ "$OUTPUT" == *"Scope Awareness"* &&
+if [[ "$OUTPUT" == *"Session"* &&
       "$OUTPUT" == *"selected scope: user"* &&
-      "$OUTPUT" == *"active scope: project takes precedence for this session"* &&
+      "$OUTPUT" == *"active scope: project scope is active for this working tree"* &&
       "$OUTPUT" == *"User Scope (selected)"* &&
       "$OUTPUT" == *"Project Scope (active)"* &&
+      "$OUTPUT" == *"Settings"* &&
+      "$OUTPUT" == *"Configuration"* &&
+      "$OUTPUT" == *"Auth"* &&
+      "$OUTPUT" == *"Drift"* &&
       "$OUTPUT" == *"region: us-west-2"* &&
       "$OUTPUT" == *"region: eu-west-1"* ]]; then
   pass

@@ -86,14 +86,14 @@ $profilePath = Get-DoctorProfilePath
 
 Write-Output 'Juggernaut doctor'
 Write-Output ''
-Write-Output 'Scope Awareness'
+Write-Output 'Session'
 if ($Scope) {
     Write-DoctorStatus -Status INFO -Label 'selected scope' -Detail $Scope
 } else {
     Write-DoctorStatus -Status INFO -Label 'selected scope' -Detail 'not specified'
 }
 if ($activeScope) {
-    Write-DoctorStatus -Status INFO -Label 'active scope' -Detail "$activeScope takes precedence for this session"
+    Write-DoctorStatus -Status INFO -Label 'active scope' -Detail "$activeScope scope is active for this working tree"
 } else {
     Write-DoctorStatus -Status FAIL -Label 'active scope' -Detail 'no Juggernaut v2 block found'
 }

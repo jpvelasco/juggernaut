@@ -5,6 +5,7 @@ set -euo pipefail
 
 DOCTOR_FAILS=0
 DOCTOR_WARNS=0
+DOCTOR_INDENT=2
 
 doctor_home_path() {
   local path="${1:-}"
@@ -29,15 +30,20 @@ doctor_text() {
 
 doctor_status() {
   local status="$1" label="$2" detail="${3:-}"
+  local indent="${DOCTOR_INDENT:-2}"
   case "$status" in
     FAIL) DOCTOR_FAILS=$((DOCTOR_FAILS + 1)) ;;
     WARN) DOCTOR_WARNS=$((DOCTOR_WARNS + 1)) ;;
   esac
   if [[ -n "$detail" ]]; then
-    printf '  %-5s %s: %s\n' "$status" "$label" "$detail"
+    printf '%*s%-5s %s: %s\n' "$indent" "" "$status" "$label" "$detail"
   else
-    printf '  %-5s %s\n' "$status" "$label"
+    printf '%*s%-5s %s\n' "$indent" "" "$status" "$label"
   fi
+}
+
+doctor_subsection() {
+  printf '  %s\n' "$1"
 }
 
 doctor_bool_state() {
@@ -222,6 +228,13 @@ doctor_check_region_models_mantle() {
 
   doctor_status OK "effort" "$(doctor_text "$effort")"
   doctor_status OK "mantle" "$(doctor_bool_state "$use_mantle")"
+  if [[ "$use_mantle" == "true" ]]; then
+    if [[ "$(jq -r '.env.CLAUDE_CODE_USE_MANTLE // ""' <<<"$block")" == "1" ]]; then
+      doctor_status OK "mantle env" "CLAUDE_CODE_USE_MANTLE=1"
+    else
+      doctor_status WARN "mantle env" "missing CLAUDE_CODE_USE_MANTLE=1"
+    fi
+  fi
   if [[ "$use_mantle" == "true" && -n "$mantle_url" ]]; then
     doctor_status INFO "mantle URL" "$mantle_url"
   fi
@@ -230,6 +243,7 @@ doctor_check_region_models_mantle() {
 doctor_check_scope() {
   local scope="$1" path="$2" settings="$3" active="$4" selected="$5" profile="$6"
   doctor_scope_title "$scope" "$active" "$selected"
+  DOCTOR_INDENT=2
   doctor_status INFO "path" "$(doctor_home_path "$path")"
 
   if [[ ! -f "$path" ]]; then
@@ -237,14 +251,18 @@ doctor_check_scope() {
     return 0
   fi
 
+  doctor_subsection "Settings"
+  DOCTOR_INDENT=4
   if [[ -z "$settings" ]]; then
     doctor_status FAIL "settings.json" "not valid JSON"
+    DOCTOR_INDENT=2
     return 0
   fi
   doctor_status OK "settings.json" "valid JSON"
 
   if ! config_has_juggernaut_block "$settings"; then
     doctor_status WARN "juggernaut block" "missing"
+    DOCTOR_INDENT=2
     return 0
   fi
 
@@ -256,10 +274,19 @@ doctor_check_scope() {
     doctor_status FAIL "juggernaut block" "present, schema invalid"
   fi
 
+  doctor_subsection "Configuration"
+  DOCTOR_INDENT=4
   doctor_check_region_models_mantle "$block"
+
+  doctor_subsection "Auth"
+  DOCTOR_INDENT=4
   doctor_check_auth "$block" "$profile"
+
+  doctor_subsection "Drift"
+  DOCTOR_INDENT=4
   doctor_check_native_drift "$settings" "$block"
   doctor_check_shell_drift "$block" "$profile"
+  DOCTOR_INDENT=2
 }
 
 doctor_summary() {

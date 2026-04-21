@@ -88,14 +88,14 @@ profile_path="$(doctor_profile_path)"
 
 echo "Juggernaut doctor"
 echo
-echo "Scope Awareness"
+echo "Session"
 if [[ -n "$requested_scope" ]]; then
   doctor_status INFO "selected scope" "$requested_scope"
 else
   doctor_status INFO "selected scope" "not specified"
 fi
 if [[ -n "$active_scope" ]]; then
-  doctor_status INFO "active scope" "$active_scope takes precedence for this session"
+  doctor_status INFO "active scope" "$active_scope scope is active for this working tree"
 else
   doctor_status FAIL "active scope" "no Juggernaut v2 block found"
 fi
