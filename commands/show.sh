@@ -196,9 +196,7 @@ fi
 
 echo "Juggernaut show"
 show_current_block "$active_block"
-echo
 show_effective_config "$active_path" "$active_block"
 if [[ "$active_block" != "null" && -n "$active_block" ]]; then
-  echo
   show_shell_fallback "$active_block"
 fi

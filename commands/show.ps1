@@ -194,11 +194,8 @@ if ($projectBlock) {
 }
 
 Write-Output 'Juggernaut show'
-Write-Output ''
 Show-CurrentBlock -Block $activeBlock
-Write-Output ''
 Show-EffectiveConfig -Path $activePath -Block $activeBlock
 if ($activeBlock) {
-    Write-Output ''
     Show-ShellFallback -Block $activeBlock
 }
