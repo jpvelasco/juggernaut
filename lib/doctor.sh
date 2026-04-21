@@ -117,7 +117,7 @@ doctor_check_native_drift() {
   local settings="$1" block="$2"
   local expected
   expected="$(schema_derive_native_keys "$block")"
-  if jq -e --argjson settings "$settings" --argjson expected "$expected" '
+  if jq -en --argjson settings "$settings" --argjson expected "$expected" '
     (($settings.model // null) == ($expected.model // null))
     and (($settings.modelOverrides // {}) == ($expected.modelOverrides // {}))
     and (all((($expected.env // {}) | keys[]); (($settings.env // {})[.] // null) == $expected.env[.]))

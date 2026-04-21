@@ -26,6 +26,48 @@ Describe 'doctor.ps1' {
         }
     }
 
+    It 'reports no drift on a freshly written settings.json' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-doctor-nodrift-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+
+        $oldHome = $env:HOME
+        $oldUserProfile = $env:USERPROFILE
+        $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldShell = $env:SHELL
+        $oldAwsProfile = $env:AWS_PROFILE
+        $oldLocation = (Get-Location).Path
+        try {
+            $env:HOME = $tmpHome
+            $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'
+            $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:SHELL = 'bash'
+            $env:AWS_PROFILE = 'juggernaut-test'
+
+            $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                                         -UseMantle $false -ShellFallbackMode 'settings-only' `
+                                         -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
+            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $block)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $merged
+
+            Set-Location $tmpHome
+            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
+            if ($output -notmatch [regex]::Escape('settings native keys: match juggernaut block')) {
+                throw "Expected no drift on fresh settings.json, got: $output"
+            }
+        } finally {
+            Set-Location $oldLocation
+            $env:HOME = $oldHome
+            $env:USERPROFILE = $oldUserProfile
+            $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            $env:SHELL = $oldShell
+            $env:AWS_PROFILE = $oldAwsProfile
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'shows both scopes and marks selected versus active' {
         $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-doctor-home-" + [Guid]::NewGuid().ToString('N'))
         $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-doctor-work-" + [Guid]::NewGuid().ToString('N'))

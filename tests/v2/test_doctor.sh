@@ -71,6 +71,15 @@ else
   printf '%s\n' "$OUTPUT" >&2
 fi
 
+section "no drift warning on a fresh apply"
+OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"settings native keys: match juggernaut block"* ]]; then
+  pass
+else
+  fail "expected no drift on a freshly written settings.json"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
 section "reports native drift per scope"
 tmp_json="$TMP_HOME/.claude/settings.json.tmp"
 jq '.model = "drifted-model"' "$TMP_HOME/.claude/settings.json" > "$tmp_json"
