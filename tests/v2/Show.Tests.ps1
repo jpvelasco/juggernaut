@@ -53,32 +53,23 @@ Describe 'show.ps1' {
             Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
 
             $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
-            $expected = @'
-Juggernaut show
-
-Current Juggernaut Block
-  Scope: user
-  Auth: iam
-  Region: us-west-2
-  Model: global.anthropic.claude-sonnet-4-6
-  Effort: xhigh
-  Opus Plan: disabled
-  Mantle: disabled
-
-Effective Config
-  ~/.claude/settings.json
-    Region: us-west-2
-    Model: global.anthropic.claude-sonnet-4-6
-
-Shell Fallback
-  ~/.zshrc
-    Present: yes
-    Storage: keychain
-'@
             $actualText = (($output -replace '\\', '/') -replace "`r`n", "`n").TrimEnd("`r", "`n")
-            $expectedText = ($expected -replace "`r`n", "`n").TrimEnd("`r", "`n")
-            if ($actualText -ne $expectedText) {
-                throw "Expected show output to match the calm layout, got: $output"
+            foreach ($needle in @(
+                'Scope Awareness',
+                'Active Scope: user takes precedence for this session',
+                'User Scope (active)',
+                'Scope: user',
+                'Auth: iam',
+                'Region: us-west-2',
+                'Project Scope',
+                'Status: No Juggernaut block',
+                'Shell Fallback',
+                'Present: yes',
+                'Storage: keychain'
+            )) {
+                if ($actualText -notmatch [regex]::Escape($needle)) {
+                    throw "Expected show output to contain '$needle', got: $output"
+                }
             }
         } finally {
             Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
@@ -117,30 +108,21 @@ Shell Fallback
             Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
 
             $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
-            $expected = @'
-Juggernaut show
-
-Current Juggernaut Block
-  Scope: user
-  Auth: api-key
-  Region: eu-west-1
-  Model: global.anthropic.claude-sonnet-4-6
-  Effort: xhigh
-  Opus Plan: enabled
-  Mantle: enabled
-
-Effective Config
-  ~/.claude/settings.json
-    Region: eu-west-1
-    Model: global.anthropic.claude-sonnet-4-6
-
-Shell Fallback
-  ~/.bashrc
-    Present: no
-'@
             $actualText = (($output -replace '\\', '/') -replace "`r`n", "`n").TrimEnd("`r", "`n")
-            $expectedText = ($expected -replace "`r`n", "`n").TrimEnd("`r", "`n")
-            if ($actualText -ne $expectedText) {
+            foreach ($needle in @(
+                'User Scope (active)',
+                'Auth: api-key',
+                'Region: eu-west-1',
+                'Opus Plan: enabled',
+                'Mantle: enabled',
+                'Shell Fallback',
+                'Present: no'
+            )) {
+                if ($actualText -notmatch [regex]::Escape($needle)) {
+                    throw "Expected show output to contain '$needle', got: $output"
+                }
+            }
+            if ($actualText -match [regex]::Escape('Storage: keychain')) {
                 throw "Expected disabled shell fallback output to omit storage, got: $output"
             }
         } finally {
@@ -151,6 +133,67 @@ Shell Fallback
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
             $env:SHELL = $oldShell
             Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'shows both scopes and selected scope' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-home-" + [Guid]::NewGuid().ToString('N'))
+        $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-work-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $tmpWork '.claude') -Force | Out-Null
+
+        $oldHome = $env:HOME
+        $oldHomeVar = $HOME
+        $oldUserProfile = $env:USERPROFILE
+        $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldShell = $env:SHELL
+        $oldLocation = (Get-Location).Path
+        try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome
+            $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'
+            $env:BEDROCK_CONFIG_PATH = Join-Path $repoRoot 'bedrock-config.json'
+            $env:SHELL = 'bash'
+
+            $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                                             -UseMantle $false -ShellFallbackMode 'settings-only' `
+                                             -Scope 'user' -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
+            $userMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $userBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $userBlock)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
+
+            $projectBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'ap-southeast-1' -Storage 'profile' `
+                                                -UseMantle $false -ShellFallbackMode 'settings-only' `
+                                                -Scope 'project' -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
+            $projectMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $projectBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $projectBlock)
+            Write-SettingsAtomic -Path (Join-Path $tmpWork '.claude/settings.json') -Content $projectMerged
+
+            Set-Location $tmpWork
+            $output = & (Join-Path $repoRoot 'commands\show.ps1') -Scope user 2>&1 | Out-String
+            $actualText = (($output -replace '\\', '/') -replace "`r`n", "`n")
+            foreach ($needle in @(
+                'Selected Scope: user',
+                'Active Scope: project takes precedence for this session',
+                'User Scope (selected)',
+                'Project Scope (active)',
+                'Region: us-west-2',
+                'Region: ap-southeast-1'
+            )) {
+                if ($actualText -notmatch [regex]::Escape($needle)) {
+                    throw "Expected show output to contain '$needle', got: $output"
+                }
+            }
+        } finally {
+            Set-Location $oldLocation
+            Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
+            $env:HOME = $oldHome
+            $env:USERPROFILE = $oldUserProfile
+            $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            $env:SHELL = $oldShell
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path $tmpWork -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }

@@ -1,21 +1,27 @@
 # commands/show.ps1 — Juggernaut v2 show subcommand.
 
+[CmdletBinding(PositionalBinding=$false)]
 param(
+    [string]$Scope = '',
+    [Alias('v2')][switch]$UseV2,
     [switch]$Help,
-    [switch]$Version
+    [switch]$Version,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$RemainingArgs
 )
 
 $ErrorActionPreference = 'Stop'
 
-$v2Active = $env:JUGGERNAUT_USE_V2 -eq '1'
-foreach ($arg in $args) {
-    switch ($arg) {
-        '--v2'      { $v2Active = $true }
-        '--help'    { $Help = $true }
-        '-h'        { $Help = $true }
-        '--version' { $Version = $true }
-        '-v'        { $Version = $true }
-        default     { }
+$v2Active = ($env:JUGGERNAUT_USE_V2 -eq '1') -or $UseV2
+foreach ($arg in $RemainingArgs) {
+    switch -Regex ($arg) {
+        '^--v2$' { $v2Active = $true; break }
+        '^--scope=(user|project)$' { $Scope = $Matches[1]; break }
+        '^--scope=' { throw "show: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')" }
+        '^--help$' { $Help = $true; break }
+        '^-h$' { $Help = $true; break }
+        '^--version$' { $Version = $true; break }
+        '^-v$' { $Version = $true; break }
+        default { }
     }
 }
 
@@ -41,6 +47,11 @@ if ($Version) {
 if (-not $v2Active) {
     Write-Output 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
     return
+}
+
+if ($Scope -and $Scope -notin @('user','project')) {
+    Write-Error "show: --scope must be 'user' or 'project' (got: '$Scope')"
+    exit 1
 }
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
@@ -141,6 +152,38 @@ function Show-EffectiveConfig {
     Show-Kv -Indent 4 -Label 'Model' -Value $view.Model
 }
 
+function Show-ScopeConfig {
+    param(
+        [Parameter(Mandatory)][string]$ScopeName,
+        [Parameter(Mandatory)][string]$Path,
+        [AllowNull()]$Block,
+        [bool]$Active,
+        [bool]$Selected
+    )
+
+    $title = (Get-Culture).TextInfo.ToTitleCase($ScopeName) + ' Scope'
+    if ($Active -and $Selected) { $title += ' (active, selected)' }
+    elseif ($Active) { $title += ' (active)' }
+    elseif ($Selected) { $title += ' (selected)' }
+
+    Write-Output $title
+    Write-Output ('  ' + (Show-HomePath $Path))
+
+    if (-not $Block) {
+        Show-Kv -Indent 4 -Label 'Status' -Value 'No Juggernaut block'
+        return
+    }
+
+    $view = Get-ShowBlock -Block $Block
+    Show-Kv -Indent 4 -Label 'Scope' -Value $view.Scope
+    Show-Kv -Indent 4 -Label 'Auth' -Value $view.AuthMode
+    Show-Kv -Indent 4 -Label 'Region' -Value $view.Region
+    Show-Kv -Indent 4 -Label 'Model' -Value $view.Model
+    Show-Kv -Indent 4 -Label 'Effort' -Value $view.Effort
+    Show-Kv -Indent 4 -Label 'Opus Plan' -Value (Show-State $view.OpusPlan)
+    Show-Kv -Indent 4 -Label 'Mantle' -Value (Show-State $view.UseMantle)
+}
+
 function Show-ShellFallback {
     param([AllowNull()]$Block)
     if (-not $Block) { return }
@@ -186,19 +229,35 @@ if ($effective.project) {
 
 $activePath = '—'
 $activeBlock = $null
+$activeScope = ''
 if ($projectBlock) {
     $activePath = $projectPath
     $activeBlock = $projectBlock
+    $activeScope = 'project'
 } elseif ($userBlock) {
     $activePath = $userPath
     $activeBlock = $userBlock
+    $activeScope = 'user'
 }
 
 Write-Output 'Juggernaut show'
 Write-Output ''
-Show-CurrentBlock -Block $activeBlock
+Write-Output 'Scope Awareness'
+if ($Scope) {
+    Show-Kv -Indent 2 -Label 'Selected Scope' -Value $Scope
+} else {
+    Show-Kv -Indent 2 -Label 'Selected Scope' -Value 'not specified'
+}
+if ($activeScope) {
+    Show-Kv -Indent 2 -Label 'Active Scope' -Value "$activeScope takes precedence for this session"
+} else {
+    Show-Kv -Indent 2 -Label 'Active Scope' -Value 'No Juggernaut v2 block found'
+}
 Write-Output ''
-Show-EffectiveConfig -Path $activePath -Block $activeBlock
+Show-ScopeConfig -ScopeName 'user' -Path $userPath -Block $userBlock -Active:($activeScope -eq 'user') -Selected:($Scope -eq 'user')
+Write-Output ''
+$displayProjectPath = if ($projectPath) { $projectPath } else { Join-Path (Get-Location).Path '.claude/settings.json' }
+Show-ScopeConfig -ScopeName 'project' -Path $displayProjectPath -Block $projectBlock -Active:($activeScope -eq 'project') -Selected:($Scope -eq 'project')
 if ($activeBlock) {
     Write-Output ''
     Show-ShellFallback -Block $activeBlock

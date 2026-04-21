@@ -47,7 +47,17 @@ J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
 
 OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
-if [[ "$OUTPUT" == $'Juggernaut show\n\nCurrent Juggernaut Block\n  Scope: user\n  Auth: iam\n  Region: us-west-2\n  Model: global.anthropic.claude-sonnet-4-6\n  Effort: xhigh\n  Opus Plan: disabled\n  Mantle: disabled\n\nEffective Config\n  ~/.claude/settings.json\n    Region: us-west-2\n    Model: global.anthropic.claude-sonnet-4-6\n\nShell Fallback\n  ~/.zshrc\n    Present: yes\n    Storage: keychain' ]]; then
+if [[ "$OUTPUT" == *"Scope Awareness"* &&
+      "$OUTPUT" == *"Active Scope: user takes precedence for this session"* &&
+      "$OUTPUT" == *"User Scope (active)"* &&
+      "$OUTPUT" == *"Scope: user"* &&
+      "$OUTPUT" == *"Auth: iam"* &&
+      "$OUTPUT" == *"Region: us-west-2"* &&
+      "$OUTPUT" == *"Project Scope"* &&
+      "$OUTPUT" == *"Status: No Juggernaut block"* &&
+      "$OUTPUT" == *"Shell Fallback"* &&
+      "$OUTPUT" == *"Present: yes"* &&
+      "$OUTPUT" == *"Storage: keychain"* ]]; then
   pass
 else
   fail "expected show output to match the calm layout"
@@ -63,10 +73,38 @@ config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut
 
 export SHELL="/bin/bash"
 OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
-if [[ "$OUTPUT" == $'Juggernaut show\n\nCurrent Juggernaut Block\n  Scope: user\n  Auth: api-key\n  Region: eu-west-1\n  Model: global.anthropic.claude-sonnet-4-6\n  Effort: xhigh\n  Opus Plan: enabled\n  Mantle: enabled\n\nEffective Config\n  ~/.claude/settings.json\n    Region: eu-west-1\n    Model: global.anthropic.claude-sonnet-4-6\n\nShell Fallback\n  ~/.bashrc\n    Present: no' ]]; then
+if [[ "$OUTPUT" == *"User Scope (active)"* &&
+      "$OUTPUT" == *"Auth: api-key"* &&
+      "$OUTPUT" == *"Region: eu-west-1"* &&
+      "$OUTPUT" == *"Opus Plan: enabled"* &&
+      "$OUTPUT" == *"Mantle: enabled"* &&
+      "$OUTPUT" == *"Shell Fallback"* &&
+      "$OUTPUT" == *"Present: no"* &&
+      "$OUTPUT" != *"Storage: keychain"* ]]; then
   pass
 else
   fail "expected disabled shell fallback output to omit storage"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+section "shows both scopes when both exist"
+mkdir -p "$TMP_WORK/.claude"
+J_AUTH_MODE=iam J_REGION=ap-southeast-1 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=project J_VERSION=2.0.0 \
+  J_SHELL_FALLBACK_MODE=settings-only \
+  PROJECT_BLOCK="$(schema_new_juggernaut_block)"
+config_write_atomic "$TMP_WORK/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"
+
+OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/show.sh" --scope=user 2>&1)"
+if [[ "$OUTPUT" == *"Selected Scope: user"* &&
+      "$OUTPUT" == *"Active Scope: project takes precedence for this session"* &&
+      "$OUTPUT" == *"User Scope (selected)"* &&
+      "$OUTPUT" == *"Project Scope (active)"* &&
+      "$OUTPUT" == *"Region: eu-west-1"* &&
+      "$OUTPUT" == *"Region: ap-southeast-1"* ]]; then
+  pass
+else
+  fail "expected show to print both scopes and mark selected/active"
   printf '%s\n' "$OUTPUT" >&2
 fi
 

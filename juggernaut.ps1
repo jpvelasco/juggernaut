@@ -1,12 +1,16 @@
 # juggernaut.ps1 — v2 subcommand dispatcher (PowerShell).
 # Usage: juggernaut.ps1 [<subcommand>] [options]
 
-param([Parameter(Position=0)][string]$Subcommand = 'apply')
+param(
+    [Parameter(Position=0)][string]$Subcommand = 'apply',
+    [Alias('v2')][switch]$UseV2,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$RemainingArgs
+)
 
 $ErrorActionPreference = 'Stop'
-$v2Active = $env:JUGGERNAUT_USE_V2 -eq '1'
+$v2Active = ($env:JUGGERNAUT_USE_V2 -eq '1') -or $UseV2
 $filteredArgs = @()
-foreach ($arg in $args) {
+foreach ($arg in $RemainingArgs) {
     if ($arg -eq '--v2') {
         $v2Active = $true
     } else {
@@ -70,8 +74,13 @@ switch ($Subcommand) {
         & $showScript @subcommandArgs
         exit $LASTEXITCODE
     }
-    { $_ -in 'doctor','uninstall' } {
-        Write-Error "juggernaut $Subcommand: not yet implemented in Phase 4"
+    'doctor' {
+        $doctorScript = Join-Path $PSScriptRoot_ 'commands\doctor.ps1'
+        & $doctorScript @subcommandArgs
+        exit $LASTEXITCODE
+    }
+    'uninstall' {
+        Write-Error "juggernaut ${Subcommand}: not yet implemented in Phase 4"
         exit 1
     }
     { $_ -in '--version','-v' } {
