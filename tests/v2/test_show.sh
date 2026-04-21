@@ -47,7 +47,7 @@ J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
 
 OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
-if [[ "$OUTPUT" == $'Juggernaut show\nCurrent Juggernaut Block\nScope: user\nAuth: iam\nRegion: us-west-2\nModel: global.anthropic.claude-sonnet-4-6\nEffort: xhigh\nOpus Plan: disabled\nMantle: disabled\nEffective Config\n~/.claude/settings.json\nRegion: us-west-2\nModel: global.anthropic.claude-sonnet-4-6\nShell Fallback\n~/.zshrc\nPresent: yes\nStorage: keychain' ]]; then
+if [[ "$OUTPUT" == $'Juggernaut show\n\nCurrent Juggernaut Block\n  Scope: user\n  Auth: iam\n  Region: us-west-2\n  Model: global.anthropic.claude-sonnet-4-6\n  Effort: xhigh\n  Opus Plan: disabled\n  Mantle: disabled\n\nEffective Config\n  ~/.claude/settings.json\n    Region: us-west-2\n    Model: global.anthropic.claude-sonnet-4-6\n\nShell Fallback\n  ~/.zshrc\n    Present: yes\n    Storage: keychain' ]]; then
   pass
 else
   fail "expected show output to match the calm layout"

@@ -55,22 +55,25 @@ Describe 'show.ps1' {
             $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
             $expected = @'
 Juggernaut show
+
 Current Juggernaut Block
-Scope: user
-Auth: iam
-Region: us-west-2
-Model: global.anthropic.claude-sonnet-4-6
-Effort: xhigh
-Opus Plan: disabled
-Mantle: disabled
+  Scope: user
+  Auth: iam
+  Region: us-west-2
+  Model: global.anthropic.claude-sonnet-4-6
+  Effort: xhigh
+  Opus Plan: disabled
+  Mantle: disabled
+
 Effective Config
-~/.claude/settings.json
-Region: us-west-2
-Model: global.anthropic.claude-sonnet-4-6
+  ~/.claude/settings.json
+    Region: us-west-2
+    Model: global.anthropic.claude-sonnet-4-6
+
 Shell Fallback
-~/.zshrc
-Present: yes
-Storage: keychain
+  ~/.zshrc
+    Present: yes
+    Storage: keychain
 '@
             $actualLines = @($output -replace '\\', '/' -split "`r?`n" | Where-Object { $_ -ne '' })
             $expectedLines = @($expected -split "`r?`n" | Where-Object { $_ -ne '' })
