@@ -54,6 +54,22 @@ else
   printf '%s\n' "$OUTPUT" >&2
 fi
 
+section "human-readable output without shell fallback"
+J_AUTH_MODE=api-key J_REGION=eu-west-1 J_EFFORT=xhigh J_STORAGE=keychain \
+  J_USE_MANTLE=true J_OPUSPLAN=true J_SCOPE=user J_VERSION=2.0.0 \
+  J_SHELL_FALLBACK_MODE=settings-only \
+  USER_BLOCK="$(schema_new_juggernaut_block)"
+config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
+
+export SHELL="/bin/bash"
+OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
+if [[ "$OUTPUT" == $'Juggernaut show\n\nCurrent Juggernaut Block\n  Scope: user\n  Auth: api-key\n  Region: eu-west-1\n  Model: global.anthropic.claude-sonnet-4-6\n  Effort: xhigh\n  Opus Plan: enabled\n  Mantle: enabled\n\nEffective Config\n  ~/.claude/settings.json\n    Region: eu-west-1\n    Model: global.anthropic.claude-sonnet-4-6\n\nShell Fallback\n  ~/.bashrc\n    Present: no' ]]; then
+  pass
+else
+  fail "expected disabled shell fallback output to omit storage"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
 echo
 echo "show.sh tests: $PASS passed, $FAIL failed"
 exit "$FAIL"

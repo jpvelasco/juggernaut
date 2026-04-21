@@ -146,7 +146,6 @@ function Show-ShellFallback {
     if (-not $Block) { return }
 
     $view = Get-ShowBlock -Block $Block
-    if (-not $view.ShellEnabled -and $view.ShellProfiles.Count -eq 0) { return }
 
     Write-Output 'Shell Fallback'
     $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
@@ -155,7 +154,9 @@ function Show-ShellFallback {
         Write-Output ('  ' + (Show-HomePath $shellPath))
     }
     Show-Kv -Indent 4 -Label 'Present' -Value (Show-Bool $view.ShellEnabled)
-    Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
+    if ($view.ShellEnabled) {
+        Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
+    }
 }
 
 function Show-HomePath {

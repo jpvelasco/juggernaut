@@ -146,17 +146,12 @@ show_shell_fallback() {
     return 0
   fi
 
-  local enabled storage count fallback_view
+  local enabled storage fallback_view
   fallback_view="$(printf '%s' "$block" | jq -r '[
   (.shellFallback.enabled|tostring),
-  (.auth.storage // ""),
-  ((.shellFallback.lastWrittenProfiles // []) | length | tostring)
+  (.auth.storage // "")
 ] | @tsv')"
-  IFS=$'\t' read -r enabled storage count <<< "$fallback_view"
-
-  if [[ "$enabled" != "true" && "$count" == "0" ]]; then
-    return 0
-  fi
+  IFS=$'\t' read -r enabled storage <<< "$fallback_view"
 
   local shell_name shell_path
   shell_name="$(basename -- "${SHELL:-bash}")"
@@ -167,7 +162,9 @@ show_shell_fallback() {
     printf '  %s\n' "$(show_home_path "$shell_path")"
   fi
   show_kv 4 "Present" "$(show_bool "${enabled:-}")"
-  show_kv 4 "Storage" "$(show_text "${storage:-}")"
+  if [[ "$enabled" == "true" ]]; then
+    show_kv 4 "Storage" "$(show_text "${storage:-}")"
+  fi
 }
 
 user_path="$(config_user_settings_path)"

@@ -90,4 +90,67 @@ Shell Fallback
             Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
+
+    It 'prints disabled shell fallback without storage' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+
+        $oldHome = $env:HOME
+        $oldHomeVar = $HOME
+        $oldUserProfile = $env:USERPROFILE
+        $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldShell = $env:SHELL
+        try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome
+            $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'
+            $env:BEDROCK_CONFIG_PATH = Join-Path $repoRoot 'bedrock-config.json'
+            $env:SHELL = 'bash'
+
+            $userBlock = New-JuggernautBlock -AuthMode 'api-key' -Region 'eu-west-1' -Storage 'keychain' `
+                                             -EffortLevel 'xhigh' -UseMantle $true -OpusPlan $true `
+                                             -ShellFallbackMode 'settings-only' `
+                                             -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
+            $userMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $userBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $userBlock)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
+
+            $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
+            $expected = @'
+Juggernaut show
+
+Current Juggernaut Block
+  Scope: user
+  Auth: api-key
+  Region: eu-west-1
+  Model: global.anthropic.claude-sonnet-4-6
+  Effort: xhigh
+  Opus Plan: enabled
+  Mantle: enabled
+
+Effective Config
+  ~/.claude/settings.json
+    Region: eu-west-1
+    Model: global.anthropic.claude-sonnet-4-6
+
+Shell Fallback
+  ~/.bashrc
+    Present: no
+'@
+            $actualText = (($output -replace '\\', '/') -replace "`r`n", "`n").TrimEnd("`r", "`n")
+            $expectedText = ($expected -replace "`r`n", "`n").TrimEnd("`r", "`n")
+            if ($actualText -ne $expectedText) {
+                throw "Expected disabled shell fallback output to omit storage, got: $output"
+            }
+        } finally {
+            Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
+            $env:HOME = $oldHome
+            $env:USERPROFILE = $oldUserProfile
+            $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            $env:SHELL = $oldShell
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
