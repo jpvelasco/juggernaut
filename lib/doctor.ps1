@@ -299,14 +299,14 @@ function Invoke-DoctorBlockChecks {
     if (-not $Settings) {
         Write-DoctorStatus -Status FAIL -Label 'settings.json' -Detail 'not valid JSON'
         $script:DoctorIndent = 2
-        return $false
+        return
     }
     Write-DoctorStatus -Status OK -Label 'settings.json' -Detail 'valid JSON'
 
     if (-not (Test-HasJuggernautBlock -Settings $Settings)) {
         Write-DoctorStatus -Status WARN -Label 'juggernaut block' -Detail 'missing'
         $script:DoctorIndent = 2
-        return $false
+        return
     }
 
     $block = Get-JuggernautBlockFromSettings -Settings $Settings
@@ -329,7 +329,6 @@ function Invoke-DoctorBlockChecks {
     Invoke-DoctorNativeDriftCheck -Settings $Settings -Block $block
     Invoke-DoctorShellDriftCheck -Block $block -ProfilePath $ProfilePath
     $script:DoctorIndent = 2
-    return $true
 }
 
 function Invoke-DoctorScopeCheck {
@@ -350,7 +349,7 @@ function Invoke-DoctorScopeCheck {
         return
     }
     Write-DoctorSubsection -Name 'Settings'
-    Invoke-DoctorBlockChecks -Settings $Settings -ProfilePath $ProfilePath | Out-Null
+    Invoke-DoctorBlockChecks -Settings $Settings -ProfilePath $ProfilePath
 }
 
 function Write-DoctorSummary {
