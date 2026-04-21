@@ -290,36 +290,23 @@ function Invoke-DoctorRegionModelsMantleCheck {
     }
 }
 
-function Invoke-DoctorScopeCheck {
+function Invoke-DoctorBlockChecks {
     param(
-        [Parameter(Mandatory)][string]$Scope,
-        [Parameter(Mandatory)][string]$Path,
-        [AllowNull()]$Settings,
-        [bool]$Active,
-        [bool]$Selected,
+        [Parameter(Mandatory)]$Settings,
         [AllowNull()][string]$ProfilePath
     )
-    Write-DoctorScopeTitle -Scope $Scope -Active:$Active -Selected:$Selected
-    $script:DoctorIndent = 2
-    Write-DoctorStatus -Status INFO -Label 'path' -Detail (Show-DoctorHomePath $Path)
-
-    if (-not (Test-Path $Path)) {
-        Write-DoctorStatus -Status INFO -Label 'settings.json' -Detail 'not found'
-        return
-    }
-    Write-DoctorSubsection -Name 'Settings'
     $script:DoctorIndent = 4
     if (-not $Settings) {
         Write-DoctorStatus -Status FAIL -Label 'settings.json' -Detail 'not valid JSON'
         $script:DoctorIndent = 2
-        return
+        return $false
     }
     Write-DoctorStatus -Status OK -Label 'settings.json' -Detail 'valid JSON'
 
     if (-not (Test-HasJuggernautBlock -Settings $Settings)) {
         Write-DoctorStatus -Status WARN -Label 'juggernaut block' -Detail 'missing'
         $script:DoctorIndent = 2
-        return
+        return $false
     }
 
     $block = Get-JuggernautBlockFromSettings -Settings $Settings
@@ -342,6 +329,28 @@ function Invoke-DoctorScopeCheck {
     Invoke-DoctorNativeDriftCheck -Settings $Settings -Block $block
     Invoke-DoctorShellDriftCheck -Block $block -ProfilePath $ProfilePath
     $script:DoctorIndent = 2
+    return $true
+}
+
+function Invoke-DoctorScopeCheck {
+    param(
+        [Parameter(Mandatory)][string]$Scope,
+        [Parameter(Mandatory)][string]$Path,
+        [AllowNull()]$Settings,
+        [bool]$Active,
+        [bool]$Selected,
+        [AllowNull()][string]$ProfilePath
+    )
+    Write-DoctorScopeTitle -Scope $Scope -Active:$Active -Selected:$Selected
+    $script:DoctorIndent = 2
+    Write-DoctorStatus -Status INFO -Label 'path' -Detail (Show-DoctorHomePath $Path)
+
+    if (-not (Test-Path $Path)) {
+        Write-DoctorStatus -Status INFO -Label 'settings.json' -Detail 'not found'
+        return
+    }
+    Write-DoctorSubsection -Name 'Settings'
+    Invoke-DoctorBlockChecks -Settings $Settings -ProfilePath $ProfilePath | Out-Null
 }
 
 function Write-DoctorSummary {
