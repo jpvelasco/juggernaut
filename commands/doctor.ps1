@@ -86,22 +86,19 @@ $profilePath = Get-DoctorProfilePath
 
 Write-Output 'Juggernaut doctor'
 Write-Output ''
-Write-Output 'Session'
-if ($Scope) {
-    Write-DoctorStatus -Status INFO -Label 'selected scope' -Detail $Scope
-} else {
-    Write-DoctorStatus -Status INFO -Label 'selected scope' -Detail 'not specified'
-}
 if ($activeScope) {
-    Write-DoctorStatus -Status INFO -Label 'active scope' -Detail "$activeScope scope is active for this working tree"
+    Write-Output "Active scope: $activeScope"
 } else {
-    Write-DoctorStatus -Status FAIL -Label 'active scope' -Detail 'no Juggernaut v2 block found'
+    Write-Output 'Active scope: none  (no Juggernaut v2 block found)'
+    $script:DoctorFails += 1
+}
+if ($Scope) {
+    Write-Output "Showing:      $Scope scope (explicitly selected)"
 }
 
 Write-Output ''
 Invoke-DoctorScopeCheck -Scope 'user' -Path $userPath -Settings $userSettings -Active:($activeScope -eq 'user') -Selected:($Scope -eq 'user') -ProfilePath $profilePath
 Write-Output ''
 Invoke-DoctorScopeCheck -Scope 'project' -Path $projectPath -Settings $projectSettings -Active:($activeScope -eq 'project') -Selected:($Scope -eq 'project') -ProfilePath $profilePath
-Write-Output ''
 Write-DoctorSummary
 if ($script:DoctorFails -gt 0) { exit 1 }

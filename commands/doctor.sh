@@ -88,21 +88,18 @@ profile_path="$(doctor_profile_path)"
 
 echo "Juggernaut doctor"
 echo
-echo "Session"
-if [[ -n "$requested_scope" ]]; then
-  doctor_status INFO "selected scope" "$requested_scope"
-else
-  doctor_status INFO "selected scope" "not specified"
-fi
 if [[ -n "$active_scope" ]]; then
-  doctor_status INFO "active scope" "$active_scope scope is active for this working tree"
+  echo "Active scope: $active_scope"
 else
-  doctor_status FAIL "active scope" "no Juggernaut v2 block found"
+  echo "Active scope: none  (no Juggernaut v2 block found)"
+  DOCTOR_FAILS=$((DOCTOR_FAILS + 1))
+fi
+if [[ -n "$requested_scope" ]]; then
+  echo "Showing:      $requested_scope scope (explicitly selected)"
 fi
 
 echo
 doctor_check_scope "user" "$user_path" "$user_settings" "$([[ "$active_scope" == "user" ]] && echo true || echo false)" "$([[ "${requested_scope:-}" == "user" ]] && echo true || echo false)" "$profile_path"
 echo
 doctor_check_scope "project" "$project_path" "$project_settings" "$([[ "$active_scope" == "project" ]] && echo true || echo false)" "$([[ "${requested_scope:-}" == "project" ]] && echo true || echo false)" "$profile_path"
-echo
 doctor_summary

@@ -36,6 +36,7 @@ Describe 'doctor.ps1' {
         $oldBedrock = $env:BEDROCK_CONFIG_PATH
         $oldShell = $env:SHELL
         $oldAwsProfile = $env:AWS_PROFILE
+        $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
         $oldLocation = (Get-Location).Path
         try {
             $env:HOME = $tmpHome
@@ -44,6 +45,7 @@ Describe 'doctor.ps1' {
             $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
             $env:SHELL = 'bash'
             $env:AWS_PROFILE = 'juggernaut-test'
+            Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
 
             $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
                                          -UseMantle $false -ShellFallbackMode 'settings-only' `
@@ -53,8 +55,11 @@ Describe 'doctor.ps1' {
 
             Set-Location $tmpHome
             $output = & (Join-Path $repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
-            if ($output -notmatch [regex]::Escape('settings native keys: match juggernaut block')) {
+            if ($output -notmatch [regex]::Escape('drift: in sync')) {
                 throw "Expected no drift on fresh settings.json, got: $output"
+            }
+            if ($output -match 'WARN|FAIL') {
+                throw "Expected no warnings/failures on fresh settings.json, got: $output"
             }
         } finally {
             Set-Location $oldLocation
@@ -64,6 +69,7 @@ Describe 'doctor.ps1' {
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
             $env:SHELL = $oldShell
             $env:AWS_PROFILE = $oldAwsProfile
+            if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
             Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
@@ -81,6 +87,7 @@ Describe 'doctor.ps1' {
         $oldBedrock = $env:BEDROCK_CONFIG_PATH
         $oldShell = $env:SHELL
         $oldAwsProfile = $env:AWS_PROFILE
+        $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
         $oldLocation = (Get-Location).Path
         try {
             Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
@@ -90,6 +97,7 @@ Describe 'doctor.ps1' {
             $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
             $env:SHELL = 'bash'
             $env:AWS_PROFILE = 'juggernaut-test'
+            Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
 
             $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
                                              -UseMantle $false -ShellFallbackMode 'settings-only' `
@@ -108,17 +116,14 @@ Describe 'doctor.ps1' {
             $text = (($output -replace '\\', '/') -replace "`r`n", "`n")
 
             foreach ($needle in @(
-                'Session',
-                'selected scope: user',
-                'active scope: project scope is active for this working tree',
+                'Active scope: project',
+                'Showing:      user scope',
                 'User Scope (selected)',
                 'Project Scope (active)',
-                'Settings',
-                'Configuration',
-                'Auth',
-                'Drift',
                 'region: us-west-2',
-                'region: eu-west-1'
+                'region: eu-west-1',
+                'auth: iam',
+                'drift: in sync'
             )) {
                 if ($text -notmatch [regex]::Escape($needle)) {
                     throw "Expected doctor output to contain '$needle', got: $output"
@@ -133,6 +138,7 @@ Describe 'doctor.ps1' {
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
             $env:SHELL = $oldShell
             $env:AWS_PROFILE = $oldAwsProfile
+            if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
             Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -Path $tmpWork -Recurse -Force -ErrorAction SilentlyContinue
         }

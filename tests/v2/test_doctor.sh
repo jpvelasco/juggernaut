@@ -35,6 +35,7 @@ export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export JUGGERNAUT_USE_V2=1
 export AWS_PROFILE="juggernaut-test"
 export SHELL="/bin/bash"
+unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 
 . "$REPO_ROOT/lib/schema.sh"
 . "$REPO_ROOT/lib/config_manager.sh"
@@ -54,17 +55,13 @@ write_scope_settings project "$TMP_WORK/.claude/settings.json" eu-west-1
 
 section "shows both scopes and explicit selected scope"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
-if [[ "$OUTPUT" == *"Session"* &&
-      "$OUTPUT" == *"selected scope: user"* &&
-      "$OUTPUT" == *"active scope: project scope is active for this working tree"* &&
+if [[ "$OUTPUT" == *"Active scope: project"* &&
+      "$OUTPUT" == *"Showing:      user scope"* &&
       "$OUTPUT" == *"User Scope (selected)"* &&
       "$OUTPUT" == *"Project Scope (active)"* &&
-      "$OUTPUT" == *"Settings"* &&
-      "$OUTPUT" == *"Configuration"* &&
-      "$OUTPUT" == *"Auth"* &&
-      "$OUTPUT" == *"Drift"* &&
       "$OUTPUT" == *"region: us-west-2"* &&
-      "$OUTPUT" == *"region: eu-west-1"* ]]; then
+      "$OUTPUT" == *"region: eu-west-1"* &&
+      "$OUTPUT" == *"auth: iam"* ]]; then
   pass
 else
   fail "expected both user and project scope output"
@@ -73,10 +70,10 @@ fi
 
 section "no drift warning on a fresh apply"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
-if [[ "$OUTPUT" == *"settings native keys: match juggernaut block"* ]]; then
+if [[ "$OUTPUT" == *"drift: in sync"* && "$OUTPUT" != *"WARN"* && "$OUTPUT" != *"FAIL"* ]]; then
   pass
 else
-  fail "expected no drift on a freshly written settings.json"
+  fail "expected no warnings on a freshly written settings.json"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
@@ -85,10 +82,10 @@ tmp_json="$TMP_HOME/.claude/settings.json.tmp"
 jq '.model = "drifted-model"' "$TMP_HOME/.claude/settings.json" > "$tmp_json"
 mv "$tmp_json" "$TMP_HOME/.claude/settings.json"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
-if [[ "$OUTPUT" == *"settings native keys: differ from juggernaut block"* ]]; then
+if [[ "$OUTPUT" == *"WARN  drift: native keys differ"* ]]; then
   pass
 else
-  fail "expected settings native drift warning"
+  fail "expected drift warning for user scope"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
@@ -98,7 +95,7 @@ if OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"; then
   fail "doctor should exit non-zero for malformed settings"
   printf '%s\n' "$OUTPUT" >&2
 else
-  if [[ "$OUTPUT" == *"Project Scope"* && "$OUTPUT" == *"settings.json: not valid JSON"* ]]; then
+  if [[ "$OUTPUT" == *"Project Scope"* && "$OUTPUT" == *"not valid JSON"* ]]; then
     pass
   else
     fail "expected malformed project settings failure"
