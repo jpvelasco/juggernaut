@@ -108,18 +108,18 @@ function Show-CurrentBlock {
     Write-Output 'Current Juggernaut Block'
 
     if (-not $Block) {
-        Show-Kv -Indent 2 -Label 'Status' -Value 'No active Juggernaut block'
+        Show-Kv -Label 'Status' -Value 'No active Juggernaut block'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 2 -Label 'Scope' -Value $view.Scope
-    Show-Kv -Indent 2 -Label 'Auth' -Value $view.AuthMode
-    Show-Kv -Indent 2 -Label 'Region' -Value $view.Region
-    Show-Kv -Indent 2 -Label 'Model' -Value $view.Model
-    Show-Kv -Indent 2 -Label 'Effort' -Value $view.Effort
-    Show-Kv -Indent 2 -Label 'Opus Plan' -Value (Show-State $view.OpusPlan)
-    Show-Kv -Indent 2 -Label 'Mantle' -Value (Show-State $view.UseMantle)
+    Show-Kv -Label 'Scope' -Value $view.Scope
+    Show-Kv -Label 'Auth' -Value $view.AuthMode
+    Show-Kv -Label 'Region' -Value $view.Region
+    Show-Kv -Label 'Model' -Value $view.Model
+    Show-Kv -Label 'Effort' -Value $view.Effort
+    Show-Kv -Label 'Opus Plan' -Value (Show-State $view.OpusPlan)
+    Show-Kv -Label 'Mantle' -Value (Show-State $view.UseMantle)
 }
 
 function Show-EffectiveConfig {
@@ -129,16 +129,16 @@ function Show-EffectiveConfig {
     )
 
     Write-Output 'Effective Config'
-    Write-Output ('  ' + (Show-HomePath $Path))
+    Write-Output (Show-HomePath $Path)
     if (-not $Block) {
-        Show-Kv -Indent 4 -Label 'Region' -Value '—'
-        Show-Kv -Indent 4 -Label 'Model' -Value '—'
+        Show-Kv -Label 'Region' -Value '—'
+        Show-Kv -Label 'Model' -Value '—'
         return
     }
 
     $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 4 -Label 'Region' -Value $view.Region
-    Show-Kv -Indent 4 -Label 'Model' -Value $view.Model
+    Show-Kv -Label 'Region' -Value $view.Region
+    Show-Kv -Label 'Model' -Value $view.Model
 }
 
 function Show-ShellFallback {
@@ -152,10 +152,10 @@ function Show-ShellFallback {
     $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
     $shellPath = Get-ProfileWriterShellConfigPath -Shell $shellName
     if ($shellPath) {
-        Write-Output ('  ' + (Show-HomePath $shellPath))
+        Write-Output (Show-HomePath $shellPath)
     }
-    Show-Kv -Indent 4 -Label 'Present' -Value (Show-Bool $view.ShellEnabled)
-    Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
+    Show-Kv -Label 'Present' -Value (Show-Bool $view.ShellEnabled)
+    Show-Kv -Label 'Storage' -Value $view.Storage
 }
 
 function Show-HomePath {
@@ -194,11 +194,8 @@ if ($projectBlock) {
 }
 
 Write-Output 'Juggernaut show'
-Write-Output ''
 Show-CurrentBlock -Block $activeBlock
-Write-Output ''
 Show-EffectiveConfig -Path $activePath -Block $activeBlock
 if ($activeBlock) {
-    Write-Output ''
     Show-ShellFallback -Block $activeBlock
 }
