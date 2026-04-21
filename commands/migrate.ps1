@@ -14,7 +14,7 @@ param(
 
 # Feature flag gate — v2 commands are dormant until explicitly enabled.
 if ($env:JUGGERNAUT_USE_V2 -ne '1') {
-    Write-Host "migrate: v2 migration is not active. Set `$env:JUGGERNAUT_USE_V2 = '1' to enable." -ForegroundColor DarkYellow
+    Write-Host 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
     exit 0
 }
 

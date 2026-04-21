@@ -6,10 +6,13 @@ $script:ProfileWriterEnd   = '# END: Claude Code Bedrock Configuration'
 
 function Get-ProfileWriterShellConfigPath {
     param([Parameter(Mandatory)][string]$Shell)
+    $homePath = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { '' }
+    if (-not $homePath) { return '' }
+
     switch ($Shell) {
-        'bash' { return (Join-Path $env:HOME '.bashrc') }
-        'zsh'  { return (Join-Path $env:HOME '.zshrc') }
-        'fish' { return (Join-Path $env:HOME '.config/fish/config.fish') }
+        'bash' { return (Join-Path $homePath '.bashrc') }
+        'zsh'  { return (Join-Path $homePath '.zshrc') }
+        'fish' { return (Join-Path $homePath '.config/fish/config.fish') }
         default { return '' }
     }
 }
