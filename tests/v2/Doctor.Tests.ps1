@@ -26,121 +26,96 @@ Describe 'doctor.ps1' {
         }
     }
 
-    It 'reports no drift on a freshly written settings.json' {
-        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-doctor-nodrift-" + [Guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
-
-        $oldHome = $env:HOME
-        $oldUserProfile = $env:USERPROFILE
-        $oldFlag = $env:JUGGERNAUT_USE_V2
-        $oldBedrock = $env:BEDROCK_CONFIG_PATH
-        $oldShell = $env:SHELL
-        $oldAwsProfile = $env:AWS_PROFILE
-        $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
-        $oldLocation = (Get-Location).Path
-        try {
-            $env:HOME = $tmpHome
-            $env:USERPROFILE = $tmpHome
-            $env:JUGGERNAUT_USE_V2 = '1'
-            $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
-            $env:SHELL = 'bash'
-            $env:AWS_PROFILE = 'juggernaut-test'
-            Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
-
-            $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
-                                         -UseMantle $false -ShellFallbackMode 'settings-only' `
-                                         -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
-            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $block)
-            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $merged
-
-            Set-Location $tmpHome
-            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
-            if ($output -notmatch [regex]::Escape('drift: in sync')) {
-                throw "Expected no drift on fresh settings.json, got: $output"
-            }
-            if ($output -match 'WARN|FAIL') {
-                throw "Expected no warnings/failures on fresh settings.json, got: $output"
-            }
-        } finally {
-            Set-Location $oldLocation
-            $env:HOME = $oldHome
-            $env:USERPROFILE = $oldUserProfile
-            $env:JUGGERNAUT_USE_V2 = $oldFlag
-            $env:BEDROCK_CONFIG_PATH = $oldBedrock
-            $env:SHELL = $oldShell
-            $env:AWS_PROFILE = $oldAwsProfile
-            if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
-            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    It 'shows both scopes and marks selected versus active' {
-        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-doctor-home-" + [Guid]::NewGuid().ToString('N'))
-        $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-doctor-work-" + [Guid]::NewGuid().ToString('N'))
+    It 'shows section headers and active scope' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-h-" + [Guid]::NewGuid().ToString('N'))
+        $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-w-" + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $tmpWork '.claude') -Force | Out-Null
 
-        $oldHome = $env:HOME
-        $oldHomeVar = $HOME
-        $oldUserProfile = $env:USERPROFILE
-        $oldFlag = $env:JUGGERNAUT_USE_V2
-        $oldBedrock = $env:BEDROCK_CONFIG_PATH
-        $oldShell = $env:SHELL
-        $oldAwsProfile = $env:AWS_PROFILE
-        $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldShell = $env:SHELL
+        $oldAwsProfile = $env:AWS_PROFILE; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
         $oldLocation = (Get-Location).Path
         try {
             Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
-            $env:HOME = $tmpHome
-            $env:USERPROFILE = $tmpHome
-            $env:JUGGERNAUT_USE_V2 = '1'
-            $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
-            $env:SHELL = 'bash'
-            $env:AWS_PROFILE = 'juggernaut-test'
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:SHELL = 'bash'; $env:AWS_PROFILE = 'juggernaut-test'
             Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
 
-            $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
-                                             -UseMantle $false -ShellFallbackMode 'settings-only' `
-                                             -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
-            $userMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $userBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $userBlock)
-            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
+            $ub = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
+            $um = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $ub -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $ub)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $um
 
-            $projectBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'eu-west-1' -Storage 'profile' `
-                                                -UseMantle $false -ShellFallbackMode 'settings-only' `
-                                                -Scope 'project' -BedrockConfigPath $script:BedrockConfigPath
-            $projectMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $projectBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $projectBlock)
-            Write-SettingsAtomic -Path (Join-Path $tmpWork '.claude/settings.json') -Content $projectMerged
+            $pb = New-JuggernautBlock -AuthMode 'iam' -Region 'eu-west-1' -Storage 'profile' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'project' -BedrockConfigPath $script:BedrockConfigPath
+            $pm = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $pb -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $pb)
+            Write-SettingsAtomic -Path (Join-Path $tmpWork '.claude/settings.json') -Content $pm
 
             Set-Location $tmpWork
-            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') -Scope user 2>&1 | Out-String
-            $text = (($output -replace '\\', '/') -replace "`r`n", "`n")
+            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
+            $text = ($output -replace "`r`n", "`n") -replace '\\', '/'
 
             foreach ($needle in @(
-                'Active scope: project',
-                'Showing:      user scope',
-                'User Scope (selected)',
-                'Project Scope (active)',
-                'region: us-west-2',
-                'region: eu-west-1',
-                'auth: iam',
-                'drift: in sync'
+                'User Scope', 'Project Scope', 'Active Scope',
+                'Credentials', 'Region & Models', 'Mantle', 'Drift', 'Summary',
+                'Status: OK', 'No issues found',
+                'Region: eu-west-1 (OK)'
             )) {
                 if ($text -notmatch [regex]::Escape($needle)) {
-                    throw "Expected doctor output to contain '$needle', got: $output"
+                    throw "Expected '$needle' in output, got: $output"
                 }
             }
         } finally {
             Set-Location $oldLocation
-            Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
-            $env:HOME = $oldHome
-            $env:USERPROFILE = $oldUserProfile
-            $env:JUGGERNAUT_USE_V2 = $oldFlag
-            $env:BEDROCK_CONFIG_PATH = $oldBedrock
-            $env:SHELL = $oldShell
-            $env:AWS_PROFILE = $oldAwsProfile
+            Set-Variable -Name HOME -Value $oldHome -Scope Global -Force
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
             if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
-            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -Path $tmpWork -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path $tmpHome,$tmpWork -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'honours --scope flag for detail sections' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-s-" + [Guid]::NewGuid().ToString('N'))
+        $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-sw-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $tmpWork '.claude') -Force | Out-Null
+
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldShell = $env:SHELL
+        $oldAwsProfile = $env:AWS_PROFILE; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldLocation = (Get-Location).Path
+        try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:SHELL = 'bash'; $env:AWS_PROFILE = 'juggernaut-test'
+            Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
+
+            $ub = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
+            $um = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $ub -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $ub)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $um
+
+            $pb = New-JuggernautBlock -AuthMode 'iam' -Region 'eu-west-1' -Storage 'profile' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'project' -BedrockConfigPath $script:BedrockConfigPath
+            $pm = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $pb -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $pb)
+            Write-SettingsAtomic -Path (Join-Path $tmpWork '.claude/settings.json') -Content $pm
+
+            Set-Location $tmpWork
+            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') -Scope user 2>&1 | Out-String
+            if ($output -notmatch [regex]::Escape('Region: us-west-2 (OK)')) {
+                throw "Expected user region us-west-2 when -Scope user, got: $output"
+            }
+        } finally {
+            Set-Location $oldLocation
+            Set-Variable -Name HOME -Value $oldHome -Scope Global -Force
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
+            if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            Remove-Item -Path $tmpHome,$tmpWork -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }

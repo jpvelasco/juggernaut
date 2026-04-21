@@ -85,20 +85,56 @@ elseif ($userHasBlock) { $activeScope = 'user' }
 $profilePath = Get-DoctorProfilePath
 
 Write-Output 'Juggernaut doctor'
+
+# ── User Scope ───────────────────────────────────────────────────────────────
 Write-Output ''
+Write-Output 'User Scope'
+Write-DoctorScopeBlock -Path $userPath -Settings $userSettings
+
+# ── Project Scope ─────────────────────────────────────────────────────────────
+Write-Output ''
+Write-Output 'Project Scope'
+Write-DoctorScopeBlock -Path $projectPath -Settings $projectSettings
+
+# ── Active Scope ──────────────────────────────────────────────────────────────
+Write-Output ''
+Write-Output 'Active Scope'
 if ($activeScope) {
-    Write-Output "Active scope: $activeScope"
+    Write-Output $activeScope
 } else {
-    Write-Output 'Active scope: none  (no Juggernaut v2 block found)'
     $script:DoctorFails += 1
-}
-if ($Scope) {
-    Write-Output "Showing:      $Scope scope (explicitly selected)"
+    Write-Output 'none (no Juggernaut v2 block found)'
 }
 
-Write-Output ''
-Invoke-DoctorScopeCheck -Scope 'user' -Path $userPath -Settings $userSettings -Active:($activeScope -eq 'user') -Selected:($Scope -eq 'user') -ProfilePath $profilePath
-Write-Output ''
-Invoke-DoctorScopeCheck -Scope 'project' -Path $projectPath -Settings $projectSettings -Active:($activeScope -eq 'project') -Selected:($Scope -eq 'project') -ProfilePath $profilePath
+# Resolve which block to use for the detailed checks below.
+$checkScope = if ($Scope) { $Scope } else { $activeScope }
+$checkSettings = $null
+if ($checkScope -eq 'user') { $checkSettings = $userSettings }
+elseif ($checkScope -eq 'project') { $checkSettings = $projectSettings }
+
+if ($checkSettings -and (Test-HasJuggernautBlock -Settings $checkSettings)) {
+    $checkBlock = Get-JuggernautBlockFromSettings -Settings $checkSettings
+
+    # ── Credentials ─────────────────────────────────────────────────────────────
+    Write-Output ''
+    Write-Output 'Credentials'
+    Write-DoctorCredentials -Block $checkBlock -ProfilePath $profilePath
+
+    # ── Region & Models ──────────────────────────────────────────────────────────
+    Write-Output ''
+    Write-Output 'Region & Models'
+    Write-DoctorRegionModels -Block $checkBlock
+
+    # ── Mantle ───────────────────────────────────────────────────────────────────
+    Write-Output ''
+    Write-Output 'Mantle'
+    Write-DoctorMantle -Block $checkBlock
+
+    # ── Drift ────────────────────────────────────────────────────────────────────
+    Write-Output ''
+    Write-Output 'Drift'
+    Write-DoctorDrift -Settings $checkSettings -Block $checkBlock -ProfilePath $profilePath
+}
+
 Write-DoctorSummary
 if ($script:DoctorFails -gt 0) { exit 1 }

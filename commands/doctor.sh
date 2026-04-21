@@ -86,20 +86,56 @@ fi
 
 profile_path="$(doctor_profile_path)"
 
-echo "Juggernaut doctor"
-echo
+printf 'Juggernaut doctor\n'
+
+# ── User Scope ───────────────────────────────────────────────────────────────
+doctor_section "User Scope"
+doctor_scope_block "$user_path" "$user_settings"
+
+# ── Project Scope ─────────────────────────────────────────────────────────────
+doctor_section "Project Scope"
+doctor_scope_block "$project_path" "$project_settings"
+
+# ── Active Scope ──────────────────────────────────────────────────────────────
+doctor_section "Active Scope"
 if [[ -n "$active_scope" ]]; then
-  echo "Active scope: $active_scope"
+  printf '%s\n' "$active_scope"
 else
-  echo "Active scope: none  (no Juggernaut v2 block found)"
   DOCTOR_FAILS=$((DOCTOR_FAILS + 1))
-fi
-if [[ -n "$requested_scope" ]]; then
-  echo "Showing:      $requested_scope scope (explicitly selected)"
+  printf 'none (no Juggernaut v2 block found)\n'
 fi
 
-echo
-doctor_check_scope "user" "$user_path" "$user_settings" "$([[ "$active_scope" == "user" ]] && echo true || echo false)" "$([[ "${requested_scope:-}" == "user" ]] && echo true || echo false)" "$profile_path"
-echo
-doctor_check_scope "project" "$project_path" "$project_settings" "$([[ "$active_scope" == "project" ]] && echo true || echo false)" "$([[ "${requested_scope:-}" == "project" ]] && echo true || echo false)" "$profile_path"
+# Resolve which block to use for the detailed checks below.
+# Honour --scope if given; otherwise use the active scope.
+check_scope="${requested_scope:-$active_scope}"
+check_settings=""
+check_path=""
+if [[ "$check_scope" == "user" ]]; then
+  check_settings="$user_settings"
+  check_path="$user_path"
+elif [[ "$check_scope" == "project" ]]; then
+  check_settings="$project_settings"
+  check_path="$project_path"
+fi
+
+if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; then
+  check_block="$(config_get_juggernaut_block "$check_settings")"
+
+  # ── Credentials ─────────────────────────────────────────────────────────────
+  doctor_section "Credentials"
+  doctor_credentials "$check_block" "$profile_path"
+
+  # ── Region & Models ──────────────────────────────────────────────────────────
+  doctor_section "Region & Models"
+  doctor_region_models "$check_block"
+
+  # ── Mantle ───────────────────────────────────────────────────────────────────
+  doctor_section "Mantle"
+  doctor_mantle "$check_block"
+
+  # ── Drift ────────────────────────────────────────────────────────────────────
+  doctor_section "Drift"
+  doctor_drift "$check_settings" "$check_block" "$profile_path"
+fi
+
 doctor_summary

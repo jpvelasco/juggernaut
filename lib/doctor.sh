@@ -18,42 +18,21 @@ doctor_home_path() {
   fi
 }
 
-doctor_text() {
-  local value="${1:-}"
-  if [[ -n "$value" && "$value" != "null" ]]; then
-    printf '%s\n' "$value"
-  else
-    printf '%s\n' "-"
-  fi
-}
+doctor_section() { printf '\n%s\n' "$1"; }
+doctor_kv()      { printf '%s: %s\n' "$1" "$2"; }
 
-doctor_status() {
-  local status="$1" label="$2" detail="${3:-}"
+doctor_kv_inline() {
+  local label="$1" value="$2" status="$3"
   case "$status" in
     FAIL) DOCTOR_FAILS=$((DOCTOR_FAILS + 1)) ;;
     WARN) DOCTOR_WARNS=$((DOCTOR_WARNS + 1)) ;;
   esac
-  if [[ -n "$detail" ]]; then
-    printf '  %-5s %s: %s\n' "$status" "$label" "$detail"
-  else
-    printf '  %-5s %s\n' "$status" "$label"
-  fi
+  printf '%s: %s (%s)\n' "$label" "$value" "$status"
 }
 
-doctor_scope_title() {
-  local scope="$1" active="$2" selected="$3"
-  local label
-  label="$(tr '[:lower:]' '[:upper:]' <<<"${scope:0:1}")${scope:1} Scope"
-  if [[ "$active" == "true" && "$selected" == "true" ]]; then
-    printf '%s (active, selected)\n' "$label"
-  elif [[ "$active" == "true" ]]; then
-    printf '%s (active)\n' "$label"
-  elif [[ "$selected" == "true" ]]; then
-    printf '%s (selected)\n' "$label"
-  else
-    printf '%s\n' "$label"
-  fi
-}
+doctor_ok()   { printf 'Status: OK\n'; }
+doctor_warn() { DOCTOR_WARNS=$((DOCTOR_WARNS + 1)); printf 'Status: WARN\n'; }
+doctor_fail() { DOCTOR_FAILS=$((DOCTOR_FAILS + 1)); printf 'Status: FAIL\n'; }
 
 doctor_profile_path() {
   local shell_name
@@ -73,18 +52,14 @@ doctor_shell_value() {
       prefix = key "="
       if (index($2, prefix) == 1) {
         value = substr($2, length(prefix) + 1)
-        gsub(/^"/, "", value)
-        gsub(/"$/, "", value)
-        print value
-        exit
+        gsub(/^"/, "", value); gsub(/"$/, "", value)
+        print value; exit
       }
     }
     $1 == "set" && $2 == "-gx" && $3 == key {
       value = $4
-      gsub(/^"/, "", value)
-      gsub(/"$/, "", value)
-      print value
-      exit
+      gsub(/^"/, "", value); gsub(/"$/, "", value)
+      print value; exit
     }
   '
 }
@@ -99,116 +74,144 @@ doctor_shell_has_key_assignment() {
   ' "$profile" | grep -Eq "(export[[:space:]]+$key=|set[[:space:]]+-gx[[:space:]]+$key[[:space:]])"
 }
 
-doctor_check_config() {
-  local block="$1"
-  local region model effort use_mantle mantle_url model_display
-
-  region="$(jq -r '.auth.region // ""' <<<"$block")"
-  model="$(jq -r '.model // ""' <<<"$block")"
-  effort="$(jq -r '.effortLevel // ""' <<<"$block")"
-  use_mantle="$(jq -r '.useMantle // false' <<<"$block")"
-  mantle_url="$(jq -r '.mantle.baseUrl // ""' <<<"$block")"
-
-  if [[ -n "$region" ]] && schema_is_supported_region "$region"; then
-    doctor_status OK "region" "$region"
-  else
-    doctor_status FAIL "region" "$(doctor_text "$region") (unsupported)"
+doctor_scope_block() {
+  local path="$1" settings="$2"
+  printf '%s\n' "$(doctor_home_path "$path")"
+  if [[ ! -f "$path" ]]; then
+    doctor_kv "Status" "not found"
+    return 0
   fi
-
-  if [[ -n "$model" ]]; then
-    model_display="${model#global.anthropic.}"
-    doctor_status OK "model" "$model_display"
-  else
-    doctor_status FAIL "model" "missing"
+  if [[ -z "$settings" ]]; then
+    doctor_fail
+    doctor_kv "Details" "not valid JSON"
+    return 0
   fi
-
-  if ! jq -e '.modelOverrides.opus and .modelOverrides.sonnet and .modelOverrides.haiku and .modelOverrides.subagent' <<<"$block" >/dev/null; then
-    doctor_status WARN "overrides" "one or more model overrides missing"
+  if ! config_has_juggernaut_block "$settings"; then
+    doctor_kv "Status" "no Juggernaut config"
+    return 0
   fi
-
-  doctor_status OK "effort" "$(doctor_text "$effort")"
-
-  if [[ "$use_mantle" == "true" ]]; then
-    if [[ -n "$mantle_url" ]]; then
-      doctor_status OK "mantle" "on  ($mantle_url)"
-    else
-      doctor_status OK "mantle" "on"
-    fi
-    if [[ "$(jq -r '.env.CLAUDE_CODE_USE_MANTLE // ""' <<<"$block")" != "1" ]]; then
-      doctor_status WARN "mantle" "on  (CLAUDE_CODE_USE_MANTLE=1 missing from env)"
-    fi
+  local block
+  block="$(config_get_juggernaut_block "$settings")"
+  if schema_validate "$block" >/dev/null 2>&1; then
+    doctor_ok
+    doctor_kv "Juggernaut block" "present and valid"
   else
-    doctor_status OK "mantle" "off"
+    doctor_fail
+    doctor_kv "Juggernaut block" "present but invalid"
   fi
 }
 
-doctor_check_auth() {
+doctor_credentials() {
   local block="$1" profile="$2"
-  local auth_mode storage cred_detail
+  local auth_mode storage
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   storage="$(jq -r '.auth.storage // ""' <<<"$block")"
-
+  doctor_kv "Auth mode" "$auth_mode"
   case "$auth_mode" in
     iam)
       if [[ -n "${AWS_PROFILE:-}" ]]; then
-        cred_detail="AWS_PROFILE set"
+        doctor_ok
+        doctor_kv "Details" "AWS_PROFILE is set"
       elif [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-        cred_detail="access key set"
+        doctor_ok
+        doctor_kv "Details" "access key variables are set"
       else
-        cred_detail=""
-      fi
-      if [[ -n "$cred_detail" ]]; then
-        doctor_status OK "auth" "iam  ($cred_detail)"
-      else
-        doctor_status WARN "auth" "iam  (no credentials in environment)"
+        doctor_warn
+        doctor_kv "Details" "no IAM credentials in environment"
       fi
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-        doctor_status WARN "auth conflict" "AWS_BEARER_TOKEN_BEDROCK set while mode is iam"
+        DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+        doctor_kv "Warning" "AWS_BEARER_TOKEN_BEDROCK is set while auth mode is iam"
       fi
       ;;
     api-key)
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-        doctor_status OK "auth" "api-key  (env var set)"
+        doctor_ok
+        doctor_kv "Details" "AWS_BEARER_TOKEN_BEDROCK is set"
       elif [[ "$storage" == "keychain" ]] && keychain_available 2>/dev/null && [[ -n "$(keychain_get 2>/dev/null || true)" ]]; then
-        doctor_status OK "auth" "api-key  (keychain)"
+        doctor_ok
+        doctor_kv "Details" "keychain entry present"
       elif [[ -n "$profile" ]] && doctor_shell_has_key_assignment "$profile" "AWS_BEARER_TOKEN_BEDROCK"; then
-        doctor_status OK "auth" "api-key  (shell profile)"
+        doctor_ok
+        doctor_kv "Details" "shell profile contains API key"
       else
-        doctor_status FAIL "auth" "api-key  (no key in env, keychain, or profile)"
+        doctor_fail
+        doctor_kv "Details" "no API key found in env, keychain, or shell profile"
       fi
       ;;
     *)
-      doctor_status FAIL "auth" "missing or unsupported mode"
+      doctor_fail
+      doctor_kv "Details" "missing or unsupported auth mode"
       ;;
   esac
 }
 
-doctor_check_drift() {
+doctor_region_models() {
+  local block="$1"
+  local region model effort
+  region="$(jq -r '.auth.region // ""' <<<"$block")"
+  model="$(jq -r '.model // ""' <<<"$block")"
+  effort="$(jq -r '.effortLevel // ""' <<<"$block")"
+  if [[ -n "$region" ]] && schema_is_supported_region "$region"; then
+    doctor_kv_inline "Region" "$region" "OK"
+  else
+    doctor_kv_inline "Region" "${region:--}" "FAIL"
+  fi
+  if [[ -n "$model" ]]; then
+    doctor_kv_inline "Model" "$model" "OK"
+  else
+    doctor_kv_inline "Model" "-" "FAIL"
+  fi
+  doctor_kv "Effort" "${effort:--}"
+  if ! jq -e '.modelOverrides.opus and .modelOverrides.sonnet and .modelOverrides.haiku and .modelOverrides.subagent' <<<"$block" >/dev/null; then
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "Overrides" "WARN (one or more missing)"
+  fi
+}
+
+doctor_mantle() {
+  local block="$1"
+  local use_mantle mantle_url
+  use_mantle="$(jq -r '.useMantle // false' <<<"$block")"
+  mantle_url="$(jq -r '.mantle.baseUrl // ""' <<<"$block")"
+  if [[ "$use_mantle" != "true" ]]; then
+    doctor_kv "Status" "disabled"
+    return 0
+  fi
+  doctor_kv "Status" "enabled"
+  [[ -n "$mantle_url" ]] && doctor_kv "URL" "$mantle_url"
+  if [[ "$(jq -r '.env.CLAUDE_CODE_USE_MANTLE // ""' <<<"$block")" != "1" ]]; then
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "Warning" "CLAUDE_CODE_USE_MANTLE=1 missing from env"
+  fi
+}
+
+doctor_drift() {
   local settings="$1" block="$2" profile="$3"
   local expected
-
   expected="$(schema_derive_native_keys "$block")"
   if jq -en --argjson settings "$settings" --argjson expected "$expected" '
     (($settings.model // null) == ($expected.model // null))
     and (($settings.modelOverrides // {}) == ($expected.modelOverrides // {}))
     and (all((($expected.env // {}) | keys[]); (($settings.env // {})[.] // null) == $expected.env[.]))
   ' >/dev/null; then
-    doctor_status OK "drift" "in sync"
+    doctor_kv "Settings native keys" "OK (in sync)"
   else
-    doctor_status WARN "drift" "native keys differ from juggernaut block"
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "Settings native keys" "WARN (differ from juggernaut block)"
   fi
-
   local enabled mode
   enabled="$(jq -r '.shellFallback.enabled // false' <<<"$block")"
   mode="$(jq -r '.shellFallback.mode // "both"' <<<"$block")"
-
-  [[ "$enabled" == "true" && "$mode" != "settings-only" ]] || return 0
-
-  if [[ -z "$profile" || ! -f "$profile" ]] || ! profile_writer_has_block "$profile"; then
-    doctor_status WARN "shell" "fallback expected but not found"
+  if [[ "$enabled" != "true" || "$mode" == "settings-only" ]]; then
+    doctor_kv "Settings vs Shell Fallback" "OK (no fallback configured)"
     return 0
   fi
-
+  if [[ -z "$profile" || ! -f "$profile" ]] || ! profile_writer_has_block "$profile"; then
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "Settings vs Shell Fallback" "WARN (expected but not found)"
+    return 0
+  fi
   local mismatches=0 key exp_val actual
   for key in AWS_REGION ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_USE_MANTLE ANTHROPIC_BEDROCK_MANTLE_BASE_URL; do
     exp_val="$(jq -r --arg key "$key" '.env[$key] // ""' <<<"$block")"
@@ -216,56 +219,28 @@ doctor_check_drift() {
     actual="$(doctor_shell_value "$profile" "$key" || true)"
     [[ "$actual" != "$exp_val" ]] && mismatches=$((mismatches + 1))
   done
-
   if (( mismatches == 0 )); then
-    doctor_status OK "shell" "$(doctor_home_path "$profile") in sync"
+    doctor_kv "Settings vs Shell Fallback" "OK (no drift detected)"
   else
-    doctor_status WARN "shell" "$(doctor_home_path "$profile") has $mismatches differing value(s)"
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "Settings vs Shell Fallback" "WARN ($mismatches differing value(s))"
   fi
-}
-
-doctor_check_scope() {
-  local scope="$1" path="$2" settings="$3" active="$4" selected="$5" profile="$6"
-  doctor_scope_title "$scope" "$active" "$selected"
-  printf '  %s\n' "$(doctor_home_path "$path")"
-
-  if [[ ! -f "$path" ]]; then
-    doctor_status INFO "status" "not found"
-    return 0
-  fi
-
-  if [[ -z "$settings" ]]; then
-    doctor_status FAIL "status" "not valid JSON"
-    return 0
-  fi
-
-  if ! config_has_juggernaut_block "$settings"; then
-    doctor_status WARN "status" "no Juggernaut block found"
-    return 0
-  fi
-
-  local block
-  block="$(config_get_juggernaut_block "$settings")"
-  if ! schema_validate "$block" >/dev/null 2>&1; then
-    doctor_status FAIL "status" "block schema invalid"
-  fi
-
-  doctor_check_config "$block"
-  doctor_check_auth "$block" "$profile"
-  doctor_check_drift "$settings" "$block" "$profile"
 }
 
 doctor_summary() {
-  echo
+  doctor_section "Summary"
   if (( DOCTOR_FAILS > 0 )); then
-    echo "Summary: $DOCTOR_FAILS failure(s), $DOCTOR_WARNS warning(s)"
-    echo "  Run 'juggernaut apply' to fix configuration issues."
+    printf 'Status: FAIL\n'
+    printf '%d failure(s), %d warning(s)\n' "$DOCTOR_FAILS" "$DOCTOR_WARNS"
+    echo "Run 'juggernaut apply' to fix configuration issues."
     return 1
   fi
   if (( DOCTOR_WARNS > 0 )); then
-    echo "Summary: $DOCTOR_WARNS warning(s)"
+    printf 'Status: WARN\n'
+    printf '%d warning(s)\n' "$DOCTOR_WARNS"
     return 0
   fi
-  echo "Summary: no issues found"
+  printf 'Status: OK\n'
+  echo "No issues found"
   return 0
 }

@@ -50,39 +50,60 @@ write_scope_settings() {
   config_write_atomic "$target" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
 }
 
-write_scope_settings user "$TMP_HOME/.claude/settings.json" us-west-2
+write_scope_settings user    "$TMP_HOME/.claude/settings.json" us-west-2
 write_scope_settings project "$TMP_WORK/.claude/settings.json" eu-west-1
 
-section "shows both scopes and explicit selected scope"
-OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
-if [[ "$OUTPUT" == *"Active scope: project"* &&
-      "$OUTPUT" == *"Showing:      user scope"* &&
-      "$OUTPUT" == *"User Scope (selected)"* &&
-      "$OUTPUT" == *"Project Scope (active)"* &&
-      "$OUTPUT" == *"region: us-west-2"* &&
-      "$OUTPUT" == *"region: eu-west-1"* &&
-      "$OUTPUT" == *"auth: iam"* ]]; then
-  pass
-else
-  fail "expected both user and project scope output"
-  printf '%s\n' "$OUTPUT" >&2
-fi
-
-section "no drift warning on a fresh apply"
+section "shows both scopes with section headers"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
-if [[ "$OUTPUT" == *"drift: in sync"* && "$OUTPUT" != *"WARN"* && "$OUTPUT" != *"FAIL"* ]]; then
+if [[ "$OUTPUT" == *"User Scope"* &&
+      "$OUTPUT" == *"Project Scope"* &&
+      "$OUTPUT" == *"Active Scope"* &&
+      "$OUTPUT" == *"Credentials"* &&
+      "$OUTPUT" == *"Region & Models"* &&
+      "$OUTPUT" == *"Drift"* &&
+      "$OUTPUT" == *"Summary"* ]]; then
   pass
 else
-  fail "expected no warnings on a freshly written settings.json"
+  fail "missing expected section headers"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "reports native drift per scope"
+section "shows active scope and both paths"
+OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"Active Scope"$'\n'"project"* &&
+      "$OUTPUT" == *"~/.claude/settings.json"* &&
+      "$OUTPUT" == *"Region: eu-west-1 (OK)"* ]]; then
+  pass
+else
+  fail "expected active scope=project and project region"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+section "honours --scope flag for detail sections"
+OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
+if [[ "$OUTPUT" == *"Region: us-west-2 (OK)"* ]]; then
+  pass
+else
+  fail "expected user scope region us-west-2 when --scope=user"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+section "no issues on a fresh apply"
+OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
+  pass
+else
+  fail "expected clean summary"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+section "reports native drift"
 tmp_json="$TMP_HOME/.claude/settings.json.tmp"
 jq '.model = "drifted-model"' "$TMP_HOME/.claude/settings.json" > "$tmp_json"
 mv "$tmp_json" "$TMP_HOME/.claude/settings.json"
+# drift check uses active scope (project) by default; switch to user to see user drift
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
-if [[ "$OUTPUT" == *"WARN  drift: native keys differ"* ]]; then
+if [[ "$OUTPUT" == *"Settings native keys: WARN"* ]]; then
   pass
 else
   fail "expected drift warning for user scope"
