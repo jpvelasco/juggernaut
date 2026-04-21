@@ -310,7 +310,7 @@ function Invoke-DoctorBlockChecks {
     }
 
     $block = Get-JuggernautBlockFromSettings -Settings $Settings
-    if (Test-JuggernautBlock -Block $block 3>$null) {
+    if (Test-JuggernautBlock -Block $block -WarningAction SilentlyContinue) {
         Write-DoctorStatus -Status OK -Label 'juggernaut block' -Detail 'present, schema valid'
     } else {
         Write-DoctorStatus -Status FAIL -Label 'juggernaut block' -Detail 'present, schema invalid'
