@@ -30,61 +30,60 @@ Describe 'show.ps1' {
 
     It 'prints the calm section headers and values' {
         $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-" + [Guid]::NewGuid().ToString('N'))
-        $projectRoot = Join-Path $tmpHome 'project'
-        $projectWork = Join-Path $projectRoot 'work\inner'
-        New-Item -ItemType Directory -Path $projectWork -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $projectRoot '.claude') -Force | Out-Null
 
+        $oldHome = $env:HOME
+        $oldHomeVar = $HOME
         $oldUserProfile = $env:USERPROFILE
         $oldFlag = $env:JUGGERNAUT_USE_V2
         $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldShell = $env:SHELL
         try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome
             $env:USERPROFILE = $tmpHome
             $env:JUGGERNAUT_USE_V2 = '1'
             $env:BEDROCK_CONFIG_PATH = Join-Path $repoRoot 'bedrock-config.json'
+            $env:SHELL = 'zsh'
 
-            $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
-                                             -EffortLevel 'high' -UseMantle $false -OpusPlan $false `
+            $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'keychain' `
+                                             -EffortLevel 'xhigh' -UseMantle $false -OpusPlan $false `
                                              -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
             $userMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $userBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $userBlock)
             Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
 
-            $projectBlock = New-JuggernautBlock -AuthMode 'api-key' -Region 'us-east-1' -Storage 'keychain' `
-                                                -EffortLevel 'xhigh' -UseMantle $true -MantleBaseUrl 'https://mantle.example.com' `
-                                                -OpusPlan $false -Scope 'project' -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
-            $projectMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $projectBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $projectBlock)
-            Write-SettingsAtomic -Path (Join-Path $projectRoot '.claude/settings.json') -Content $projectMerged
-
-            Push-Location $projectWork
-            try {
-                $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
-                @(
-                    'Juggernaut show',
-                    'Current Juggernaut Block',
-                    'Scope:',
-                    'Auth:',
-                    'Region:',
-                    'Model:',
-                    'Effort:',
-                    'Opus Plan:',
-                    'Mantle:',
-                    'Effective Config',
-                    'Shell Fallback',
-                    'Present:',
-                    'Storage:'
-                ) | ForEach-Object {
-                    if ($output -notmatch [regex]::Escape($_)) {
-                        throw "Expected show output to contain '$($_)', got: $output"
-                    }
-                }
-            } finally {
-                Pop-Location
+            $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
+            $expected = @'
+Juggernaut show
+Current Juggernaut Block
+Scope: user
+Auth: iam
+Region: us-west-2
+Model: global.anthropic.claude-sonnet-4-6
+Effort: xhigh
+Opus Plan: disabled
+Mantle: disabled
+Effective Config
+~/.claude/settings.json
+Region: us-west-2
+Model: global.anthropic.claude-sonnet-4-6
+Shell Fallback
+~/.zshrc
+Present: yes
+Storage: keychain
+'@
+            $actualLines = @($output -replace '\\', '/' -split "`r?`n" | Where-Object { $_ -ne '' })
+            $expectedLines = @($expected -split "`r?`n" | Where-Object { $_ -ne '' })
+            if (@(Compare-Object -ReferenceObject $expectedLines -DifferenceObject $actualLines -SyncWindow 0).Count -ne 0) {
+                throw "Expected show output to match the calm layout, got: $output"
             }
         } finally {
+            Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
+            $env:HOME = $oldHome
             $env:USERPROFILE = $oldUserProfile
             $env:JUGGERNAUT_USE_V2 = $oldFlag
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            $env:SHELL = $oldShell
             Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
         }
     }

@@ -112,7 +112,9 @@ show_home_path() {
   local path="$1"
   local home="${HOME:-}"
   if [[ -n "$home" && "$path" == "$home"* ]]; then
-    printf '~%s\n' "${path#"$home"}"
+    local suffix="${path#"$home"}"
+    suffix="${suffix//\\//}"
+    printf '~%s\n' "$suffix"
   else
     printf '%s\n' "$path"
   fi

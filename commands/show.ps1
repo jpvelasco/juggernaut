@@ -163,7 +163,7 @@ function Show-HomePath {
     if (-not $Path) { return '' }
     $homePath = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { '' }
     if ($homePath -and $Path.StartsWith($homePath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return '~' + $Path.Substring($homePath.Length)
+        return '~' + ($Path.Substring($homePath.Length) -replace '\\', '/')
     }
     return $Path
 }

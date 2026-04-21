@@ -30,37 +30,29 @@ TMP_WORK="$(mktemp -d)"
 trap 'rm -rf "$TMP_HOME" "$TMP_WORK"' EXIT
 
 mkdir -p "$TMP_HOME/.claude"
-mkdir -p "$TMP_WORK/project/.claude"
 
 export HOME="$TMP_HOME"
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export JUGGERNAUT_USE_V2=1
+export SHELL="/bin/zsh"
 
 . "$REPO_ROOT/lib/schema.sh"
 . "$REPO_ROOT/lib/config_manager.sh"
 set +e
 
-J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=high J_STORAGE=profile \
+J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
   J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.0.0 \
   J_SHELL_FALLBACK_MODE=both \
   USER_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
 
-(
-  cd "$TMP_WORK/project"
-  J_AUTH_MODE=api-key J_REGION=us-east-1 J_EFFORT=xhigh J_STORAGE=keychain \
-    J_USE_MANTLE=true J_MANTLE_BASE_URL="https://mantle.example.com" \
-    J_OPUSPLAN=false J_SCOPE=project J_VERSION=2.0.0 J_SHELL_FALLBACK_MODE=both \
-    PROJECT_BLOCK="$(schema_new_juggernaut_block)"
-  config_write_atomic "$TMP_WORK/project/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"
-  OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
-  if [[ "$OUTPUT" == *"Juggernaut show"* && "$OUTPUT" == *"Current Juggernaut Block"* && "$OUTPUT" == *"Scope:"* && "$OUTPUT" == *"Auth:"* && "$OUTPUT" == *"Region:"* && "$OUTPUT" == *"Model:"* && "$OUTPUT" == *"Effort:"* && "$OUTPUT" == *"Opus Plan:"* && "$OUTPUT" == *"Mantle:"* && "$OUTPUT" == *"Effective Config"* && "$OUTPUT" == *"Shell Fallback"* && "$OUTPUT" == *"Present:"* && "$OUTPUT" == *"Storage:"* ]]; then
-    pass
-  else
-    fail "expected show output to contain the main sections"
-    printf '%s\n' "$OUTPUT" >&2
-  fi
-)
+OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
+if [[ "$OUTPUT" == $'Juggernaut show\nCurrent Juggernaut Block\nScope: user\nAuth: iam\nRegion: us-west-2\nModel: global.anthropic.claude-sonnet-4-6\nEffort: xhigh\nOpus Plan: disabled\nMantle: disabled\nEffective Config\n~/.claude/settings.json\nRegion: us-west-2\nModel: global.anthropic.claude-sonnet-4-6\nShell Fallback\n~/.zshrc\nPresent: yes\nStorage: keychain' ]]; then
+  pass
+else
+  fail "expected show output to match the calm layout"
+  printf '%s\n' "$OUTPUT" >&2
+fi
 
 echo
 echo "show.sh tests: $PASS passed, $FAIL failed"
