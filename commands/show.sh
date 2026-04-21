@@ -6,9 +6,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 v2_active="${JUGGERNAUT_USE_V2:-0}"
+requested_scope=""
 for arg in "$@"; do
   case "$arg" in
     --v2) v2_active=1 ;;
+    --scope=*) requested_scope="${arg#--scope=}" ;;
     --version|-v)
       cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
       exit 0
@@ -33,6 +35,11 @@ if [[ "$v2_active" != "1" ]]; then
   echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
   exit 0
 fi
+
+case "${requested_scope:-}" in
+  ""|user|project) ;;
+  *) echo "show: --scope must be 'user' or 'project' (got: '$requested_scope')" >&2; exit 1 ;;
+esac
 
 . "$SCRIPT_DIR/lib/config_manager.sh"
 . "$SCRIPT_DIR/lib/profile_writer.sh"
@@ -140,6 +147,42 @@ show_effective_config() {
   show_kv 4 "Model" "$(show_text "${model:-}")"
 }
 
+show_scope_config() {
+  local scope="$1"
+  local path="$2"
+  local block="$3"
+  local active="$4"
+  local selected="$5"
+  local title
+  title="$(tr '[:lower:]' '[:upper:]' <<<"${scope:0:1}")${scope:1} Scope"
+  if [[ "$active" == "true" && "$selected" == "true" ]]; then
+    title+=" (active, selected)"
+  elif [[ "$active" == "true" ]]; then
+    title+=" (active)"
+  elif [[ "$selected" == "true" ]]; then
+    title+=" (selected)"
+  fi
+
+  echo "$title"
+  printf '  %s\n' "$(show_home_path "$path")"
+  if [[ -z "$block" || "$block" == "null" ]]; then
+    show_kv 4 "Status" "No Juggernaut block"
+    return 0
+  fi
+
+  local scope_meta auth_mode region model effort opusplan use_mantle block_view
+  block_view="$(show_block_view "$block")"
+  IFS=$'\t' read -r scope_meta auth_mode region model effort opusplan use_mantle <<< "$block_view"
+
+  show_kv 4 "Scope" "$(show_text "${scope_meta:-}")"
+  show_kv 4 "Auth" "$(show_text "${auth_mode:-}")"
+  show_kv 4 "Region" "$(show_text "${region:-}")"
+  show_kv 4 "Model" "$(show_text "${model:-}")"
+  show_kv 4 "Effort" "$(show_text "${effort:-}")"
+  show_kv 4 "Opus Plan" "$(show_state "${opusplan:-}")"
+  show_kv 4 "Mantle" "$(show_state "${use_mantle:-}")"
+}
+
 show_shell_fallback() {
   local block="$1"
   if [[ -z "$block" || "$block" == "null" ]]; then
@@ -183,19 +226,34 @@ fi
 
 active_path="—"
 active_block="null"
+active_scope=""
 if [[ "$project_block" != "null" && -n "$project_block" ]]; then
   active_path="${project_path:-${PWD}/.claude/settings.json}"
   active_block="$project_block"
+  active_scope="project"
 elif [[ "$user_block" != "null" && -n "$user_block" ]]; then
   active_path="$user_path"
   active_block="$user_block"
+  active_scope="user"
 fi
 
 echo "Juggernaut show"
 echo
-show_current_block "$active_block"
+echo "Scope Awareness"
+if [[ -n "$requested_scope" ]]; then
+  show_kv 2 "Selected Scope" "$requested_scope"
+else
+  show_kv 2 "Selected Scope" "not specified"
+fi
+if [[ -n "$active_scope" ]]; then
+  show_kv 2 "Active Scope" "$active_scope takes precedence for this session"
+else
+  show_kv 2 "Active Scope" "No Juggernaut v2 block found"
+fi
 echo
-show_effective_config "$active_path" "$active_block"
+show_scope_config "user" "$user_path" "$user_block" "$([[ "$active_scope" == "user" ]] && echo true || echo false)" "$([[ "${requested_scope:-}" == "user" ]] && echo true || echo false)"
+echo
+show_scope_config "project" "${project_path:-${PWD}/.claude/settings.json}" "$project_block" "$([[ "$active_scope" == "project" ]] && echo true || echo false)" "$([[ "${requested_scope:-}" == "project" ]] && echo true || echo false)"
 if [[ "$active_block" != "null" && -n "$active_block" ]]; then
   echo
   show_shell_fallback "$active_block"

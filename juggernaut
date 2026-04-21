@@ -97,8 +97,7 @@ case "$SUBCMD" in
     exec "$SCRIPT_DIR/commands/show.sh" "$@"
     ;;
   doctor)
-    echo "juggernaut doctor: not yet implemented in Phase 3" >&2
-    exit 1
+    exec "$SCRIPT_DIR/commands/doctor.sh" "$@"
     ;;
   uninstall)
     echo "juggernaut uninstall: not yet implemented in Phase 3" >&2
