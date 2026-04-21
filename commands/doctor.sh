@@ -109,13 +109,10 @@ fi
 # Honour --scope if given; otherwise use the active scope.
 check_scope="${requested_scope:-$active_scope}"
 check_settings=""
-check_path=""
 if [[ "$check_scope" == "user" ]]; then
   check_settings="$user_settings"
-  check_path="$user_path"
 elif [[ "$check_scope" == "project" ]]; then
   check_settings="$project_settings"
-  check_path="$project_path"
 fi
 
 if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; then
