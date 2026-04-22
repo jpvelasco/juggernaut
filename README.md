@@ -149,20 +149,28 @@ See [Model Switching on Bedrock](#model-switching-on-bedrock-v16) for details.
 - Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
 - AWS CLI configured (`aws configure` or SSO)
 
-**One-Line Install (fastest):**
+**Install v2.0.0 (recommended — pinned, stable):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
+# Unix/macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.0.0
+
+# Windows PowerShell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.0.0
 ```
 
-**Windows PowerShell:**
-```powershell
+**Install latest (always tracks main):**
+```bash
+# Unix/macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
+
+# Windows PowerShell
 irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
 ```
 
-**One-Command Setup:**
+**One-Command Setup (manual clone):**
 ```bash
 # Clone and run setup
-git clone https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch 2.0.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./setup  # Auto-detects your OS and shell
 
 # Apply configuration
