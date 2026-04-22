@@ -50,7 +50,7 @@ Subcommands:
   migrate     Migrate a v1 profile block to settings.json
   show        Print current Juggernaut configuration
   doctor      Verify configuration and connectivity (not yet implemented)
-  uninstall   Remove Juggernaut configuration (not yet implemented)
+  uninstall   Remove Juggernaut configuration
 
 Common options (apply):
   --auth=iam|api-key       Authentication mode (default: iam)
@@ -100,8 +100,7 @@ case "$SUBCMD" in
     exec "$SCRIPT_DIR/commands/doctor.sh" "$@"
     ;;
   uninstall)
-    echo "juggernaut uninstall: not yet implemented in Phase 3" >&2
-    exit 1
+    exec "$SCRIPT_DIR/commands/uninstall.sh" "$@"
     ;;
   --version|-v)
     cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
