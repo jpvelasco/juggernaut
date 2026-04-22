@@ -49,10 +49,10 @@ Subcommands:
   apply       Configure Claude Code to use Amazon Bedrock (default)
   migrate     Migrate a v1 profile block to settings.json
   show        Print current Juggernaut configuration
-  doctor      Verify configuration and connectivity (not yet implemented)
+  doctor      Verify configuration and credentials
   uninstall   Remove Juggernaut configuration
 
-Common options (apply):
+Options (apply):
   --auth=iam|api-key       Authentication mode (default: iam)
   --bedrock-key=KEY        Bedrock API key (api-key mode)
   --preserve-key           Reuse existing key from env/keychain
