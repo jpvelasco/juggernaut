@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "1.7.5",
+  "version": "2.0.0",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -12,26 +12,20 @@
     "CLAUDE_CODE_USE_BEDROCK": "1",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
-
     "ANTHROPIC_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-7[1m]",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_SUBAGENT_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-
     "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.7 (New flagship - 1M context)",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Recommended)",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
-
     "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable model yet - 1M context, high-res vision (up to 2576px / ~3.75MP), xhigh effort by default, stronger agentic reasoning and self-verification.",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
-
     "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,thinking,adaptive_thinking,interleaved_thinking",
-
     "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
-
     "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
     "ENABLE_PROMPT_CACHING_1H": "1",
     "DISABLE_ERROR_REPORTING": "1",
@@ -40,10 +34,25 @@
     "DISABLE_BUG_COMMAND": "1"
   },
   "regions": [
-    "us-east-1", "us-east-2", "us-west-2",
-    "eu-west-1", "eu-west-2", "eu-west-3", "eu-central-1", "eu-central-2",
-    "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-northeast-1", "ap-northeast-2", "ap-south-1",
-    "sa-east-1", "ca-central-1", "me-south-1", "me-central-1", "il-central-1"
+    "us-east-1",
+    "us-east-2",
+    "us-west-2",
+    "eu-west-1",
+    "eu-west-2",
+    "eu-west-3",
+    "eu-central-1",
+    "eu-central-2",
+    "ap-southeast-1",
+    "ap-southeast-2",
+    "ap-southeast-3",
+    "ap-northeast-1",
+    "ap-northeast-2",
+    "ap-south-1",
+    "sa-east-1",
+    "ca-central-1",
+    "me-south-1",
+    "me-central-1",
+    "il-central-1"
   ],
   "defaults": {
     "region": "us-west-2",

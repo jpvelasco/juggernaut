@@ -8,6 +8,50 @@
 
 **One-command setup for Claude Code with Amazon Bedrock using Global CRIS inference profiles.**
 
+## What's New in v2.0
+
+Juggernaut v2.0 introduces a settings.json-first CLI that stores configuration under `~/.claude/settings.json` instead of (or alongside) your shell profile — the same file Claude Code reads natively. The shell profile block is now an optional fallback.
+
+Enable v2 with `--v2` or `export JUGGERNAUT_USE_V2=1`:
+
+```bash
+juggernaut apply --v2           # Configure Claude Code for Bedrock
+juggernaut show --v2            # Print current configuration
+juggernaut doctor --v2          # Diagnose credential and config issues
+juggernaut migrate --v2         # Upgrade from a v1 profile block
+juggernaut uninstall --v2       # Safely remove all Juggernaut configuration
+```
+
+Or activate permanently for your session:
+```bash
+export JUGGERNAUT_USE_V2=1
+juggernaut apply
+juggernaut doctor
+```
+
+**v1 is unchanged.** Existing `setup` / `setup-claude-bedrock.sh` / `setup-claude-bedrock.ps1` workflows continue to work exactly as before.
+
+### v2.0 Commands
+
+| Command | Description |
+|---------|-------------|
+| `apply` | Write Juggernaut config to `settings.json`. Supports `--scope=user\|project`, `--dry-run`, `--force`, `--auth=iam\|api-key`, `--1m-context`, `--opusplan`, `--effort`, `--mantle`, and more. |
+| `show` | Print the current Juggernaut block from both user and project scopes. |
+| `doctor` | Read-only diagnostics — checks credentials, region, models, Mantle status, and drift between settings.json and the shell fallback. |
+| `migrate` | Migrate a v1 shell profile block to settings.json. Supports `--dry-run`, `--clean`, `--rollback`. |
+| `uninstall` | Remove the Juggernaut block from settings.json (all scopes by default), shell profiles, and OS keychain. Supports `--dry-run`, `--force`, `--scope=user\|project`. |
+
+```bash
+# Uninstall with a preview first
+juggernaut uninstall --v2 --dry-run
+
+# Uninstall for real
+juggernaut uninstall --v2
+
+# Limit to one scope
+juggernaut uninstall --v2 --scope=user
+```
+
 ## What This Does
 
 Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, with optimized settings for enterprise use:
@@ -603,25 +647,31 @@ When using Bedrock, Claude Code follows this precedence:
 
 ## Uninstalling
 
-To remove the Bedrock configuration and revert to Anthropic's direct API:
-
-**Unix/macOS/Linux:**
+**v2 (recommended):**
 ```bash
-# Remove from specific shell
-./uninstall.sh zsh      # or bash/fish
+# Preview what will be removed
+juggernaut uninstall --v2 --dry-run
 
-# Remove from all shells
-./uninstall.sh all
+# Remove all Juggernaut configuration (settings.json, profile block, keychain)
+juggernaut uninstall --v2
 
-# Then restart terminal or source your shell config
+# Limit to one scope
+juggernaut uninstall --v2 --scope=user
+juggernaut uninstall --v2 --scope=project
+```
+
+**v1 (legacy — profile-only):**
+
+Unix/macOS/Linux:
+```bash
+./uninstall.sh zsh   # or bash/fish
+./uninstall.sh all   # all shells
 source ~/.zshrc
 ```
 
-**Windows (PowerShell):**
+Windows (PowerShell):
 ```powershell
 .\uninstall.ps1
-
-# Then restart PowerShell or reload profile
 . $PROFILE.CurrentUserAllHosts
 ```
 

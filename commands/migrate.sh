@@ -32,6 +32,19 @@ for arg in "$@"; do
     --clean)    CLEAN=true ;;
     --dry-run)  DRY_RUN=true ;;
     --project)  SCOPE="project" ;;
+    --help|-h)
+      cat <<'EOF'
+juggernaut migrate - migrate v1 profile block to settings.json
+
+Usage: juggernaut migrate [--dry-run] [--clean] [--rollback] [--project]
+
+Options:
+  --dry-run   Show what would be done without writing anything
+  --clean     Remove profile block(s) after a successful migration
+  --rollback  Restore most recent settings.json backup
+  --project   Migrate to project scope (./.claude/settings.json)
+EOF
+      exit 0 ;;
     *) echo "migrate: unknown option '$arg'" >&2; exit 1 ;;
   esac
 done
