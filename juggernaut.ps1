@@ -32,7 +32,7 @@ Subcommands:
   migrate     Migrate a v1 profile block to settings.json
   show        Print current Juggernaut configuration
   doctor      Verify configuration and connectivity (not yet implemented)
-  uninstall   Remove Juggernaut configuration (not yet implemented)
+  uninstall   Remove Juggernaut configuration
 
 Run 'juggernaut.ps1 apply --help' for apply-specific options.
 '@
@@ -80,8 +80,9 @@ switch ($Subcommand) {
         exit $LASTEXITCODE
     }
     'uninstall' {
-        Write-Error "juggernaut ${Subcommand}: not yet implemented in Phase 4"
-        exit 1
+        $uninstallScript = Join-Path $PSScriptRoot_ 'commands\uninstall.ps1'
+        & $uninstallScript @subcommandArgs
+        exit $LASTEXITCODE
     }
     { $_ -in '--version','-v' } {
         $vf = Join-Path $PSScriptRoot_ 'VERSION'
