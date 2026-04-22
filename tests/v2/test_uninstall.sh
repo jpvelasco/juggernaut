@@ -33,14 +33,15 @@ unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 . "$REPO_ROOT/lib/keychain.sh"
 set +e
 
-# Stash and clear any real keychain entry so tests run in isolation.
-_saved_keychain_key="$(keychain_get 2>/dev/null || true)"
-if [[ -n "$_saved_keychain_key" ]]; then keychain_delete 2>/dev/null || true; fi
-trap '_trap_exit' EXIT
 _trap_exit() {
   rm -rf "$TMP_HOME" "$TMP_WORK"
   if [[ -n "$_saved_keychain_key" ]]; then keychain_store "$_saved_keychain_key" 2>/dev/null || true; fi
 }
+
+# Stash and clear any real keychain entry so tests run in isolation.
+_saved_keychain_key="$(keychain_get 2>/dev/null || true)"
+if [[ -n "$_saved_keychain_key" ]]; then keychain_delete 2>/dev/null || true; fi
+trap '_trap_exit' EXIT
 
 write_settings() {
   local path="$1" region="${2:-us-west-2}"
