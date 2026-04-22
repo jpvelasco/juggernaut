@@ -42,6 +42,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Normalize version: accept "2.0.0" or "v2.0.0" — tags are always v-prefixed.
+if [[ -n "$VERSION" && "$VERSION" != v* ]]; then
+  VERSION="v${VERSION}"
+fi
+
 if ! command -v git >/dev/null 2>&1; then
   echo "Error: git is required but not installed" >&2
   exit 1

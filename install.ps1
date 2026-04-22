@@ -20,6 +20,9 @@ $ErrorActionPreference = 'Stop'
 
 if ($Latest) { $Version = '' }
 
+# Normalize version: accept "2.0.0" or "v2.0.0" — tags are always v-prefixed.
+if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
+
 $RepoUrl    = 'https://github.com/jpvelasco/juggernaut.git'
 $InstallDir = if ($env:JUGGERNAUT_DIR) { $env:JUGGERNAUT_DIR } else { Join-Path $HOME '.juggernaut' }
 
