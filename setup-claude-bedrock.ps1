@@ -1,8 +1,8 @@
 # Claude Code - Amazon Bedrock Setup Script for Windows
-# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-OpusPlan] [-Effort <level>] [-Force] [-SkipPreflight] [-DryRun]
+# Usage: .\setup-claude-bedrock.ps1 [-Auth <iam|api-key|bedrock-api-key>] [-BedrockKey <key>] [-PreserveKey] [-Region <region>] [-Model <id>] [-FastModel <id>] [-OpusModel <id>] [-SonnetModel <id>] [-HaikuModel <id>] [-Global] [-ModelPrefix <prefix>] [-OpusPlan] [-Effort <level>] [-Force] [-SkipPreflight] [-DryRun]
 
 param(
-    [ValidateSet("iam", "api-key")]
+    [ValidateSet("", "iam", "api-key", "bedrock-api-key")]
     [string]$Auth = "",
     [string]$BedrockKey = "",
     [switch]$PreserveKey,
@@ -51,6 +51,10 @@ $OpusPlanExplicit = $PSBoundParameters.ContainsKey('OpusPlan') -or $PSBoundParam
 $EffortExplicit = $PSBoundParameters.ContainsKey('Effort')
 
 $ErrorActionPreference = "Stop"
+
+if ($Auth -eq "bedrock-api-key") {
+    $Auth = "api-key"
+}
 
 #-------------------------------------------------------------------------------
 # Load Configuration from JSON
@@ -108,13 +112,13 @@ function Test-Prerequisites {
 }
 
 # Detect existing auth mode from profile file
-# Returns: "iam", "api-key", or $null if not found
+# Returns: "iam", "api-key", "bedrock-api-key", or $null if not found
 function Get-ExistingAuthMode {
     param([string]$ProfilePath)
 
     if (Test-Path $ProfilePath) {
         $content = Get-Content $ProfilePath -Raw -Encoding utf8 -ErrorAction SilentlyContinue
-        if ($content -match "# Auth mode: (iam|api-key)") {
+        if ($content -match "# Auth mode: (iam|api-key|bedrock-api-key)") {
             return $Matches[1]
         }
     }
@@ -280,6 +284,9 @@ if (-not $AuthExplicit -and [string]::IsNullOrEmpty($Auth)) {
 # Apply default if still unset
 if ([string]::IsNullOrEmpty($Auth)) {
     $Auth = if ($Config -and $Config.defaults.auth_mode) { $Config.defaults.auth_mode } else { "iam" }
+}
+if ($Auth -eq "bedrock-api-key") {
+    $Auth = "api-key"
 }
 
 # Detect existing custom models if user didn't explicitly specify
@@ -522,7 +529,7 @@ if ($Help) {
     Write-Host "Usage: .\setup-claude-bedrock.ps1 [OPTIONS]"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Auth <MODE>       Authentication: iam (default) or api-key"
+    Write-Host "  -Auth <MODE>       Authentication: iam (default) or bedrock-api-key"
     Write-Host "  -BedrockKey <KEY>  Bedrock API key (optional; prompts if not provided)"
     Write-Host "  -PreserveKey       Reuse existing API key from environment (no prompt)"
     Write-Host "  -Storage <MODE>    Where to store API key: profile or keychain"
@@ -546,7 +553,7 @@ if ($Help) {
     Write-Host "  iam        Use AWS IAM/SSO credentials (default)"
     Write-Host "             Requires: aws configure, SSO login, or IAM role"
     Write-Host ""
-    Write-Host "  api-key    Use Bedrock API key (simpler setup)"
+    Write-Host "  bedrock-api-key    Use Bedrock API key (simpler setup)"
     Write-Host "             Prompts securely if -BedrockKey not provided"
     Write-Host "             Get key from: AWS Console -> Bedrock -> API keys"
     Write-Host ""
@@ -556,10 +563,10 @@ if ($Help) {
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  .\setup-claude-bedrock.ps1                              # IAM/SSO (default)"
-    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key                # Prompts for key"
-    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -Storage keychain  # Secure storage"
-    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-xxx  # Inline key"
-    Write-Host "  .\setup-claude-bedrock.ps1 -Auth api-key -PreserveKey   # Reuse existing key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth bedrock-api-key                # Prompts for key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth bedrock-api-key -Storage keychain  # Secure storage"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth bedrock-api-key -BedrockKey br-xxx  # Inline key"
+    Write-Host "  .\setup-claude-bedrock.ps1 -Auth bedrock-api-key -PreserveKey   # Reuse existing key"
     Write-Host "  .\setup-claude-bedrock.ps1 -Model anthropic.claude-3-opus-20240229-v1:0  # Custom model"
     Write-Host "  .\setup-claude-bedrock.ps1 -Model default               # Reset to default"
     Write-Host "  .\setup-claude-bedrock.ps1 -DryRun"

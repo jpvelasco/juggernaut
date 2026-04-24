@@ -3,11 +3,11 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.0.0
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.1
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version 2.0.0
+#   bash install.sh --version 2.1.1
 #   bash install.sh --latest
 
 set -e
@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Normalize version: accept "2.0.0" or "v2.0.0" — tags are always v-prefixed.
+# Normalize version: accept "2.1.1" or "v2.1.1" — tags are always v-prefixed.
 if [[ -n "$VERSION" && "$VERSION" != v* ]]; then
   VERSION="v${VERSION}"
 fi

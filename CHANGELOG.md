@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.1.1] - 2026-04-24
+
+### Fixed
+
+- **Windows installer hotfix** — legacy PowerShell setup now accepts its empty default auth value again, accepts `bedrock-api-key`, and maps it into the existing Bedrock API-key setup flow.
+- **Pinned install commands** — README install examples now pass the release version explicitly so tagged raw installer URLs stay pinned instead of updating an existing install to `main`.
+- **Version bumped to 2.1.1** in `VERSION` and `bedrock-config.json`.
+
 ## [2.1.0] - 2026-04-23
 
 ### Added
@@ -53,5 +61,6 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.1.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.1
 [2.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.0
 [2.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.0.0

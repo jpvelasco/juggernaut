@@ -37,6 +37,20 @@ Describe 'install.ps1 robustness' {
         $script:InstallPs1 | Should -Match 'juggernaut doctor --v2'
     }
 
+    It 'does not reject default or bedrock API-key auth before setup can run' {
+        $setupScript = Join-Path $script:RepoRoot 'setup-claude-bedrock.ps1'
+        $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)
+        if (-not $pwsh) { $pwsh = Get-Command powershell -ErrorAction Stop }
+
+        $defaultOutput = & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $setupScript -Help 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0
+        $defaultOutput | Should -Match ([regex]::Escape('Authentication: iam (default) or bedrock-api-key'))
+
+        $bedrockOutput = & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $setupScript -Auth bedrock-api-key -Help 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0
+        $bedrockOutput | Should -Match ([regex]::Escape('bedrock-api-key'))
+    }
+
     It 'can run doctor through the launcher entrypoint after a clean install' {
         $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-inst-h-" + [Guid]::NewGuid().ToString('N'))
         $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-inst-w-" + [Guid]::NewGuid().ToString('N'))
