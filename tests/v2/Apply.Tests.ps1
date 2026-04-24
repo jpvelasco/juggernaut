@@ -33,7 +33,7 @@ Describe 'New-JuggernautBlock — IAM defaults' {
     It 'effortLevel = xhigh'   { $script:block.effortLevel   | Should -Be 'xhigh' }
     It 'opusplan = false'      { $script:block.opusplan       | Should -BeFalse }
     It 'meta.managedBy = juggernaut' { $script:block.meta.managedBy | Should -Be 'juggernaut' }
-    It 'meta.version = 2.1.1'  { $script:block.meta.version  | Should -Be '2.1.1' }
+    It 'meta.version = 2.1.2'  { $script:block.meta.version  | Should -Be '2.1.2' }
     It 'env.AWS_REGION = us-east-1' {
         $script:block.env['AWS_REGION'] | Should -Be 'us-east-1'
     }
@@ -166,7 +166,7 @@ Describe 'Build-ProfileWriterBlock — bash IAM' {
     It 'contains BEGIN marker'  { $script:pwBlock | Should -Match 'BEGIN: Claude Code Bedrock Configuration' }
     It 'contains END marker'    { $script:pwBlock | Should -Match 'END: Claude Code Bedrock Configuration' }
     It 'sets AWS_REGION'        { $script:pwBlock | Should -Match 'AWS_REGION="us-east-1"' }
-    It 'unsets bearer token'    { $script:pwBlock | Should -Match 'unset AWS_BEARER_TOKEN_BEDROCK' }
+    It 'does not modify bearer token' { $script:pwBlock | Should -Not -Match 'AWS_BEARER_TOKEN_BEDROCK' }
     It 'sets CLAUDE_CODE_USE_BEDROCK' { $script:pwBlock | Should -Match 'CLAUDE_CODE_USE_BEDROCK="1"' }
 }
 
@@ -177,7 +177,7 @@ Describe 'Build-ProfileWriterBlock — fish syntax' {
             -ApiKeyExpr '' -StorageMode 'profile' `
             -BedrockConfigPath $script:BedrockConfigPath
         $b | Should -Match 'set -gx AWS_REGION "us-west-2"'
-        $b | Should -Match 'set -e AWS_BEARER_TOKEN_BEDROCK'
+        $b | Should -Not -Match 'AWS_BEARER_TOKEN_BEDROCK'
     }
 }
 

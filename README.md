@@ -57,40 +57,52 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
 - AWS CLI configured (`aws configure` or SSO)
 
-**Install v2.1.1:**
+**Install v2.1.2:**
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.1/install.sh | bash -s -- --version v2.1.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.sh | bash -s -- --version v2.1.2
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.1/install.ps1))) -Version v2.1.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.ps1))) -Version v2.1.2
 ```
 
 **Install a pinned version (recommended for stability):**
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.1/install.sh | bash -s -- --version v2.1.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.sh | bash -s -- --version v2.1.2
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.1/install.ps1))) -Version v2.1.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.ps1))) -Version v2.1.2
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v2.1.1 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v2.1.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 
 export JUGGERNAUT_USE_V2=1
 ./juggernaut apply
 ```
 
-The pinned installer commands above install v2.1.1 directly from the release tag.
+The pinned installer commands above install v2.1.2 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
+
+**Configure after install:**
+
+```bash
+# Bedrock API key
+juggernaut apply --v2 --auth=bedrock-api-key
+```
+
+```bash
+# IAM/SSO
+juggernaut apply --v2 --auth=iam
+```
 
 ### Version Pinning
 
@@ -98,26 +110,26 @@ Use the pinned release tag URLs for a stable install:
 
 ```bash
 # Bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.1/install.sh | bash -s -- --version v2.1.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.sh | bash -s -- --version v2.1.2
 ```
 
 ```powershell
 # PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.1/install.ps1))) -Version v2.1.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.ps1))) -Version v2.1.2
 ```
 
 ```bash
 # After downloading
-bash install.sh --version 2.1.1
+bash install.sh --version 2.1.2
 ```
 
 ```powershell
-.\install.ps1 -Version 2.1.1
+.\install.ps1 -Version 2.1.2
 ```
 
-Both scripts normalize the version automatically — `2.1.1` and `v2.1.1` both work.
+Both scripts normalize the version automatically — `2.1.2` and `v2.1.2` both work.
 
-The v2.1 installers also repair executable bits, create a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and print the exact verification command. On Windows, first-run script policy friction can usually be resolved with:
+The v2.1 installers repair executable bits, create a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and print the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
 
 ```powershell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser

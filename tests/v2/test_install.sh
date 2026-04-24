@@ -26,6 +26,11 @@ if [[ "$INSTALL_SH" == *'.local/bin'* && "$INSTALL_SH" == *'ln -sfn'* && "$INSTA
 else
   fail "install.sh missing ~/.local/bin symlink or verification message"
 fi
+if [[ "$INSTALL_SH" == *'--configure'* && "$INSTALL_SH" == *'./juggernaut apply --v2'* && "$INSTALL_SH" != *'exec bash ./setup'* ]]; then
+  pass
+else
+  fail "install.sh should install-only by default and configure only when explicit"
+fi
 
 section "install.ps1 user launcher"
 for needle in '.local\bin' 'juggernaut.cmd' 'ExecutionPolicy Bypass' 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser' 'juggernaut doctor --v2'; do
@@ -35,6 +40,11 @@ if [[ "$INSTALL_PS1" == *"If PowerShell blocks first run scripts, run:"* ]]; the
   pass
 else
   fail "install.ps1 missing first-run execution-policy guidance"
+fi
+if [[ "$INSTALL_PS1" == *'[switch]$Configure'* && "$INSTALL_PS1" == *'juggernaut.ps1 apply --v2'* && "$INSTALL_PS1" != *'setup-claude-bedrock.ps1 @SetupArgs'* ]]; then
+  pass
+else
+  fail "install.ps1 should install-only by default and configure only when explicit"
 fi
 
 section "fresh install doctor smoke"
@@ -54,7 +64,7 @@ export J_STORAGE=profile
 export J_USE_MANTLE=false
 export J_OPUSPLAN=false
 export J_SCOPE=user
-export J_VERSION=2.1.1
+export J_VERSION=2.1.2
 export J_SHELL_FALLBACK_MODE=settings-only
 BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"

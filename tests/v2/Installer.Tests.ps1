@@ -21,6 +21,12 @@ Describe 'install.sh robustness' {
         $script:InstallSh | Should -Match 'ln -sfn'
         $script:InstallSh | Should -Match 'juggernaut doctor --v2'
     }
+
+    It 'does not run setup by default' {
+        $script:InstallSh | Should -Match ([regex]::Escape('--configure'))
+        $script:InstallSh | Should -Match ([regex]::Escape('./juggernaut apply --v2'))
+        $script:InstallSh | Should -Not -Match ([regex]::Escape('exec bash ./setup'))
+    }
 }
 
 Describe 'install.ps1 robustness' {
@@ -35,6 +41,12 @@ Describe 'install.ps1 robustness' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('If PowerShell blocks first run scripts, run:'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'))
         $script:InstallPs1 | Should -Match 'juggernaut doctor --v2'
+    }
+
+    It 'does not run setup by default' {
+        $script:InstallPs1 | Should -Match ([regex]::Escape('[switch]$Configure'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('juggernaut.ps1 apply --v2'))
+        $script:InstallPs1 | Should -Not -Match ([regex]::Escape('setup-claude-bedrock.ps1 @SetupArgs'))
     }
 
     It 'does not reject default or bedrock API-key auth before setup can run' {

@@ -112,12 +112,6 @@ function Build-ProfileWriterBlock {
         } else {
             [void]$sb.AppendLine('unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE 2>/dev/null || true')
         }
-    } else {
-        if ($Shell -eq 'fish') {
-            [void]$sb.AppendLine('set -e AWS_BEARER_TOKEN_BEDROCK 2>/dev/null')
-        } else {
-            [void]$sb.AppendLine('unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true')
-        }
     }
 
     # Helper: emit one export line

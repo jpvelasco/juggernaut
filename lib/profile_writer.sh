@@ -149,12 +149,6 @@ profile_writer_build_block() {
     else
       block+="unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE 2>/dev/null || true"$'\n'
     fi
-  else
-    if [[ "$shell" == "fish" ]]; then
-      block+="set -e AWS_BEARER_TOKEN_BEDROCK 2>/dev/null"$'\n'
-    else
-      block+="unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true"$'\n'
-    fi
   fi
 
   # Core env vars — use module-level helper _pw_export_line <syntax> <shell> <key> <value>

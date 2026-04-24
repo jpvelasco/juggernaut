@@ -754,8 +754,8 @@ if ($Auth -eq "api-key") {
     $ConfigBlock += "Remove-Item Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue`n"
     $ConfigBlock += "Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue`n"
 } else {
-    # Using IAM/SSO - unset API key that might interfere
-    $ConfigBlock += "Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue`n"
+    # IAM/SSO does not need an API key, but do not clear one from the user's
+    # profile. Users may keep Bedrock API-key credentials for other tools.
 }
 
 # Add AWS_REGION first

@@ -493,13 +493,6 @@ generate_config_block() {
         else
             config+="unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE 2>/dev/null || true"$'\n'
         fi
-    else
-        # Using IAM/SSO - unset API key that might interfere
-        if [[ "$shell" == "fish" ]]; then
-            config+="set -e AWS_BEARER_TOKEN_BEDROCK 2>/dev/null"$'\n'
-        else
-            config+="unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true"$'\n'
-        fi
     fi
 
     for key in "${CONFIG_KEY_ORDER[@]}"; do
