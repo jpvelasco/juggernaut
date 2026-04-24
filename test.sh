@@ -941,9 +941,10 @@ test_credential_conflict_prevention() {
     run_test "api-key mode unsets AWS_PROFILE" \
         "echo \"\$_bash_apikey\" | grep -qE 'unset[^#]*AWS_PROFILE'"
 
-    # IAM mode should unset API key var
-    run_test "iam mode unsets AWS_BEARER_TOKEN_BEDROCK" \
-        "echo \"\$_bash_iam\" | grep -qE 'unset[^#]*AWS_BEARER_TOKEN_BEDROCK'"
+    # IAM mode should not clear API key var; users may keep bearer tokens for
+    # other tools or switch auth modes later.
+    run_test "iam mode preserves AWS_BEARER_TOKEN_BEDROCK" \
+        "! echo \"\$_bash_iam\" | grep -qE '(^|[^#])AWS_BEARER_TOKEN_BEDROCK'"
 
     # Fish uses different syntax — verify all four vars
     run_test "fish api-key erases AWS_ACCESS_KEY_ID" \
@@ -958,9 +959,9 @@ test_credential_conflict_prevention() {
     run_test "fish api-key erases AWS_PROFILE" \
         "echo \"\$_fish_apikey\" | grep -q 'set -e AWS_PROFILE'"
 
-    # Fish IAM mode should erase API key var
-    run_test "fish iam erases AWS_BEARER_TOKEN_BEDROCK" \
-        "echo \"\$_fish_iam\" | grep -q 'set -e AWS_BEARER_TOKEN_BEDROCK'"
+    # Fish IAM mode should also preserve API key var
+    run_test "fish iam preserves AWS_BEARER_TOKEN_BEDROCK" \
+        "! echo \"\$_fish_iam\" | grep -q 'AWS_BEARER_TOKEN_BEDROCK'"
 
     # api-key mode should warn (not fail) when aws is missing
     if command -v aws &>/dev/null; then

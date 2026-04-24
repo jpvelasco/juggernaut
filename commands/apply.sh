@@ -361,7 +361,7 @@ export J_MANTLE_BASE_URL="$J_MANTLE_URL"
 export J_OPUSPLAN
 export J_USE_1M="$J_1M_CONTEXT"
 export J_SCOPE
-export J_VERSION="2.1.1"
+export J_VERSION="2.1.2"
 
 # Only export model overrides if explicitly set (schema uses bedrock-config.json defaults otherwise).
 [[ -n "$J_MODEL" ]]        && export J_MODEL

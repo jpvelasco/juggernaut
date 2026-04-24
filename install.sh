@@ -3,11 +3,11 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.1
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.2
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version 2.1.1
+#   bash install.sh --version 2.1.2
 #   bash install.sh --latest
 
 set -e
@@ -15,6 +15,7 @@ set -e
 REPO_URL="https://github.com/jpvelasco/juggernaut.git"
 INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
 VERSION=""
+CONFIGURE=0
 SETUP_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       VERSION=""
       shift
       ;;
+    --configure)
+      CONFIGURE=1
+      shift
+      ;;
     *)
       SETUP_ARGS+=("$1")
       shift
@@ -42,7 +47,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Normalize version: accept "2.1.1" or "v2.1.1" — tags are always v-prefixed.
+# Normalize version: accept "2.1.2" or "v2.1.2" — tags are always v-prefixed.
 if [[ -n "$VERSION" && "$VERSION" != v* ]]; then
   VERSION="v${VERSION}"
 fi
@@ -93,7 +98,14 @@ case ":$PATH:" in
   *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' from any directory." ;;
 esac
 
-echo "Verify after setup with: juggernaut doctor --v2"
-echo "Next: juggernaut apply --v2"
-cd "$INSTALL_DIR"
-exec bash ./setup "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
+echo "Verify after install with: juggernaut doctor --v2"
+echo "Configure with one of:"
+echo "  juggernaut apply --v2 --auth=bedrock-api-key"
+echo "  juggernaut apply --v2 --auth=iam"
+
+if [[ "$CONFIGURE" == "1" ]]; then
+  cd "$INSTALL_DIR"
+  exec bash ./juggernaut apply --v2 "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
+elif [[ ${#SETUP_ARGS[@]} -gt 0 ]]; then
+  echo "Note: install arguments after --version were ignored. Use --configure to run apply during install." >&2
+fi

@@ -3,16 +3,17 @@
 #
 # Usage:
 #   irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.1
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.2
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
-#   .\install.ps1 -Version 2.1.1
+#   .\install.ps1 -Version 2.1.2
 #   .\install.ps1 -Latest
 
 param(
     [string]$Version = '',
     [switch]$Latest,
+    [switch]$Configure,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$SetupArgs
 )
 
@@ -20,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 if ($Latest) { $Version = '' }
 
-# Normalize version: accept "2.1.1" or "v2.1.1" - tags are always v-prefixed.
+# Normalize version: accept "2.1.2" or "v2.1.2" - tags are always v-prefixed.
 if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 
 $RepoUrl    = 'https://github.com/jpvelasco/juggernaut.git'
@@ -88,8 +89,15 @@ if (-not (($env:PATH -split ';') -contains $ShimDir)) {
 }
 Write-Host 'If PowerShell blocks first run scripts, run:'
 Write-Host '  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
-Write-Host 'Verify after setup with: juggernaut doctor --v2'
-Write-Host 'Next: juggernaut apply --v2'
+Write-Host 'Verify after install with: juggernaut doctor --v2'
+Write-Host 'Configure with one of:'
+Write-Host '  juggernaut apply --v2 --auth=bedrock-api-key'
+Write-Host '  juggernaut apply --v2 --auth=iam'
 
-Set-Location $InstallDir
-& .\setup-claude-bedrock.ps1 @SetupArgs
+if ($Configure) {
+    Set-Location $InstallDir
+    & .\juggernaut.ps1 apply --v2 @SetupArgs
+    exit $LASTEXITCODE
+} elseif ($SetupArgs.Count -gt 0) {
+    Write-Warning 'Install arguments after -Version were ignored. Use -Configure to run apply during install.'
+}
