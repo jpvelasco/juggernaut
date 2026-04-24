@@ -619,11 +619,11 @@ test_1m_context() {
     section "1M Context Windows"
 
     # Core suffix behavior
-    run_test "--1m-context appends [1m] to opus model" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
+    run_test "--1m-context keeps Opus model suffix-free" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
-    run_test "--1m-context opus model is claude-opus-4-7[1m]" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'claude-opus-4-7\[1m\]'"
+    run_test "--1m-context opus model is claude-opus-4-7" \
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'claude-opus-4-7'"
 
     run_test "--1m-context appends [1m] to sonnet model" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_SONNET_MODEL=' | grep -q '\[1m\]'"
@@ -634,8 +634,8 @@ test_1m_context() {
     run_test "--1m-context does NOT affect ANTHROPIC_MODEL" \
         "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -E '^export ANTHROPIC_MODEL=' | grep -q '\[1m\]'"
 
-    run_test "default opus model includes [1m] suffix" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
+    run_test "default opus model is suffix-free" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh bash --dry-run 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q '\[1m\]'"
 
     # Name and description updates
     run_test "--1m-context opus name contains 1m context (already default)" \
@@ -655,7 +655,7 @@ test_1m_context() {
 
     # Prefix combination
     run_test "--1m-context works with --model-prefix=us" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*\[1m\]'"
+        "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'ANTHROPIC_DEFAULT_OPUS_MODEL=' | grep -q 'us.anthropic.*claude-opus-4-7'"
 
     run_test "--1m-context + prefix: opus name contains 1m context" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --model-prefix=us --dry-run --force 2>&1 | grep 'OPUS_MODEL_NAME' | grep -qi '1m context'"
@@ -664,8 +664,8 @@ test_1m_context() {
     run_test "--1m-context persists in config comment" \
         "$SCRIPT_DIR/setup-claude-bedrock.sh bash --1m-context --dry-run --force 2>&1 | grep -q '# 1MContext: true'"
 
-    run_test "fish shell 1M context uses correct syntax" \
-        "$SCRIPT_DIR/setup-claude-bedrock.sh fish --1m-context --dry-run --force 2>&1 | grep -q 'set -gx ANTHROPIC_DEFAULT_OPUS_MODEL.*\[1m\]'"
+    run_test "fish shell 1M context keeps Opus suffix-free" \
+        "! $SCRIPT_DIR/setup-claude-bedrock.sh fish --1m-context --dry-run --force 2>&1 | grep 'set -gx ANTHROPIC_DEFAULT_OPUS_MODEL' | grep -q '\[1m\]'"
 
     # Help text
     run_test "help shows --1m-context" \

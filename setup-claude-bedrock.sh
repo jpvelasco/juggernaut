@@ -1522,17 +1522,16 @@ main() {
         # The prefix is reflected in the model IDs themselves.
     fi
 
-    # Apply 1M context: suffix model IDs, update names and descriptions (Opus & Sonnet only)
+    # Apply 1M context: Sonnet opt-in uses the Claude Code suffix. Opus 4.7 is native 1M
+    # on Bedrock and must stay on the official suffix-free model ID.
     if [[ "$USE_1M_CONTEXT" == true ]]; then
-        # Append [1m] suffix to Opus and Sonnet model IDs (idempotent)
-        for key in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
-            if [[ -n "${BEDROCK_CONFIG[$key]}" && "${BEDROCK_CONFIG[$key]}" != *"[1m]"* ]]; then
-                BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]}[1m]"
-            fi
-        done
+        # Append [1m] suffix to Sonnet model ID only (idempotent)
+        if [[ -n "${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL]}" && "${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL]}" != *"[1m]"* ]]; then
+            BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL]="${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL]}[1m]"
+        fi
 
         # Update names for 1M context — insert ", 1M Context" inside parens (idempotent, case-insensitive)
-        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
+        for key in ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
             local val="${BEDROCK_CONFIG[$key]}"
             local val_lower="${val,,}"
             if [[ -n "$val" && "$val_lower" != *"1m context"* ]]; then
@@ -1541,7 +1540,7 @@ main() {
         done
 
         # Update descriptions for 1M context — append (idempotent, case-insensitive)
-        for key in ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
+        for key in ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
             local desc="${BEDROCK_CONFIG[$key]}"
             local desc_lower="${desc,,}"
             if [[ -n "$desc" && "$desc_lower" != *"1m context"* ]]; then
@@ -1549,15 +1548,12 @@ main() {
             fi
         done
 
-        # Apply to custom opus/sonnet overrides if set (idempotent — skip if already suffixed)
-        if [[ -n "$CUSTOM_OPUS_MODEL" && "$CUSTOM_OPUS_MODEL" != "default" && ! "$CUSTOM_OPUS_MODEL" =~ \[1m\]$ ]]; then
-            CUSTOM_OPUS_MODEL="${CUSTOM_OPUS_MODEL}[1m]"
-        fi
+        # Apply to custom sonnet overrides if set (idempotent — skip if already suffixed)
         if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
             CUSTOM_SONNET_MODEL="${CUSTOM_SONNET_MODEL}[1m]"
         fi
     elif [[ "$EXPLICIT_NO_1M" == true ]]; then
-        # Strip [1m] from base config model IDs (Opus 4.7 defaults to [1m])
+        # Strip [1m] from base config model IDs for backward compatibility.
         for key in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
             if [[ "${BEDROCK_CONFIG[$key]}" == *"[1m]"* ]]; then
                 BEDROCK_CONFIG["$key"]="${BEDROCK_CONFIG[$key]%\[1m\]}"
