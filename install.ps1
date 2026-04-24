@@ -3,11 +3,11 @@
 #
 # Usage:
 #   irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.0.0
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.1
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
-#   .\install.ps1 -Version 2.0.0
+#   .\install.ps1 -Version 2.1.1
 #   .\install.ps1 -Latest
 
 param(
@@ -20,7 +20,7 @@ $ErrorActionPreference = 'Stop'
 
 if ($Latest) { $Version = '' }
 
-# Normalize version: accept "2.0.0" or "v2.0.0" - tags are always v-prefixed.
+# Normalize version: accept "2.1.1" or "v2.1.1" - tags are always v-prefixed.
 if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 
 $RepoUrl    = 'https://github.com/jpvelasco/juggernaut.git'
