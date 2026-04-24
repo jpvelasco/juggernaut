@@ -58,43 +58,60 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - AWS CLI configured (`aws configure` or SSO)
 
 **Install latest (always tracks main):**
+
 ```bash
 # Unix/macOS/Linux
 curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
+```
 
+```powershell
 # Windows PowerShell
 irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
 ```
 
 **Install a pinned version (recommended for stability):**
+
 ```bash
 # Unix/macOS/Linux
 curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.0
+```
 
+```powershell
 # Windows PowerShell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.0
 ```
 
 **Manual clone:**
+
 ```bash
 git clone --branch v2.1.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+
 export JUGGERNAUT_USE_V2=1
 ./juggernaut apply
 ```
 
+By default the installer uses the `main` branch (always latest). Pass `--version` to pin a specific release.
+
 ### Version Pinning
 
-By default, the installer clones the `main` branch (always latest). Pass `--version` to install a specific release tag instead:
+Pass `--version` to install a specific release tag:
 
 ```bash
 # Bash — accepts "2.1.0" or "v2.1.0"
 curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.0
+```
 
+```powershell
 # PowerShell — accepts "2.1.0" or "v2.1.0"
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.0
+```
 
+```bash
 # After downloading
 bash install.sh --version 2.1.0
+```
+
+```powershell
 .\install.ps1 -Version 2.1.0
 ```
 
@@ -109,6 +126,7 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 ## Commands
 
 Activate v2 permanently for your session:
+
 ```bash
 export JUGGERNAUT_USE_V2=1
 ```
@@ -158,23 +176,27 @@ First-time Anthropic model users must submit use case details:
 Ensure your AWS credentials are configured. Choose one method:
 
 **Option A: AWS CLI**
+
 ```bash
 aws configure
 ```
 
 **Option B: SSO Profile (Recommended)**
+
 ```bash
 aws sso login --profile=<your-profile-name>
 export AWS_PROFILE=your-profile-name
 ```
 
 **Option C: Access Keys**
+
 ```bash
 export AWS_ACCESS_KEY_ID=your-access-key-id
 export AWS_SECRET_ACCESS_KEY=your-secret-access-key
 ```
 
 Verify credentials:
+
 ```bash
 aws sts get-caller-identity
 ```
@@ -195,11 +217,13 @@ juggernaut doctor
 ```
 
 **Custom region (default: us-west-2):**
+
 ```bash
 juggernaut apply --region=us-east-1
 ```
 
 **Skip pre-flight dependency checks:**
+
 ```bash
 juggernaut apply --skip-preflight
 JUGGERNAUT_SKIP_PREFLIGHT=1 juggernaut apply   # via environment variable
@@ -210,11 +234,13 @@ JUGGERNAUT_SKIP_PREFLIGHT=1 juggernaut apply   # via environment variable
 Instead of IAM/SSO, you can use a Bedrock API key:
 
 **Interactive mode (recommended — secure):**
+
 ```bash
-juggernaut apply --auth=bedrock-api-key   # Prompts securely for key
+juggernaut apply --auth=bedrock-api-key
 ```
 
 **Inline mode (for CI/CD and scripting):**
+
 ```bash
 juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
 ```
@@ -224,9 +250,11 @@ juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
 `--auth=api-key` is accepted as a legacy compatibility alias. New v2 writes persist `auth.mode` as `bedrock-api-key`.
 
 **Secure keychain storage (optional):**
+
 Use `--storage=keychain` to store your API key in the OS keychain instead of your shell profile.
 
 **API Key Lifetime (AWS Bedrock):**
+
 | Type | Duration | Use Case |
 |------|----------|----------|
 | Short-term | Up to 12 hours | Production (recommended) |
@@ -392,17 +420,20 @@ Mantle
 ```
 
 ### Check environment variables:
+
 ```bash
 echo $CLAUDE_CODE_USE_BEDROCK
 echo $AWS_REGION
 ```
 
 ### Verify AWS credentials:
+
 ```bash
 aws sts get-caller-identity
 ```
 
 ### List available Bedrock models:
+
 ```bash
 aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 ```
@@ -479,6 +510,7 @@ See `iam-policy.json` for the complete policy.
 - Commands are saved to shell history
 
 **For CI/CD**, use secrets management:
+
 ```bash
 # GitHub Actions
 juggernaut apply --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
