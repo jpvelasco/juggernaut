@@ -75,6 +75,7 @@ $authExplicit = $PSBoundParameters.ContainsKey('Auth')
 $mantleExplicit = $PSBoundParameters.ContainsKey('Mantle') -or $PSBoundParameters.ContainsKey('MantleUrl')
 if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
 if ($Force) { $Yes = $true }
+$HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
 
 if ($NoShellFallback -and $ShellFallbackOnly) {
     Write-Error 'apply: -NoShellFallback and -ShellFallbackOnly are mutually exclusive'
@@ -112,9 +113,9 @@ $hasV2Block = Test-HasJuggernautBlock -Settings $existingSettings
 # ---------------------------------------------------------------------------
 if (-not $hasV2Block) {
     $v1Candidates = @(
-        (Join-Path $env:HOME '.bashrc'),
-        (Join-Path $env:HOME '.zshrc'),
-        (Join-Path $env:HOME '.config\fish\config.fish')
+        (Join-Path $HomeDir '.bashrc'),
+        (Join-Path $HomeDir '.zshrc'),
+        (Join-Path $HomeDir '.config\fish\config.fish')
     )
     foreach ($candidate in $v1Candidates) {
         if (Test-Path $candidate) {
@@ -277,7 +278,7 @@ $buildParams = @{
     MantleBaseUrl  = $MantleUrl
     ShellFallbackMode = $shellMode
     Scope          = $Scope
-    Version        = '2.1.2'
+    Version        = '2.1.3'
     BedrockConfigPath = $env:BEDROCK_CONFIG_PATH
 }
 if ($Model)       { $buildParams['Model']       = $Model }
@@ -309,7 +310,7 @@ if ($DryRun) {
     $mergedSettings | ConvertTo-Json -Depth 20
     Write-Host '-----------------------------------------'
     if ($shellMode -ne 'settings-only') {
-        Write-Host "Would also update shell profile (bash): $(Join-Path $env:HOME '.bashrc')"
+        Write-Host "Would also update shell profile (bash): $(Join-Path $HomeDir '.bashrc')"
     }
     Write-Host ''
     Write-Host '[dry-run] Done.'
@@ -338,7 +339,7 @@ if (-not $NoShellFallback) {
     # Windows: update PowerShell profile with Set-Gx-less export comment block.
     # For now we write the bash-style block to $HOME/.bashrc if it exists,
     # mirroring what the PS migrator does. Full PS profile_writer is Phase 4.
-    $profilePath = Join-Path $env:HOME '.bashrc'
+    $profilePath = Join-Path $HomeDir '.bashrc'
     if (Test-Path (Split-Path $profilePath -Parent)) {
         $blockContent = Build-ProfileWriterBlock `
             -Shell       'bash' `

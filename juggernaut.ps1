@@ -1,13 +1,24 @@
 # juggernaut.ps1 - v2 subcommand dispatcher (PowerShell).
 # Usage: juggernaut.ps1 [<subcommand>] [options]
 
-param(
-    [Parameter(Position=0)][string]$Subcommand = 'apply',
-    [Alias('v2')][switch]$UseV2,
-    [Parameter(ValueFromRemainingArguments=$true)][string[]]$RemainingArgs
-)
-
 $ErrorActionPreference = 'Stop'
+$rawArgs = @($args)
+$Subcommand = 'apply'
+$UseV2 = $false
+$RemainingArgs = @()
+
+if ($rawArgs.Count -gt 0) {
+    $firstArg = [string]$rawArgs[0]
+    if (($firstArg -notlike '-*') -or ($firstArg -in @('--version','-v','--help','-h','help'))) {
+        $Subcommand = $firstArg
+        if ($rawArgs.Count -gt 1) {
+            $RemainingArgs = @($rawArgs[1..($rawArgs.Count - 1)])
+        }
+    } else {
+        $RemainingArgs = $rawArgs
+    }
+}
+
 $v2Active = ($env:JUGGERNAUT_USE_V2 -eq '1') -or $UseV2
 $filteredArgs = @()
 foreach ($arg in $RemainingArgs) {
@@ -20,6 +31,61 @@ foreach ($arg in $RemainingArgs) {
 $subcommandArgs = $filteredArgs
 
 $PSScriptRoot_ = $PSScriptRoot
+
+function Convert-GnuStyleArgs {
+    param([string[]]$InputArgs)
+    $converted = @{}
+    for ($i = 0; $i -lt $InputArgs.Count; $i++) {
+        $arg = [string]$InputArgs[$i]
+        switch -Regex ($arg) {
+            '^--([^=]+)=(.*)$' {
+                $rawName = $Matches[1]
+                $value = $Matches[2]
+                $name = $rawName -replace '-', ''
+                $converted[$name] = $value
+                continue
+            }
+            '^--(.+)$' {
+                $rawName = $Matches[1]
+                $name = $rawName -replace '-', ''
+                if (($i + 1) -lt $InputArgs.Count -and ([string]$InputArgs[$i + 1]) -notlike '-*') {
+                    $converted[$name] = [string]$InputArgs[$i + 1]
+                    $i++
+                } else {
+                    $converted[$name] = $true
+                }
+                continue
+            }
+            '^-([^=]+)=(.*)$' {
+                $rawName = $Matches[1]
+                $value = $Matches[2]
+                $name = $rawName -replace '-', ''
+                $converted[$name] = $value
+                continue
+            }
+            '^-([^-].*)$' {
+                $rawName = $Matches[1]
+                if ($rawName -eq 'h') { $name = 'Help' }
+                elseif ($rawName -eq 'v') { $name = 'Version' }
+                else { $name = $rawName -replace '-', '' }
+                if (($i + 1) -lt $InputArgs.Count -and ([string]$InputArgs[$i + 1]) -notlike '-*') {
+                    $converted[$name] = [string]$InputArgs[$i + 1]
+                    $i++
+                } else {
+                    $converted[$name] = $true
+                }
+                continue
+            }
+            default {
+                if (-not $converted.ContainsKey('RemainingArgs')) {
+                    $converted['RemainingArgs'] = @()
+                }
+                $converted['RemainingArgs'] += $arg
+            }
+        }
+    }
+    return $converted
+}
 
 function Show-Help {
     @'
@@ -57,6 +123,7 @@ if (-not $v2Active) {
 }
 
 $env:JUGGERNAUT_USE_V2 = '1'
+$subcommandArgs = Convert-GnuStyleArgs -InputArgs $subcommandArgs
 
 switch ($Subcommand) {
     'apply' {

@@ -65,7 +65,7 @@ Describe 'install.ps1 robustness' {
 
     It 'can run doctor through the launcher entrypoint after a clean install' {
         $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-inst-h-" + [Guid]::NewGuid().ToString('N'))
-        $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-inst-w-" + [Guid]::NewGuid().ToString('N'))
+        $tmpWork = Join-Path $tmpHome 'work'
         New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
         New-Item -ItemType Directory -Path $tmpWork -Force | Out-Null
 

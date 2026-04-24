@@ -57,40 +57,40 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
 - AWS CLI configured (`aws configure` or SSO)
 
-**Install v2.1.2:**
+**Install v2.1.3:**
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.sh | bash -s -- --version v2.1.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.3/install.sh | bash -s -- --version v2.1.3
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.ps1))) -Version v2.1.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.3/install.ps1))) -Version v2.1.3
 ```
 
 **Install a pinned version (recommended for stability):**
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.sh | bash -s -- --version v2.1.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.3/install.sh | bash -s -- --version v2.1.3
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.ps1))) -Version v2.1.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.3/install.ps1))) -Version v2.1.3
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v2.1.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v2.1.3 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 
 export JUGGERNAUT_USE_V2=1
 ./juggernaut apply
 ```
 
-The pinned installer commands above install v2.1.2 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
+The pinned installer commands above install v2.1.3 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
 
 **Configure after install:**
 
@@ -110,24 +110,24 @@ Use the pinned release tag URLs for a stable install:
 
 ```bash
 # Bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.sh | bash -s -- --version v2.1.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.3/install.sh | bash -s -- --version v2.1.3
 ```
 
 ```powershell
 # PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.2/install.ps1))) -Version v2.1.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.3/install.ps1))) -Version v2.1.3
 ```
 
 ```bash
 # After downloading
-bash install.sh --version 2.1.2
+bash install.sh --version 2.1.3
 ```
 
 ```powershell
-.\install.ps1 -Version 2.1.2
+.\install.ps1 -Version 2.1.3
 ```
 
-Both scripts normalize the version automatically — `2.1.2` and `v2.1.2` both work.
+Both scripts normalize the version automatically — `2.1.3` and `v2.1.3` both work.
 
 The v2.1 installers repair executable bits, create a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and print the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
 
