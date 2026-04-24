@@ -1530,23 +1530,19 @@ main() {
             BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL]="${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL]}[1m]"
         fi
 
-        # Update names for 1M context — insert ", 1M Context" inside parens (idempotent, case-insensitive)
-        for key in ANTHROPIC_DEFAULT_SONNET_MODEL_NAME; do
-            local val="${BEDROCK_CONFIG[$key]}"
-            local val_lower="${val,,}"
-            if [[ -n "$val" && "$val_lower" != *"1m context"* ]]; then
-                BEDROCK_CONFIG["$key"]="${val/)/, 1M Context)}"
-            fi
-        done
+        # Update Sonnet name for 1M context — insert ", 1M Context" inside parens (idempotent, case-insensitive)
+        local sonnet_name="${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL_NAME]}"
+        local sonnet_name_lower="${sonnet_name,,}"
+        if [[ -n "$sonnet_name" && "$sonnet_name_lower" != *"1m context"* ]]; then
+            BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL_NAME]="${sonnet_name/)/, 1M Context)}"
+        fi
 
-        # Update descriptions for 1M context — append (idempotent, case-insensitive)
-        for key in ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION; do
-            local desc="${BEDROCK_CONFIG[$key]}"
-            local desc_lower="${desc,,}"
-            if [[ -n "$desc" && "$desc_lower" != *"1m context"* ]]; then
-                BEDROCK_CONFIG["$key"]="$desc, 1M Context"
-            fi
-        done
+        # Update Sonnet description for 1M context — append (idempotent, case-insensitive)
+        local sonnet_desc="${BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION]}"
+        local sonnet_desc_lower="${sonnet_desc,,}"
+        if [[ -n "$sonnet_desc" && "$sonnet_desc_lower" != *"1m context"* ]]; then
+            BEDROCK_CONFIG[ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION]="$sonnet_desc, 1M Context"
+        fi
 
         # Apply to custom sonnet overrides if set (idempotent — skip if already suffixed)
         if [[ -n "$CUSTOM_SONNET_MODEL" && "$CUSTOM_SONNET_MODEL" != "default" && ! "$CUSTOM_SONNET_MODEL" =~ \[1m\]$ ]]; then
