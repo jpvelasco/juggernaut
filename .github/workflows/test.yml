@@ -23,7 +23,7 @@ jobs:
         run: |
           shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
           shellcheck juggernaut commands/apply.sh lib/keychain.sh lib/profile_writer.sh lib/schema.sh lib/config_manager.sh lib/migrator.sh
-          shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh
+          shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh tests/v2/test_install.sh
 
       - name: Verify version sync
         run: |
@@ -147,6 +147,10 @@ jobs:
           bash ./tests/v2/test_migrator.sh
           bash ./tests/v2/test_keychain.sh
           bash ./tests/v2/test_apply.sh
+          bash ./tests/v2/test_show.sh
+          bash ./tests/v2/test_doctor.sh
+          bash ./tests/v2/test_uninstall.sh
+          bash ./tests/v2/test_install.sh
 
   test-windows-powershell:
     name: Test on Windows (PowerShell)

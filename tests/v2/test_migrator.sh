@@ -70,7 +70,7 @@ assert_eq "legacyEnv.source" "$(printf '%s' "$BLOCK" | jq -r '.legacyEnv.source'
 section "v1_apikey_profile — API key, plaintext in profile, us-west-2"
 BLOCK="$(build_from_fixture "$FIXTURES/v1_apikey_profile.sh")"
 
-assert_eq "auth.mode"    "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"    "api-key"
+assert_eq "auth.mode"    "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"    "bedrock-api-key"
 assert_eq "auth.region"  "$(printf '%s' "$BLOCK" | jq -r '.auth.region')"  "us-west-2"
 assert_eq "auth.storage" "$(printf '%s' "$BLOCK" | jq -r '.auth.storage')" "profile"
 assert_false "opusplan"  "$(printf '%s' "$BLOCK" | jq -r '.opusplan')"
@@ -81,7 +81,7 @@ assert_false "opusplan"  "$(printf '%s' "$BLOCK" | jq -r '.opusplan')"
 section "v1_apikey_keychain — API key, keychain storage, us-east-1"
 BLOCK="$(build_from_fixture "$FIXTURES/v1_apikey_keychain.sh")"
 
-assert_eq "auth.mode"    "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"    "api-key"
+assert_eq "auth.mode"    "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"    "bedrock-api-key"
 assert_eq "auth.storage" "$(printf '%s' "$BLOCK" | jq -r '.auth.storage')" "keychain"
 assert_eq "auth.region"  "$(printf '%s' "$BLOCK" | jq -r '.auth.region')"  "us-east-1"
 

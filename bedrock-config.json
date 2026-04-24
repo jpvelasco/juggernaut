@@ -1,10 +1,10 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "opus": "global.anthropic.claude-opus-4-7[1m]",
+    "opus": "global.anthropic.claude-opus-4-7",
     "sonnet": "global.anthropic.claude-sonnet-4-6",
     "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
@@ -13,7 +13,7 @@
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
     "ANTHROPIC_MODEL": "global.anthropic.claude-sonnet-4-6",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-7[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-7",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_SUBAGENT_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -62,9 +62,10 @@
   },
   "notes": {
     "fast_model": "Fast/background model defaults to Haiku 4.5 using ANTHROPIC_DEFAULT_HAIKU_MODEL (Anthropic recommendation for cost & speed on subagents, exploration, etc.). ANTHROPIC_SMALL_FAST_MODEL was removed because it is officially deprecated. See: https://code.claude.com/docs/en/model-config",
-    "1m_context": "Opus 4.7 defaults to [1m] (1M context is native to the model). Sonnet 4.6 requires --1m-context to opt in. Claude Code strips the [1m] suffix before sending to Bedrock.",
+    "1m_context": "Opus 4.7 and Sonnet 4.6 have native 1M context windows in Amazon Bedrock; default model IDs stay suffix-free. The --1m-context flag records the user's context preference for Juggernaut-managed settings.",
     "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Opus 4.7 defaults to xhigh per Anthropic recommendation. Override with --effort=low|medium|high|xhigh.",
     "subagent_model": "CLAUDE_CODE_SUBAGENT_MODEL controls the model for background subagents independently of ANTHROPIC_DEFAULT_HAIKU_MODEL. Defaults to Haiku for cost efficiency.",
-    "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config"
+    "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config",
+    "source": "Bedrock IDs and context windows verified against AWS Bedrock model cards: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-6.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-4-5.html. Claude Code model env vars verified against: https://docs.anthropic.com/en/docs/claude-code/model-config"
   }
 }

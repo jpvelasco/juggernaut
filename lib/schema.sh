@@ -33,8 +33,18 @@ schema_default_env_from_bedrock_config() {
   jq -c '.environment' "${BEDROCK_CONFIG_PATH:-bedrock-config.json}"
 }
 
+schema_normalize_auth_mode() {
+  case "${1:-}" in
+    api-key|bedrock-api-key) echo "bedrock-api-key" ;;
+    iam|"") echo "${1:-iam}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 # schema_new_juggernaut_block
 # Builds a fresh juggernaut block from flags/detected state.
+# "api-key" is accepted only as a legacy read alias. New writes must emit
+# "bedrock-api-key" so the stored schema is explicit about Bedrock API-key auth.
 # Inputs via env vars (caller sets): J_PROVIDER, J_USE_MANTLE, J_MANTLE_BASE_URL,
 #   J_MODEL, J_OPUS_MODEL, J_SONNET_MODEL, J_HAIKU_MODEL, J_SUBAGENT_MODEL,
 #   J_USE_1M, J_OPUSPLAN, J_EFFORT, J_AUTH_MODE, J_STORAGE, J_REGION,
@@ -51,19 +61,20 @@ schema_new_juggernaut_block() {
   local use_mantle="${J_USE_MANTLE:-true}"
   local mantle_base_url="${J_MANTLE_BASE_URL:-}"
   local model="${J_MODEL:-global.anthropic.claude-sonnet-4-6}"
-  local opus_model="${J_OPUS_MODEL:-global.anthropic.claude-opus-4-7[1m]}"
+  local opus_model="${J_OPUS_MODEL:-global.anthropic.claude-opus-4-7}"
   local sonnet_model="${J_SONNET_MODEL:-global.anthropic.claude-sonnet-4-6}"
   local haiku_model="${J_HAIKU_MODEL:-global.anthropic.claude-haiku-4-5-20251001-v1:0}"
   local subagent_model="${J_SUBAGENT_MODEL:-$haiku_model}"
   local use_1m="${J_USE_1M:-true}"
   local opusplan="${J_OPUSPLAN:-false}"
   local effort="${J_EFFORT:-xhigh}"
-  local auth_mode="${J_AUTH_MODE:-iam}"
+  local auth_mode
+  auth_mode="$(schema_normalize_auth_mode "${J_AUTH_MODE:-iam}")"
   local storage="${J_STORAGE:-keychain}"
   local region="${J_REGION:-$(schema_default_region)}"
   local shell_mode="${J_SHELL_FALLBACK_MODE:-both}"
   local scope="${J_SCOPE:-user}"
-  local version="${J_VERSION:-2.0.0}"
+  local version="${J_VERSION:-2.1.0}"
 
   # Assemble env map: start from bedrock-config.json defaults, then overlay.
   local env_json
@@ -160,12 +171,13 @@ schema_validate() {
     fi
   done
 
-  # Enum: auth.mode
+  # Enum: auth.mode. "api-key" is legacy read-only compatibility; builders
+  # rewrite it to "bedrock-api-key" on the next apply/migrate.
   local auth_mode
   auth_mode="$(echo "$block" | jq -r '.auth.mode // ""')"
   case "$auth_mode" in
-    iam|api-key) ;;
-    *) errors+="  - auth.mode must be 'iam' or 'api-key' (got: '$auth_mode')"$'\n' ;;
+    iam|api-key|bedrock-api-key) ;;
+    *) errors+="  - auth.mode must be 'iam' or 'bedrock-api-key' (got: '$auth_mode')"$'\n' ;;
   esac
 
   # Enum: auth.storage

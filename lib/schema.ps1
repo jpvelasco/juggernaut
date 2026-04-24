@@ -28,6 +28,17 @@ function Test-SchemaSupportedRegion {
     return $regions -contains $Region
 }
 
+function ConvertTo-SchemaAuthMode {
+    param([string]$AuthMode)
+    switch ($AuthMode) {
+        'api-key' { 'bedrock-api-key' }
+        'bedrock-api-key' { 'bedrock-api-key' }
+        'iam' { 'iam' }
+        '' { 'iam' }
+        default { $AuthMode }
+    }
+}
+
 function New-JuggernautBlock {
     [CmdletBinding()]
     param(
@@ -35,23 +46,26 @@ function New-JuggernautBlock {
         [bool]$UseMantle = $true,
         [string]$MantleBaseUrl = '',
         [string]$Model = 'global.anthropic.claude-sonnet-4-6',
-        [string]$OpusModel = 'global.anthropic.claude-opus-4-7[1m]',
+        [string]$OpusModel = 'global.anthropic.claude-opus-4-7',
         [string]$SonnetModel = 'global.anthropic.claude-sonnet-4-6',
         [string]$HaikuModel = 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
         [string]$SubagentModel = '',
         [bool]$Use1MContext = $true,
         [bool]$OpusPlan = $false,
         [ValidateSet('low','medium','high','xhigh','max')][string]$EffortLevel = 'xhigh',
-        [ValidateSet('iam','api-key')][string]$AuthMode = 'iam',
+        # "api-key" is accepted only as a legacy read alias. New writes emit
+        # "bedrock-api-key" so persisted config is explicit about Bedrock auth.
+        [ValidateSet('iam','api-key','bedrock-api-key')][string]$AuthMode = 'iam',
         [ValidateSet('profile','keychain')][string]$Storage = 'keychain',
         [string]$Region = '',
         [ValidateSet('both','settings-only','shell-only')][string]$ShellFallbackMode = 'both',
         [ValidateSet('user','project')][string]$Scope = 'user',
-        [string]$Version = '2.0.0',
+        [string]$Version = '2.1.0',
         [string]$BedrockConfigPath
     )
 
     if ([string]::IsNullOrEmpty($Region)) { $Region = Get-SchemaDefaultRegion }
+    $AuthMode = ConvertTo-SchemaAuthMode -AuthMode $AuthMode
     if ([string]::IsNullOrEmpty($SubagentModel)) { $SubagentModel = $HaikuModel }
 
     $bedrock = if ($BedrockConfigPath) { Get-SchemaBedrockConfig -Path $BedrockConfigPath } else { Get-SchemaBedrockConfig }
@@ -138,7 +152,8 @@ function Test-JuggernautBlock {
     }
 
     $authMode = $Block.auth.mode
-    if ($authMode -notin @('iam','api-key')) { $errors.Add("auth.mode must be 'iam' or 'api-key' (got: '$authMode')") }
+    # "api-key" remains valid for reading legacy blocks; builders rewrite it.
+    if ($authMode -notin @('iam','api-key','bedrock-api-key')) { $errors.Add("auth.mode must be 'iam' or 'bedrock-api-key' (got: '$authMode')") }
 
     $storage = $Block.auth.storage
     if ($storage -notin @('profile','keychain')) { $errors.Add("auth.storage must be 'profile' or 'keychain' (got: '$storage')") }

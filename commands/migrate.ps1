@@ -9,8 +9,12 @@ param(
     [switch]$Rollback,
     [switch]$Clean,
     [switch]$DryRun,
+    [switch]$Yes,
+    [switch]$Force,
     [ValidateSet('user','project')][string]$Scope = 'user'
 )
+
+if ($Force) { $Yes = $true }
 
 # Feature flag gate — v2 commands are dormant until explicitly enabled.
 if ($env:JUGGERNAUT_USE_V2 -ne '1') {
@@ -24,6 +28,18 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $RepoRoot 'lib/migrator.ps1')
 
 $SettingsPath = Resolve-SettingsTarget -Scope $Scope
+
+if ($Clean -and -not $DryRun -and -not $Yes) {
+    if ([Console]::IsInputRedirected) {
+        Write-Error 'migrate: -Clean requires confirmation. Re-run with -Clean -Yes.'
+        exit 1
+    }
+    $answer = Read-Host 'Remove migrated v1 profile blocks after migration? [y/N]'
+    if ($answer -notmatch '^(y|yes)$') {
+        Write-Host 'migrate: cleanup skipped. Re-run with -Clean -Yes to confirm.'
+        $Clean = $false
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Rollback

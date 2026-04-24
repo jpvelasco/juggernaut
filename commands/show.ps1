@@ -90,6 +90,16 @@ function Show-Kv {
     Write-Output ("{0}{1}: {2}" -f $prefix, $Label, (Show-Value $Value))
 }
 
+function Show-Auth {
+    param([AllowNull()][string]$AuthMode)
+    switch ($AuthMode) {
+        'api-key' { 'Bedrock API key' }
+        'bedrock-api-key' { 'Bedrock API key' }
+        'iam' { 'IAM' }
+        default { Show-Value $AuthMode }
+    }
+}
+
 function Get-ShowBlock {
     param([AllowNull()]$Block)
     if (-not $Block) { return $null }
@@ -101,7 +111,7 @@ function Get-ShowBlock {
 
     [ordered]@{
         Scope        = $Block.meta.scope
-        AuthMode     = $Block.auth.mode
+        AuthMode     = Show-Auth $Block.auth.mode
         Region       = $Block.auth.region
         Model        = $Block.model
         Effort       = $Block.effortLevel

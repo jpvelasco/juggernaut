@@ -106,9 +106,10 @@ doctor_credentials() {
   local auth_mode storage
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   storage="$(jq -r '.auth.storage // ""' <<<"$block")"
-  doctor_kv "Auth mode" "$auth_mode"
+  [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
   case "$auth_mode" in
     iam)
+      doctor_kv "Auth" "IAM"
       if [[ -n "${AWS_PROFILE:-}" ]]; then
         doctor_ok
         doctor_kv "Details" "AWS_PROFILE is set"
@@ -120,20 +121,20 @@ doctor_credentials() {
         doctor_kv "Details" "no IAM credentials in environment"
       fi
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-        DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-        doctor_kv "Warning" "AWS_BEARER_TOKEN_BEDROCK is set while auth mode is iam"
+        doctor_kv "Note" "AWS_BEARER_TOKEN_BEDROCK is set but this config uses IAM"
       fi
       ;;
-    api-key)
+    bedrock-api-key)
+      doctor_kv "Auth" "Bedrock API key"
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
+        doctor_kv "Source" "AWS_BEARER_TOKEN_BEDROCK"
         doctor_ok
-        doctor_kv "Details" "AWS_BEARER_TOKEN_BEDROCK is set"
       elif [[ "$storage" == "keychain" ]] && keychain_available 2>/dev/null && [[ -n "$(keychain_get 2>/dev/null || true)" ]]; then
+        doctor_kv "Source" "system keychain"
         doctor_ok
-        doctor_kv "Details" "keychain entry present"
       elif [[ -n "$profile" ]] && doctor_shell_has_key_assignment "$profile" "AWS_BEARER_TOKEN_BEDROCK"; then
+        doctor_kv "Source" "shell profile"
         doctor_ok
-        doctor_kv "Details" "shell profile contains API key"
       else
         doctor_fail
         doctor_kv "Details" "no API key found in env, keychain, or shell profile"
@@ -171,14 +172,19 @@ doctor_region_models() {
 
 doctor_mantle() {
   local block="$1"
-  local use_mantle mantle_url
+  local use_mantle mantle_url auth_mode
   use_mantle="$(jq -r '.useMantle // false' <<<"$block")"
   mantle_url="$(jq -r '.mantle.baseUrl // ""' <<<"$block")"
+  auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
+  [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
   if [[ "$use_mantle" != "true" ]]; then
     doctor_kv "Status" "disabled"
     return 0
   fi
   doctor_kv "Status" "enabled"
+  if [[ "$auth_mode" == "bedrock-api-key" ]]; then
+    doctor_kv "Reason" "Bedrock API key detected"
+  fi
   [[ -n "$mantle_url" ]] && doctor_kv "URL" "$mantle_url"
   if [[ "$(jq -r '.env.CLAUDE_CODE_USE_MANTLE // ""' <<<"$block")" != "1" ]]; then
     DOCTOR_WARNS=$((DOCTOR_WARNS + 1))

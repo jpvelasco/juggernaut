@@ -69,15 +69,15 @@ irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | ie
 **Install a pinned version (recommended for stability):**
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.0.0
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.0
 
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.0.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.0
 ```
 
 **Manual clone:**
 ```bash
-git clone --branch v2.0.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v2.1.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 export JUGGERNAUT_USE_V2=1
 ./juggernaut apply
 ```
@@ -87,18 +87,24 @@ export JUGGERNAUT_USE_V2=1
 By default, the installer clones the `main` branch (always latest). Pass `--version` to install a specific release tag instead:
 
 ```bash
-# Bash — accepts "2.0.0" or "v2.0.0"
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.0.0
+# Bash — accepts "2.1.0" or "v2.1.0"
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.0
 
-# PowerShell — accepts "2.0.0" or "v2.0.0"
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.0.0
+# PowerShell — accepts "2.1.0" or "v2.1.0"
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.0
 
 # After downloading
-bash install.sh --version 2.0.0
-.\install.ps1 -Version 2.0.0
+bash install.sh --version 2.1.0
+.\install.ps1 -Version 2.1.0
 ```
 
-Both scripts normalize the version automatically — `2.0.0` and `v2.0.0` both work.
+Both scripts normalize the version automatically — `2.1.0` and `v2.1.0` both work.
+
+The v2.1 installers also repair executable bits, create a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and print the exact verification command. On Windows, first-run script policy friction can usually be resolved with:
+
+```powershell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
 
 ## Commands
 
@@ -119,11 +125,22 @@ juggernaut uninstall   # Safely remove all Juggernaut configuration
 
 | Command | Description |
 |---------|-------------|
-| `apply` | Write Juggernaut config to `settings.json`. Supports `--scope=user\|project`, `--dry-run`, `--force`, `--auth=iam\|api-key`, `--1m-context`, `--opusplan`, `--effort`, `--mantle`, and more. |
+| `apply` | Write Juggernaut config to `settings.json`. Supports `--scope=user\|project`, `--dry-run`, `--yes`, `--auth=iam\|bedrock-api-key`, `--1m-context`, `--opusplan`, `--effort`, `--mantle`, and more. |
 | `show` | Print the current Juggernaut block from both user and project scopes. |
 | `doctor` | Read-only diagnostics — checks credentials, region, models, Mantle status, and drift between settings.json and the shell fallback. |
-| `migrate` | Migrate a v1 shell profile block to settings.json. Supports `--dry-run`, `--clean`, `--rollback`. |
+| `migrate` | Migrate a v1 shell profile block to settings.json. Supports `--dry-run`, `--yes`, `--clean`, `--rollback`. |
 | `uninstall` | Remove the Juggernaut block from settings.json (all scopes by default), shell profiles, and OS keychain. Supports `--dry-run`, `--force`, `--scope=user\|project`. |
+
+### v1 Migration
+
+`juggernaut apply --v2` no longer migrates a v1 shell profile block silently. In an interactive terminal it asks before writing; in non-interactive use it exits with a clear message unless you pass `--yes`. Use `--dry-run` to preview the proposed migration without writing anything.
+
+```bash
+juggernaut apply --v2 --dry-run
+juggernaut apply --v2 --yes
+juggernaut migrate --dry-run
+juggernaut migrate --yes
+```
 
 ## Detailed Setup Steps
 
@@ -194,15 +211,17 @@ Instead of IAM/SSO, you can use a Bedrock API key:
 
 **Interactive mode (recommended — secure):**
 ```bash
-juggernaut apply --auth=api-key   # Prompts securely for key
+juggernaut apply --auth=bedrock-api-key   # Prompts securely for key
 ```
 
 **Inline mode (for CI/CD and scripting):**
 ```bash
-juggernaut apply --auth=api-key --bedrock-key=br-xxxxxxxxxxxx
+juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
 ```
 
 > **Note:** In non-interactive environments (CI/CD, piped input, cron), you must use `--bedrock-key` as the script cannot prompt for input.
+
+`--auth=api-key` is accepted as a legacy compatibility alias. New v2 writes persist `auth.mode` as `bedrock-api-key`.
 
 **Secure keychain storage (optional):**
 Use `--storage=keychain` to store your API key in the OS keychain instead of your shell profile.
@@ -239,26 +258,26 @@ Key environment variables set:
 | Tier | Model | Global CRIS Profile |
 |------|-------|-------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
-| **Opus** | Claude Opus 4.7 | `global.anthropic.claude-opus-4-7[1m]` |
+| **Opus** | Claude Opus 4.7 | `global.anthropic.claude-opus-4-7` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
 ### Model Picker (`/model`)
 
 | Picker Entry | Bedrock Model ID | Description |
 |-------------|-----------------|-------------|
-| Opus 4.7 (New flagship – 1M context) | `global.anthropic.claude-opus-4-7[1m]` | Most capable — 1M context, high-res vision, stronger agentic reasoning |
+| Opus 4.7 (New flagship, native 1M context) | `global.anthropic.claude-opus-4-7` | Most capable — 1M context, high-res vision, stronger agentic reasoning |
 | Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Best balance of speed and intelligence |
 | Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest model for everyday tasks and subagents |
 
 ### 1M Context Windows
 
-Opus 4.7 defaults to 1M context. Enable it for Sonnet too with:
+Opus 4.7 uses its native 1M context window without a suffix. Enable 1M context for Sonnet with:
 
 ```bash
 juggernaut apply --1m-context
 ```
 
-This appends `[1m]` to Sonnet's model ID. Claude Code strips the suffix before sending to Bedrock — no changes needed on the AWS side. To revert:
+This records the 1M-context preference in the Juggernaut settings block while keeping the official Bedrock model ID intact. To revert:
 
 ```bash
 juggernaut apply --no-1m-context
@@ -281,7 +300,7 @@ Juggernaut sets `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` for Opus and 
 Override individual model IDs:
 
 ```bash
-juggernaut apply --opus-model=us.anthropic.claude-opus-4-7[1m]
+juggernaut apply --opus-model=us.anthropic.claude-opus-4-7
 juggernaut apply --sonnet-model=eu.anthropic.claude-sonnet-4-6
 juggernaut apply --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
 juggernaut apply --model-prefix=us    # All models use us.anthropic.* prefix
@@ -357,6 +376,19 @@ Run diagnostics first:
 ```bash
 export JUGGERNAUT_USE_V2=1
 juggernaut doctor
+```
+
+For a bearer-token setup, the credential section should look like:
+
+```text
+Credentials
+  Auth: Bedrock API key
+  Source: AWS_BEARER_TOKEN_BEDROCK
+  Status: OK
+
+Mantle
+  Status: enabled
+  Reason: Bedrock API key detected
 ```
 
 ### Check environment variables:
@@ -437,7 +469,7 @@ See `iam-policy.json` for the complete policy.
 
 ### API Key Authentication
 
-**Interactive mode (`juggernaut apply --auth=api-key`)** is secure:
+**Interactive mode (`juggernaut apply --auth=bedrock-api-key`)** is secure:
 - Key entered with hidden input (not displayed while typing)
 - Not visible in `ps aux` or process listings
 - Not saved to shell history
@@ -449,7 +481,7 @@ See `iam-policy.json` for the complete policy.
 **For CI/CD**, use secrets management:
 ```bash
 # GitHub Actions
-juggernaut apply --auth=api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
+juggernaut apply --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
 ```
 
 ### Shell Profile Security

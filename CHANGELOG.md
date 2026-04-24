@@ -2,6 +2,27 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.1.0] - 2026-04-23
+
+### Added
+
+- **Installer launchers** — Unix installers repair executable bits and create/update `~/.local/bin/juggernaut`; Windows installers create user-local PowerShell and `.cmd` shims.
+- **Bedrock API-key auth mode** — v2 now persists `auth.mode = "bedrock-api-key"` and treats legacy `"api-key"` as a read-only compatibility alias that is rewritten on the next apply or migrate.
+- **Bearer-token detection** — `AWS_BEARER_TOKEN_BEDROCK` is detected as a first-class auth source, with Mantle enabled by default when no explicit Mantle preference is supplied.
+- **Installer acceptance tests** — Bash and Pester coverage now checks installer permissions, launcher creation, and post-install messaging.
+
+### Changed
+
+- **Migration confirmation** — `apply --v2` no longer silently migrates v1 shell profile blocks. Interactive runs prompt, non-interactive runs require `--yes`, and `--dry-run` writes nothing.
+- **Model defaults** — Opus now defaults to `global.anthropic.claude-opus-4-7` without a `[1m]` suffix because Opus 4.7 has native 1M context on Bedrock.
+- **Doctor/show output** — credentials, Mantle, auth labels, and source details are calmer and consistent across Bash and PowerShell.
+- **Version bumped to 2.1.0** in `VERSION` and `bedrock-config.json`.
+
+### Fixed
+
+- **Codacy static-analysis finding** — removed the unused `active_path` assignment in `commands/show.sh`.
+- **IAM false warnings** — bearer-token users no longer receive IAM credential warnings under Bedrock API-key auth; mixed credentials are reported as informational notes.
+
 ## [2.0.0] - 2026-04-21
 
 ### Added
@@ -32,4 +53,5 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.0
 [2.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.0.0

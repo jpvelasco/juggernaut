@@ -33,7 +33,7 @@ Describe 'New-JuggernautBlock — IAM defaults' {
     It 'effortLevel = xhigh'   { $script:block.effortLevel   | Should -Be 'xhigh' }
     It 'opusplan = false'      { $script:block.opusplan       | Should -BeFalse }
     It 'meta.managedBy = juggernaut' { $script:block.meta.managedBy | Should -Be 'juggernaut' }
-    It 'meta.version = 2.0.0'  { $script:block.meta.version  | Should -Be '2.0.0' }
+    It 'meta.version = 2.1.0'  { $script:block.meta.version  | Should -Be '2.1.0' }
     It 'env.AWS_REGION = us-east-1' {
         $script:block.env['AWS_REGION'] | Should -Be 'us-east-1'
     }
@@ -289,20 +289,61 @@ Describe 'New-JuggernautBlock — 1M context default' {
 }
 
 # ---------------------------------------------------------------------------
-# New-JuggernautBlock — api-key auth
+# New-JuggernautBlock — Bedrock API-key auth
 # ---------------------------------------------------------------------------
-Describe 'New-JuggernautBlock — api-key auth mode' {
-    It 'auth.mode = api-key' {
+Describe 'New-JuggernautBlock — Bedrock API-key auth mode' {
+    It 'rewrites legacy api-key to bedrock-api-key' {
         $b = New-JuggernautBlock -AuthMode 'api-key' -Region 'us-east-1' `
                                  -BedrockConfigPath $script:BedrockConfigPath
-        $b.auth.mode | Should -Be 'api-key'
+        $b.auth.mode | Should -Be 'bedrock-api-key'
     }
-    It 'env does not contain CLAUDE_CODE_USE_BEDROCK when api-key' {
+    It 'env retains CLAUDE_CODE_USE_BEDROCK when using Bedrock API key' {
         $b = New-JuggernautBlock -AuthMode 'api-key' -Region 'us-east-1' `
                                  -BedrockConfigPath $script:BedrockConfigPath
         # CLAUDE_CODE_USE_BEDROCK is still set in Bedrock env regardless of auth mode.
         # This test verifies the block is structurally valid.
         $b.env | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'apply.ps1 — bearer token auth detection' {
+    BeforeAll {
+        $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("jug-bearer-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpDir '.claude') -Force | Out-Null
+        $script:bearerHome = $tmpDir
+
+        $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' `
+                                     -BedrockConfigPath $script:BedrockConfigPath
+        $native = Get-NativeKeysFromJuggernautBlock -Block $block
+        $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys $native
+        Write-SettingsAtomic -Path (Join-Path (Join-Path $tmpDir '.claude') 'settings.json') -Content $merged
+
+        $oldHome = $env:HOME
+        $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        try {
+            $env:HOME = $tmpDir
+            $env:AWS_BEARER_TOKEN_BEDROCK = 'br-test-token'
+            $output = & (Join-Path $script:repoRoot 'commands\apply.ps1') -DryRun -NoShellFallback 2>$null | Out-String
+            $script:bearerBlock = ($output | ConvertFrom-Json)
+
+            $explicit = & (Join-Path $script:repoRoot 'commands\apply.ps1') -Auth 'iam' -DryRun -NoShellFallback 2>$null | Out-String
+            $script:explicitIamBlock = ($explicit | ConvertFrom-Json)
+        } finally {
+            $env:HOME = $oldHome
+            if ($null -eq $oldBearer) { Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue }
+            else { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+        }
+    }
+    AfterAll {
+        Remove-Item $script:bearerHome -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'uses bedrock-api-key when bearer token is present and auth is not explicit' {
+        $script:bearerBlock.juggernaut.auth.mode | Should -Be 'bedrock-api-key'
+        $script:bearerBlock.juggernaut.useMantle | Should -BeTrue
+    }
+    It 'keeps explicit IAM even when bearer token is present' {
+        $script:explicitIamBlock.juggernaut.auth.mode | Should -Be 'iam'
     }
 }
 
@@ -345,7 +386,7 @@ Describe 'Invoke-MigratorRun — region from v1 AWS_REGION' {
 }
 
 # ---------------------------------------------------------------------------
-# Implicit migration with project scope
+# Explicit migration with project scope
 # ---------------------------------------------------------------------------
 Describe 'Invoke-MigratorRun — project scope with v1 profile' {
     BeforeAll {
@@ -361,7 +402,7 @@ Describe 'Invoke-MigratorRun — project scope with v1 profile' {
         Push-Location $script:mig4Project
         try {
             $env:HOME = $script:mig4Home
-            & (Join-Path $script:repoRoot 'commands\apply.ps1') -Auth 'iam' -Scope 'project' -NoShellFallback | Out-Null
+            & (Join-Path $script:repoRoot 'commands\apply.ps1') -Auth 'iam' -Scope 'project' -NoShellFallback -Yes | Out-Null
         } finally {
             Pop-Location
             $env:HOME = $oldHome

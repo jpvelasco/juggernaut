@@ -58,5 +58,33 @@ if (Test-Path $InstallDir) {
 }
 
 Write-Host "Installed to $InstallDir"
+
+$ShimDir = Join-Path $HOME '.local\bin'
+New-Item -ItemType Directory -Path $ShimDir -Force | Out-Null
+
+$ShimPs1 = Join-Path $ShimDir 'juggernaut.ps1'
+$ShimCmd = Join-Path $ShimDir 'juggernaut.cmd'
+$TargetPs1 = Join-Path $InstallDir 'juggernaut.ps1'
+
+@"
+param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)
+& '$TargetPs1' @Args
+exit `$LASTEXITCODE
+"@ | Set-Content -Path $ShimPs1 -Encoding utf8
+
+@"
+@echo off
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$ShimPs1" %*
+"@ | Set-Content -Path $ShimCmd -Encoding ascii
+
+Write-Host "Launcher written to $ShimCmd"
+if (-not (($env:PATH -split ';') -contains $ShimDir)) {
+    Write-Host "Note: add $ShimDir to PATH to run 'juggernaut' from any directory."
+}
+Write-Host 'If PowerShell blocks first run scripts, run:'
+Write-Host '  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
+Write-Host 'Verify after setup with: juggernaut doctor --v2'
+Write-Host 'Next: juggernaut apply --v2'
+
 Set-Location $InstallDir
 & .\setup-claude-bedrock.ps1 @SetupArgs

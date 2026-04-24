@@ -24,6 +24,7 @@ fi
 ROLLBACK=false
 CLEAN=false
 DRY_RUN=false
+YES=false
 SCOPE="user"
 
 for arg in "$@"; do
@@ -31,18 +32,20 @@ for arg in "$@"; do
     --rollback) ROLLBACK=true ;;
     --clean)    CLEAN=true ;;
     --dry-run)  DRY_RUN=true ;;
+    --yes|--force|-f) YES=true ;;
     --project)  SCOPE="project" ;;
     --help|-h)
       cat <<'EOF'
 juggernaut migrate - migrate v1 profile block to settings.json
 
-Usage: juggernaut migrate [--dry-run] [--clean] [--rollback] [--project]
+Usage: juggernaut migrate [--dry-run] [--clean] [--rollback] [--project] [--yes]
 
 Options:
   --dry-run   Show what would be done without writing anything
   --clean     Remove profile block(s) after a successful migration
   --rollback  Restore most recent settings.json backup
   --project   Migrate to project scope (./.claude/settings.json)
+  --yes       Confirm destructive cleanup prompts
 EOF
       exit 0 ;;
     *) echo "migrate: unknown option '$arg'" >&2; exit 1 ;;
@@ -67,6 +70,19 @@ fi
 if [[ ! -f "$BEDROCK_CONFIG" ]]; then
   echo "migrate: bedrock-config.json not found at $BEDROCK_CONFIG" >&2
   exit 1
+fi
+
+if [[ "$CLEAN" == true && "$DRY_RUN" != true && "$YES" != true ]]; then
+  if [[ -t 0 ]]; then
+    read -r -p "Remove migrated v1 profile blocks after migration? [y/N] " _answer
+    case "$_answer" in
+      y|Y|yes|YES) ;;
+      *) echo "migrate: cleanup skipped. Re-run with --clean --yes to confirm." >&2; CLEAN=false ;;
+    esac
+  else
+    echo "migrate: --clean requires confirmation. Re-run with --clean --yes." >&2
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------

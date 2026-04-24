@@ -41,7 +41,7 @@ export SHELL="/bin/zsh"
 set +e
 
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
-  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.0.0 \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   USER_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
@@ -51,7 +51,7 @@ if [[ "$OUTPUT" == *"Scope Awareness"* &&
       "$OUTPUT" == *"Active Scope: user takes precedence for this session"* &&
       "$OUTPUT" == *"User Scope (active)"* &&
       "$OUTPUT" == *"Scope: user"* &&
-      "$OUTPUT" == *"Auth: iam"* &&
+      "$OUTPUT" == *"Auth: IAM"* &&
       "$OUTPUT" == *"Region: us-west-2"* &&
       "$OUTPUT" == *"Project Scope"* &&
       "$OUTPUT" == *"Status: No Juggernaut block"* &&
@@ -66,7 +66,7 @@ fi
 
 section "human-readable output without shell fallback"
 J_AUTH_MODE=api-key J_REGION=eu-west-1 J_EFFORT=xhigh J_STORAGE=keychain \
-  J_USE_MANTLE=true J_OPUSPLAN=true J_SCOPE=user J_VERSION=2.0.0 \
+  J_USE_MANTLE=true J_OPUSPLAN=true J_SCOPE=user J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=settings-only \
   USER_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
@@ -74,7 +74,7 @@ config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut
 export SHELL="/bin/bash"
 OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
 if [[ "$OUTPUT" == *"User Scope (active)"* &&
-      "$OUTPUT" == *"Auth: api-key"* &&
+      "$OUTPUT" == *"Auth: Bedrock API key"* &&
       "$OUTPUT" == *"Region: eu-west-1"* &&
       "$OUTPUT" == *"Opus Plan: enabled"* &&
       "$OUTPUT" == *"Mantle: enabled"* &&
@@ -90,7 +90,7 @@ fi
 section "shows both scopes when both exist"
 mkdir -p "$TMP_WORK/.claude"
 J_AUTH_MODE=iam J_REGION=ap-southeast-1 J_EFFORT=xhigh J_STORAGE=profile \
-  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=project J_VERSION=2.0.0 \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=project J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=settings-only \
   PROJECT_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_WORK/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"

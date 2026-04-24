@@ -111,7 +111,7 @@ Describe 'show.ps1' {
             $actualText = (($output -replace '\\', '/') -replace "`r`n", "`n").TrimEnd("`r", "`n")
             foreach ($needle in @(
                 'User Scope (active)',
-                'Auth: api-key',
+                'Auth: Bedrock API key',
                 'Region: eu-west-1',
                 'Opus Plan: enabled',
                 'Mantle: enabled',

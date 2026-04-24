@@ -24,7 +24,9 @@ set +e
 # Defaults
 # ---------------------------------------------------------------------------
 DRY_RUN=false
+J_YES=false
 J_AUTH_MODE=""          # Populated from existing block or flag; default applied below.
+J_AUTH_EXPLICIT=false
 J_API_KEY=""
 J_PRESERVE_KEY=false
 J_STORAGE=""            # Populated from existing block or platform default.
@@ -38,6 +40,7 @@ J_EFFORT=""
 J_OPUSPLAN=""           # Tri-state: ""=unset, "true", "false"
 J_1M_CONTEXT=""
 J_USE_MANTLE=false
+J_MANTLE_EXPLICIT=false
 J_MANTLE_URL=""
 J_SCOPE="user"
 J_NO_SHELL_FALLBACK=false
@@ -55,8 +58,8 @@ juggernaut apply — configure Claude Code for Amazon Bedrock
 Usage: juggernaut apply [options]
 
 Options:
-  --auth=iam|api-key       Authentication mode (auto-detected on re-run)
-  --bedrock-key=KEY        Bedrock API key (api-key mode; prompts if omitted)
+  --auth=iam|bedrock-api-key  Authentication mode (legacy: api-key)
+  --bedrock-key=KEY        Bedrock API key (prompts if omitted)
   --preserve-key           Reuse existing key from env/keychain
   --storage=profile|keychain  API key storage (default: keychain on macOS/Win)
   --region=REGION          AWS region (default: us-west-2)
@@ -75,7 +78,7 @@ Options:
   --no-shell-fallback      Write settings.json only
   --shell-fallback-only    Write profile block only
   --dry-run                Preview without writing
-  --force, -f              Skip confirmation prompts
+  --yes, --force, -f       Confirm migration prompts
   --skip-preflight         Skip dependency checks
   --help, -h               Show this help
 
@@ -88,9 +91,9 @@ EOF
 for arg in "$@"; do
   case "$arg" in
     --dry-run)              DRY_RUN=true ;;
-    --force|-f)             ;;   # accepted for UX; confirmation prompts not yet implemented
+    --yes|--force|-f)       J_YES=true ;;
     --skip-preflight)       J_SKIP_PREFLIGHT=true ;;
-    --auth=*)               J_AUTH_MODE="${arg#--auth=}" ;;
+    --auth=*)               J_AUTH_MODE="${arg#--auth=}"; J_AUTH_EXPLICIT=true ;;
     --bedrock-key=*)        J_API_KEY="${arg#--bedrock-key=}" ;;
     --preserve-key)         J_PRESERVE_KEY=true ;;
     --storage=*)            J_STORAGE="${arg#--storage=}"; J_STORAGE_EXPLICIT=true ;;
@@ -104,8 +107,8 @@ for arg in "$@"; do
     --no-opusplan)          J_OPUSPLAN=false ;;
     --1m-context)           J_1M_CONTEXT=true ;;
     --no-1m-context)        J_1M_CONTEXT=false ;;
-    --mantle)               J_USE_MANTLE=true ;;
-    --mantle-url=*)         J_MANTLE_URL="${arg#--mantle-url=}"; J_USE_MANTLE=true ;;
+    --mantle)               J_USE_MANTLE=true; J_MANTLE_EXPLICIT=true ;;
+    --mantle-url=*)         J_MANTLE_URL="${arg#--mantle-url=}"; J_USE_MANTLE=true; J_MANTLE_EXPLICIT=true ;;
     --scope=*)              J_SCOPE="${arg#--scope=}" ;;
     --no-shell-fallback)    J_NO_SHELL_FALLBACK=true ;;
     --shell-fallback-only)  J_SHELL_FALLBACK_ONLY=true ;;
@@ -118,6 +121,10 @@ for arg in "$@"; do
       echo "apply: unknown option '$arg' (ignored)" >&2 ;;
   esac
 done
+
+case "$J_AUTH_MODE" in
+  api-key) J_AUTH_MODE="bedrock-api-key" ;;
+esac
 
 # Validate scope
 case "$J_SCOPE" in
@@ -172,7 +179,7 @@ if config_has_juggernaut_block "$EXISTING_JSON"; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Implicit migration — if no v2 block, look for v1 profile blocks.
+# Step 2: Explicit migration — if no v2 block, look for v1 profile blocks.
 # ---------------------------------------------------------------------------
 if [[ "$HAS_V2_BLOCK" == "false" ]]; then
   V1_CANDIDATES=(
@@ -182,15 +189,32 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
   )
   for candidate in "${V1_CANDIDATES[@]}"; do
     if migrator_has_v1_block "$candidate" 2>/dev/null; then
-      echo "Juggernaut found an existing v1 profile block in $candidate." >&2
-      echo "  We are migrating it to ~/.claude/settings.json, Claude Code's native config." >&2
+      echo "Juggernaut found an existing v1 profile block:" >&2
+      echo "  $candidate" >&2
+      echo "Migration writes the equivalent v2 settings to:" >&2
+      echo "  $SETTINGS_PATH" >&2
+      echo "The old profile block remains as a fallback unless you later run migrate --clean." >&2
+      if [[ "$DRY_RUN" == "true" ]]; then
+        echo "[dry-run] Would migrate $candidate to $SETTINGS_PATH" >&2
+        break
+      fi
+      if [[ "$J_YES" != "true" ]]; then
+        if [[ -t 0 ]]; then
+          read -r -p "Migrate this v1 block now? [y/N] " _answer
+          case "$_answer" in
+            y|Y|yes|YES) ;;
+            *) echo "apply: migration skipped. Re-run with --yes to confirm non-interactively." >&2; exit 1 ;;
+          esac
+        else
+          echo "apply: migration requires confirmation. Re-run with --yes, or run juggernaut migrate --dry-run first." >&2
+          exit 1
+        fi
+      fi
       if migrator_run "$candidate" "$SETTINGS_PATH" "$BEDROCK_CONFIG_PATH"; then
         # Re-read after migration.
         EXISTING_JSON="$(config_read "$SETTINGS_PATH")"
         HAS_V2_BLOCK=true
-        echo "  Migration complete. Your new settings are now in $SETTINGS_PATH." >&2
-        echo "  Your shell profile was left in place as a fallback, so nothing is lost." >&2
-        echo "  When you are ready, you can remove the old block with: juggernaut migrate --clean" >&2
+        echo "Migration complete. Settings written to: $SETTINGS_PATH" >&2
       else
         echo "  Migration encountered an error — continuing with defaults. Your profile block is unchanged." >&2
       fi
@@ -208,6 +232,7 @@ if [[ "$HAS_V2_BLOCK" == "true" ]]; then
 
   # Carry over stored values for fields not provided on CLI.
   [[ -z "$J_AUTH_MODE" ]]  && J_AUTH_MODE="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.mode // ""')"
+  [[ "$J_AUTH_MODE" == "api-key" ]] && J_AUTH_MODE="bedrock-api-key"
   [[ -z "$J_STORAGE" ]]    && J_STORAGE="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.storage // ""')"
   [[ -z "$J_REGION" ]]     && J_REGION="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.region // ""')"
   [[ -z "$J_MODEL" ]]      && J_MODEL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.model // ""')"
@@ -217,7 +242,7 @@ if [[ "$HAS_V2_BLOCK" == "true" ]]; then
   [[ -z "$J_EFFORT" ]]     && J_EFFORT="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.effortLevel // ""')"
   [[ -z "$J_OPUSPLAN" ]]   && J_OPUSPLAN="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.opusplan | tostring')"
   [[ -z "$J_1M_CONTEXT" ]] && J_1M_CONTEXT="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.context.use1MContext | tostring')"
-  if [[ "$J_USE_MANTLE" == "false" ]]; then
+  if [[ "$J_MANTLE_EXPLICIT" == "false" && "$J_USE_MANTLE" == "false" ]]; then
     J_USE_MANTLE="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.useMantle | tostring')"
   fi
   [[ -z "$J_MANTLE_URL" ]] && J_MANTLE_URL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.mantle.baseUrl // ""')"
@@ -226,6 +251,13 @@ fi
 # ---------------------------------------------------------------------------
 # Step 4: Apply hard defaults for anything still unset.
 # ---------------------------------------------------------------------------
+if [[ "$J_AUTH_EXPLICIT" == "false" && -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
+  J_AUTH_MODE="bedrock-api-key"
+  J_PRESERVE_KEY=true
+  if [[ "$J_MANTLE_EXPLICIT" == "false" ]]; then
+    J_USE_MANTLE=true
+  fi
+fi
 : "${J_AUTH_MODE:=iam}"
 : "${J_REGION:=$(jq -r '.defaults.region // "us-west-2"' "$BEDROCK_CONFIG_PATH" 2>/dev/null || echo "us-west-2")}"
 : "${J_EFFORT:=xhigh}"
@@ -246,8 +278,8 @@ fi
 
 # Validate auth mode.
 case "$J_AUTH_MODE" in
-  iam|api-key) ;;
-  *) echo "apply: --auth must be 'iam' or 'api-key' (got: '$J_AUTH_MODE')" >&2; exit 1 ;;
+  iam|bedrock-api-key) ;;
+  *) echo "apply: --auth must be 'iam' or 'bedrock-api-key' (got: '$J_AUTH_MODE')" >&2; exit 1 ;;
 esac
 
 # Validate effort.
@@ -264,11 +296,11 @@ if [[ "$J_SKIP_PREFLIGHT" != "true" && "$J_AUTH_MODE" == "iam" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5: Resolve API key for api-key mode.
+# Step 5: Resolve API key for Bedrock API-key mode.
 # ---------------------------------------------------------------------------
 API_KEY_EXPR=""   # Shell expression to embed in profile block; empty for IAM.
 
-if [[ "$J_AUTH_MODE" == "api-key" ]]; then
+if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
   if [[ "$J_PRESERVE_KEY" == "true" ]]; then
     if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
       J_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
@@ -329,7 +361,7 @@ export J_MANTLE_BASE_URL="$J_MANTLE_URL"
 export J_OPUSPLAN
 export J_USE_1M="$J_1M_CONTEXT"
 export J_SCOPE
-export J_VERSION="2.0.0"
+export J_VERSION="2.1.0"
 
 # Only export model overrides if explicitly set (schema uses bedrock-config.json defaults otherwise).
 [[ -n "$J_MODEL" ]]        && export J_MODEL
@@ -415,7 +447,11 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "Juggernaut v2 apply complete."
-echo "  Auth:     $J_AUTH_MODE"
+if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
+  echo "  Auth:     Bedrock API key"
+else
+  echo "  Auth:     IAM"
+fi
 echo "  Region:   $J_REGION"
 echo "  Effort:   $J_EFFORT"
 echo "  Opusplan: $J_OPUSPLAN"
