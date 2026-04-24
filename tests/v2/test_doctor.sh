@@ -44,7 +44,7 @@ set +e
 write_scope_settings() {
   local scope="$1" target="$2" region="$3"
   J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
-    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION=2.0.0 \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION=2.1.0 \
     J_SHELL_FALLBACK_MODE=settings-only \
     BLOCK="$(schema_new_juggernaut_block)"
   config_write_atomic "$target" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
@@ -96,6 +96,26 @@ else
   fail "expected clean summary"
   printf '%s\n' "$OUTPUT" >&2
 fi
+
+section "bedrock API-key auth reports bearer-token source without IAM warning"
+API_HOME="$(mktemp -d)"
+mkdir -p "$API_HOME/.claude"
+J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.1.0 \
+  J_SHELL_FALLBACK_MODE=settings-only \
+  API_BLOCK="$(schema_new_juggernaut_block)"
+config_write_atomic "$API_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$API_BLOCK" "$(schema_derive_native_keys "$API_BLOCK")")"
+OUTPUT="$(HOME="$API_HOME" AWS_BEARER_TOKEN_BEDROCK=br-test AWS_PROFILE=also-set bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"Auth: Bedrock API key"* &&
+      "$OUTPUT" == *"Source: AWS_BEARER_TOKEN_BEDROCK"* &&
+      "$OUTPUT" == *"Reason: Bedrock API key detected"* &&
+      "$OUTPUT" != *"is set while auth mode is iam"* ]]; then
+  pass
+else
+  fail "expected bearer-token credentials output without IAM warning"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$API_HOME"
 
 section "reports native drift"
 tmp_json="$TMP_HOME/.claude/settings.json.tmp"

@@ -53,8 +53,8 @@ Subcommands:
   uninstall   Remove Juggernaut configuration
 
 Options (apply):
-  --auth=iam|api-key       Authentication mode (default: iam)
-  --bedrock-key=KEY        Bedrock API key (api-key mode)
+  --auth=iam|bedrock-api-key  Authentication mode (default: iam; legacy: api-key)
+  --bedrock-key=KEY        Bedrock API key (bedrock-api-key mode)
   --preserve-key           Reuse existing key from env/keychain
   --storage=profile|keychain  API key storage (default: keychain on macOS/Windows)
   --region=REGION          AWS region (default: us-west-2)
@@ -73,7 +73,7 @@ Options (apply):
   --no-shell-fallback      Write settings.json only, skip profile block
   --shell-fallback-only    Write profile block only, skip settings.json
   --dry-run                Preview changes without writing files
-  --force, -f              Skip confirmation prompts
+  --yes, --force, -f       Confirm migration prompts
   --version, -v            Show version
   --help, -h               Show this help message
 

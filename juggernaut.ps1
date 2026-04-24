@@ -1,4 +1,4 @@
-# juggernaut.ps1 — v2 subcommand dispatcher (PowerShell).
+# juggernaut.ps1 - v2 subcommand dispatcher (PowerShell).
 # Usage: juggernaut.ps1 [<subcommand>] [options]
 
 param(
@@ -23,7 +23,7 @@ $PSScriptRoot_ = $PSScriptRoot
 
 function Show-Help {
     @'
-Juggernaut v2 — Claude Code Bedrock configurator
+Juggernaut v2 - Claude Code Bedrock configurator
 
 Usage: juggernaut.ps1 <subcommand> [options]
 
@@ -31,7 +31,7 @@ Subcommands:
   apply       Configure Claude Code to use Amazon Bedrock (default)
   migrate     Migrate a v1 profile block to settings.json
   show        Print current Juggernaut configuration
-  doctor      Verify configuration and connectivity (not yet implemented)
+  doctor      Verify configuration and credentials
   uninstall   Remove Juggernaut configuration
 
 Run 'juggernaut.ps1 apply --help' for apply-specific options.

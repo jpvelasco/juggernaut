@@ -140,7 +140,7 @@ profile_writer_build_block() {
   [[ -n "$effort_level" ]] && block+="# EffortLevel: $effort_level"$'\n'
 
   # Unset conflicting auth vars
-  if [[ "$auth_mode" == "api-key" ]]; then
+  if [[ "$auth_mode" == "api-key" || "$auth_mode" == "bedrock-api-key" ]]; then
     if [[ "$shell" == "fish" ]]; then
       block+="set -e AWS_ACCESS_KEY_ID 2>/dev/null"$'\n'
       block+="set -e AWS_SECRET_ACCESS_KEY 2>/dev/null"$'\n'
@@ -181,7 +181,7 @@ profile_writer_build_block() {
   fi
 
   # API key expression (api-key mode only)
-  if [[ "$auth_mode" == "api-key" && -n "$api_key_expr" ]]; then
+  if [[ ( "$auth_mode" == "api-key" || "$auth_mode" == "bedrock-api-key" ) && -n "$api_key_expr" ]]; then
     if [[ "$shell" == "fish" ]]; then
       block+="$syntax AWS_BEARER_TOKEN_BEDROCK $api_key_expr"$'\n'
     else

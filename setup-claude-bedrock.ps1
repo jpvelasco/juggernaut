@@ -35,7 +35,7 @@ param(
 
 if ($V2 -or $env:JUGGERNAUT_USE_V2 -eq '1') {
     $env:JUGGERNAUT_USE_V2 = '1'
-    Write-Host "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." -ForegroundColor DarkYellow
+    Write-Host "[v2] Juggernaut v2.0 enabled - currently dormant, v1 is still active." -ForegroundColor DarkYellow
 }
 
 # Track if parameters were explicitly provided by the user
@@ -52,9 +52,9 @@ $EffortExplicit = $PSBoundParameters.ContainsKey('Effort')
 
 $ErrorActionPreference = "Stop"
 
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 # Load Configuration from JSON
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigFile = Join-Path $ScriptDir "bedrock-config.json"
@@ -68,9 +68,9 @@ if (Test-Path $ConfigFile) {
     }
 }
 
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 # Helpers
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 
 function ConvertFrom-SecureStringPlainText {
     param([SecureString]$Secure)
@@ -378,7 +378,7 @@ if (-not $StorageExplicit -and $Storage -eq "profile") {
     # On Windows, Credential Manager is always available
     $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if (-not ($profileContent -match "CLAUDE_CODE_USE_BEDROCK")) {
-        # New install — default to keychain on Windows
+        # New install - default to keychain on Windows
         $Storage = "keychain"
     }
 }
@@ -441,9 +441,9 @@ $ValidRegions = if ($Config -and $Config.regions) {
     )
 }
 
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 # Keychain Functions (Windows Credential Manager)
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 
 $KeychainTarget = "juggernaut-bedrock"
 
@@ -535,8 +535,8 @@ if ($Help) {
     Write-Host "  -HaikuModel <ID>   Custom Haiku model (use 'default' to reset)"
     Write-Host "  -Global            Use global inference profiles (default)"
     Write-Host "  -ModelPrefix <PFX> Custom model prefix (e.g., 'eu', 'ap')"
-    Write-Host "  -OneM              Enable 1M token context window (Opus & Sonnet only)"
-    Write-Host "  -NoOneM            Disable 1M context (revert to standard ~200K)"
+    Write-Host "  -OneM              Enable 1M token context window for Sonnet (Opus 4.7 is native 1M)"
+    Write-Host "  -NoOneM            Disable 1M context for Sonnet"
     Write-Host "  -Force             Overwrite existing configuration without prompting"
     Write-Host "  -SkipPreflight     Skip dependency checks (also: `$env:JUGGERNAUT_SKIP_PREFLIGHT=1)"
     Write-Host "  -DryRun            Preview changes without modifying files"
@@ -583,7 +583,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
             exit 1
         }
     } elseif (-not $AuthExplicit) {
-        # Auth mode was auto-detected from existing config — try to reuse key automatically
+        # Auth mode was auto-detected from existing config - try to reuse key automatically
         $existingKey = [Environment]::GetEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK")
         if (-not [string]::IsNullOrEmpty($existingKey)) {
             $BedrockKey = $existingKey
@@ -679,36 +679,27 @@ if (-not [string]::IsNullOrEmpty($ModelPrefix)) {
     # The prefix is reflected in the model IDs themselves.
 }
 
-# Apply 1M context (Opus & Sonnet only)
+# Apply 1M context. Sonnet uses Claude Code's suffix; Opus 4.7 is native 1M on Bedrock.
 if ($OneM) {
-    # Append [1m] suffix (idempotent)
-    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL")) {
-        $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop -and $prop.Value -notmatch '\[1m\]') {
-            $prop.Value = "$($prop.Value)[1m]"
-        }
+    # Append [1m] suffix to Sonnet only (idempotent)
+    $sonnetProp = $Config.environment.PSObject.Properties["ANTHROPIC_DEFAULT_SONNET_MODEL"]
+    if ($sonnetProp -and $sonnetProp.Value -notmatch '\[1m\]') {
+        $sonnetProp.Value = "$($sonnetProp.Value)[1m]"
     }
 
-    # Update names for 1M context — insert ", 1M Context" inside parens (idempotent)
-    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME")) {
-        $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = $prop.Value -replace '\)', ', 1M Context)'
-        }
+    # Update Sonnet name for 1M context (idempotent)
+    $sonnetNameProp = $Config.environment.PSObject.Properties["ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"]
+    if ($sonnetNameProp -and $sonnetNameProp.Value -notlike '*1M Context*') {
+        $sonnetNameProp.Value = $sonnetNameProp.Value -replace '\)', ', 1M Context)'
     }
 
-    # Update descriptions for 1M context — append (idempotent)
-    foreach ($key in @("ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION", "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION")) {
-        $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = "$($prop.Value), 1M Context"
-        }
+    # Update Sonnet description for 1M context (idempotent)
+    $sonnetDescriptionProp = $Config.environment.PSObject.Properties["ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"]
+    if ($sonnetDescriptionProp -and $sonnetDescriptionProp.Value -notlike '*1M Context*') {
+        $sonnetDescriptionProp.Value = "$($sonnetDescriptionProp.Value), 1M Context"
     }
 
-    # Apply to custom overrides (idempotent - skip if already suffixed)
-    if (-not [string]::IsNullOrEmpty($OpusModel) -and $OpusModel -ne "default") {
-        if ($OpusModel -notmatch '\[1m\]$') { $OpusModel = "$OpusModel[1m]" }
-    }
+    # Apply to custom Sonnet overrides (idempotent - skip if already suffixed)
     if (-not [string]::IsNullOrEmpty($SonnetModel) -and $SonnetModel -ne "default") {
         if ($SonnetModel -notmatch '\[1m\]$') { $SonnetModel = "$SonnetModel[1m]" }
     }
@@ -804,7 +795,7 @@ if ($Auth -eq "api-key") {
         $retrievalCmd = Get-KeychainRetrievalCommand
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = $retrievalCmd`n"
     } else {
-        # Store directly in profile — single-quote to prevent backtick expansion
+        # Store directly in profile - single-quote to prevent backtick expansion
         $escapedKey = $BedrockKey -replace "'", "''"
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = '$escapedKey'`n"
     }

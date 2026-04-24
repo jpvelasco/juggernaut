@@ -86,17 +86,17 @@ $profilePath = Get-DoctorProfilePath
 
 Write-Output 'Juggernaut doctor'
 
-# ── User Scope ───────────────────────────────────────────────────────────────
+# -- User Scope ----------------------------------------------------------------
 Write-Output ''
 Write-Output 'User Scope'
 Write-DoctorScopeBlock -Path $userPath -Settings $userSettings
 
-# ── Project Scope ─────────────────────────────────────────────────────────────
+# -- Project Scope -------------------------------------------------------------
 Write-Output ''
 Write-Output 'Project Scope'
 Write-DoctorScopeBlock -Path $projectPath -Settings $projectSettings
 
-# ── Active Scope ──────────────────────────────────────────────────────────────
+# -- Active Scope --------------------------------------------------------------
 Write-Output ''
 Write-Output 'Active Scope'
 if ($activeScope) {
@@ -115,22 +115,22 @@ elseif ($checkScope -eq 'project') { $checkSettings = $projectSettings }
 if ($checkSettings -and (Test-HasJuggernautBlock -Settings $checkSettings)) {
     $checkBlock = Get-JuggernautBlockFromSettings -Settings $checkSettings
 
-    # ── Credentials ─────────────────────────────────────────────────────────────
+    # -- Credentials ------------------------------------------------------------
     Write-Output ''
     Write-Output 'Credentials'
     Write-DoctorCredentials -Block $checkBlock -ProfilePath $profilePath
 
-    # ── Region & Models ──────────────────────────────────────────────────────────
+    # -- Region & Models --------------------------------------------------------
     Write-Output ''
     Write-Output 'Region & Models'
     Write-DoctorRegionModels -Block $checkBlock
 
-    # ── Mantle ───────────────────────────────────────────────────────────────────
+    # -- Mantle -----------------------------------------------------------------
     Write-Output ''
     Write-Output 'Mantle'
     Write-DoctorMantle -Block $checkBlock
 
-    # ── Drift ────────────────────────────────────────────────────────────────────
+    # -- Drift ------------------------------------------------------------------
     Write-Output ''
     Write-Output 'Drift'
     Write-DoctorDrift -Settings $checkSettings -Block $checkBlock -ProfilePath $profilePath

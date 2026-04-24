@@ -1,4 +1,4 @@
-# lib/profile_writer.ps1 — Shell profile block write/update/detect for Juggernaut v2.
+# lib/profile_writer.ps1 - Shell profile block write/update/detect for Juggernaut v2.
 # PowerShell mirror of lib/profile_writer.sh. Requires PowerShell 5.1+.
 
 $script:ProfileWriterBegin = '# BEGIN: Claude Code Bedrock Configuration'
@@ -103,7 +103,7 @@ function Build-ProfileWriterBlock {
     if ($EffortLevel) { [void]$sb.AppendLine("# EffortLevel: $EffortLevel") }
 
     # Unset conflicting auth vars
-    if ($AuthMode -eq 'api-key') {
+    if ($AuthMode -in @('api-key','bedrock-api-key')) {
         if ($Shell -eq 'fish') {
             [void]$sb.AppendLine('set -e AWS_ACCESS_KEY_ID 2>/dev/null')
             [void]$sb.AppendLine('set -e AWS_SECRET_ACCESS_KEY 2>/dev/null')
@@ -149,7 +149,7 @@ function Build-ProfileWriterBlock {
         if ($MantleUrl) { [void]$sb.AppendLine((& $line 'ANTHROPIC_BEDROCK_MANTLE_BASE_URL' $MantleUrl)) }
     }
 
-    if ($AuthMode -eq 'api-key' -and $ApiKeyExpr) {
+    if ($AuthMode -in @('api-key','bedrock-api-key') -and $ApiKeyExpr) {
         if ($Shell -eq 'fish') {
             [void]$sb.AppendLine("$syntax AWS_BEARER_TOKEN_BEDROCK $ApiKeyExpr")
         } else {

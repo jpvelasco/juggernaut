@@ -124,9 +124,10 @@ function Write-DoctorCredentials {
     param([Parameter(Mandatory)]$Block, [AllowNull()][string]$ProfilePath)
     $authMode = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
     $storage = Get-DoctorNestedProp -Object $Block -Path @('auth','storage')
-    Write-Output "Auth mode: $authMode"
+    if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
     switch ($authMode) {
         'iam' {
+            Write-Output 'Auth: IAM'
             if ($env:AWS_PROFILE) {
                 Write-Output 'Status: OK'
                 Write-Output 'Details: AWS_PROFILE is set'
@@ -139,20 +140,20 @@ function Write-DoctorCredentials {
                 Write-Output 'Details: no IAM credentials in environment'
             }
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
-                $script:DoctorWarns += 1
-                Write-Output 'Warning: AWS_BEARER_TOKEN_BEDROCK is set while auth mode is iam'
+                Write-Output 'Note: AWS_BEARER_TOKEN_BEDROCK is set but this config uses IAM'
             }
         }
-        'api-key' {
+        'bedrock-api-key' {
+            Write-Output 'Auth: Bedrock API key'
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
+                Write-Output 'Source: AWS_BEARER_TOKEN_BEDROCK'
                 Write-Output 'Status: OK'
-                Write-Output 'Details: AWS_BEARER_TOKEN_BEDROCK is set'
             } elseif ($storage -eq 'keychain' -and (Test-KeychainAvailable) -and (Get-KeychainEntry)) {
+                Write-Output 'Source: system keychain'
                 Write-Output 'Status: OK'
-                Write-Output 'Details: keychain entry present'
             } elseif ($ProfilePath -and (Test-DoctorShellHasKeyAssignment -ProfilePath $ProfilePath -Key 'AWS_BEARER_TOKEN_BEDROCK')) {
+                Write-Output 'Source: shell profile'
                 Write-Output 'Status: OK'
-                Write-Output 'Details: shell profile contains API key'
             } else {
                 $script:DoctorFails += 1
                 Write-Output 'Status: FAIL'
@@ -200,11 +201,14 @@ function Write-DoctorMantle {
     param([Parameter(Mandatory)]$Block)
     $useMantle = Get-DoctorProp -Object $Block -Name 'useMantle'
     $mantleUrl = Get-DoctorNestedProp -Object $Block -Path @('mantle','baseUrl')
+    $authMode = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
+    if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
     if (-not $useMantle) {
         Write-Output 'Status: disabled'
         return
     }
     Write-Output 'Status: enabled'
+    if ($authMode -eq 'bedrock-api-key') { Write-Output 'Reason: Bedrock API key detected' }
     if ($mantleUrl) { Write-Output "URL: $mantleUrl" }
     $mantleEnv = Get-DoctorNestedProp -Object $Block -Path @('env','CLAUDE_CODE_USE_MANTLE')
     if ($mantleEnv -ne '1') {

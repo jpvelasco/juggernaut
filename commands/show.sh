@@ -72,6 +72,14 @@ show_kv() {
   printf '%*s%s: %s\n' "$indent" "" "$label" "$value"
 }
 
+show_auth() {
+  case "${1:-}" in
+    api-key|bedrock-api-key) echo "Bedrock API key" ;;
+    iam) echo "IAM" ;;
+    *) show_text "${1:-}" ;;
+  esac
+}
+
 show_block_view() {
   local block="$1"
   printf '%s' "$block" | jq -r '[
@@ -98,7 +106,7 @@ show_current_block() {
   IFS=$'\t' read -r scope auth_mode region model effort opusplan use_mantle <<< "$block_view"
 
   show_kv 2 "Scope" "$(show_text "${scope:-}")"
-  show_kv 2 "Auth" "$(show_text "${auth_mode:-}")"
+  show_kv 2 "Auth" "$(show_auth "${auth_mode:-}")"
   show_kv 2 "Region" "$(show_text "${region:-}")"
   show_kv 2 "Model" "$(show_text "${model:-}")"
   show_kv 2 "Effort" "$(show_text "${effort:-}")"
@@ -175,7 +183,7 @@ show_scope_config() {
   IFS=$'\t' read -r scope_meta auth_mode region model effort opusplan use_mantle <<< "$block_view"
 
   show_kv 4 "Scope" "$(show_text "${scope_meta:-}")"
-  show_kv 4 "Auth" "$(show_text "${auth_mode:-}")"
+  show_kv 4 "Auth" "$(show_auth "${auth_mode:-}")"
   show_kv 4 "Region" "$(show_text "${region:-}")"
   show_kv 4 "Model" "$(show_text "${model:-}")"
   show_kv 4 "Effort" "$(show_text "${effort:-}")"
@@ -224,15 +232,12 @@ if [[ "$project_json" != "null" ]]; then
   project_block="$(printf '%s' "$project_json" | jq -c '.juggernaut // null')"
 fi
 
-active_path="—"
 active_block="null"
 active_scope=""
 if [[ "$project_block" != "null" && -n "$project_block" ]]; then
-  active_path="${project_path:-${PWD}/.claude/settings.json}"
   active_block="$project_block"
   active_scope="project"
 elif [[ "$user_block" != "null" && -n "$user_block" ]]; then
-  active_path="$user_path"
   active_block="$user_block"
   active_scope="user"
 fi

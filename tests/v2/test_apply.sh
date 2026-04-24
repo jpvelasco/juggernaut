@@ -92,7 +92,7 @@ set +e  # lib sources re-enable errexit; restore manual error handling.
 
 J_AUTH_MODE=iam J_REGION=us-east-1 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   BLOCK="$(schema_new_juggernaut_block)"
 
@@ -102,7 +102,7 @@ assert_eq "auth.storage" "$(printf '%s' "$BLOCK" | jq -r '.auth.storage')" "prof
 assert_eq "effortLevel"  "$(printf '%s' "$BLOCK" | jq -r '.effortLevel')"  "xhigh"
 assert_false "opusplan"  "$(printf '%s' "$BLOCK" | jq -r '.opusplan')"
 assert_eq "managedBy"    "$(printf '%s' "$BLOCK" | jq -r '.meta.managedBy')" "juggernaut"
-assert_eq "version"      "$(printf '%s' "$BLOCK" | jq -r '.meta.version')"   "2.0.0"
+assert_eq "version"      "$(printf '%s' "$BLOCK" | jq -r '.meta.version')"   "2.1.0"
 assert_eq "scope"        "$(printf '%s' "$BLOCK" | jq -r '.meta.scope')"     "user"
 assert_eq "env.AWS_REGION" "$(printf '%s' "$BLOCK" | jq -r '.env.AWS_REGION')" "us-east-1"
 assert_eq "env.BEDROCK"    "$(printf '%s' "$BLOCK" | jq -r '.env.CLAUDE_CODE_USE_BEDROCK')" "1"
@@ -110,12 +110,47 @@ assert_eq "env.BEDROCK"    "$(printf '%s' "$BLOCK" | jq -r '.env.CLAUDE_CODE_USE
 rm -rf "$TMP_DIR"
 
 # ---------------------------------------------------------------------------
+# Bearer-token auth auto-detection
+# ---------------------------------------------------------------------------
+section "AWS_BEARER_TOKEN_BEDROCK auto-detects Bedrock API-key auth"
+BEARER_JSON="$(
+  AWS_BEARER_TOKEN_BEDROCK="br-test-token" BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$(mktemp -d)" bash "$REPO_ROOT/commands/apply.sh" --dry-run --no-shell-fallback 2>/dev/null \
+    | sed -n '/^{/,/^}$/p'
+)"
+assert_eq "bearer/auth.mode" "$(printf '%s' "$BEARER_JSON" | jq -r '.juggernaut.auth.mode')" "bedrock-api-key"
+assert_true "bearer/useMantle" "$(printf '%s' "$BEARER_JSON" | jq -r '.juggernaut.useMantle')"
+assert_eq "bearer/env mantle" "$(printf '%s' "$BEARER_JSON" | jq -r '.env.CLAUDE_CODE_USE_MANTLE')" "1"
+
+section "AWS_BEARER_TOKEN_BEDROCK overrides stored IAM auth unless auth is explicit"
+BEARER_HOME="$(mktemp -d)"
+mkdir -p "$BEARER_HOME/.claude"
+J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.1.0 \
+  J_SHELL_FALLBACK_MODE=settings-only \
+  IAM_BLOCK="$(schema_new_juggernaut_block)"
+config_write_atomic "$BEARER_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$IAM_BLOCK" "$(schema_derive_native_keys "$IAM_BLOCK")")"
+BEARER_JSON="$(
+  AWS_BEARER_TOKEN_BEDROCK="br-test-token" BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$BEARER_HOME" bash "$REPO_ROOT/commands/apply.sh" --dry-run --no-shell-fallback 2>/dev/null \
+    | sed -n '/^{/,/^}$/p'
+)"
+assert_eq "bearer/existing-iam auth.mode" "$(printf '%s' "$BEARER_JSON" | jq -r '.juggernaut.auth.mode')" "bedrock-api-key"
+EXPLICIT_JSON="$(
+  AWS_BEARER_TOKEN_BEDROCK="br-test-token" BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$BEARER_HOME" bash "$REPO_ROOT/commands/apply.sh" --auth=iam --dry-run --no-shell-fallback 2>/dev/null \
+    | sed -n '/^{/,/^}$/p'
+)"
+assert_eq "bearer/explicit-iam auth.mode" "$(printf '%s' "$EXPLICIT_JSON" | jq -r '.juggernaut.auth.mode')" "iam"
+rm -rf "$BEARER_HOME"
+
+# ---------------------------------------------------------------------------
 # Opusplan flag sets ANTHROPIC_MODEL=opusplan
 # ---------------------------------------------------------------------------
 section "opusplan=true → env.ANTHROPIC_MODEL=opusplan"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=true \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   OPBLOCK="$(schema_new_juggernaut_block)"
 
@@ -128,7 +163,7 @@ assert_eq "ANTHROPIC_MODEL" "$(printf '%s' "$OPBLOCK" | jq -r '.env.ANTHROPIC_MO
 section "effort level propagates to env"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=high J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   EBLOCK="$(schema_new_juggernaut_block)"
 
@@ -141,7 +176,7 @@ assert_eq "EFFORT_LEVEL env"  "$(printf '%s' "$EBLOCK" | jq -r '.env.CLAUDE_CODE
 section "useMantle=true → env.CLAUDE_CODE_USE_MANTLE=1"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=true J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   MBLOCK="$(schema_new_juggernaut_block)"
 
@@ -151,7 +186,7 @@ assert_eq "CLAUDE_CODE_USE_MANTLE" "$(printf '%s' "$MBLOCK" | jq -r '.env.CLAUDE
 # Mantle URL propagates when set.
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=true J_MANTLE_BASE_URL="https://mantle.example.com" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   MUBLOCK="$(schema_new_juggernaut_block)"
 
@@ -165,7 +200,7 @@ assert_eq "ANTHROPIC_BEDROCK_MANTLE_BASE_URL" \
 # useMantle=false must NOT set CLAUDE_CODE_USE_MANTLE.
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   NMBLOCK="$(schema_new_juggernaut_block)"
 
@@ -181,7 +216,7 @@ TMP_SETTINGS="$TMP_DIR/settings.json"
 
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.0.0 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.1.0 \
   J_SHELL_FALLBACK_MODE=both \
   RT_BLOCK="$(schema_new_juggernaut_block)"
 
@@ -197,9 +232,9 @@ assert_eq "rt/model"      "$(printf '%s' "$RT_READ" | jq -r '.model')"          
 rm -rf "$TMP_DIR"
 
 # ---------------------------------------------------------------------------
-# Implicit migration: apply.sh migrates a v1 profile block on first run
+# Explicit migration: apply.sh migrates a v1 profile block with --yes
 # ---------------------------------------------------------------------------
-section "implicit migration — apply.sh migrates v1 block"
+section "explicit migration — apply.sh migrates v1 block with --yes"
 TMP_DIR="$(mktemp -d)"
 TMP_SETTINGS="$TMP_DIR/settings.json"
 TMP_PROFILE="$TMP_DIR/profile.sh"
@@ -215,25 +250,42 @@ TMP_SETTINGS="$FAKE_HOME/.claude/settings.json"
 
 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
   HOME="$FAKE_HOME" bash "$REPO_ROOT/commands/apply.sh" \
-  --auth=iam --region=us-east-1 --no-shell-fallback \
+  --auth=iam --region=us-east-1 --no-shell-fallback --yes \
   >/dev/null 2>&1
 RC=$?
-if [[ "$RC" -eq 0 ]]; then pass; else fail "apply.sh with implicit migration should exit 0 (got $RC)"; fi
+if [[ "$RC" -eq 0 ]]; then pass; else fail "apply.sh with explicit migration should exit 0 (got $RC)"; fi
 
 if [[ -f "$TMP_SETTINGS" ]]; then
   MIG_READ="$(cat "$TMP_SETTINGS")"
   assert_eq "mig/managedBy" "$(printf '%s' "$MIG_READ" | jq -r '.juggernaut.meta.managedBy')" "juggernaut"
   assert_eq "mig/auth.region" "$(printf '%s' "$MIG_READ" | jq -r '.juggernaut.auth.region')" "us-east-1"
 else
-  fail "settings.json not written after implicit migration"
+  fail "settings.json not written after explicit migration"
 fi
 
 rm -rf "$TMP_DIR" "$FAKE_HOME"
 
 # ---------------------------------------------------------------------------
-# scope=project + implicit migration
+# migration requires confirmation in non-interactive mode
 # ---------------------------------------------------------------------------
-section "--scope=project with implicit migration"
+section "migration requires --yes in non-interactive mode"
+FAKE_HOME_CONFIRM="$(mktemp -d)"
+mkdir -p "$FAKE_HOME_CONFIRM/.claude"
+cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME_CONFIRM/.bashrc"
+
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  HOME="$FAKE_HOME_CONFIRM" bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=iam --no-shell-fallback \
+  >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -ne 0 ]]; then pass; else fail "apply.sh should require --yes for non-interactive migration"; fi
+if [[ ! -f "$FAKE_HOME_CONFIRM/.claude/settings.json" ]]; then pass; else fail "migration without --yes must not write settings.json"; fi
+rm -rf "$FAKE_HOME_CONFIRM"
+
+# ---------------------------------------------------------------------------
+# scope=project + explicit migration
+# ---------------------------------------------------------------------------
+section "--scope=project with explicit migration"
 TMP_PROJECT="$(mktemp -d)"
 FAKE_HOME2="$(mktemp -d)"
 mkdir -p "$TMP_PROJECT/.claude"
@@ -243,18 +295,18 @@ cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME2/.bashrc"
   cd "$TMP_PROJECT" &&
   BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
     HOME="$FAKE_HOME2" bash "$REPO_ROOT/commands/apply.sh" \
-    --auth=iam --scope=project --no-shell-fallback \
+    --auth=iam --scope=project --no-shell-fallback --yes \
     >/dev/null 2>&1
 )
 RC=$?
-if [[ "$RC" -eq 0 ]]; then pass; else fail "--scope=project implicit migration should exit 0 (got $RC)"; fi
+if [[ "$RC" -eq 0 ]]; then pass; else fail "--scope=project explicit migration should exit 0 (got $RC)"; fi
 
 if [[ -f "$TMP_PROJECT/.claude/settings.json" ]]; then
   PROJECT_READ="$(cat "$TMP_PROJECT/.claude/settings.json")"
   assert_eq "project/mig managedBy" "$(printf '%s' "$PROJECT_READ" | jq -r '.juggernaut.meta.managedBy')" "juggernaut"
   assert_eq "project/mig auth.region" "$(printf '%s' "$PROJECT_READ" | jq -r '.juggernaut.auth.region')" "us-east-1"
 else
-  fail "--scope=project implicit migration did not write project settings.json"
+  fail "--scope=project explicit migration did not write project settings.json"
 fi
 
 rm -rf "$TMP_PROJECT" "$FAKE_HOME2"
@@ -427,7 +479,7 @@ cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME4/.bashrc"
 
 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
   HOME="$FAKE_HOME4" bash "$REPO_ROOT/commands/apply.sh" \
-  --auth=iam --no-shell-fallback \
+  --auth=iam --no-shell-fallback --yes \
   >/dev/null 2>&1
 RC=$?
 if [[ "$RC" -eq 0 ]]; then pass; else fail "migration (no --region) should exit 0 (got $RC)"; fi

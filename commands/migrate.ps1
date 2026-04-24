@@ -1,4 +1,4 @@
-# commands/migrate.ps1 — juggernaut migrate subcommand (PowerShell).
+# commands/migrate.ps1 - juggernaut migrate subcommand (PowerShell).
 # Usage:
 #   .\migrate.ps1                  Detect v1 block and migrate to settings.json.
 #   .\migrate.ps1 -Rollback        Restore most recent settings.json backup.
@@ -9,10 +9,14 @@ param(
     [switch]$Rollback,
     [switch]$Clean,
     [switch]$DryRun,
+    [switch]$Yes,
+    [switch]$Force,
     [ValidateSet('user','project')][string]$Scope = 'user'
 )
 
-# Feature flag gate — v2 commands are dormant until explicitly enabled.
+if ($Force) { $Yes = $true }
+
+# Feature flag gate - v2 commands are dormant until explicitly enabled.
 if ($env:JUGGERNAUT_USE_V2 -ne '1') {
     Write-Host 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
     exit 0
@@ -25,6 +29,18 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 $SettingsPath = Resolve-SettingsTarget -Scope $Scope
 
+if ($Clean -and -not $DryRun -and -not $Yes) {
+    if ([Console]::IsInputRedirected) {
+        Write-Error 'migrate: -Clean requires confirmation. Re-run with -Clean -Yes.'
+        exit 1
+    }
+    $answer = Read-Host 'Remove migrated v1 profile blocks after migration? [y/N]'
+    if ($answer -notmatch '^(y|yes)$') {
+        Write-Host 'migrate: cleanup skipped. Re-run with -Clean -Yes to confirm.'
+        $Clean = $false
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Rollback
 # ---------------------------------------------------------------------------
@@ -34,11 +50,12 @@ if ($Rollback) {
         exit 0
     }
     $ok = Invoke-MigratorRollback -SettingsPath $SettingsPath
-    exit ($ok ? 0 : 1)
+    if ($ok) { exit 0 }
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
-# Standard migration — scan Windows shell profiles
+# Standard migration - scan Windows shell profiles
 # ---------------------------------------------------------------------------
 $candidates = @(
     $PROFILE,
@@ -53,7 +70,7 @@ foreach ($profileFile in $candidates) {
         Write-Host "Found v1 block: $profileFile"
 
         if ($DryRun) {
-            Write-Host "[dry-run] Would migrate $profileFile → $SettingsPath"
+            Write-Host "[dry-run] Would migrate $profileFile -> $SettingsPath"
             continue
         }
 

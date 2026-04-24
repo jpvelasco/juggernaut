@@ -76,5 +76,24 @@ else
 fi
 
 echo "Installed to $INSTALL_DIR"
+chmod +x "$INSTALL_DIR/juggernaut" "$INSTALL_DIR/setup" "$INSTALL_DIR"/commands/*.sh "$INSTALL_DIR"/lib/*.sh 2>/dev/null || {
+  echo "Warning: could not update executable permissions for all Juggernaut scripts" >&2
+}
+
+BIN_DIR="$HOME/.local/bin"
+mkdir -p "$BIN_DIR"
+if ln -sfn "$INSTALL_DIR/juggernaut" "$BIN_DIR/juggernaut"; then
+  echo "Launcher linked at $BIN_DIR/juggernaut"
+else
+  echo "Warning: could not create $BIN_DIR/juggernaut symlink" >&2
+fi
+
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' from any directory." ;;
+esac
+
+echo "Verify after setup with: juggernaut doctor --v2"
+echo "Next: juggernaut apply --v2"
 cd "$INSTALL_DIR"
 exec bash ./setup "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"

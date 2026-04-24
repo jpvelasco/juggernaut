@@ -1,4 +1,4 @@
-# commands/apply.ps1 — Juggernaut v2 apply subcommand (PowerShell).
+# commands/apply.ps1 - Juggernaut v2 apply subcommand (PowerShell).
 # Configures Claude Code to use Amazon Bedrock via settings.json (+ optional shell fallback).
 
 param(
@@ -23,6 +23,7 @@ param(
     [switch]$ShellFallbackOnly,
     [switch]$DryRun,
     [switch]$Force,
+    [switch]$Yes,
     [switch]$SkipPreflight,
     [switch]$Help
 )
@@ -44,12 +45,12 @@ if (-not $env:BEDROCK_CONFIG_PATH) {
 
 if ($Help) {
     @'
-juggernaut apply — configure Claude Code for Amazon Bedrock
+juggernaut apply - configure Claude Code for Amazon Bedrock
 
 Usage: juggernaut.ps1 apply [options]
 
-  -Auth             iam|api-key  (default: iam, auto-detected on re-run)
-  -BedrockKey       Bedrock API key (api-key mode)
+  -Auth             iam|bedrock-api-key  (legacy: api-key)
+  -BedrockKey       Bedrock API key
   -PreserveKey      Reuse existing key from env/keychain
   -Storage          profile|keychain
   -Region           AWS region
@@ -65,10 +66,15 @@ Usage: juggernaut.ps1 apply [options]
   -NoShellFallback  Write settings.json only
   -ShellFallbackOnly  Write profile block only
   -DryRun           Preview without writing
-  -Force            Skip confirmation prompts
+  -Yes / -Force     Confirm migration prompts
 '@
     exit 0
 }
+
+$authExplicit = $PSBoundParameters.ContainsKey('Auth')
+$mantleExplicit = $PSBoundParameters.ContainsKey('Mantle') -or $PSBoundParameters.ContainsKey('MantleUrl')
+if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
+if ($Force) { $Yes = $true }
 
 if ($NoShellFallback -and $ShellFallbackOnly) {
     Write-Error 'apply: -NoShellFallback and -ShellFallbackOnly are mutually exclusive'
@@ -95,15 +101,14 @@ $existingSettings = [ordered]@{}
 if (Test-SettingsExists -Path $SettingsPath) {
     try { $existingSettings = Read-Settings -Path $SettingsPath }
     catch {
-        Write-Error "apply: cannot read $SettingsPath — may be corrupted: $_"
+        Write-Error "apply: cannot read $SettingsPath - may be corrupted: $_"
         exit 1
     }
 }
 $hasV2Block = Test-HasJuggernautBlock -Settings $existingSettings
 
 # ---------------------------------------------------------------------------
-# Step 2: Implicit migration — detect and migrate v1 profile blocks.
-# Defensive: warn and continue if migration fails.
+# Step 2: Explicit migration - detect and migrate v1 profile blocks.
 # ---------------------------------------------------------------------------
 if (-not $hasV2Block) {
     $v1Candidates = @(
@@ -116,8 +121,26 @@ if (-not $hasV2Block) {
             $hasMig = $false
             try { $hasMig = Test-MigratorHasV1Block -ProfileFile $candidate } catch {}
             if ($hasMig) {
-                Write-Host "apply: found an existing v1 block in $candidate." -ForegroundColor DarkYellow
-                Write-Host "apply: migrating it to ~/.claude/settings.json, Claude Code's native config." -ForegroundColor DarkYellow
+                Write-Host 'Juggernaut found an existing v1 profile block:'
+                Write-Host "  $candidate"
+                Write-Host 'Migration writes the equivalent v2 settings to:'
+                Write-Host "  $SettingsPath"
+                Write-Host 'The old profile block remains as a fallback unless you later run migrate -Clean.'
+                if ($DryRun) {
+                    Write-Host "[dry-run] Would migrate $candidate to $SettingsPath"
+                    break
+                }
+                if (-not $Yes) {
+                    if ([Console]::IsInputRedirected) {
+                        Write-Error 'apply: migration requires confirmation. Re-run with -Yes, or run migrate -DryRun first.'
+                        exit 1
+                    }
+                    $answer = Read-Host 'Migrate this v1 block now? [y/N]'
+                    if ($answer -notmatch '^(y|yes)$') {
+                        Write-Error 'apply: migration skipped. Re-run with -Yes to confirm non-interactively.'
+                        exit 1
+                    }
+                }
                 try {
                     $ok = Invoke-MigratorRun -ProfileFile $candidate `
                                              -SettingsPath $SettingsPath `
@@ -125,13 +148,12 @@ if (-not $hasV2Block) {
                     if ($ok) {
                         $existingSettings = Read-Settings -Path $SettingsPath
                         $hasV2Block = $true
-                        Write-Host "apply: migration complete. Your new settings are now in $SettingsPath." -ForegroundColor Green
-                        Write-Host 'apply: your shell profile was left in place as a fallback, so nothing is lost.' -ForegroundColor Green
+                        Write-Host "Migration complete. Settings written to: $SettingsPath" -ForegroundColor Green
                     } else {
-                        Write-Warning "apply: migration from $candidate returned false — continuing with defaults."
+                        Write-Warning "apply: migration from $candidate returned false - continuing with defaults."
                     }
                 } catch {
-                    Write-Warning "apply: migration from $candidate failed — continuing with defaults: $_"
+                    Write-Warning "apply: migration from $candidate failed - continuing with defaults: $_"
                 }
                 break
             }
@@ -146,6 +168,7 @@ $existingBlock = if ($hasV2Block) { Get-JuggernautBlockFromSettings -Settings $e
 
 if ($existingBlock) {
     if (-not $Auth)        { $Auth        = $existingBlock.auth.mode            }
+    if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
     if (-not $Storage)     { $Storage     = $existingBlock.auth.storage         }
     if (-not $Region)      { $Region      = $existingBlock.auth.region          }
     if (-not $Model)       { $Model       = $existingBlock.model                }
@@ -159,13 +182,18 @@ if ($existingBlock) {
     if (-not $Use1MContext -and -not $No1MContext) {
         if ($existingBlock.context.use1MContext) { $Use1MContext = $true } else { $No1MContext = $true }
     }
-    if (-not $Mantle -and $existingBlock.useMantle) { $Mantle = $true }
+    if (-not $mantleExplicit -and -not $Mantle -and $existingBlock.useMantle) { $Mantle = $true }
     if (-not $MantleUrl -and $existingBlock.mantle.baseUrl) { $MantleUrl = $existingBlock.mantle.baseUrl }
 }
 
 # ---------------------------------------------------------------------------
 # Step 4: Hard defaults for unset fields.
 # ---------------------------------------------------------------------------
+if (-not $authExplicit -and $env:AWS_BEARER_TOKEN_BEDROCK) {
+    $Auth = 'bedrock-api-key'
+    $PreserveKey = $true
+    if (-not $mantleExplicit) { $Mantle = $true }
+}
 if (-not $Auth)   { $Auth   = 'iam' }
 if (-not $Effort) { $Effort = 'xhigh' }
 if (-not $Region) {
@@ -183,8 +211,8 @@ if (-not $Storage) {
     $Storage = if (($os -in 'windows','macos') -and (Test-KeychainAvailable)) { 'keychain' } else { 'profile' }
 }
 
-if ($Auth -notin 'iam','api-key') {
-    Write-Error "apply: -Auth must be 'iam' or 'api-key' (got: '$Auth')"; exit 1
+if ($Auth -notin 'iam','bedrock-api-key') {
+    Write-Error "apply: -Auth must be 'iam' or 'bedrock-api-key' (got: '$Auth')"; exit 1
 }
 if ($Effort -notin 'low','medium','high','xhigh','max') {
     Write-Error "apply: -Effort must be one of low|medium|high|xhigh|max"; exit 1
@@ -200,7 +228,7 @@ if (-not $SkipPreflight -and $Auth -eq 'iam') {
 # Step 5: Resolve API key.
 # ---------------------------------------------------------------------------
 $apiKeyExpr = ''
-if ($Auth -eq 'api-key') {
+if ($Auth -eq 'bedrock-api-key') {
     if ($PreserveKey) {
         $BedrockKey = if ($env:AWS_BEARER_TOKEN_BEDROCK) {
             $env:AWS_BEARER_TOKEN_BEDROCK
@@ -225,7 +253,7 @@ if ($Auth -eq 'api-key') {
         if ($DryRun) {
             Write-Host '[dry-run] would store API key in system keychain'
         } elseif (-not (Set-KeychainEntry -Key $BedrockKey)) {
-            Write-Warning 'apply: keychain store failed — falling back to profile storage'
+            Write-Warning 'apply: keychain store failed - falling back to profile storage'
             $Storage = 'profile'
         }
         $apiKeyExpr = Get-KeychainRetrievalExpression -Shell 'bash'
@@ -249,7 +277,7 @@ $buildParams = @{
     MantleBaseUrl  = $MantleUrl
     ShellFallbackMode = $shellMode
     Scope          = $Scope
-    Version        = '2.0.0'
+    Version        = '2.1.0'
     BedrockConfigPath = $env:BEDROCK_CONFIG_PATH
 }
 if ($Model)       { $buildParams['Model']       = $Model }
@@ -260,7 +288,7 @@ if ($HaikuModel)  { $buildParams['HaikuModel']  = $HaikuModel; $buildParams['Sub
 $newBlock = New-JuggernautBlock @buildParams
 
 if (-not (Test-JuggernautBlock -Block $newBlock)) {
-    Write-Error 'apply: block validation failed — check your options'
+    Write-Error 'apply: block validation failed - check your options'
     exit 1
 }
 
@@ -277,9 +305,9 @@ if ($DryRun) {
     Write-Host '[dry-run] No files will be written.'
     Write-Host ''
     Write-Host "Would write to: $SettingsPath"
-    Write-Host '─────────────────────────────────────────'
+    Write-Host '-----------------------------------------'
     $mergedSettings | ConvertTo-Json -Depth 20
-    Write-Host '─────────────────────────────────────────'
+    Write-Host '-----------------------------------------'
     if ($shellMode -ne 'settings-only') {
         Write-Host "Would also update shell profile (bash): $(Join-Path $env:HOME '.bashrc')"
     }
@@ -341,7 +369,8 @@ if (-not $NoShellFallback) {
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Juggernaut v2 apply complete.' -ForegroundColor Cyan
-Write-Host "  Auth:     $Auth"
+if ($Auth -eq 'bedrock-api-key') { Write-Host '  Auth:     Bedrock API key' }
+else { Write-Host '  Auth:     IAM' }
 Write-Host "  Region:   $Region"
 Write-Host "  Effort:   $Effort"
 Write-Host "  Opusplan: $useOpusPlan"
