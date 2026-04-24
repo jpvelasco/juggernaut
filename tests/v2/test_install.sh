@@ -31,6 +31,42 @@ section "install.ps1 user launcher"
 for needle in '.local\bin' 'juggernaut.cmd' 'ExecutionPolicy Bypass' 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser' 'juggernaut doctor --v2'; do
   if [[ "$INSTALL_PS1" == *"$needle"* ]]; then pass; else fail "install.ps1 missing $needle"; fi
 done
+if [[ "$INSTALL_PS1" == *"If PowerShell blocks first run scripts, run:"* ]]; then
+  pass
+else
+  fail "install.ps1 missing first-run execution-policy guidance"
+fi
+
+section "fresh install doctor smoke"
+TMP_HOME="$(mktemp -d)"
+TMP_WORK="$(mktemp -d)"
+trap 'rm -rf "$TMP_HOME" "$TMP_WORK"' EXIT
+mkdir -p "$TMP_HOME/.claude"
+
+. "$REPO_ROOT/lib/schema.sh"
+. "$REPO_ROOT/lib/config_manager.sh"
+set +e
+
+export J_AUTH_MODE=iam
+export J_REGION=us-west-2
+export J_EFFORT=xhigh
+export J_STORAGE=profile
+export J_USE_MANTLE=false
+export J_OPUSPLAN=false
+export J_SCOPE=user
+export J_VERSION=2.1.0
+export J_SHELL_FALLBACK_MODE=settings-only
+BLOCK="$(schema_new_juggernaut_block)"
+config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
+
+chmod +x "$REPO_ROOT/juggernaut" "$REPO_ROOT/commands/doctor.sh"
+if OUTPUT="$(cd "$TMP_WORK" && HOME="$TMP_HOME" AWS_PROFILE=juggernaut-test SHELL=/bin/bash "$REPO_ROOT/juggernaut" doctor --v2 2>&1)" &&
+   [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
+  pass
+else
+  fail "fresh install doctor smoke failed"
+  printf '%s\n' "$OUTPUT" >&2
+fi
 
 echo
 echo "install tests: $PASS passed, $FAIL failed"
