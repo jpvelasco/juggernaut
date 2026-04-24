@@ -35,7 +35,7 @@ param(
 
 if ($V2 -or $env:JUGGERNAUT_USE_V2 -eq '1') {
     $env:JUGGERNAUT_USE_V2 = '1'
-    Write-Host "[v2] Juggernaut v2.0 enabled — currently dormant, v1 is still active." -ForegroundColor DarkYellow
+    Write-Host "[v2] Juggernaut v2.0 enabled - currently dormant, v1 is still active." -ForegroundColor DarkYellow
 }
 
 # Track if parameters were explicitly provided by the user
@@ -52,9 +52,9 @@ $EffortExplicit = $PSBoundParameters.ContainsKey('Effort')
 
 $ErrorActionPreference = "Stop"
 
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 # Load Configuration from JSON
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigFile = Join-Path $ScriptDir "bedrock-config.json"
@@ -68,9 +68,9 @@ if (Test-Path $ConfigFile) {
     }
 }
 
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 # Helpers
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 
 function ConvertFrom-SecureStringPlainText {
     param([SecureString]$Secure)
@@ -378,7 +378,7 @@ if (-not $StorageExplicit -and $Storage -eq "profile") {
     # On Windows, Credential Manager is always available
     $profileContent = Get-Content $ProfilePathForDetection -Raw -Encoding utf8 -ErrorAction SilentlyContinue
     if (-not ($profileContent -match "CLAUDE_CODE_USE_BEDROCK")) {
-        # New install — default to keychain on Windows
+        # New install - default to keychain on Windows
         $Storage = "keychain"
     }
 }
@@ -441,9 +441,9 @@ $ValidRegions = if ($Config -and $Config.regions) {
     )
 }
 
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 # Keychain Functions (Windows Credential Manager)
-#───────────────────────────────────────────────────────────────────────────────
+#-------------------------------------------------------------------------------
 
 $KeychainTarget = "juggernaut-bedrock"
 
@@ -583,7 +583,7 @@ if ($Auth -eq "api-key" -and [string]::IsNullOrEmpty($BedrockKey)) {
             exit 1
         }
     } elseif (-not $AuthExplicit) {
-        # Auth mode was auto-detected from existing config — try to reuse key automatically
+        # Auth mode was auto-detected from existing config - try to reuse key automatically
         $existingKey = [Environment]::GetEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK")
         if (-not [string]::IsNullOrEmpty($existingKey)) {
             $BedrockKey = $existingKey
@@ -687,20 +687,16 @@ if ($OneM) {
         $sonnetProp.Value = "$($sonnetProp.Value)[1m]"
     }
 
-    # Update names for 1M context — insert ", 1M Context" inside parens (idempotent)
-    foreach ($key in @("ANTHROPIC_DEFAULT_SONNET_MODEL_NAME")) {
-        $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = $prop.Value -replace '\)', ', 1M Context)'
-        }
+    # Update Sonnet name for 1M context (idempotent)
+    $sonnetNameProp = $Config.environment.PSObject.Properties["ANTHROPIC_DEFAULT_SONNET_MODEL_NAME"]
+    if ($sonnetNameProp -and $sonnetNameProp.Value -notlike '*1M Context*') {
+        $sonnetNameProp.Value = $sonnetNameProp.Value -replace '\)', ', 1M Context)'
     }
 
-    # Update descriptions for 1M context — append (idempotent)
-    foreach ($key in @("ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION")) {
-        $prop = $Config.environment.PSObject.Properties[$key]
-        if ($prop -and $prop.Value -notlike '*1M Context*') {
-            $prop.Value = "$($prop.Value), 1M Context"
-        }
+    # Update Sonnet description for 1M context (idempotent)
+    $sonnetDescriptionProp = $Config.environment.PSObject.Properties["ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION"]
+    if ($sonnetDescriptionProp -and $sonnetDescriptionProp.Value -notlike '*1M Context*') {
+        $sonnetDescriptionProp.Value = "$($sonnetDescriptionProp.Value), 1M Context"
     }
 
     # Apply to custom Sonnet overrides (idempotent - skip if already suffixed)
@@ -799,7 +795,7 @@ if ($Auth -eq "api-key") {
         $retrievalCmd = Get-KeychainRetrievalCommand
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = $retrievalCmd`n"
     } else {
-        # Store directly in profile — single-quote to prevent backtick expansion
+        # Store directly in profile - single-quote to prevent backtick expansion
         $escapedKey = $BedrockKey -replace "'", "''"
         $ConfigBlock += "`$env:AWS_BEARER_TOKEN_BEDROCK = '$escapedKey'`n"
     }

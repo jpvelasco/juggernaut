@@ -1,4 +1,4 @@
-# lib/migrator.ps1 — v1.7.x profile-block → v2 settings.json migration for Juggernaut.
+# lib/migrator.ps1 - v1.7.x profile-block -> v2 settings.json migration for Juggernaut.
 # Mirrors lib/migrator.sh. PowerShell 5.1+ compatible.
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ function ConvertFrom-MigratorV1Block {
     if (-not $sonnetModel) { $sonnetModel = & $getExport 'ANTHROPIC_DEFAULT_SONNET_MODEL'; if (-not $sonnetModel) { $sonnetModel = & $getFish 'ANTHROPIC_DEFAULT_SONNET_MODEL' } }
     if (-not $haikuModel)  { $haikuModel  = & $getExport 'ANTHROPIC_DEFAULT_HAIKU_MODEL';  if (-not $haikuModel)  { $haikuModel  = & $getFish 'ANTHROPIC_DEFAULT_HAIKU_MODEL' } }
 
-    # Region: export line → fish set -gx → default.
+    # Region: export line -> fish set -gx -> default.
     # auth.region is the single source of truth in v2; sourced from AWS_REGION.
     $region = & $getExport 'AWS_REGION'
     if (-not $region) { $region = & $getFish 'AWS_REGION' }
@@ -224,7 +224,7 @@ function Invoke-MigratorRun {
     Write-SettingsAtomic -Path $SettingsPath -Content $merged
     Set-MigratorProfileAnnotation -ProfileFile $ProfileFile
 
-    Write-Host "Migration complete: $ProfileFile → $SettingsPath"
+    Write-Host "Migration complete: $ProfileFile -> $SettingsPath"
     return $true
 }
 

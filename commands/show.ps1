@@ -1,4 +1,4 @@
-# commands/show.ps1 — Juggernaut v2 show subcommand.
+# commands/show.ps1 - Juggernaut v2 show subcommand.
 
 [CmdletBinding(PositionalBinding=$false)]
 param(
@@ -27,7 +27,7 @@ foreach ($arg in $RemainingArgs) {
 
 if ($Help) {
     @'
-juggernaut show — print the current Juggernaut configuration
+juggernaut show - print the current Juggernaut configuration
 
 Usage: juggernaut.ps1 show
 
@@ -60,7 +60,7 @@ $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 
 function Show-Value {
     param([AllowNull()]$Value)
-    if ($null -eq $Value -or $Value -eq '') { return '—' }
+    if ($null -eq $Value -or $Value -eq '') { return '-' }
     return [string]$Value
 }
 
@@ -69,7 +69,7 @@ function Show-Bool {
     if ($Value -is [bool]) { return $(if ($Value) { 'yes' } else { 'no' }) }
     if ($Value -eq 'true') { return 'yes' }
     if ($Value -eq 'false') { return 'no' }
-    return '—'
+    return '-'
 }
 
 function Show-State {
@@ -77,7 +77,7 @@ function Show-State {
     if ($Value -is [bool]) { return $(if ($Value) { 'enabled' } else { 'disabled' }) }
     if ($Value -eq 'true') { return 'enabled' }
     if ($Value -eq 'false') { return 'disabled' }
-    return '—'
+    return '-'
 }
 
 function Show-Kv {
@@ -152,8 +152,8 @@ function Show-EffectiveConfig {
     Write-Output 'Effective Config'
     Write-Output ('  ' + (Show-HomePath $Path))
     if (-not $Block) {
-        Show-Kv -Indent 4 -Label 'Region' -Value '—'
-        Show-Kv -Indent 4 -Label 'Model' -Value '—'
+        Show-Kv -Indent 4 -Label 'Region' -Value '-'
+        Show-Kv -Indent 4 -Label 'Model' -Value '-'
         return
     }
 
@@ -237,7 +237,7 @@ if ($effective.project) {
     }
 }
 
-$activePath = '—'
+$activePath = '-'
 $activeBlock = $null
 $activeScope = ''
 if ($projectBlock) {

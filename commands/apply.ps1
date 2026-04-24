@@ -1,4 +1,4 @@
-# commands/apply.ps1 — Juggernaut v2 apply subcommand (PowerShell).
+# commands/apply.ps1 - Juggernaut v2 apply subcommand (PowerShell).
 # Configures Claude Code to use Amazon Bedrock via settings.json (+ optional shell fallback).
 
 param(
@@ -45,7 +45,7 @@ if (-not $env:BEDROCK_CONFIG_PATH) {
 
 if ($Help) {
     @'
-juggernaut apply — configure Claude Code for Amazon Bedrock
+juggernaut apply - configure Claude Code for Amazon Bedrock
 
 Usage: juggernaut.ps1 apply [options]
 
@@ -101,14 +101,14 @@ $existingSettings = [ordered]@{}
 if (Test-SettingsExists -Path $SettingsPath) {
     try { $existingSettings = Read-Settings -Path $SettingsPath }
     catch {
-        Write-Error "apply: cannot read $SettingsPath — may be corrupted: $_"
+        Write-Error "apply: cannot read $SettingsPath - may be corrupted: $_"
         exit 1
     }
 }
 $hasV2Block = Test-HasJuggernautBlock -Settings $existingSettings
 
 # ---------------------------------------------------------------------------
-# Step 2: Explicit migration — detect and migrate v1 profile blocks.
+# Step 2: Explicit migration - detect and migrate v1 profile blocks.
 # ---------------------------------------------------------------------------
 if (-not $hasV2Block) {
     $v1Candidates = @(
@@ -150,10 +150,10 @@ if (-not $hasV2Block) {
                         $hasV2Block = $true
                         Write-Host "Migration complete. Settings written to: $SettingsPath" -ForegroundColor Green
                     } else {
-                        Write-Warning "apply: migration from $candidate returned false — continuing with defaults."
+                        Write-Warning "apply: migration from $candidate returned false - continuing with defaults."
                     }
                 } catch {
-                    Write-Warning "apply: migration from $candidate failed — continuing with defaults: $_"
+                    Write-Warning "apply: migration from $candidate failed - continuing with defaults: $_"
                 }
                 break
             }
@@ -253,7 +253,7 @@ if ($Auth -eq 'bedrock-api-key') {
         if ($DryRun) {
             Write-Host '[dry-run] would store API key in system keychain'
         } elseif (-not (Set-KeychainEntry -Key $BedrockKey)) {
-            Write-Warning 'apply: keychain store failed — falling back to profile storage'
+            Write-Warning 'apply: keychain store failed - falling back to profile storage'
             $Storage = 'profile'
         }
         $apiKeyExpr = Get-KeychainRetrievalExpression -Shell 'bash'
@@ -288,7 +288,7 @@ if ($HaikuModel)  { $buildParams['HaikuModel']  = $HaikuModel; $buildParams['Sub
 $newBlock = New-JuggernautBlock @buildParams
 
 if (-not (Test-JuggernautBlock -Block $newBlock)) {
-    Write-Error 'apply: block validation failed — check your options'
+    Write-Error 'apply: block validation failed - check your options'
     exit 1
 }
 
@@ -305,9 +305,9 @@ if ($DryRun) {
     Write-Host '[dry-run] No files will be written.'
     Write-Host ''
     Write-Host "Would write to: $SettingsPath"
-    Write-Host '─────────────────────────────────────────'
+    Write-Host '-----------------------------------------'
     $mergedSettings | ConvertTo-Json -Depth 20
-    Write-Host '─────────────────────────────────────────'
+    Write-Host '-----------------------------------------'
     if ($shellMode -ne 'settings-only') {
         Write-Host "Would also update shell profile (bash): $(Join-Path $env:HOME '.bashrc')"
     }

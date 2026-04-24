@@ -1,4 +1,4 @@
-# lib/schema.ps1 — Juggernaut v2 block schema for PowerShell. Mirrors lib/schema.sh.
+# lib/schema.ps1 - Juggernaut v2 block schema for PowerShell. Mirrors lib/schema.sh.
 # Uses native ConvertFrom-Json / ConvertTo-Json. PowerShell 5.1+ compatible.
 
 $Script:JuggernautSchemaVersion = 1

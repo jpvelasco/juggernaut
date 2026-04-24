@@ -1,4 +1,4 @@
-# lib/profile_writer.ps1 — Shell profile block write/update/detect for Juggernaut v2.
+# lib/profile_writer.ps1 - Shell profile block write/update/detect for Juggernaut v2.
 # PowerShell mirror of lib/profile_writer.sh. Requires PowerShell 5.1+.
 
 $script:ProfileWriterBegin = '# BEGIN: Claude Code Bedrock Configuration'

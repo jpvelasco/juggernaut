@@ -1,4 +1,4 @@
-# commands/uninstall.ps1 — Juggernaut v2 uninstall subcommand.
+# commands/uninstall.ps1 - Juggernaut v2 uninstall subcommand.
 
 [CmdletBinding(PositionalBinding=$false)]
 param(

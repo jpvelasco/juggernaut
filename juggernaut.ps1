@@ -1,4 +1,4 @@
-# juggernaut.ps1 — v2 subcommand dispatcher (PowerShell).
+# juggernaut.ps1 - v2 subcommand dispatcher (PowerShell).
 # Usage: juggernaut.ps1 [<subcommand>] [options]
 
 param(
@@ -23,7 +23,7 @@ $PSScriptRoot_ = $PSScriptRoot
 
 function Show-Help {
     @'
-Juggernaut v2 — Claude Code Bedrock configurator
+Juggernaut v2 - Claude Code Bedrock configurator
 
 Usage: juggernaut.ps1 <subcommand> [options]
 

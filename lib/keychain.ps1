@@ -1,4 +1,4 @@
-# lib/keychain.ps1 — OS keychain abstraction for Juggernaut v2 (PowerShell).
+# lib/keychain.ps1 - OS keychain abstraction for Juggernaut v2 (PowerShell).
 # Mirror of lib/keychain.sh. Requires PowerShell 5.1+.
 
 $script:KeychainService = 'juggernaut-bedrock'

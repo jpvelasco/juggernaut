@@ -1,4 +1,4 @@
-# lib/config_manager.ps1 — settings.json read/merge/write for Juggernaut v2. Mirrors lib/config_manager.sh.
+# lib/config_manager.ps1 - settings.json read/merge/write for Juggernaut v2. Mirrors lib/config_manager.sh.
 # UTF-8 throughout. Note: Set-Content -Encoding utf8 emits UTF-8-with-BOM on
 # Windows PowerShell 5.1; all mainstream JSON parsers tolerate a leading BOM.
 
@@ -35,7 +35,7 @@ function Test-SettingsExists {
 }
 
 function ConvertTo-HashtableRecursive {
-    # PS 5.1 has no ConvertFrom-Json -AsHashtable. Walk PSCustomObject → [ordered]@{}
+    # PS 5.1 has no ConvertFrom-Json -AsHashtable. Walk PSCustomObject -> [ordered]@{}
     # and keep arrays as [object[]] so indexing like $x[0] returns an element.
     param([Parameter(Mandatory)][AllowNull()]$InputObject)
     if ($null -eq $InputObject) { return $null }

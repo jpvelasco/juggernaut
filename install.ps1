@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# install.ps1 — Juggernaut installer
+# install.ps1 - Juggernaut installer
 #
 # Usage:
 #   irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
@@ -20,7 +20,7 @@ $ErrorActionPreference = 'Stop'
 
 if ($Latest) { $Version = '' }
 
-# Normalize version: accept "2.0.0" or "v2.0.0" — tags are always v-prefixed.
+# Normalize version: accept "2.0.0" or "v2.0.0" - tags are always v-prefixed.
 if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 
 $RepoUrl    = 'https://github.com/jpvelasco/juggernaut.git'
@@ -74,7 +74,12 @@ exit `$LASTEXITCODE
 
 @"
 @echo off
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$ShimPs1" %*
+where pwsh.exe >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+  pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "$ShimPs1" %*
+) else (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ShimPs1" %*
+)
 "@ | Set-Content -Path $ShimCmd -Encoding ascii
 
 Write-Host "Launcher written to $ShimCmd"
