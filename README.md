@@ -57,28 +57,28 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 - Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
 - AWS CLI configured (`aws configure` or SSO)
 
-**Install latest (always tracks main):**
+**Install v2.1.0:**
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.0/install.sh | bash
 ```
 
 ```powershell
 # Windows PowerShell
-irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.0/install.ps1)))
 ```
 
 **Install a pinned version (recommended for stability):**
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.0
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.0/install.sh | bash
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.0/install.ps1)))
 ```
 
 **Manual clone:**
@@ -90,20 +90,20 @@ export JUGGERNAUT_USE_V2=1
 ./juggernaut apply
 ```
 
-By default the installer uses the `main` branch (always latest). Pass `--version` to pin a specific release.
+The pinned installer URLs above install v2.1.0 directly from the release tag.
 
 ### Version Pinning
 
-Pass `--version` to install a specific release tag:
+Use the pinned release tag URLs for a stable install:
 
 ```bash
-# Bash — accepts "2.1.0" or "v2.1.0"
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.0
+# Bash
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.0/install.sh | bash
 ```
 
 ```powershell
-# PowerShell — accepts "2.1.0" or "v2.1.0"
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.0
+# PowerShell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.0/install.ps1)))
 ```
 
 ```bash
