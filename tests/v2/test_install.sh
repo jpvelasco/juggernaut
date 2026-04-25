@@ -47,10 +47,59 @@ else
   fail "install.ps1 should install-only by default and configure only when explicit"
 fi
 
+section "dirty existing install is backed up before fresh clone"
+for needle in 'JUGGERNAUT_REPO_URL' 'install_tree_dirty' 'backup_existing_install' '.backup.' 'Backup created:'; do
+  if [[ "$INSTALL_SH" == *"$needle"* ]]; then pass; else fail "install.sh missing dirty install backup behavior: $needle"; fi
+done
+for needle in 'JUGGERNAUT_REPO_URL' 'Test-InstallTreeDirty' 'Backup-ExistingInstall' '.backup.' 'Backup created:'; do
+  if [[ "$INSTALL_PS1" == *"$needle"* ]]; then pass; else fail "install.ps1 missing dirty install backup behavior: $needle"; fi
+done
+
+TMP_REMOTE="$(mktemp -d)"
+TMP_SRC="$(mktemp -d)"
+TMP_INSTALL_HOME="$(mktemp -d)"
+trap 'rm -rf "$TMP_HOME" "$TMP_WORK" "$TMP_REMOTE" "$TMP_SRC" "$TMP_INSTALL_HOME"' EXIT
+
+git -C "$TMP_SRC" init -q
+git -C "$TMP_SRC" config user.email test@example.invalid
+git -C "$TMP_SRC" config user.name "Juggernaut Test"
+mkdir -p "$TMP_SRC/commands" "$TMP_SRC/lib"
+printf '#!/usr/bin/env bash\n' > "$TMP_SRC/juggernaut"
+printf '#!/usr/bin/env bash\n' > "$TMP_SRC/setup"
+printf '#!/usr/bin/env bash\n' > "$TMP_SRC/commands/apply.sh"
+printf '#!/usr/bin/env bash\n' > "$TMP_SRC/lib/schema.sh"
+printf '9.9.9\n' > "$TMP_SRC/VERSION"
+chmod +x "$TMP_SRC/juggernaut" "$TMP_SRC/setup" "$TMP_SRC/commands/apply.sh" "$TMP_SRC/lib/schema.sh"
+git -C "$TMP_SRC" add .
+git -C "$TMP_SRC" commit -q -m "fixture"
+git -C "$TMP_SRC" tag v9.9.9
+git clone --bare -q "$TMP_SRC" "$TMP_REMOTE/repo.git"
+git clone --branch v9.9.9 -q "$TMP_REMOTE/repo.git" "$TMP_INSTALL_HOME/.juggernaut"
+printf '# local edit\n' >> "$TMP_INSTALL_HOME/.juggernaut/lib/schema.sh"
+
+if OUTPUT="$(HOME="$TMP_INSTALL_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" bash "$REPO_ROOT/install.sh" --version v9.9.9 2>&1)" &&
+   [[ "$OUTPUT" == *"Existing installation has local changes"* ]] &&
+   [[ "$OUTPUT" == *"Backup created:"* ]] &&
+   [[ -d "$TMP_INSTALL_HOME/.juggernaut" ]] &&
+   [[ -z "$(git -C "$TMP_INSTALL_HOME/.juggernaut" status --short)" ]]; then
+  shopt -s nullglob
+  BACKUPS=("$TMP_INSTALL_HOME"/.juggernaut.backup.*)
+  shopt -u nullglob
+  if [[ "${#BACKUPS[@]}" -eq 1 && -f "${BACKUPS[0]}/lib/schema.sh" ]] &&
+     grep -q '# local edit' "${BACKUPS[0]}/lib/schema.sh"; then
+    pass
+  else
+    fail "dirty install backup should preserve the edited install tree"
+    printf '%s\n' "$OUTPUT" >&2
+  fi
+else
+  fail "dirty install should be backed up and replaced by a clean clone"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
 section "fresh install doctor smoke"
 TMP_HOME="$(mktemp -d)"
 TMP_WORK="$(mktemp -d)"
-trap 'rm -rf "$TMP_HOME" "$TMP_WORK"' EXIT
 mkdir -p "$TMP_HOME/.claude"
 
 . "$REPO_ROOT/lib/schema.sh"
@@ -64,7 +113,7 @@ export J_STORAGE=profile
 export J_USE_MANTLE=false
 export J_OPUSPLAN=false
 export J_SCOPE=user
-export J_VERSION=2.2.2
+export J_VERSION=2.2.3
 export J_SHELL_FALLBACK_MODE=settings-only
 BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"

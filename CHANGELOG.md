@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.2.3] - 2026-04-25
+
+### Fixed
+
+- **Dirty installer upgrades** — Unix and Windows installers now detect local changes in an existing install directory, back it up as `.backup.YYYYMMDD_HHMMSS`, and clone a fresh release instead of failing during `git checkout`.
+- **Installer testability** — installers accept `JUGGERNAUT_REPO_URL` so tests can exercise upgrade behavior against a local tagged repository.
+- **Version bumped to 2.2.3** in `VERSION`, `bedrock-config.json`, docs, and v2 defaults.
+
 ## [2.2.2] - 2026-04-25
 
 ### Fixed

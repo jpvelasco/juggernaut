@@ -12,7 +12,7 @@
 
 set -e
 
-REPO_URL="https://github.com/jpvelasco/juggernaut.git"
+REPO_URL="${JUGGERNAUT_REPO_URL:-https://github.com/jpvelasco/juggernaut.git}"
 INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
 VERSION=""
 CONFIGURE=0
@@ -63,21 +63,57 @@ else
   echo "Installing Juggernaut (latest)..."
 fi
 
-if [[ -d "$INSTALL_DIR" ]]; then
-  echo "Updating existing installation in $INSTALL_DIR"
-  git -C "$INSTALL_DIR" fetch --tags --quiet
-  if [[ -n "$VERSION" ]]; then
-    git -C "$INSTALL_DIR" checkout --quiet "$VERSION"
-  else
-    git -C "$INSTALL_DIR" checkout --quiet main
-    git -C "$INSTALL_DIR" pull --ff-only --quiet
-  fi
-else
+clone_install() {
   if [[ -n "$VERSION" ]]; then
     git clone --branch "$VERSION" --depth 1 --quiet "$REPO_URL" "$INSTALL_DIR"
   else
     git clone --quiet "$REPO_URL" "$INSTALL_DIR"
   fi
+}
+
+backup_existing_install() {
+  local ts backup n
+  ts="$(date +%Y%m%d_%H%M%S)"
+  backup="${INSTALL_DIR}.backup.${ts}"
+  n=1
+  while [[ -e "$backup" ]]; do
+    backup="${INSTALL_DIR}.backup.${ts}.${n}"
+    n=$((n + 1))
+  done
+  echo "Backup created: $backup"
+  mv "$INSTALL_DIR" "$backup"
+}
+
+install_tree_dirty() {
+  if ! git -C "$INSTALL_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! git -C "$INSTALL_DIR" diff --quiet --ignore-submodules --; then
+    return 0
+  fi
+  if ! git -C "$INSTALL_DIR" diff --cached --quiet --ignore-submodules --; then
+    return 0
+  fi
+  [[ -n "$(git -C "$INSTALL_DIR" ls-files --others --exclude-standard)" ]]
+}
+
+if [[ -d "$INSTALL_DIR" ]]; then
+  if install_tree_dirty; then
+    echo "Existing installation has local changes or is not a clean Git checkout."
+    backup_existing_install
+    clone_install
+  else
+    echo "Updating existing installation in $INSTALL_DIR"
+    git -C "$INSTALL_DIR" fetch --tags --quiet
+    if [[ -n "$VERSION" ]]; then
+      git -C "$INSTALL_DIR" checkout --quiet "$VERSION"
+    else
+      git -C "$INSTALL_DIR" checkout --quiet main
+      git -C "$INSTALL_DIR" pull --ff-only --quiet
+    fi
+  fi
+else
+  clone_install
 fi
 
 echo "Installed to $INSTALL_DIR"
