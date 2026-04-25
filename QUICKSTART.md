@@ -38,12 +38,12 @@ aws sts get-caller-identity
 ### 3. Install Juggernaut
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.0/install.sh | bash -s -- --version v2.2.0
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.1/install.sh | bash -s -- --version v2.2.1
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.0/install.ps1))) -Version v2.2.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.1/install.ps1))) -Version v2.2.1
 ```
 
 ### 4. Configure

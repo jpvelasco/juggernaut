@@ -2,6 +2,15 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.2.1] - 2026-04-24
+
+### Fixed
+
+- **Windows doctor scope reporting** — `doctor --v2 --scope=user` no longer treats `~/.claude/settings.json` as both user and project config when run from the Windows home directory.
+- **Windows shell fallback diagnostics** — doctor now reads PowerShell profile fallback blocks and uses recorded profile paths before falling back to Bash-style profile guesses.
+- **Windows show fallback display** — show now displays the PowerShell profiles written by v2 instead of reporting `~/.bashrc` when PowerShell profile paths are recorded.
+- **Version bumped to 2.2.1** in `VERSION` and `bedrock-config.json`.
+
 ## [2.2.0] - 2026-04-24
 
 ### Upgrade Notes
@@ -94,6 +103,7 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.1
 [2.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.0
 [2.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.3
 [2.1.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.2

@@ -70,10 +70,10 @@ function Read-DoctorSettingsOrNull {
 
 $userPath = Get-UserSettingsPath
 $projectPath = Get-ProjectSettingsPath
-if (-not $projectPath) { $projectPath = Join-Path (Get-Location).Path '.claude/settings.json' }
+$displayProjectPath = if ($projectPath) { $projectPath } else { Join-Path (Get-Location).Path '.claude/settings.json' }
 
 $userSettings = Read-DoctorSettingsOrNull -Path $userPath
-$projectSettings = Read-DoctorSettingsOrNull -Path $projectPath
+$projectSettings = if ($projectPath) { Read-DoctorSettingsOrNull -Path $projectPath } else { $null }
 
 $userHasBlock = $userSettings -and (Test-HasJuggernautBlock -Settings $userSettings)
 $projectHasBlock = $projectSettings -and (Test-HasJuggernautBlock -Settings $projectSettings)
@@ -81,8 +81,6 @@ $projectHasBlock = $projectSettings -and (Test-HasJuggernautBlock -Settings $pro
 $activeScope = ''
 if ($projectHasBlock) { $activeScope = 'project' }
 elseif ($userHasBlock) { $activeScope = 'user' }
-
-$profilePath = Get-DoctorProfilePath
 
 Write-Output 'Juggernaut doctor'
 
@@ -94,7 +92,12 @@ Write-DoctorScopeBlock -Path $userPath -Settings $userSettings
 # -- Project Scope -------------------------------------------------------------
 Write-Output ''
 Write-Output 'Project Scope'
-Write-DoctorScopeBlock -Path $projectPath -Settings $projectSettings
+if ($projectPath) {
+    Write-DoctorScopeBlock -Path $displayProjectPath -Settings $projectSettings
+} else {
+    Write-Output (Show-DoctorHomePath $displayProjectPath)
+    Write-Output 'Status: not found'
+}
 
 # -- Active Scope --------------------------------------------------------------
 Write-Output ''
@@ -114,6 +117,7 @@ elseif ($checkScope -eq 'project') { $checkSettings = $projectSettings }
 
 if ($checkSettings -and (Test-HasJuggernautBlock -Settings $checkSettings)) {
     $checkBlock = Get-JuggernautBlockFromSettings -Settings $checkSettings
+    $profilePath = Get-DoctorProfilePath -Block $checkBlock
 
     # -- Credentials ------------------------------------------------------------
     Write-Output ''

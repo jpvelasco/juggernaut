@@ -58,6 +58,9 @@ function Get-DoctorShellValue {
         if ($line -match "^\s*set\s+-gx\s+$([regex]::Escape($Key))\s+(.+)$") {
             return (($Matches[1] -replace '^"', '') -replace '"$', '')
         }
+        if ($line -match "^\s*\`$env:$([regex]::Escape($Key))\s*=\s*(.+)$") {
+            return ((($Matches[1] -replace "^'", '') -replace "'$", '') -replace '^"', '') -replace '"$', ''
+        }
     }
     return ''
 }
@@ -67,6 +70,7 @@ function Test-DoctorShellHasKeyAssignment {
     foreach ($line in (Get-DoctorShellBlock -ProfilePath $ProfilePath)) {
         if ($line -match "^\s*export\s+$([regex]::Escape($Key))=") { return $true }
         if ($line -match "^\s*set\s+-gx\s+$([regex]::Escape($Key))\s+") { return $true }
+        if ($line -match "^\s*\`$env:$([regex]::Escape($Key))\s*=") { return $true }
     }
     return $false
 }
@@ -88,6 +92,26 @@ function Test-DoctorNativeKeysMatch {
 }
 
 function Get-DoctorProfilePath {
+    param([AllowNull()]$Block)
+
+    $profiles = @()
+    if ($Block) {
+        $rawProfiles = Get-DoctorNestedProp -Object $Block -Path @('shellFallback','lastWrittenProfiles')
+        if ($rawProfiles) { $profiles = @($rawProfiles) }
+    }
+    foreach ($profilePath in $profiles) {
+        if ($profilePath -and (Test-ProfileWriterHasBlock -ProfileFile $profilePath)) { return $profilePath }
+    }
+    if ($profiles.Count -gt 0) { return [string]$profiles[0] }
+
+    if ($IsWindows -or $env:OS -match 'Windows') {
+        $targets = @(Get-ProfileWriterPowerShellProfileTargets)
+        foreach ($target in $targets) {
+            if ($target -and (Test-ProfileWriterHasBlock -ProfileFile $target)) { return $target }
+        }
+        if ($targets.Count -gt 0) { return [string]$targets[0] }
+    }
+
     $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
     Get-ProfileWriterShellConfigPath -Shell $shellName
 }
