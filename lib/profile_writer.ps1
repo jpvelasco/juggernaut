@@ -13,13 +13,38 @@ function Get-ProfileWriterShellConfigPath {
         'bash' { return (Join-Path $homePath '.bashrc') }
         'zsh'  { return (Join-Path $homePath '.zshrc') }
         'fish' { return (Join-Path $homePath '.config/fish/config.fish') }
+        'powershell' { return $PROFILE }
         default { return '' }
     }
+}
+
+function Get-ProfileWriterPowerShellProfileTargets {
+    if ($env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS) {
+        return @($env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -split [IO.Path]::PathSeparator |
+            Where-Object { $_ } |
+            Select-Object -Unique)
+    }
+
+    $targets = New-Object System.Collections.Generic.List[string]
+    try {
+        if ($PROFILE.CurrentUserAllHosts) {
+            $targets.Add([string]$PROFILE.CurrentUserAllHosts)
+        }
+    } catch {}
+
+    $documents = [Environment]::GetFolderPath('MyDocuments')
+    if ($documents) {
+        $targets.Add((Join-Path $documents 'PowerShell\profile.ps1'))
+        $targets.Add((Join-Path $documents 'WindowsPowerShell\profile.ps1'))
+    }
+
+    return @($targets | Where-Object { $_ } | Select-Object -Unique)
 }
 
 function Get-ProfileWriterExportSyntax {
     param([Parameter(Mandatory)][string]$Shell)
     if ($Shell -eq 'fish') { return 'set -gx' }
+    if ($Shell -eq 'powershell') { return '$env:' }
     return 'export'
 }
 
@@ -109,6 +134,8 @@ function Build-ProfileWriterBlock {
             [void]$sb.AppendLine('set -e AWS_SECRET_ACCESS_KEY 2>/dev/null')
             [void]$sb.AppendLine('set -e AWS_SESSION_TOKEN 2>/dev/null')
             [void]$sb.AppendLine('set -e AWS_PROFILE 2>/dev/null')
+        } elseif ($Shell -eq 'powershell') {
+            [void]$sb.AppendLine("Remove-Item Env:AWS_ACCESS_KEY_ID,Env:AWS_SECRET_ACCESS_KEY,Env:AWS_SESSION_TOKEN,Env:AWS_PROFILE -ErrorAction SilentlyContinue")
         } else {
             [void]$sb.AppendLine('unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE 2>/dev/null || true')
         }
@@ -117,6 +144,10 @@ function Build-ProfileWriterBlock {
     # Helper: emit one export line
     $line = {
         param($k, $v)
+        if ($Shell -eq 'powershell') {
+            $ev = $v -replace "'", "''"
+            return "`$env:$k = '$ev'"
+        }
         $ev = $v -replace '"', '\"'
         if ($Shell -eq 'fish') { "$syntax $k `"$ev`"" }
         else                   { "$syntax $k=`"$ev`"" }
@@ -144,7 +175,46 @@ function Build-ProfileWriterBlock {
     }
 
     if ($AuthMode -in @('api-key','bedrock-api-key') -and $ApiKeyExpr) {
-        if ($Shell -eq 'fish') {
+        if ($Shell -eq 'powershell') {
+            if ($StorageMode -eq 'keychain') {
+                [void]$sb.AppendLine(@'
+function Get-JuggernautBedrockApiKey {
+    $src = @"
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+[DllImport("advapi32.dll")]
+public static extern void CredFree(IntPtr credential);
+[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+public struct CREDENTIAL {
+    public int Flags; public int Type;
+    public string TargetName; public string Comment;
+    public long LastWritten; public int CredentialBlobSize;
+    public IntPtr CredentialBlob; public int Persist;
+    public int AttributeCount; public IntPtr Attributes;
+    public string TargetAlias; public string UserName;
+}
+"@
+    Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition $src -ErrorAction SilentlyContinue
+    $ptr = [IntPtr]::Zero
+    if ([Win32.Cred]::CredRead('juggernaut-bedrock', 1, 0, [ref]$ptr)) {
+        try {
+            $c = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Win32.Cred+CREDENTIAL])
+            if ($c.CredentialBlobSize -gt 0) {
+                return [Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob, $c.CredentialBlobSize / 2)
+            }
+        } finally {
+            [Win32.Cred]::CredFree($ptr)
+        }
+    }
+    return ''
+}
+$env:AWS_BEARER_TOKEN_BEDROCK = Get-JuggernautBedrockApiKey
+'@)
+            } else {
+                $escapedKey = $ApiKeyExpr -replace "'", "''"
+                [void]$sb.AppendLine("`$env:AWS_BEARER_TOKEN_BEDROCK = '$escapedKey'")
+            }
+        } elseif ($Shell -eq 'fish') {
             [void]$sb.AppendLine("$syntax AWS_BEARER_TOKEN_BEDROCK $ApiKeyExpr")
         } else {
             [void]$sb.AppendLine("$syntax AWS_BEARER_TOKEN_BEDROCK=$ApiKeyExpr")

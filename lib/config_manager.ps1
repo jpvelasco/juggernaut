@@ -4,14 +4,22 @@
 
 $Script:ConfigBackupRetain = 5
 
+function Get-ConfigManagerHomePath {
+    if ($env:HOME) { return $env:HOME }
+    if ($env:USERPROFILE) { return $env:USERPROFILE }
+    if ($HOME) { return $HOME }
+    return [Environment]::GetFolderPath('UserProfile')
+}
+
 function Get-UserSettingsPath {
-    Join-Path $HOME '.claude/settings.json'
+    Join-Path (Get-ConfigManagerHomePath) '.claude/settings.json'
 }
 
 function Get-ProjectSettingsPath {
     param([string]$StartDir = (Get-Location).Path)
+    $homePath = Get-ConfigManagerHomePath
     $dir = $StartDir
-    while ($dir -and $dir -ne $HOME -and $dir -ne [IO.Path]::GetPathRoot($dir)) {
+    while ($dir -and $dir -ne $homePath -and $dir -ne [IO.Path]::GetPathRoot($dir)) {
         $candidate = Join-Path $dir '.claude/settings.json'
         if (Test-Path $candidate) { return $candidate }
         $parent = Split-Path $dir -Parent

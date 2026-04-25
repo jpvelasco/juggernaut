@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# tests/v2/test_feature_flag.sh — the --v2 / JUGGERNAUT_USE_V2 flag is dormant plumbing.
-# Confirms it is accepted, announced, does not alter v1 dry-run output, and does not leak
-# into paths that shouldn't see it.
+# tests/v2/test_feature_flag.sh — setup defaults to v2, with explicit v1 legacy fallback.
 
 set -uo pipefail
 
@@ -29,15 +27,18 @@ section "JUGGERNAUT_USE_V2=1 env var also delegates to juggernaut apply"
 apply_help_env="$(JUGGERNAUT_USE_V2=1 bash "$REPO_ROOT/setup" --help 2>/dev/null | head -1)"
 if [[ "$apply_help_env" == *"juggernaut apply"* ]]; then pass; else fail "env var should delegate to apply (got: '$apply_help_env')"; fi
 
-section "Default run (no flag) does NOT announce v2"
-clean_stderr="$(bash "$REPO_ROOT/setup" --help 2>&1 1>/dev/null)"
-if [[ "$clean_stderr" != *"Juggernaut v2"* ]]; then pass; else fail "v1 default run should be silent about v2"; fi
+section "Default run delegates to juggernaut apply"
+default_help="$(env -u JUGGERNAUT_USE_V2 bash "$REPO_ROOT/setup" --help 2>/dev/null | head -1)"
+if [[ "$default_help" == *"juggernaut apply"* ]]; then pass; else fail "default setup should delegate to apply (got: '$default_help')"; fi
 
-section "--v2 routes to apply; v1 path routes to setup-claude-bedrock (help differs)"
+section "--legacy-v1 routes to setup-claude-bedrock help"
 with_v2="$(bash "$REPO_ROOT/setup" --v2 --help 2>/dev/null | head -1)"
-without_v2="$(bash "$REPO_ROOT/setup" --help 2>/dev/null | head -1)"
-# v2 path shows apply help; v1 path shows v1 help — they must differ.
-if [[ "$with_v2" != "$without_v2" ]]; then pass; else fail "--v2 and v1 help should differ (both got: '$with_v2')"; fi
+legacy_help="$(bash "$REPO_ROOT/setup" --legacy-v1 --help 2>/dev/null | head -1)"
+if [[ "$with_v2" == *"juggernaut apply"* && "$legacy_help" == *"legacy v1"* ]]; then
+  pass
+else
+  fail "--v2 should show apply help and --legacy-v1 should show legacy help (got: '$with_v2' / '$legacy_help')"
+fi
 
 section "--v2 does NOT alter v1 dry-run stdout (behavioral isolation)"
 # Run v1 apply in dry-run twice, once with --v2, once without. The user-visible

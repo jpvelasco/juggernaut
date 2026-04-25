@@ -43,18 +43,19 @@ detect_shell() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# v2 feature flag (hidden; dormant in Phase 1). Filters --v2 out of argv.
-JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-0}"
+# v2 is the default path. v1 remains available as an explicit legacy fallback.
+JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-1}"
+JUGGERNAUT_LEGACY_V1="${JUGGERNAUT_USE_V1:-0}"
 FILTERED_ARGS=()
 for arg in "$@"; do
-    if [[ "$arg" == "--v2" ]]; then
-        JUGGERNAUT_V2_ACTIVE=1
-    else
-        FILTERED_ARGS+=("$arg")
-    fi
+    case "$arg" in
+        --v2) JUGGERNAUT_V2_ACTIVE=1 ;;
+        --v1|--legacy-v1) JUGGERNAUT_LEGACY_V1=1; JUGGERNAUT_V2_ACTIVE=0 ;;
+        *) FILTERED_ARGS+=("$arg") ;;
+    esac
 done
 set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
-if [[ "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
+if [[ "$JUGGERNAUT_LEGACY_V1" != "1" && "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
     export JUGGERNAUT_USE_V2=1
     exec "$SCRIPT_DIR/juggernaut" apply "$@"
 fi
@@ -66,12 +67,15 @@ for arg in "$@"; do
         exit 0
     }
     [[ "$arg" == "--help" || "$arg" == "-h" ]] && {
-        echo "Juggernaut - Claude Code Bedrock Setup"
+        echo "Juggernaut - Claude Code Bedrock Setup (legacy v1)"
         echo ""
-        echo "Usage: ./setup [OPTIONS]"
+        echo "Usage: ./setup --legacy-v1 [OPTIONS]"
         echo ""
-        echo "Automatically detects your OS and shell, then configures Claude Code"
-        echo "to use Amazon Bedrock with Global CRIS inference profiles."
+        echo "Fresh installs should use the v2 default:"
+        echo "  ./setup --v2"
+        echo "  juggernaut apply --v2"
+        echo ""
+        echo "This legacy path writes shell profile configuration only."
         echo ""
         echo "Options:"
         echo "  --auth=MODE          Authentication: iam (default) or api-key"
@@ -94,11 +98,9 @@ for arg in "$@"; do
         echo "  --help, -h           Show this help message"
         echo ""
         echo "Examples:"
-        echo "  ./setup                                    # IAM/SSO auth (default)"
-        echo "  ./setup --auth=api-key                     # API key (interactive prompt)"
-        echo "  ./setup --auth=api-key --bedrock-key=br-xxx   # API key (inline)"
-        echo "  ./setup --auth=api-key --preserve-key      # Reuse existing env key"
-        echo "  ./setup --dry-run                          # Preview changes"
+        echo "  ./setup --legacy-v1                         # IAM/SSO auth (legacy)"
+        echo "  ./setup --legacy-v1 --auth=api-key          # API key (interactive prompt)"
+        echo "  ./setup --legacy-v1 --dry-run               # Preview legacy changes"
         echo ""
         echo "Supported platforms:"
         echo "  - macOS (bash, zsh, fish)"

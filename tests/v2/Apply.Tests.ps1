@@ -33,7 +33,7 @@ Describe 'New-JuggernautBlock — IAM defaults' {
     It 'effortLevel = xhigh'   { $script:block.effortLevel   | Should -Be 'xhigh' }
     It 'opusplan = false'      { $script:block.opusplan       | Should -BeFalse }
     It 'meta.managedBy = juggernaut' { $script:block.meta.managedBy | Should -Be 'juggernaut' }
-    It 'meta.version = 2.1.3'  { $script:block.meta.version  | Should -Be '2.1.3' }
+    It 'meta.version = 2.1.4'  { $script:block.meta.version  | Should -Be '2.1.4' }
     It 'env.AWS_REGION = us-east-1' {
         $script:block.env['AWS_REGION'] | Should -Be 'us-east-1'
     }
@@ -181,6 +181,46 @@ Describe 'Build-ProfileWriterBlock — fish syntax' {
     }
 }
 
+Describe 'Build-ProfileWriterBlock — PowerShell syntax' {
+    It 'writes PowerShell env assignments for profile storage' {
+        $b = Build-ProfileWriterBlock `
+            -Shell 'powershell' -Region 'us-west-2' -AuthMode 'bedrock-api-key' `
+            -ApiKeyExpr 'br-test-token' -StorageMode 'profile' `
+            -BedrockConfigPath $script:BedrockConfigPath
+        $b | Should -Match ([regex]::Escape('$env:AWS_REGION = ''us-west-2'''))
+        $b | Should -Match ([regex]::Escape('$env:AWS_BEARER_TOKEN_BEDROCK = ''br-test-token'''))
+        $b | Should -Not -Match '^export '
+    }
+
+    It 'writes a Credential Manager reader for keychain storage' {
+        $b = Build-ProfileWriterBlock `
+            -Shell 'powershell' -Region 'us-west-2' -AuthMode 'bedrock-api-key' `
+            -ApiKeyExpr 'keychain' -StorageMode 'keychain' `
+            -BedrockConfigPath $script:BedrockConfigPath
+        $b | Should -Match 'Get-JuggernautBedrockApiKey'
+        $b | Should -Match ([regex]::Escape('$env:AWS_BEARER_TOKEN_BEDROCK = Get-JuggernautBedrockApiKey'))
+        $b | Should -Not -Match 'secret-tool lookup'
+    }
+}
+
+Describe 'Get-ProfileWriterPowerShellProfileTargets' {
+    It 'uses test override paths when provided' {
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+        try {
+            $sep = [IO.Path]::PathSeparator
+            $one = Join-Path ([IO.Path]::GetTempPath()) 'jug-one-profile.ps1'
+            $two = Join-Path ([IO.Path]::GetTempPath()) 'jug-two-profile.ps1'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = "$one$sep$two"
+            $targets = Get-ProfileWriterPowerShellProfileTargets
+            $targets | Should -Contain $one
+            $targets | Should -Contain $two
+        } finally {
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
+        }
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Profile writer — write / annotate
 # ---------------------------------------------------------------------------
@@ -253,6 +293,33 @@ Describe 'Test-KeychainAvailable' {
     It 'returns a boolean without throwing' {
         { Test-KeychainAvailable } | Should -Not -Throw
         Test-KeychainAvailable | Should -BeIn @($true, $false)
+    }
+}
+
+Describe 'Keychain storage round-trip' {
+    It 'stores, reads, and removes a test key when keychain is available' {
+        if (-not (Test-KeychainAvailable)) {
+            Set-ItResult -Skipped -Because 'No supported OS keychain is available'
+            return
+        }
+
+        $oldService = $env:JUGGERNAUT_KEYCHAIN_SERVICE
+        $oldAccount = $env:JUGGERNAUT_KEYCHAIN_ACCOUNT
+        try {
+            $env:JUGGERNAUT_KEYCHAIN_SERVICE = 'juggernaut-bedrock-test'
+            $env:JUGGERNAUT_KEYCHAIN_ACCOUNT = 'api-key-test'
+            Remove-KeychainEntry
+            Set-KeychainEntry -Key 'br-test-roundtrip' | Should -BeTrue
+            Get-KeychainEntry | Should -Be 'br-test-roundtrip'
+            Remove-KeychainEntry
+            Get-KeychainEntry | Should -Be ''
+        } finally {
+            Remove-KeychainEntry
+            if ($null -eq $oldService) { Remove-Item Env:\JUGGERNAUT_KEYCHAIN_SERVICE -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_KEYCHAIN_SERVICE = $oldService }
+            if ($null -eq $oldAccount) { Remove-Item Env:\JUGGERNAUT_KEYCHAIN_ACCOUNT -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_KEYCHAIN_ACCOUNT = $oldAccount }
+        }
     }
 }
 

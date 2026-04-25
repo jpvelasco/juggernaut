@@ -4,6 +4,16 @@
 $script:KeychainService = 'juggernaut-bedrock'
 $script:KeychainAccount = 'api-key'
 
+function Get-KeychainServiceName {
+    if ($env:JUGGERNAUT_KEYCHAIN_SERVICE) { return $env:JUGGERNAUT_KEYCHAIN_SERVICE }
+    return $script:KeychainService
+}
+
+function Get-KeychainAccountName {
+    if ($env:JUGGERNAUT_KEYCHAIN_ACCOUNT) { return $env:JUGGERNAUT_KEYCHAIN_ACCOUNT }
+    return $script:KeychainAccount
+}
+
 function Get-KeychainOS {
     if ($IsWindows -or $env:OS -match 'Windows') { return 'windows' }
     if ($IsMacOS)  { return 'macos' }
@@ -30,8 +40,8 @@ function Test-KeychainAvailable {
 
 function Set-KeychainEntry {
     param([Parameter(Mandatory)][string]$Key)
-    $svc = $script:KeychainService
-    $acc = $script:KeychainAccount
+    $svc = Get-KeychainServiceName
+    $acc = Get-KeychainAccountName
     $os  = Get-KeychainOS
     switch ($os) {
         'macos' {
@@ -45,18 +55,49 @@ function Set-KeychainEntry {
             return $LASTEXITCODE -eq 0
         }
         'windows' {
-            # cmdkey stores to Windows Credential Manager (always available, no plaintext in memory).
-            cmdkey /delete:$svc 2>$null | Out-Null
-            cmdkey /generic:$svc /user:$acc /pass:$Key 2>$null | Out-Null
-            return $LASTEXITCODE -eq 0
+            $src = @'
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredWrite(ref CREDENTIAL credential, int flags);
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredDelete(string target, int type, int flags);
+[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+public struct CREDENTIAL {
+    public int Flags; public int Type;
+    public string TargetName; public string Comment;
+    public long LastWritten; public int CredentialBlobSize;
+    public IntPtr CredentialBlob; public int Persist;
+    public int AttributeCount; public IntPtr Attributes;
+    public string TargetAlias; public string UserName;
+}
+'@
+            Add-Type -Namespace 'Win32' -Name 'CredWriteApi' -MemberDefinition $src -ErrorAction SilentlyContinue
+            [Win32.CredWriteApi]::CredDelete($svc, 1, 0) | Out-Null
+
+            $blob = [IntPtr]::Zero
+            try {
+                $blob = [Runtime.InteropServices.Marshal]::StringToCoTaskMemUni($Key)
+                $cred = New-Object Win32.CredWriteApi+CREDENTIAL
+                $cred.Flags = 0
+                $cred.Type = 1
+                $cred.TargetName = $svc
+                $cred.UserName = $acc
+                $cred.CredentialBlobSize = [Text.Encoding]::Unicode.GetByteCount($Key)
+                $cred.CredentialBlob = $blob
+                $cred.Persist = 2
+                return [Win32.CredWriteApi]::CredWrite([ref]$cred, 0)
+            } finally {
+                if ($blob -ne [IntPtr]::Zero) {
+                    [Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($blob)
+                }
+            }
         }
         default { return $false }
     }
 }
 
 function Get-KeychainEntry {
-    $svc = $script:KeychainService
-    $acc = $script:KeychainAccount
+    $svc = Get-KeychainServiceName
+    $acc = Get-KeychainAccountName
     $os  = Get-KeychainOS
     switch ($os) {
         'macos' {
@@ -102,13 +143,20 @@ public struct CREDENTIAL {
 }
 
 function Remove-KeychainEntry {
-    $svc = $script:KeychainService
-    $acc = $script:KeychainAccount
+    $svc = Get-KeychainServiceName
+    $acc = Get-KeychainAccountName
     $os  = Get-KeychainOS
     switch ($os) {
         'macos'             { security delete-generic-password -s $svc -a $acc 2>$null | Out-Null }
         { $_ -in 'linux','wsl' } { secret-tool clear service $svc account $acc 2>$null | Out-Null }
-        'windows'           { cmdkey /delete:$svc 2>$null | Out-Null }
+        'windows'           {
+            $src = @'
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredDelete(string target, int type, int flags);
+'@
+            Add-Type -Namespace 'Win32' -Name 'CredDeleteApi' -MemberDefinition $src -ErrorAction SilentlyContinue
+            [Win32.CredDeleteApi]::CredDelete($svc, 1, 0) | Out-Null
+        }
     }
 }
 
@@ -116,8 +164,8 @@ function Remove-KeychainEntry {
 # Returns the shell expression to embed in a profile for runtime key retrieval.
 function Get-KeychainRetrievalExpression {
     param([Parameter(Mandatory)][string]$Shell)
-    $svc = $script:KeychainService
-    $acc = $script:KeychainAccount
+    $svc = Get-KeychainServiceName
+    $acc = Get-KeychainAccountName
     $os  = Get-KeychainOS
     $cmd = switch ($os) {
         'macos'             { "security find-generic-password -s '$svc' -a '$acc' -w 2>/dev/null" }

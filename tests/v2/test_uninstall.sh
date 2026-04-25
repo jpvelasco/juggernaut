@@ -42,7 +42,7 @@ write_settings() {
   local path="$1" region="${2:-us-west-2}"
   local block
   block="$(J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
-    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.1.3 \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.1.4 \
     J_SHELL_FALLBACK_MODE=settings-only schema_new_juggernaut_block)"
   config_write_atomic "$path" "$(config_merge_juggernaut_block '{}' "$block" "$(schema_derive_native_keys "$block")")"
 }
