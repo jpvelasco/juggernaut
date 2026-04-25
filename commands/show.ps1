@@ -201,10 +201,18 @@ function Show-ShellFallback {
     $view = Get-ShowBlock -Block $Block
 
     Write-Output 'Shell Fallback'
-    $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
-    $shellPath = Get-ProfileWriterShellConfigPath -Shell $shellName
-    if ($shellPath) {
-        Write-Output ('  ' + (Show-HomePath $shellPath))
+    $profiles = @($view.ShellProfiles | Where-Object { $_ })
+    if ($profiles.Count -eq 0) {
+        if ($IsWindows -or $env:OS -match 'Windows') {
+            $profiles = @(Get-ProfileWriterPowerShellProfileTargets)
+        } else {
+            $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
+            $shellPath = Get-ProfileWriterShellConfigPath -Shell $shellName
+            if ($shellPath) { $profiles = @($shellPath) }
+        }
+    }
+    foreach ($profilePath in $profiles) {
+        Write-Output ('  ' + (Show-HomePath $profilePath))
     }
     Show-Kv -Indent 4 -Label 'Present' -Value (Show-Bool $view.ShellEnabled)
     if ($view.ShellEnabled) {
@@ -237,15 +245,12 @@ if ($effective.project) {
     }
 }
 
-$activePath = '-'
 $activeBlock = $null
 $activeScope = ''
 if ($projectBlock) {
-    $activePath = $projectPath
     $activeBlock = $projectBlock
     $activeScope = 'project'
 } elseif ($userBlock) {
-    $activePath = $userPath
     $activeBlock = $userBlock
     $activeScope = 'user'
 }

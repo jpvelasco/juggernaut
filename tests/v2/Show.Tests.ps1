@@ -136,6 +136,52 @@ Describe 'show.ps1' {
         }
     }
 
+    It 'shows recorded PowerShell fallback profiles instead of bash on Windows' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-psprofile-" + [Guid]::NewGuid().ToString('N'))
+        $profilePath = Join-Path $tmpHome 'WindowsPowerShell\profile.ps1'
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Split-Path $profilePath -Parent) -Force | Out-Null
+
+        $oldHome = $env:HOME
+        $oldHomeVar = $HOME
+        $oldUserProfile = $env:USERPROFILE
+        $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldShell = $env:SHELL
+        try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome
+            $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'
+            $env:BEDROCK_CONFIG_PATH = Join-Path $repoRoot 'bedrock-config.json'
+            $env:SHELL = 'bash'
+
+            $userBlock = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                                             -ShellFallbackMode 'both' -Scope 'user' `
+                                             -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
+            $userBlock.shellFallback.lastWrittenProfiles = @($profilePath)
+            $userMerged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $userBlock -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $userBlock)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $userMerged
+
+            $output = & (Join-Path $repoRoot 'commands\show.ps1') -Scope user 2>&1 | Out-String
+            $actualText = (($output -replace '\\', '/') -replace "`r`n", "`n")
+            if ($actualText -notmatch [regex]::Escape('~/WindowsPowerShell/profile.ps1')) {
+                throw "Expected show output to contain recorded PowerShell profile path, got: $output"
+            }
+            if ($actualText -match [regex]::Escape('~/.bashrc')) {
+                throw "Expected show output not to fall back to bash when profiles are recorded, got: $output"
+            }
+        } finally {
+            Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
+            $env:HOME = $oldHome
+            $env:USERPROFILE = $oldUserProfile
+            $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            $env:SHELL = $oldShell
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'shows both scopes and selected scope' {
         $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-home-" + [Guid]::NewGuid().ToString('N'))
         $tmpWork = Join-Path ([IO.Path]::GetTempPath()) ("jug-show-work-" + [Guid]::NewGuid().ToString('N'))
