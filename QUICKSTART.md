@@ -38,12 +38,12 @@ aws sts get-caller-identity
 ### 3. Install Juggernaut
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.4/install.sh | bash -s -- --version v2.1.4
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.0/install.sh | bash -s -- --version v2.2.0
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.1.4/install.ps1))) -Version v2.1.4
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.0/install.ps1))) -Version v2.2.0
 ```
 
 ### 4. Configure
@@ -56,7 +56,7 @@ juggernaut apply --v2 --auth=iam
 juggernaut apply --v2 --auth=bedrock-api-key
 ```
 
-The older shell-profile-only v1 setup remains available for compatibility with `./setup --legacy-v1`, but v2 is recommended for new installs and upgrades.
+The older shell-profile-only v1 setup remains available for compatibility with `./setup --legacy-v1`, but v2 is the default and recommended path for new installs and upgrades.
 
 ### 5. Launch
 ```bash
@@ -95,11 +95,23 @@ source apply-config.sh
 
 ## Fast / Background Model Note
 
-Juggernaut defaults background tasks and subagents to **Haiku 4.5** (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). `ANTHROPIC_SMALL_FAST_MODEL` has been removed as it is officially deprecated. For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`. Official Anthropic docs: https://code.claude.com/docs/en/model-config
+Juggernaut defaults background tasks and subagents to **Haiku 4.5** (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). `ANTHROPIC_SMALL_FAST_MODEL` has been removed as it is officially deprecated. For higher-quality background work, override the Haiku/subagent model with:
+
+```bash
+juggernaut apply --v2 --haiku-model=global.anthropic.claude-sonnet-4-6
+```
+
+Official Anthropic docs: https://code.claude.com/docs/en/model-config
 
 ## 1M Context Windows
 
-Enable 1M token context for Opus and Sonnet: `./setup --1m-context`. Standard context is the default.
+Enable 1M token context for Opus and Sonnet:
+
+```bash
+juggernaut apply --v2 --1m-context
+```
+
+Standard context is the default.
 
 ## Troubleshooting
 

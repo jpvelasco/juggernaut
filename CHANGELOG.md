@@ -2,7 +2,13 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
-## [2.1.4] - 2026-04-24
+## [2.2.0] - 2026-04-24
+
+### Upgrade Notes
+
+- `./setup` now defaults to the v2 settings.json-first flow. This is the recommended path for new installs and upgrades.
+- The older shell-profile-only v1 flow remains available for compatibility with `./setup --legacy-v1` or `./setup --v1`.
+- Windows users should run `juggernaut apply --v2 --auth=bedrock-api-key` or `juggernaut apply --v2 --auth=iam` after install; the installer itself remains install-only unless `-Configure` is passed.
 
 ### Changed
 
@@ -14,7 +20,7 @@ All notable changes to Juggernaut will be documented in this file.
 - **Windows keychain storage** — PowerShell v2 now writes Bedrock API keys directly to Windows Credential Manager instead of shelling through `cmdkey`, avoiding failures with generated key characters.
 - **No silent plaintext fallback for explicit keychain use** — if users explicitly request keychain storage and it fails, apply now stops with a clear message instead of downgrading to profile storage.
 - **Uninstall cleanup** — v2 uninstall removes Juggernaut blocks from Windows PowerShell profile targets as well as Unix-style shell profiles.
-- **Version bumped to 2.1.4** in `VERSION` and `bedrock-config.json`.
+- **Version bumped to 2.2.0** in `VERSION` and `bedrock-config.json`.
 
 ## [2.1.3] - 2026-04-24
 
@@ -88,7 +94,7 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
-[2.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.4
+[2.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.0
 [2.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.3
 [2.1.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.2
 [2.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.0
