@@ -44,7 +44,7 @@ set +e
 write_scope_settings() {
   local scope="$1" target="$2" region="$3"
   J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
-    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION=2.1.3 \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION=2.2.0 \
     J_SHELL_FALLBACK_MODE=settings-only \
     BLOCK="$(schema_new_juggernaut_block)"
   config_write_atomic "$target" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
@@ -101,7 +101,7 @@ section "bedrock API-key auth reports bearer-token source without IAM warning"
 API_HOME="$(mktemp -d)"
 mkdir -p "$API_HOME/.claude"
 J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
-  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.1.3 \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.0 \
   J_SHELL_FALLBACK_MODE=settings-only \
   API_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$API_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$API_BLOCK" "$(schema_derive_native_keys "$API_BLOCK")")"

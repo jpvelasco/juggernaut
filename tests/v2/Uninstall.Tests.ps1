@@ -9,6 +9,7 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib\schema.ps1')
     . (Join-Path $script:RepoRoot 'lib\config_manager.ps1')
     . (Join-Path $script:RepoRoot 'lib\keychain.ps1')
+    . (Join-Path $script:RepoRoot 'lib\profile_writer.ps1')
     $script:BedrockConfigPath = Join-Path $script:RepoRoot 'bedrock-config.json'
     $script:UninstallScript   = Join-Path $script:RepoRoot 'commands\uninstall.ps1'
     $env:BEDROCK_CONFIG_PATH  = $script:BedrockConfigPath
@@ -35,11 +36,13 @@ BeforeAll {
         $oldProfile = $env:USERPROFILE
         $oldV2      = $env:JUGGERNAUT_USE_V2
         $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
         $oldLoc     = (Get-Location).Path
         try {
             $env:HOME = $d.Home; $env:USERPROFILE = $d.Home
             $env:JUGGERNAUT_USE_V2 = '1'
             $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $d.Home 'PowerShell\profile.ps1'
             Set-Variable -Name HOME -Value $d.Home -Scope Global -Force
             Set-Location $d.Work
             $output = & $script:UninstallScript @params 2>&1 | Out-String
@@ -50,6 +53,8 @@ BeforeAll {
             $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
             $env:JUGGERNAUT_USE_V2 = $oldV2
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
         }
     }
 
@@ -166,6 +171,34 @@ Describe 'uninstall.ps1' {
             $r = Invoke-Uninstall $d @{ Force = $true }
             $r.Output | Should -Match 'Nothing to uninstall'
         } finally { Remove-TestDirs $d }
+    }
+
+    # ---------------------------------------------------------------------------
+    # Windows PowerShell profiles
+    # ---------------------------------------------------------------------------
+    It 'removes Juggernaut blocks from PowerShell profile targets on Windows' {
+        if ((Get-KeychainOS) -ne 'windows') {
+            Set-ItResult -Skipped -Because 'PowerShell profile fallback is Windows-specific'
+            return
+        }
+
+        $d = New-TestDirs
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+        try {
+            $profilePath = Join-Path $d.Home 'PowerShell\profile.ps1'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $profilePath
+            $block = Build-ProfileWriterBlock -Shell 'powershell' -Region 'us-west-2' `
+                -AuthMode 'iam' -ApiKeyExpr '' -StorageMode 'profile' `
+                -BedrockConfigPath $script:BedrockConfigPath
+            Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $block
+
+            Invoke-Uninstall $d @{ Force = $true } | Out-Null
+            Get-Content $profilePath -Raw | Should -Not -Match 'BEGIN: Claude Code Bedrock Configuration'
+        } finally {
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
+            Remove-TestDirs $d
+        }
     }
 
     # ---------------------------------------------------------------------------

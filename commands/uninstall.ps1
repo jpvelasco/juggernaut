@@ -92,6 +92,14 @@ foreach ($shell in @('bash', 'zsh', 'fish')) {
         $profileTargets += $p
     }
 }
+if ((Get-KeychainOS) -eq 'windows') {
+    foreach ($p in (Get-ProfileWriterPowerShellProfileTargets)) {
+        if ($p -and (Test-ProfileWriterHasBlock -ProfileFile $p)) {
+            $profileTargets += $p
+        }
+    }
+}
+$profileTargets = @($profileTargets | Select-Object -Unique)
 
 $hasKeychain = $false
 if (Test-KeychainAvailable) {

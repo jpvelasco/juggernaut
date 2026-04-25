@@ -72,6 +72,7 @@ Usage: juggernaut.ps1 apply [options]
 }
 
 $authExplicit = $PSBoundParameters.ContainsKey('Auth')
+$storageExplicit = $PSBoundParameters.ContainsKey('Storage')
 $mantleExplicit = $PSBoundParameters.ContainsKey('Mantle') -or $PSBoundParameters.ContainsKey('MantleUrl')
 if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
 if ($Force) { $Yes = $true }
@@ -254,10 +255,16 @@ if ($Auth -eq 'bedrock-api-key') {
         if ($DryRun) {
             Write-Host '[dry-run] would store API key in system keychain'
         } elseif (-not (Set-KeychainEntry -Key $BedrockKey)) {
-            Write-Warning 'apply: keychain store failed - falling back to profile storage'
+            if ($storageExplicit) {
+                Write-Error 'apply: keychain store failed. Re-run with -Storage profile if you want plaintext profile storage.'
+                exit 1
+            }
+            Write-Warning 'apply: keychain store failed; falling back to profile storage because storage was not explicit.'
             $Storage = 'profile'
         }
-        $apiKeyExpr = Get-KeychainRetrievalExpression -Shell 'bash'
+    }
+    if ($Storage -eq 'keychain') {
+        $apiKeyExpr = 'keychain'
     } else {
         $apiKeyExpr = $BedrockKey
     }
@@ -278,7 +285,7 @@ $buildParams = @{
     MantleBaseUrl  = $MantleUrl
     ShellFallbackMode = $shellMode
     Scope          = $Scope
-    Version        = '2.1.3'
+    Version        = '2.2.0'
     BedrockConfigPath = $env:BEDROCK_CONFIG_PATH
 }
 if ($Model)       { $buildParams['Model']       = $Model }
@@ -310,7 +317,14 @@ if ($DryRun) {
     $mergedSettings | ConvertTo-Json -Depth 20
     Write-Host '-----------------------------------------'
     if ($shellMode -ne 'settings-only') {
-        Write-Host "Would also update shell profile (bash): $(Join-Path $HomeDir '.bashrc')"
+        if ((Get-KeychainOS) -eq 'windows') {
+            Write-Host "Would also update PowerShell profiles:"
+            foreach ($profilePath in (Get-ProfileWriterPowerShellProfileTargets)) {
+                Write-Host "  $profilePath"
+            }
+        } else {
+            Write-Host "Would also update shell profile (bash): $(Join-Path $HomeDir '.bashrc')"
+        }
     }
     Write-Host ''
     Write-Host '[dry-run] Done.'
@@ -332,17 +346,13 @@ if (-not $ShellFallbackOnly) {
 
 # ---------------------------------------------------------------------------
 # Step 10: Write shell profile block (unless no-shell-fallback).
-# On Windows, default shell profile is PowerShell $PROFILE.
-# For cross-platform consistency the bash profile is written when present.
+# On Windows, write PowerShell all-hosts profiles so both Windows PowerShell 5.1
+# and PowerShell 7 can load the keychain/profile fallback.
 # ---------------------------------------------------------------------------
 if (-not $NoShellFallback) {
-    # Windows: update PowerShell profile with Set-Gx-less export comment block.
-    # For now we write the bash-style block to $HOME/.bashrc if it exists,
-    # mirroring what the PS migrator does. Full PS profile_writer is Phase 4.
-    $profilePath = Join-Path $HomeDir '.bashrc'
-    if (Test-Path (Split-Path $profilePath -Parent)) {
+    if ((Get-KeychainOS) -eq 'windows') {
         $blockContent = Build-ProfileWriterBlock `
-            -Shell       'bash' `
+            -Shell       'powershell' `
             -Region      $Region `
             -AuthMode    $Auth `
             -ApiKeyExpr  $apiKeyExpr `
@@ -356,11 +366,39 @@ if (-not $NoShellFallback) {
             -OpusPlan    $useOpusPlan `
             -UseMantle   $useMantle `
             -MantleUrl   $MantleUrl
-        try {
-            Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $blockContent
-            Write-Host "Profile block written to: $profilePath" -ForegroundColor Green
-        } catch {
-            Write-Warning "apply: could not write profile block to $profilePath`: $_"
+
+        foreach ($profilePath in (Get-ProfileWriterPowerShellProfileTargets)) {
+            try {
+                Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $blockContent
+                Write-Host "Profile block written to: $profilePath" -ForegroundColor Green
+            } catch {
+                Write-Warning "apply: could not write profile block to $profilePath`: $_"
+            }
+        }
+    } else {
+        $profilePath = Join-Path $HomeDir '.bashrc'
+        if (Test-Path (Split-Path $profilePath -Parent)) {
+            $blockContent = Build-ProfileWriterBlock `
+                -Shell       'bash' `
+                -Region      $Region `
+                -AuthMode    $Auth `
+                -ApiKeyExpr  $apiKeyExpr `
+                -StorageMode $Storage `
+                -BedrockConfigPath $env:BEDROCK_CONFIG_PATH `
+                -Model       $Model `
+                -OpusModel   $OpusModel `
+                -SonnetModel $SonnetModel `
+                -HaikuModel  $HaikuModel `
+                -EffortLevel $Effort `
+                -OpusPlan    $useOpusPlan `
+                -UseMantle   $useMantle `
+                -MantleUrl   $MantleUrl
+            try {
+                Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $blockContent
+                Write-Host "Profile block written to: $profilePath" -ForegroundColor Green
+            } catch {
+                Write-Warning "apply: could not write profile block to $profilePath`: $_"
+            }
         }
     }
 }

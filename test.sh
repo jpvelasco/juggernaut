@@ -175,8 +175,9 @@ test_json_validity() {
 
 test_unified_entry_point() {
     section "Unified Entry Point"
-    run_test "setup detects OS" "$SCRIPT_DIR/setup --help | grep -q 'macOS\\|Linux\\|Windows'"
-    run_test "setup detects shell types" "$SCRIPT_DIR/setup --help | grep -q 'bash, zsh, fish'"
+    run_test "setup defaults to v2 apply help" "$SCRIPT_DIR/setup --help | grep -q 'juggernaut apply'"
+    run_test "setup legacy v1 detects OS" "$SCRIPT_DIR/setup --legacy-v1 --help | grep -q 'macOS\\|Linux\\|Windows'"
+    run_test "setup legacy v1 detects shell types" "$SCRIPT_DIR/setup --legacy-v1 --help | grep -q 'bash, zsh, fish'"
 }
 
 test_api_key_auth() {

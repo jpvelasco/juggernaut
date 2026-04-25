@@ -35,31 +35,31 @@ export AWS_PROFILE=<your-profile>
 aws sts get-caller-identity
 ```
 
-### 3. Run Setup Script
+### 3. Install Juggernaut
 ```bash
-# Navigate to juggernaut directory
-cd ~/path/to/juggernaut
-
-# Run setup (auto-detects your shell)
-./setup
-
-# Or specify shell manually
-./setup-claude-bedrock.sh zsh      # macOS default
-./setup-claude-bedrock.sh bash     # Linux/WSL/Git Bash
-./setup-claude-bedrock.sh fish     # Fish shell
-
-# Windows PowerShell
-.\setup-claude-bedrock.ps1
+# Unix/macOS/Linux
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.0/install.sh | bash -s -- --version v2.2.0
 ```
 
-### 4. Apply & Launch
-```bash
-# Apply configuration
-source ~/.zshrc  # or ~/.bashrc or ~/.config/fish/config.fish
-
+```powershell
 # Windows PowerShell
-. $PROFILE.CurrentUserAllHosts
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.0/install.ps1))) -Version v2.2.0
+```
 
+### 4. Configure
+
+```bash
+# IAM/SSO
+juggernaut apply --v2 --auth=iam
+
+# Bedrock API key
+juggernaut apply --v2 --auth=bedrock-api-key
+```
+
+The older shell-profile-only v1 setup remains available for compatibility with `./setup --legacy-v1`, but v2 is the default and recommended path for new installs and upgrades.
+
+### 5. Launch
+```bash
 # Launch Claude Code
 claude
 ```
@@ -67,11 +67,8 @@ claude
 ## Verify Setup
 
 ```bash
-# Check environment variables are set correctly
-echo $CLAUDE_CODE_USE_BEDROCK          # Should output: 1
-echo $AWS_REGION                       # Should output: us-west-2
-echo $CLAUDE_CODE_MAX_OUTPUT_TOKENS    # Should output: 32768
-echo $ANTHROPIC_MODEL                  # Should output: global.anthropic.claude-sonnet-4-6
+# Check Juggernaut configuration
+juggernaut doctor --v2
 
 # Test Bedrock access
 aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
@@ -86,7 +83,8 @@ Your setup includes:
 - ✅ Claude Haiku 4.5 available via /model picker (Global CRIS)
 - ✅ All three model tiers visible in `/model` selector
 - ✅ Optimized token limits for Bedrock (32768 output, 65536 thinking)
-- ✅ Persistent configuration in shell profile
+- ✅ Persistent configuration in `~/.claude/settings.json`
+- ✅ Optional shell profile fallback
 
 ## Updating Existing Terminals
 
@@ -97,11 +95,23 @@ source apply-config.sh
 
 ## Fast / Background Model Note
 
-Juggernaut defaults background tasks and subagents to **Haiku 4.5** (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). `ANTHROPIC_SMALL_FAST_MODEL` has been removed as it is officially deprecated. For higher-quality background work: `./setup --fast-model=global.anthropic.claude-sonnet-4-6`. Official Anthropic docs: https://code.claude.com/docs/en/model-config
+Juggernaut defaults background tasks and subagents to **Haiku 4.5** (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). `ANTHROPIC_SMALL_FAST_MODEL` has been removed as it is officially deprecated. For higher-quality background work, override the Haiku/subagent model with:
+
+```bash
+juggernaut apply --v2 --haiku-model=global.anthropic.claude-sonnet-4-6
+```
+
+Official Anthropic docs: https://code.claude.com/docs/en/model-config
 
 ## 1M Context Windows
 
-Enable 1M token context for Opus and Sonnet: `./setup --1m-context`. Standard context is the default.
+Enable 1M token context for Opus and Sonnet:
+
+```bash
+juggernaut apply --v2 --1m-context
+```
+
+Standard context is the default.
 
 ## Troubleshooting
 

@@ -8,6 +8,22 @@ BeforeAll {
     $script:BedrockConfigPath = Join-Path $repoRoot 'bedrock-config.json'
 }
 
+Describe 'PowerShell home resolution' {
+    It 'uses HOME/USERPROFILE environment overrides instead of the process $HOME automatic variable' {
+        $oldHome = $env:HOME
+        $oldUserProfile = $env:USERPROFILE
+        try {
+            $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-home-" + [Guid]::NewGuid().ToString('N'))
+            $env:HOME = $tmpHome
+            $env:USERPROFILE = $tmpHome
+            Get-UserSettingsPath | Should -Be (Join-Path $tmpHome '.claude/settings.json')
+        } finally {
+            if ($null -eq $oldHome) { Remove-Item Env:\HOME -ErrorAction SilentlyContinue } else { $env:HOME = $oldHome }
+            if ($null -eq $oldUserProfile) { Remove-Item Env:\USERPROFILE -ErrorAction SilentlyContinue } else { $env:USERPROFILE = $oldUserProfile }
+        }
+    }
+}
+
 Describe 'Write → Read round trip' {
     BeforeEach {
         $script:tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("juggernaut-" + [Guid]::NewGuid().ToString('N'))
