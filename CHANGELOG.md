@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.1.3] - 2026-04-24
+
+### Fixed
+
+- **Windows configure command compatibility** — `juggernaut apply --v2 --auth=bedrock-api-key` now works from the PowerShell launcher exactly as shown in the README and release notes.
+- **PowerShell GNU-style flags** — the PowerShell dispatcher now translates documented `--flag` and `--flag=value` options into native PowerShell parameter binding for all v2 subcommands.
+- **Windows HOME fallback** — `apply.ps1` no longer fails when `$env:HOME` is missing; it falls back to `$env:USERPROFILE` or the Windows user-profile folder.
+- **Regression coverage** — added a Pester test for the release-note style Bedrock API-key apply command with `$env:HOME` absent.
+- **Version bumped to 2.1.3** in `VERSION` and `bedrock-config.json`.
+
 ## [2.1.2] - 2026-04-24
 
 ### Fixed
@@ -64,6 +74,7 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.3
 [2.1.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.2
 [2.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.0
 [2.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.0.0

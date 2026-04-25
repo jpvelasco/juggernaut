@@ -33,7 +33,7 @@ Describe 'New-JuggernautBlock — IAM defaults' {
     It 'effortLevel = xhigh'   { $script:block.effortLevel   | Should -Be 'xhigh' }
     It 'opusplan = false'      { $script:block.opusplan       | Should -BeFalse }
     It 'meta.managedBy = juggernaut' { $script:block.meta.managedBy | Should -Be 'juggernaut' }
-    It 'meta.version = 2.1.2'  { $script:block.meta.version  | Should -Be '2.1.2' }
+    It 'meta.version = 2.1.3'  { $script:block.meta.version  | Should -Be '2.1.3' }
     It 'env.AWS_REGION = us-east-1' {
         $script:block.env['AWS_REGION'] | Should -Be 'us-east-1'
     }
@@ -344,6 +344,51 @@ Describe 'apply.ps1 — bearer token auth detection' {
     }
     It 'keeps explicit IAM even when bearer token is present' {
         $script:explicitIamBlock.juggernaut.auth.mode | Should -Be 'iam'
+    }
+}
+
+Describe 'juggernaut.ps1 — documented GNU-style apply flags' {
+    BeforeAll {
+        $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("jug-dispatch-" + [Guid]::NewGuid().ToString('N'))
+        $projectDir = Join-Path $tmpDir 'project'
+        $userProfile = Join-Path $tmpDir 'user'
+        New-Item -ItemType Directory -Path (Join-Path $projectDir '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path $userProfile -Force | Out-Null
+        $script:dispatchRoot = $tmpDir
+
+        $shellExe = Join-Path $PSHOME 'powershell.exe'
+        if (-not (Test-Path $shellExe)) {
+            $shellExe = Join-Path $PSHOME 'pwsh.exe'
+        }
+
+        $command = @"
+`$oldHome = `$env:HOME
+`$oldUserProfile = `$env:USERPROFILE
+`$oldBearer = `$env:AWS_BEARER_TOKEN_BEDROCK
+try {
+    Remove-Item Env:\HOME -ErrorAction SilentlyContinue
+    `$env:USERPROFILE = '$($userProfile -replace "'", "''")'
+    `$env:AWS_BEARER_TOKEN_BEDROCK = 'br-test-token'
+    Set-Location '$($projectDir -replace "'", "''")'
+    & '$((Join-Path $script:repoRoot 'juggernaut.ps1') -replace "'", "''")' apply --v2 --auth=bedrock-api-key --dry-run --no-shell-fallback --scope=project
+    exit `$LASTEXITCODE
+} finally {
+    if (`$null -eq `$oldHome) { Remove-Item Env:\HOME -ErrorAction SilentlyContinue } else { `$env:HOME = `$oldHome }
+    if (`$null -eq `$oldUserProfile) { Remove-Item Env:\USERPROFILE -ErrorAction SilentlyContinue } else { `$env:USERPROFILE = `$oldUserProfile }
+    if (`$null -eq `$oldBearer) { Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue } else { `$env:AWS_BEARER_TOKEN_BEDROCK = `$oldBearer }
+}
+"@
+        $script:dispatchOutput = & $shellExe -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1 | Out-String
+        $script:dispatchExitCode = $LASTEXITCODE
+    }
+    AfterAll {
+        Remove-Item $script:dispatchRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'accepts release-note style --auth=bedrock-api-key on Windows without HOME' {
+        $script:dispatchExitCode | Should -Be 0
+        $script:dispatchOutput | Should -Match '"mode":\s*"bedrock-api-key"'
+        $script:dispatchOutput | Should -Not -Match 'Cannot bind argument to parameter ''Path'''
     }
 }
 
