@@ -286,7 +286,7 @@ $buildParams = @{
     MantleBaseUrl  = $MantleUrl
     ShellFallbackMode = $shellMode
     Scope          = $Scope
-    Version        = '2.2.1'
+    Version        = '2.2.2'
     BedrockConfigPath = $env:BEDROCK_CONFIG_PATH
 }
 if ($Model)       { $buildParams['Model']       = $Model }
