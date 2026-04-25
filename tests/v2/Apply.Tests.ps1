@@ -459,6 +459,42 @@ try {
     }
 }
 
+Describe 'apply.ps1 — explicit keychain failure handling' {
+    BeforeAll {
+        $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("jug-keychain-fail-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpDir '.claude') -Force | Out-Null
+        $script:keychainFailHome = $tmpDir
+
+        $oldHome = $env:HOME
+        $oldUserProfile = $env:USERPROFILE
+        $oldForceFail = $env:JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL
+        try {
+            $env:HOME = $tmpDir
+            $env:USERPROFILE = $tmpDir
+            $env:JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL = '1'
+            $script:keychainFailOutput = & (Join-Path $script:repoRoot 'commands\apply.ps1') `
+                -Auth 'bedrock-api-key' -BedrockKey 'br-test-token' -Storage 'keychain' `
+                -NoShellFallback -SkipPreflight 2>&1 | Out-String
+            $script:keychainFailExitCode = $LASTEXITCODE
+        } finally {
+            $env:HOME = $oldHome
+            $env:USERPROFILE = $oldUserProfile
+            if ($null -eq $oldForceFail) { Remove-Item Env:\JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL = $oldForceFail }
+        }
+    }
+    AfterAll {
+        Remove-Item $script:keychainFailHome -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'stops instead of falling back when keychain storage was explicit' {
+        $script:keychainFailExitCode | Should -Be 1
+        $script:keychainFailOutput | Should -Match ([regex]::Escape('keychain store failed'))
+        $script:keychainFailOutput | Should -Not -Match ([regex]::Escape('falling back to profile storage'))
+        Test-Path (Join-Path $script:keychainFailHome '.claude/settings.json') | Should -BeFalse
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Implicit migration — region sourced from AWS_REGION (single source of truth)
 # ---------------------------------------------------------------------------

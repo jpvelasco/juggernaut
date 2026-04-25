@@ -167,6 +167,12 @@ juggernaut uninstall   # Safely remove all Juggernaut configuration
 
 v1 is legacy. Existing v1 profile blocks continue to work, but v2 is the supported path going forward because Claude Code now reads `settings.json` cleanly across clients.
 
+Fresh installs and `./setup` now default to v2. If you maintain an older v1-only environment, keep using the explicit legacy entrypoint:
+
+```bash
+./setup --legacy-v1
+```
+
 `juggernaut apply --v2` no longer migrates a v1 shell profile block silently. In an interactive terminal it asks before writing; in non-interactive use it exits with a clear message unless you pass `--yes`. Use `--dry-run` to preview the proposed migration without writing anything.
 
 ```bash

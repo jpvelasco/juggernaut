@@ -40,6 +40,7 @@ function Test-KeychainAvailable {
 
 function Set-KeychainEntry {
     param([Parameter(Mandatory)][string]$Key)
+    if ($env:JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL -eq '1') { return $false }
     $svc = Get-KeychainServiceName
     $acc = Get-KeychainAccountName
     $os  = Get-KeychainOS
