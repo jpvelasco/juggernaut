@@ -42,6 +42,7 @@ keychain_available() {
 keychain_store() {
   local key="$1"
   local os
+  [[ "${JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL:-0}" == "1" ]] && return 1
   os="$(keychain_detect_os)"
   case "$os" in
     macos)

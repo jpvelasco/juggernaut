@@ -41,6 +41,52 @@ profile_writer_has_block() {
 }
 
 # ---------------------------------------------------------------------------
+# profile_writer_read_api_key <profile_file>
+# Reads a plaintext AWS_BEARER_TOKEN_BEDROCK assignment from a Juggernaut
+# profile block. Keychain-backed blocks intentionally return empty.
+# ---------------------------------------------------------------------------
+profile_writer_read_api_key() {
+  local f="$1"
+  local line value
+  [[ -f "$f" ]] || return 1
+
+  line="$(
+    awk -v begin_marker="$PROFILE_WRITER_BEGIN_MARKER" \
+        -v end_marker="$PROFILE_WRITER_END_MARKER" '
+      $0 == begin_marker { in_block=1; next }
+      $0 == end_marker { in_block=0; next }
+      in_block { print }
+    ' "$f" \
+      | grep -E '^(export AWS_BEARER_TOKEN_BEDROCK=|set -gx AWS_BEARER_TOKEN_BEDROCK )' \
+      | tail -1
+  )" || true
+  [[ -n "$line" ]] || return 1
+
+  case "$line" in
+    export\ AWS_BEARER_TOKEN_BEDROCK=*)
+      value="${line#export AWS_BEARER_TOKEN_BEDROCK=}" ;;
+    set\ -gx\ AWS_BEARER_TOKEN_BEDROCK\ *)
+      value="${line#set -gx AWS_BEARER_TOKEN_BEDROCK }" ;;
+    *) return 1 ;;
+  esac
+
+  case "$value" in
+    *keychain*|*\$\(*|*\`*) return 1 ;;
+  esac
+
+  if [[ "$value" == \'*\' && ${#value} -ge 2 ]]; then
+    value="${value:1:${#value}-2}"
+  elif [[ "$value" == \"*\" && ${#value} -ge 2 ]]; then
+    value="${value:1:${#value}-2}"
+    value="${value//\\\"/\"}"
+    value="${value//\\\\/\\}"
+  fi
+
+  [[ -n "$value" ]] || return 1
+  printf '%s' "$value"
+}
+
+# ---------------------------------------------------------------------------
 # profile_writer_remove_block <profile_file> [dry_run]
 # Removes the marker-delimited block from the profile file.
 # Pass "true" as second arg to skip actual removal (dry-run).

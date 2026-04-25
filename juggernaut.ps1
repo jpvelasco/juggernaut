@@ -30,7 +30,21 @@ foreach ($arg in $RemainingArgs) {
 }
 $subcommandArgs = $filteredArgs
 
-$PSScriptRoot_ = $PSScriptRoot
+function Resolve-JuggernautScriptRoot {
+    param([string]$Path)
+
+    $current = Get-Item -LiteralPath $Path
+    while ($current.Target) {
+        $target = [string]$current.Target
+        if (-not [System.IO.Path]::IsPathRooted($target)) {
+            $target = Join-Path $current.DirectoryName $target
+        }
+        $current = Get-Item -LiteralPath $target
+    }
+    return $current.DirectoryName
+}
+
+$PSScriptRoot_ = Resolve-JuggernautScriptRoot -Path $PSCommandPath
 
 function Convert-GnuStyleArgs {
     param([string[]]$InputArgs)

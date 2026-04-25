@@ -144,6 +144,42 @@ EXPLICIT_JSON="$(
 assert_eq "bearer/explicit-iam auth.mode" "$(printf '%s' "$EXPLICIT_JSON" | jq -r '.juggernaut.auth.mode')" "iam"
 rm -rf "$BEARER_HOME"
 
+section "--preserve-key can reuse profile-stored API key"
+PROFILE_KEY_HOME="$(mktemp -d)"
+mkdir -p "$PROFILE_KEY_HOME/.claude"
+PROFILE_BLOCK="$(profile_writer_build_block bash us-west-2 bedrock-api-key "'br-profile-token'" profile "$BEDROCK_CONFIG_PATH")"
+profile_writer_write "$PROFILE_KEY_HOME/.bashrc" "$PROFILE_BLOCK"
+PROFILE_KEY_JSON="$(
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$PROFILE_KEY_HOME" SHELL=/bin/bash bash "$REPO_ROOT/commands/apply.sh" \
+    --auth=bedrock-api-key --preserve-key --storage=profile --dry-run --no-shell-fallback 2>/dev/null \
+    | sed -n '/^{/,/^}$/p'
+)"
+assert_eq "preserve-profile/auth.mode" "$(printf '%s' "$PROFILE_KEY_JSON" | jq -r '.juggernaut.auth.mode')" "bedrock-api-key"
+rm -rf "$PROFILE_KEY_HOME"
+
+section "explicit keychain storage does not fall back to plaintext"
+KEYCHAIN_FAIL_HOME="$(mktemp -d)"
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL=1 \
+  HOME="$KEYCHAIN_FAIL_HOME" SHELL=/bin/bash bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=bedrock-api-key --bedrock-key=br-test-token --storage=keychain --no-shell-fallback >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -ne 0 ]]; then pass; else fail "explicit keychain failure should not fall back to profile storage"; fi
+rm -rf "$KEYCHAIN_FAIL_HOME"
+
+section "login shell detection prefers SHELL over Bash runtime"
+SHELL_HOME="$(mktemp -d)"
+mkdir -p "$SHELL_HOME/.claude"
+SHELL_OUTPUT="$(
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$SHELL_HOME" SHELL=/usr/bin/zsh bash "$REPO_ROOT/commands/apply.sh" \
+    --auth=iam --dry-run 2>/dev/null
+)"
+if [[ "$SHELL_OUTPUT" == *"Would also update shell profile: $SHELL_HOME/.zshrc"* ]]; then pass
+else fail "apply.sh should target .zshrc when SHELL points to zsh"; fi
+rm -rf "$SHELL_HOME"
+
 # ---------------------------------------------------------------------------
 # Opusplan flag sets ANTHROPIC_MODEL=opusplan
 # ---------------------------------------------------------------------------

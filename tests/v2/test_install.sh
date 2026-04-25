@@ -78,6 +78,18 @@ else
   printf '%s\n' "$OUTPUT" >&2
 fi
 
+section "symlinked launcher resolves install dir"
+TMP_BIN="$TMP_HOME/.local/bin"
+mkdir -p "$TMP_BIN"
+ln -sfn "$REPO_ROOT/juggernaut" "$TMP_BIN/juggernaut"
+if OUTPUT="$(cd "$TMP_WORK" && HOME="$TMP_HOME" AWS_PROFILE=juggernaut-test SHELL=/bin/bash "$TMP_BIN/juggernaut" doctor --v2 2>&1)" &&
+   [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
+  pass
+else
+  fail "symlinked launcher should resolve commands from install dir"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
 echo
 echo "install tests: $PASS passed, $FAIL failed"
 exit "$FAIL"

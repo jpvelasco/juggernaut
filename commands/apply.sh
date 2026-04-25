@@ -138,11 +138,15 @@ if [[ "$J_NO_SHELL_FALLBACK" == "true" && "$J_SHELL_FALLBACK_ONLY" == "true" ]];
   exit 1
 fi
 
-# Auto-detect shell if not provided.
+# Auto-detect the user's login shell if not provided. This script itself runs
+# under Bash, so BASH_VERSION is only a fallback.
 if [[ -z "$SHELL_TYPE" ]]; then
-  if [[ -n "${ZSH_VERSION:-}" ]];  then SHELL_TYPE="zsh"
-  elif [[ -n "${BASH_VERSION:-}" ]]; then SHELL_TYPE="bash"
+  _shell_name="$(basename "${SHELL:-}")"
+  if [[ "$_shell_name" == "bash" || "$_shell_name" == "zsh" || "$_shell_name" == "fish" ]]; then
+    SHELL_TYPE="$_shell_name"
+  elif [[ -n "${ZSH_VERSION:-}" ]];  then SHELL_TYPE="zsh"
   elif [[ -n "${FISH_VERSION:-}" ]]; then SHELL_TYPE="fish"
+  elif [[ -n "${BASH_VERSION:-}" ]]; then SHELL_TYPE="bash"
   else SHELL_TYPE="$(basename "${SHELL:-bash}")"
   fi
 fi
@@ -306,9 +310,12 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
       J_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
     elif [[ "$J_STORAGE" == "keychain" ]] && keychain_available 2>/dev/null; then
       J_API_KEY="$(keychain_get 2>/dev/null || true)"
+    elif [[ "$J_STORAGE" == "profile" ]]; then
+      _profile_path="$(profile_writer_detect_shell_config_path "$SHELL_TYPE")"
+      J_API_KEY="$(profile_writer_read_api_key "$_profile_path" 2>/dev/null || true)"
     fi
     if [[ -z "$J_API_KEY" ]]; then
-      echo "apply: --preserve-key specified but no existing key found in env or keychain" >&2
+      echo "apply: --preserve-key specified but no existing key found in env, keychain, or shell profile" >&2
       exit 1
     fi
   fi
@@ -336,9 +343,16 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
     if [[ "$DRY_RUN" == "true" ]]; then
       echo "[dry-run] would store API key in system keychain"
     elif ! keychain_store "$J_API_KEY" 2>/dev/null; then
+      if [[ "$J_STORAGE_EXPLICIT" == "true" ]]; then
+        echo "apply: keychain store failed. Re-run with --storage=profile if you want plaintext profile storage." >&2
+        exit 1
+      fi
       echo "apply: warning — failed to store API key in keychain; falling back to profile storage" >&2
       J_STORAGE="profile"
     fi
+  fi
+
+  if [[ "$J_STORAGE" == "keychain" ]]; then
     API_KEY_EXPR="$(keychain_get_command "$SHELL_TYPE")"
   else
     # Profile storage: single-quote the key.
