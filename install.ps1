@@ -24,7 +24,7 @@ if ($Latest) { $Version = '' }
 # Normalize version: accept "2.1.2" or "v2.1.2" - tags are always v-prefixed.
 if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 
-$RepoUrl    = 'https://github.com/jpvelasco/juggernaut.git'
+$RepoUrl    = if ($env:JUGGERNAUT_REPO_URL) { $env:JUGGERNAUT_REPO_URL } else { 'https://github.com/jpvelasco/juggernaut.git' }
 $InstallDir = if ($env:JUGGERNAUT_DIR) { $env:JUGGERNAUT_DIR } else { Join-Path $HOME '.juggernaut' }
 
 if ($Version) {
@@ -38,24 +38,62 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if (Test-Path $InstallDir) {
-    Write-Host "Updating existing installation in $InstallDir"
-    git -C $InstallDir fetch --tags --quiet
-    if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
-    if ($Version) {
-        git -C $InstallDir checkout --quiet $Version
-    } else {
-        git -C $InstallDir checkout --quiet main
-        git -C $InstallDir pull --ff-only --quiet
-    }
-    if ($LASTEXITCODE -ne 0) { throw 'git checkout/pull failed' }
-} else {
+function Clone-Install {
     if ($Version) {
         git clone --branch $Version --depth 1 --quiet $RepoUrl $InstallDir
     } else {
         git clone --quiet $RepoUrl $InstallDir
     }
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
+}
+
+function Backup-ExistingInstall {
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $backup = "$InstallDir.backup.$timestamp"
+    $n = 1
+    while (Test-Path $backup) {
+        $backup = "$InstallDir.backup.$timestamp.$n"
+        $n++
+    }
+    Write-Host "Backup created: $backup"
+    Move-Item -LiteralPath $InstallDir -Destination $backup
+}
+
+function Test-InstallTreeDirty {
+    git -C $InstallDir rev-parse --git-dir *> $null
+    if ($LASTEXITCODE -ne 0) { return $true }
+
+    git -C $InstallDir diff --quiet --ignore-submodules --
+    if ($LASTEXITCODE -ne 0) { return $true }
+
+    git -C $InstallDir diff --cached --quiet --ignore-submodules --
+    if ($LASTEXITCODE -ne 0) { return $true }
+
+    $untracked = git -C $InstallDir ls-files --others --exclude-standard
+    return [bool]$untracked
+}
+
+if (Test-Path $InstallDir) {
+    if (Test-InstallTreeDirty) {
+        Write-Host 'Existing installation has local changes or is not a clean Git checkout.'
+        Backup-ExistingInstall
+        Clone-Install
+    } else {
+        Write-Host "Updating existing installation in $InstallDir"
+        git -C $InstallDir fetch --tags --quiet
+        if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
+        if ($Version) {
+            git -C $InstallDir checkout --quiet $Version
+            if ($LASTEXITCODE -ne 0) { throw "git checkout $Version failed" }
+        } else {
+            git -C $InstallDir checkout --quiet main
+            if ($LASTEXITCODE -ne 0) { throw 'git checkout main failed' }
+            git -C $InstallDir pull --ff-only --quiet
+            if ($LASTEXITCODE -ne 0) { throw 'git pull failed' }
+        }
+    }
+} else {
+    Clone-Install
 }
 
 Write-Host "Installed to $InstallDir"
