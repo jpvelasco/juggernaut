@@ -64,7 +64,7 @@ export J_STORAGE=profile
 export J_USE_MANTLE=false
 export J_OPUSPLAN=false
 export J_SCOPE=user
-export J_VERSION=2.2.1
+export J_VERSION=2.2.2
 export J_SHELL_FALLBACK_MODE=settings-only
 BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
@@ -75,6 +75,18 @@ if OUTPUT="$(cd "$TMP_WORK" && HOME="$TMP_HOME" AWS_PROFILE=juggernaut-test SHEL
   pass
 else
   fail "fresh install doctor smoke failed"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+section "symlinked launcher resolves install dir"
+TMP_BIN="$TMP_HOME/.local/bin"
+mkdir -p "$TMP_BIN"
+ln -sfn "$REPO_ROOT/juggernaut" "$TMP_BIN/juggernaut"
+if OUTPUT="$(cd "$TMP_WORK" && HOME="$TMP_HOME" AWS_PROFILE=juggernaut-test SHELL=/bin/bash "$TMP_BIN/juggernaut" doctor --v2 2>&1)" &&
+   [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
+  pass
+else
+  fail "symlinked launcher should resolve commands from install dir"
   printf '%s\n' "$OUTPUT" >&2
 fi
 

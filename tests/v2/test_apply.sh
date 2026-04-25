@@ -92,7 +92,7 @@ set +e  # lib sources re-enable errexit; restore manual error handling.
 
 J_AUTH_MODE=iam J_REGION=us-east-1 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   BLOCK="$(schema_new_juggernaut_block)"
 
@@ -102,7 +102,7 @@ assert_eq "auth.storage" "$(printf '%s' "$BLOCK" | jq -r '.auth.storage')" "prof
 assert_eq "effortLevel"  "$(printf '%s' "$BLOCK" | jq -r '.effortLevel')"  "xhigh"
 assert_false "opusplan"  "$(printf '%s' "$BLOCK" | jq -r '.opusplan')"
 assert_eq "managedBy"    "$(printf '%s' "$BLOCK" | jq -r '.meta.managedBy')" "juggernaut"
-assert_eq "version"      "$(printf '%s' "$BLOCK" | jq -r '.meta.version')"   "2.2.1"
+assert_eq "version"      "$(printf '%s' "$BLOCK" | jq -r '.meta.version')"   "2.2.2"
 assert_eq "scope"        "$(printf '%s' "$BLOCK" | jq -r '.meta.scope')"     "user"
 assert_eq "env.AWS_REGION" "$(printf '%s' "$BLOCK" | jq -r '.env.AWS_REGION')" "us-east-1"
 assert_eq "env.BEDROCK"    "$(printf '%s' "$BLOCK" | jq -r '.env.CLAUDE_CODE_USE_BEDROCK')" "1"
@@ -126,7 +126,7 @@ section "AWS_BEARER_TOKEN_BEDROCK overrides stored IAM auth unless auth is expli
 BEARER_HOME="$(mktemp -d)"
 mkdir -p "$BEARER_HOME/.claude"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
-  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.1 \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=settings-only \
   IAM_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$BEARER_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$IAM_BLOCK" "$(schema_derive_native_keys "$IAM_BLOCK")")"
@@ -144,13 +144,49 @@ EXPLICIT_JSON="$(
 assert_eq "bearer/explicit-iam auth.mode" "$(printf '%s' "$EXPLICIT_JSON" | jq -r '.juggernaut.auth.mode')" "iam"
 rm -rf "$BEARER_HOME"
 
+section "--preserve-key can reuse profile-stored API key"
+PROFILE_KEY_HOME="$(mktemp -d)"
+mkdir -p "$PROFILE_KEY_HOME/.claude"
+PROFILE_BLOCK="$(profile_writer_build_block bash us-west-2 bedrock-api-key "'br-profile-token'" profile "$BEDROCK_CONFIG_PATH")"
+profile_writer_write "$PROFILE_KEY_HOME/.bashrc" "$PROFILE_BLOCK"
+PROFILE_KEY_JSON="$(
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$PROFILE_KEY_HOME" SHELL=/bin/bash bash "$REPO_ROOT/commands/apply.sh" \
+    --auth=bedrock-api-key --preserve-key --storage=profile --dry-run --no-shell-fallback 2>/dev/null \
+    | sed -n '/^{/,/^}$/p'
+)"
+assert_eq "preserve-profile/auth.mode" "$(printf '%s' "$PROFILE_KEY_JSON" | jq -r '.juggernaut.auth.mode')" "bedrock-api-key"
+rm -rf "$PROFILE_KEY_HOME"
+
+section "explicit keychain storage does not fall back to plaintext"
+KEYCHAIN_FAIL_HOME="$(mktemp -d)"
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+  JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL=1 \
+  HOME="$KEYCHAIN_FAIL_HOME" SHELL=/bin/bash bash "$REPO_ROOT/commands/apply.sh" \
+  --auth=bedrock-api-key --bedrock-key=br-test-token --storage=keychain --no-shell-fallback >/dev/null 2>&1
+RC=$?
+if [[ "$RC" -ne 0 ]]; then pass; else fail "explicit keychain failure should not fall back to profile storage"; fi
+rm -rf "$KEYCHAIN_FAIL_HOME"
+
+section "login shell detection prefers SHELL over Bash runtime"
+SHELL_HOME="$(mktemp -d)"
+mkdir -p "$SHELL_HOME/.claude"
+SHELL_OUTPUT="$(
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$SHELL_HOME" SHELL=/usr/bin/zsh bash "$REPO_ROOT/commands/apply.sh" \
+    --auth=iam --dry-run 2>/dev/null
+)"
+if [[ "$SHELL_OUTPUT" == *"Would also update shell profile: $SHELL_HOME/.zshrc"* ]]; then pass
+else fail "apply.sh should target .zshrc when SHELL points to zsh"; fi
+rm -rf "$SHELL_HOME"
+
 # ---------------------------------------------------------------------------
 # Opusplan flag sets ANTHROPIC_MODEL=opusplan
 # ---------------------------------------------------------------------------
 section "opusplan=true → env.ANTHROPIC_MODEL=opusplan"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=true \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   OPBLOCK="$(schema_new_juggernaut_block)"
 
@@ -163,7 +199,7 @@ assert_eq "ANTHROPIC_MODEL" "$(printf '%s' "$OPBLOCK" | jq -r '.env.ANTHROPIC_MO
 section "effort level propagates to env"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=high J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   EBLOCK="$(schema_new_juggernaut_block)"
 
@@ -176,7 +212,7 @@ assert_eq "EFFORT_LEVEL env"  "$(printf '%s' "$EBLOCK" | jq -r '.env.CLAUDE_CODE
 section "useMantle=true → env.CLAUDE_CODE_USE_MANTLE=1"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=true J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   MBLOCK="$(schema_new_juggernaut_block)"
 
@@ -186,7 +222,7 @@ assert_eq "CLAUDE_CODE_USE_MANTLE" "$(printf '%s' "$MBLOCK" | jq -r '.env.CLAUDE
 # Mantle URL propagates when set.
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=true J_MANTLE_BASE_URL="https://mantle.example.com" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   MUBLOCK="$(schema_new_juggernaut_block)"
 
@@ -200,7 +236,7 @@ assert_eq "ANTHROPIC_BEDROCK_MANTLE_BASE_URL" \
 # useMantle=false must NOT set CLAUDE_CODE_USE_MANTLE.
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   NMBLOCK="$(schema_new_juggernaut_block)"
 
@@ -216,7 +252,7 @@ TMP_SETTINGS="$TMP_DIR/settings.json"
 
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.1 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
   J_SHELL_FALLBACK_MODE=both \
   RT_BLOCK="$(schema_new_juggernaut_block)"
 

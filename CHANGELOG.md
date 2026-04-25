@@ -2,6 +2,18 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.2.2] - 2026-04-25
+
+### Fixed
+
+- **Installed launcher dispatch** — Unix launchers now resolve symlinks before dispatching, so `~/.local/bin/juggernaut` finds the installed `commands/` directory.
+- **PowerShell launcher dispatch** — Windows PowerShell dispatch now resolves the launcher root defensively before loading subcommands.
+- **Profile-backed API-key upgrades** — `apply --v2 --auth=bedrock-api-key --preserve-key --storage=profile` can reuse an existing Juggernaut-managed profile key.
+- **Shell profile targeting** — Bash apply now prefers the user's login shell from `$SHELL`, avoiding accidental `.bashrc` writes for zsh/fish users.
+- **Explicit keychain safety** — Bash apply now fails closed when explicit keychain storage fails instead of silently falling back to plaintext profile storage.
+- **PowerShell 1M context default** — PowerShell fresh apply now matches Bash by defaulting 1M context on.
+- **Version bumped to 2.2.2** in `VERSION`, `bedrock-config.json`, docs, and v2 defaults.
+
 ## [2.2.1] - 2026-04-24
 
 ### Fixed

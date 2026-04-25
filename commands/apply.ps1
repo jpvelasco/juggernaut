@@ -203,6 +203,7 @@ if (-not $Region) {
     try { $cfg = Get-Content $env:BEDROCK_CONFIG_PATH -Raw -Encoding utf8 | ConvertFrom-Json } catch {}
     $Region = if ($cfg -and $cfg.defaults.region) { $cfg.defaults.region } else { 'us-west-2' }
 }
+if (-not $Use1MContext -and -not $No1MContext) { $Use1MContext = $true }
 
 $useOpusPlan = [bool]($OpusPlan -and -not $NoOpusPlan)
 $use1M       = [bool]($Use1MContext -and -not $No1MContext)
@@ -285,7 +286,7 @@ $buildParams = @{
     MantleBaseUrl  = $MantleUrl
     ShellFallbackMode = $shellMode
     Scope          = $Scope
-    Version        = '2.2.1'
+    Version        = '2.2.2'
     BedrockConfigPath = $env:BEDROCK_CONFIG_PATH
 }
 if ($Model)       { $buildParams['Model']       = $Model }
