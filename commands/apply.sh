@@ -267,17 +267,19 @@ fi
 # Step 4: Apply hard defaults for anything still unset.
 # ---------------------------------------------------------------------------
 
-# Conflict guard: if the existing block says "iam" but live evidence of an
-# API key exists (env var or keychain), auto-correct unless --auth=iam was
-# passed explicitly. This fixes corrupted installs from earlier releases.
-if [[ "$J_AUTH_EXPLICIT" == "false" && "$J_AUTH_MODE" == "iam" ]]; then
+# Bearer-token / keychain auto-detection: if no explicit --auth flag, infer
+# bedrock-api-key from live evidence. When a stored block says "iam" but a key
+# exists, warn (corrupted install); for fresh installs just silently switch.
+if [[ "$J_AUTH_EXPLICIT" == "false" ]]; then
   if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-    echo "apply: WARNING — stored auth mode is 'iam' but AWS_BEARER_TOKEN_BEDROCK is set." >&2
-    echo "apply: Auto-correcting to bedrock-api-key. Pass --auth=iam to suppress." >&2
+    if [[ "$J_AUTH_MODE" == "iam" && -n "${EXISTING_BLOCK:-}" ]]; then
+      echo "apply: WARNING — stored auth mode is 'iam' but AWS_BEARER_TOKEN_BEDROCK is set." >&2
+      echo "apply: Auto-correcting to bedrock-api-key. Pass --auth=iam to suppress." >&2
+    fi
     J_AUTH_MODE="bedrock-api-key"
     J_PRESERVE_KEY=true
     if [[ "$J_MANTLE_EXPLICIT" == "false" ]]; then J_USE_MANTLE=true; fi
-  elif [[ -n "${EXISTING_BLOCK:-}" ]]; then
+  elif [[ "$J_AUTH_MODE" == "iam" && -n "${EXISTING_BLOCK:-}" ]]; then
     _existing_storage="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.storage // ""')"
     if [[ "$_existing_storage" == "keychain" ]] && keychain_available 2>/dev/null; then
       _kc_val="$(keychain_get 2>/dev/null || true)"
@@ -288,14 +290,6 @@ if [[ "$J_AUTH_EXPLICIT" == "false" && "$J_AUTH_MODE" == "iam" ]]; then
         J_PRESERVE_KEY=true
       fi
     fi
-  fi
-fi
-
-if [[ "$J_AUTH_EXPLICIT" == "false" && -n "${AWS_BEARER_TOKEN_BEDROCK:-}" && "$J_AUTH_MODE" != "bedrock-api-key" ]]; then
-  J_AUTH_MODE="bedrock-api-key"
-  J_PRESERVE_KEY=true
-  if [[ "$J_MANTLE_EXPLICIT" == "false" ]]; then
-    J_USE_MANTLE=true
   fi
 fi
 : "${J_AUTH_MODE:=iam}"
