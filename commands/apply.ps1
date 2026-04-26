@@ -177,6 +177,30 @@ $existingBlock = if ($hasV2Block) { Get-JuggernautBlockFromSettings -Settings $e
 if ($existingBlock) {
     if (-not $Auth)        { $Auth        = $existingBlock.auth.mode            }
     if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
+
+    # Conflict guard: stored block says "iam" but live evidence of an API key
+    # exists. Auto-correct unless -Auth iam was passed explicitly.
+    if (-not $authExplicit -and $Auth -eq 'iam') {
+        if ($env:AWS_BEARER_TOKEN_BEDROCK) {
+            Write-Warning "apply: stored auth mode is 'iam' but AWS_BEARER_TOKEN_BEDROCK is set."
+            Write-Warning "apply: Auto-correcting to bedrock-api-key. Pass -Auth iam to suppress."
+            $Auth = 'bedrock-api-key'
+            $PreserveKey = $true
+            if (-not $mantleExplicit) { $Mantle = $true }
+        } else {
+            $existingStorage = if ($existingBlock.auth) { $existingBlock.auth.storage } else { '' }
+            if ($existingStorage -eq 'keychain' -and (Test-KeychainAvailable)) {
+                $kcVal = $null
+                try { $kcVal = Get-KeychainEntry } catch {}
+                if ($kcVal) {
+                    Write-Warning "apply: stored auth mode is 'iam' but a key exists in the system keychain."
+                    Write-Warning "apply: Auto-correcting to bedrock-api-key. Pass -Auth iam to suppress."
+                    $Auth = 'bedrock-api-key'
+                    $PreserveKey = $true
+                }
+            }
+        }
+    }
     if (-not $Storage)     { $Storage     = $existingBlock.auth.storage         }
     if (-not $Region)      { $Region      = $existingBlock.auth.region          }
     if (-not $Model)       { $Model       = $existingBlock.model                }
@@ -239,19 +263,29 @@ if (-not $SkipPreflight -and $Auth -eq 'iam') {
 $apiKeyExpr = ''
 if ($Auth -eq 'bedrock-api-key') {
     if ($PreserveKey) {
+        # Probe all sources regardless of stored storage preference — the storage
+        # setting may have been corrupted alongside the auth mode.
         if ($env:AWS_BEARER_TOKEN_BEDROCK) {
             $BedrockKey = $env:AWS_BEARER_TOKEN_BEDROCK
-        } elseif ($Storage -eq 'keychain' -and (Test-KeychainAvailable)) {
-            # Surface tool errors as warnings and keep going; a missing key
-            # still produces the "no existing key" exit path below.
+        }
+        if (-not $BedrockKey -and (Test-KeychainAvailable)) {
             try { $BedrockKey = Get-KeychainEntry }
             catch { Write-Warning "apply: keychain read failed: $_"; $BedrockKey = $null }
             if ($null -eq $BedrockKey) { $BedrockKey = '' }
-        } else {
-            $BedrockKey = ''
         }
         if (-not $BedrockKey) {
-            Write-Error 'apply: -PreserveKey specified but no existing key found'; exit 1
+            foreach ($profilePath in (Get-ProfileWriterPowerShellProfileTargets)) {
+                if (Test-Path $profilePath) {
+                    $profileContent = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
+                    if ($profileContent -match '\$env:AWS_BEARER_TOKEN_BEDROCK\s*=\s*[''"]([^''"]+)[''"]') {
+                        $BedrockKey = $Matches[1]
+                        if ($BedrockKey) { break }
+                    }
+                }
+            }
+        }
+        if (-not $BedrockKey) {
+            Write-Error 'apply: -PreserveKey specified but no existing key found in env, keychain, or shell profile'; exit 1
         }
     }
     if (-not $BedrockKey) {
