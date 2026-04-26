@@ -26,6 +26,7 @@ export HOME="$TMP_HOME"
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export JUGGERNAUT_USE_V2=1
 export SHELL="/bin/bash"
+EXPECTED_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
 unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 
 . "$REPO_ROOT/lib/schema.sh"
@@ -42,7 +43,7 @@ write_settings() {
   local path="$1" region="${2:-us-west-2}"
   local block
   block="$(J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
-    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.2 \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
     J_SHELL_FALLBACK_MODE=settings-only schema_new_juggernaut_block)"
   config_write_atomic "$path" "$(config_merge_juggernaut_block '{}' "$block" "$(schema_derive_native_keys "$block")")"
 }

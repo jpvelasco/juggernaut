@@ -8,7 +8,36 @@
 function Test-MigratorHasV1Block {
     param([Parameter(Mandatory)][string]$ProfileFile)
     if (-not (Test-Path $ProfileFile)) { return $false }
-    return (Get-Content -Path $ProfileFile -Raw) -match '# BEGIN: Claude Code Bedrock Configuration'
+    $content = Get-Content -Path $ProfileFile -Raw
+    if ($content -notmatch '# BEGIN: Claude Code Bedrock Configuration') { return $false }
+    # Suppress detection if the user has previously declined migration.
+    if ($env:JUGGERNAUT_FORCE_MIGRATION_PROMPT -ne '1' -and $content -match '(?m)^# MigrationDeclined:') {
+        return $false
+    }
+    return $true
+}
+
+# Inserts a "# MigrationDeclined: <ISO8601>" comment immediately after the
+# BEGIN marker so subsequent apply invocations don't re-prompt. Users can
+# re-enable the prompt with $env:JUGGERNAUT_FORCE_MIGRATION_PROMPT = '1' or
+# by removing the marker line by hand.
+function Set-MigratorDeclinedMarker {
+    param([Parameter(Mandatory)][string]$ProfileFile)
+    if (-not (Test-Path $ProfileFile)) { return }
+    $content = Get-Content -Path $ProfileFile -Raw
+    if ($content -match '(?m)^# MigrationDeclined:') { return }
+    $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $marker = "# MigrationDeclined: $ts"
+    $out = [System.Collections.Generic.List[string]]::new()
+    $inserted = $false
+    foreach ($line in (Get-Content -Path $ProfileFile)) {
+        $out.Add($line)
+        if (-not $inserted -and $line -match '^# BEGIN: Claude Code Bedrock Configuration') {
+            $out.Add($marker)
+            $inserted = $true
+        }
+    }
+    $out | Set-Content -Path $ProfileFile -Encoding utf8
 }
 
 function Get-MigratorV1BlockRaw {

@@ -61,24 +61,24 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.3/install.sh | bash -s -- --version v2.2.3
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.sh | bash -s -- --version v2.2.4
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.3/install.ps1))) -Version v2.2.3
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.ps1))) -Version v2.2.4
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v2.2.3 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v2.2.4 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 
 export JUGGERNAUT_USE_V2=1
 ./juggernaut apply
 ```
 
-The pinned installer commands above install v2.2.3 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
+The pinned installer commands above install v2.2.4 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
 
 Juggernaut v2 is the default and recommended path for new installs. The older shell-profile-only v1 setup is legacy compatibility only; use `./setup --legacy-v1` if you still need the old flow.
 
@@ -100,24 +100,24 @@ Use the pinned release tag URLs for a stable install:
 
 ```bash
 # Bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.3/install.sh | bash -s -- --version v2.2.3
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.sh | bash -s -- --version v2.2.4
 ```
 
 ```powershell
 # PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.3/install.ps1))) -Version v2.2.3
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.ps1))) -Version v2.2.4
 ```
 
 ```bash
 # After downloading
-bash install.sh --version 2.2.3
+bash install.sh --version 2.2.4
 ```
 
 ```powershell
-.\install.ps1 -Version 2.2.3
+.\install.ps1 -Version 2.2.4
 ```
 
-Both scripts normalize the version automatically — `2.2.3` and `v2.2.3` both work.
+Both scripts normalize the version automatically — `2.2.4` and `v2.2.4` both work.
 
 The v2.2 installers repair executable bits, create a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and print the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
 

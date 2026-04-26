@@ -25,12 +25,16 @@ param(
     [switch]$Force,
     [switch]$Yes,
     [switch]$SkipPreflight,
+    [switch]$ForceMigrationPrompt,
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Continue'
 $PSScriptRoot_ = Split-Path -Parent $PSCommandPath
 $RepoRoot      = Split-Path -Parent $PSScriptRoot_
+
+$versionFile = Join-Path $RepoRoot 'VERSION'
+$JuggernautVersion = if (Test-Path $versionFile) { (Get-Content $versionFile -Raw).Trim() } else { 'unknown' }
 
 $env:JUGGERNAUT_USE_V2 = '1'
 if (-not $env:BEDROCK_CONFIG_PATH) {
@@ -118,6 +122,7 @@ if (-not $hasV2Block) {
         (Join-Path $HomeDir '.zshrc'),
         (Join-Path $HomeDir '.config\fish\config.fish')
     )
+    if ($ForceMigrationPrompt) { $env:JUGGERNAUT_FORCE_MIGRATION_PROMPT = '1' }
     foreach ($candidate in $v1Candidates) {
         if (Test-Path $candidate) {
             $hasMig = $false
@@ -139,7 +144,8 @@ if (-not $hasV2Block) {
                     }
                     $answer = Read-Host 'Migrate this v1 block now? [y/N]'
                     if ($answer -notmatch '^(y|yes)$') {
-                        Write-Error 'apply: migration skipped. Re-run with -Yes to confirm non-interactively.'
+                        try { Set-MigratorDeclinedMarker -ProfileFile $candidate } catch {}
+                        Write-Error 'apply: migration skipped. Re-run with -ForceMigrationPrompt to re-prompt, or -Yes to confirm non-interactively.'
                         exit 1
                     }
                 }
@@ -233,11 +239,17 @@ if (-not $SkipPreflight -and $Auth -eq 'iam') {
 $apiKeyExpr = ''
 if ($Auth -eq 'bedrock-api-key') {
     if ($PreserveKey) {
-        $BedrockKey = if ($env:AWS_BEARER_TOKEN_BEDROCK) {
-            $env:AWS_BEARER_TOKEN_BEDROCK
+        if ($env:AWS_BEARER_TOKEN_BEDROCK) {
+            $BedrockKey = $env:AWS_BEARER_TOKEN_BEDROCK
         } elseif ($Storage -eq 'keychain' -and (Test-KeychainAvailable)) {
-            Get-KeychainEntry
-        } else { '' }
+            # Surface tool errors as warnings and keep going; a missing key
+            # still produces the "no existing key" exit path below.
+            try { $BedrockKey = Get-KeychainEntry }
+            catch { Write-Warning "apply: keychain read failed: $_"; $BedrockKey = $null }
+            if ($null -eq $BedrockKey) { $BedrockKey = '' }
+        } else {
+            $BedrockKey = ''
+        }
         if (-not $BedrockKey) {
             Write-Error 'apply: -PreserveKey specified but no existing key found'; exit 1
         }
@@ -286,7 +298,7 @@ $buildParams = @{
     MantleBaseUrl  = $MantleUrl
     ShellFallbackMode = $shellMode
     Scope          = $Scope
-    Version        = '2.2.2'
+    Version        = $JuggernautVersion
     BedrockConfigPath = $env:BEDROCK_CONFIG_PATH
 }
 if ($Model)       { $buildParams['Model']       = $Model }

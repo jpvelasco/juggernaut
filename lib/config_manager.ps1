@@ -3,6 +3,7 @@
 # Windows PowerShell 5.1; all mainstream JSON parsers tolerate a leading BOM.
 
 $Script:ConfigBackupRetain = 5
+$Script:ConfigLockTimeoutMs = 10000
 
 function Get-ConfigManagerHomePath {
     if ($env:HOME) { return $env:HOME }
@@ -173,10 +174,10 @@ function Write-SettingsAtomic {
     $mutex = New-Object System.Threading.Mutex($false, $lockName)
     $acquired = $false
     try {
-        try { $acquired = $mutex.WaitOne(5000) }
+        try { $acquired = $mutex.WaitOne($Script:ConfigLockTimeoutMs) }
         catch [System.Threading.AbandonedMutexException] { $acquired = $true }
         catch { throw "Write-SettingsAtomic: mutex acquisition failed on ${lockName}: $_" }
-        if (-not $acquired) { throw "Write-SettingsAtomic: could not acquire lock on ${lockName} within 5s" }
+        if (-not $acquired) { throw "Write-SettingsAtomic: could not acquire lock on ${lockName} within $([int]($Script:ConfigLockTimeoutMs / 1000))s" }
 
         if (Test-Path $Path) { Backup-Settings -Path $Path | Out-Null }
         $tmp = "$Path.tmp.$PID"
@@ -204,7 +205,7 @@ function Invoke-WithSettingsLock {
     $acquired = $false
     try {
         try {
-            $acquired = $mutex.WaitOne(5000)
+            $acquired = $mutex.WaitOne($Script:ConfigLockTimeoutMs)
         } catch [System.Threading.AbandonedMutexException] {
             # A prior holder died without releasing; we've now acquired it safely.
             $acquired = $true
@@ -212,7 +213,7 @@ function Invoke-WithSettingsLock {
             throw "Invoke-WithSettingsLock: mutex acquisition failed on ${lockName}: $_"
         }
         if (-not $acquired) {
-            throw "Invoke-WithSettingsLock: could not acquire lock on ${lockName} within 5s"
+            throw "Invoke-WithSettingsLock: could not acquire lock on ${lockName} within $([int]($Script:ConfigLockTimeoutMs / 1000))s"
         }
         & $Action
     } finally {

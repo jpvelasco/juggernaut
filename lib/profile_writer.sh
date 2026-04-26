@@ -37,7 +37,10 @@ profile_writer_export_syntax() {
 # ---------------------------------------------------------------------------
 profile_writer_has_block() {
   local f="$1"
-  [[ -f "$f" ]] && grep -Fq -- "$PROFILE_WRITER_BEGIN_MARKER" "$f" 2>/dev/null
+  # Normalize CRLF line endings before matching. Windows Git Bash users often
+  # have profiles saved with CRLF, and `grep -Fx` against a bare marker would
+  # miss them because the trailing \r is not part of the marker.
+  [[ -f "$f" ]] && sed 's/\r$//' "$f" 2>/dev/null | grep -Fq -- "$PROFILE_WRITER_BEGIN_MARKER"
 }
 
 # ---------------------------------------------------------------------------
@@ -98,10 +101,17 @@ profile_writer_remove_block() {
     echo "[dry-run] would remove block from $f"
     return 0
   fi
-  if [[ "$OSTYPE" == darwin* ]]; then
-    sed -i '' "/$PROFILE_WRITER_BEGIN_MARKER/,/$PROFILE_WRITER_END_MARKER/d" "$f"
+  [[ -f "$f" ]] || return 0
+  # Normalize CRLF→LF on the way through so the range delete matches bare
+  # markers. Output is LF; if the user's file was CRLF, the managed block
+  # will no longer be present, so line endings elsewhere are unchanged.
+  local tmp
+  tmp="$(mktemp)"
+  if sed 's/\r$//' "$f" | sed "/$PROFILE_WRITER_BEGIN_MARKER/,/$PROFILE_WRITER_END_MARKER/d" > "$tmp"; then
+    mv "$tmp" "$f"
   else
-    sed -i "/$PROFILE_WRITER_BEGIN_MARKER/,/$PROFILE_WRITER_END_MARKER/d" "$f"
+    rm -f "$tmp"
+    return 1
   fi
 }
 

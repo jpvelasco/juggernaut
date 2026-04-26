@@ -2,6 +2,20 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.2.4] - 2026-04-25
+
+### Fixed
+
+- **Version drift** — `commands/apply.sh` and `commands/apply.ps1` now read the repo `VERSION` file at runtime instead of using baked-in literals. Safety fallbacks in `lib/schema.sh` and `lib/schema.ps1` bumped to `2.2.4`.
+- **Fish API-key escaping** — profile writer now uses POSIX `'abc'\''def'` single-quote escaping for bedrock API keys across bash/zsh/fish. Keys containing `'`, `$`, backslashes, or backticks are preserved verbatim.
+- **CRLF robustness on Windows Git Bash** — `profile_writer_has_block`, `profile_writer_remove_block`, and `migrator_has_v1_block` now normalize CRLF line endings on read so profile detection and migration work correctly against profiles with Windows line endings.
+- **Persistent migration decline** — declining the v1→v2 migration prompt now writes a `# MigrationDeclined: <timestamp>` marker into the v1 block so future `apply` runs do not re-prompt. Pass `--force-migration-prompt` (bash) or `-ForceMigrationPrompt` (PowerShell) to bypass the marker for one run.
+- **Destructive installer upgrade** — `install.sh` and `install.ps1` now clone into `${INSTALL_DIR}.new` and atomically swap into place after backing up the existing install. If the clone fails, the original install is preserved untouched.
+- **Lock-timeout constants** — `lib/config_manager.sh` now defines `CONFIG_LOCK_TIMEOUT_SECS`/`CONFIG_STALE_LOCK_SECS`; `lib/config_manager.ps1` defines `$Script:ConfigLockTimeoutMs`. Prior hard-coded values consolidated.
+- **Keychain error signalling** — `keychain_get` (bash) now returns `0` for found, `1` for not-found, and `2` for tool errors. `Get-KeychainEntry` (PowerShell) returns `$null` for not-found and throws on tool errors so callers can distinguish absence from failure.
+- **CLI help polish** — `apply.sh --help` now documents the `[bash|zsh|fish]` positional argument.
+- **Version bumped to 2.2.4** in `VERSION`, `bedrock-config.json`, docs, and v2 defaults.
+
 ## [2.2.3] - 2026-04-25
 
 ### Fixed
@@ -123,6 +137,9 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.2.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.4
+[2.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.3
+[2.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.2
 [2.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.1
 [2.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.0
 [2.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.3

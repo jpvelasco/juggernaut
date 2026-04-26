@@ -12,6 +12,7 @@ FIXTURES="$REPO_ROOT/tests/v2/fixtures"
 
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export JUGGERNAUT_USE_V2=1
+EXPECTED_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
 
 PASS=0; FAIL=0
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
@@ -92,7 +93,7 @@ set +e  # lib sources re-enable errexit; restore manual error handling.
 
 J_AUTH_MODE=iam J_REGION=us-east-1 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   BLOCK="$(schema_new_juggernaut_block)"
 
@@ -102,7 +103,7 @@ assert_eq "auth.storage" "$(printf '%s' "$BLOCK" | jq -r '.auth.storage')" "prof
 assert_eq "effortLevel"  "$(printf '%s' "$BLOCK" | jq -r '.effortLevel')"  "xhigh"
 assert_false "opusplan"  "$(printf '%s' "$BLOCK" | jq -r '.opusplan')"
 assert_eq "managedBy"    "$(printf '%s' "$BLOCK" | jq -r '.meta.managedBy')" "juggernaut"
-assert_eq "version"      "$(printf '%s' "$BLOCK" | jq -r '.meta.version')"   "2.2.2"
+assert_eq "version"      "$(printf '%s' "$BLOCK" | jq -r '.meta.version')"   "$EXPECTED_VERSION"
 assert_eq "scope"        "$(printf '%s' "$BLOCK" | jq -r '.meta.scope')"     "user"
 assert_eq "env.AWS_REGION" "$(printf '%s' "$BLOCK" | jq -r '.env.AWS_REGION')" "us-east-1"
 assert_eq "env.BEDROCK"    "$(printf '%s' "$BLOCK" | jq -r '.env.CLAUDE_CODE_USE_BEDROCK')" "1"
@@ -126,7 +127,7 @@ section "AWS_BEARER_TOKEN_BEDROCK overrides stored IAM auth unless auth is expli
 BEARER_HOME="$(mktemp -d)"
 mkdir -p "$BEARER_HOME/.claude"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
-  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.2 \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=settings-only \
   IAM_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$BEARER_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$IAM_BLOCK" "$(schema_derive_native_keys "$IAM_BLOCK")")"
@@ -186,7 +187,7 @@ rm -rf "$SHELL_HOME"
 section "opusplan=true → env.ANTHROPIC_MODEL=opusplan"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=true \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   OPBLOCK="$(schema_new_juggernaut_block)"
 
@@ -199,7 +200,7 @@ assert_eq "ANTHROPIC_MODEL" "$(printf '%s' "$OPBLOCK" | jq -r '.env.ANTHROPIC_MO
 section "effort level propagates to env"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=high J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   EBLOCK="$(schema_new_juggernaut_block)"
 
@@ -212,7 +213,7 @@ assert_eq "EFFORT_LEVEL env"  "$(printf '%s' "$EBLOCK" | jq -r '.env.CLAUDE_CODE
 section "useMantle=true → env.CLAUDE_CODE_USE_MANTLE=1"
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=true J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   MBLOCK="$(schema_new_juggernaut_block)"
 
@@ -222,7 +223,7 @@ assert_eq "CLAUDE_CODE_USE_MANTLE" "$(printf '%s' "$MBLOCK" | jq -r '.env.CLAUDE
 # Mantle URL propagates when set.
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=true J_MANTLE_BASE_URL="https://mantle.example.com" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   MUBLOCK="$(schema_new_juggernaut_block)"
 
@@ -236,7 +237,7 @@ assert_eq "ANTHROPIC_BEDROCK_MANTLE_BASE_URL" \
 # useMantle=false must NOT set CLAUDE_CODE_USE_MANTLE.
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   NMBLOCK="$(schema_new_juggernaut_block)"
 
@@ -252,7 +253,7 @@ TMP_SETTINGS="$TMP_DIR/settings.json"
 
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
   J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
-  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION=2.2.2 \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   RT_BLOCK="$(schema_new_juggernaut_block)"
 
@@ -575,6 +576,49 @@ if printf '%s' "$V1_OUTPUT" | grep -q "Detected:"; then
   pass
 else
   fail "setup --legacy-v1 should produce v1 output (got: $V1_OUTPUT)"
+fi
+
+# ---------------------------------------------------------------------------
+# Version read from VERSION file (no literal in apply.sh)
+# ---------------------------------------------------------------------------
+section "meta.version reads from VERSION file at runtime"
+VERSION_BLOCK="$(
+  HOME="$(mktemp -d)" AWS_PROFILE=juggernaut-test \
+  bash "$REPO_ROOT/commands/apply.sh" --dry-run --auth=iam --no-shell-fallback 2>/dev/null \
+    | sed -n '/^{/,/^}$/p'
+)"
+META_VERSION="$(printf '%s' "$VERSION_BLOCK" | jq -r '.juggernaut.meta.version // .meta.version')"
+assert_eq "meta.version == VERSION" "$META_VERSION" "$EXPECTED_VERSION"
+
+# ---------------------------------------------------------------------------
+# Fish / POSIX single-quote escaping for API key with embedded quote
+# ---------------------------------------------------------------------------
+section "API key escaping — POSIX 'abc'\\''def' for keys with single quotes"
+# Re-implement the escape in isolation — same expression used in apply.sh.
+_J_KEY="it's"
+_J_ESCAPED="${_J_KEY//\'/\'\\\'\'}"
+ESCAPED="'$_J_ESCAPED'"
+# Expect POSIX-safe: 'it'\''s'
+if [[ "$ESCAPED" == "'it'\\''s'" ]]; then
+  pass
+else
+  fail "POSIX escape wrong: got [$ESCAPED], want ['it'\\''s']"
+fi
+# Verify eval round-trip (fish, bash, zsh all accept this form).
+EVAL_RESULT="$(bash -c "echo $ESCAPED")"
+assert_eq "eval round-trip bash" "$EVAL_RESULT" "$_J_KEY"
+
+# Build a fish profile block and assert the API key line uses POSIX form
+# (not fish-specific backslash escapes which would fail to parse).
+. "$REPO_ROOT/lib/profile_writer.sh"
+set +e
+FISH_BLOCK="$(profile_writer_build_block \
+  fish us-west-2 bedrock-api-key "$ESCAPED" profile \
+  "$BEDROCK_CONFIG_PATH" "" "" "" "" xhigh false false "")"
+if printf '%s' "$FISH_BLOCK" | grep -q "set -gx AWS_BEARER_TOKEN_BEDROCK 'it'\\\\''s'"; then
+  pass
+else
+  fail "fish profile must contain POSIX-escaped key (got: $(printf '%s' "$FISH_BLOCK" | grep AWS_BEARER || true))"
 fi
 
 echo

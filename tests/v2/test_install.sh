@@ -113,7 +113,7 @@ export J_STORAGE=profile
 export J_USE_MANTLE=false
 export J_OPUSPLAN=false
 export J_SCOPE=user
-export J_VERSION=2.2.3
+export J_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
 export J_SHELL_FALLBACK_MODE=settings-only
 BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"

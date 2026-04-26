@@ -35,6 +35,7 @@ export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export JUGGERNAUT_USE_V2=1
 export AWS_PROFILE="juggernaut-test"
 export SHELL="/bin/bash"
+EXPECTED_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
 unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 
 . "$REPO_ROOT/lib/schema.sh"
@@ -44,7 +45,7 @@ set +e
 write_scope_settings() {
   local scope="$1" target="$2" region="$3"
   J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
-    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION=2.2.2 \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION="$EXPECTED_VERSION" \
     J_SHELL_FALLBACK_MODE=settings-only \
     BLOCK="$(schema_new_juggernaut_block)"
   config_write_atomic "$target" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
@@ -101,7 +102,7 @@ section "bedrock API-key auth reports bearer-token source without IAM warning"
 API_HOME="$(mktemp -d)"
 mkdir -p "$API_HOME/.claude"
 J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
-  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.2 \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=settings-only \
   API_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$API_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$API_BLOCK" "$(schema_derive_native_keys "$API_BLOCK")")"

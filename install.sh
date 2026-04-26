@@ -64,10 +64,11 @@ else
 fi
 
 clone_install() {
+  local target="${1:-$INSTALL_DIR}"
   if [[ -n "$VERSION" ]]; then
-    git clone --branch "$VERSION" --depth 1 --quiet "$REPO_URL" "$INSTALL_DIR"
+    git clone --branch "$VERSION" --depth 1 --quiet "$REPO_URL" "$target"
   else
-    git clone --quiet "$REPO_URL" "$INSTALL_DIR"
+    git clone --quiet "$REPO_URL" "$target"
   fi
 }
 
@@ -100,8 +101,15 @@ install_tree_dirty() {
 if [[ -d "$INSTALL_DIR" ]]; then
   if install_tree_dirty; then
     echo "Existing installation has local changes or is not a clean Git checkout."
+    # Clone to a sibling directory first so a failed clone cannot destroy the
+    # existing install. Only if the clone succeeds do we swap directories.
+    NEW_DIR="${INSTALL_DIR}.new"
+    rm -rf "$NEW_DIR"
+    trap 'rm -rf "$NEW_DIR"' EXIT
+    clone_install "$NEW_DIR"
     backup_existing_install
-    clone_install
+    mv "$NEW_DIR" "$INSTALL_DIR"
+    trap - EXIT
   else
     echo "Updating existing installation in $INSTALL_DIR"
     git -C "$INSTALL_DIR" fetch --tags --quiet
