@@ -110,7 +110,12 @@ doctor_credentials() {
   case "$auth_mode" in
     iam)
       doctor_kv "Auth" "IAM"
-      if [[ -n "${AWS_PROFILE:-}" ]]; then
+      if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
+        # Bearer token present but config says IAM — surface as the primary status.
+        doctor_warn
+        doctor_kv "Details" "AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
+        doctor_kv "Fix" "run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)"
+      elif [[ -n "${AWS_PROFILE:-}" ]]; then
         doctor_ok
         doctor_kv "Details" "AWS_PROFILE is set"
       elif [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
@@ -119,11 +124,6 @@ doctor_credentials() {
       else
         doctor_warn
         doctor_kv "Details" "no IAM credentials in environment"
-      fi
-      if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-        doctor_warn
-        doctor_kv "Details" "AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
-        doctor_kv "Fix" "run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)"
       fi
       ;;
     bedrock-api-key)

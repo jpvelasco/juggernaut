@@ -152,7 +152,13 @@ function Write-DoctorCredentials {
     switch ($authMode) {
         'iam' {
             Write-Output 'Auth: IAM'
-            if ($env:AWS_PROFILE) {
+            if ($env:AWS_BEARER_TOKEN_BEDROCK) {
+                # Bearer token present but config says IAM — surface as the primary status.
+                $script:DoctorWarns += 1
+                Write-Output 'Status: WARN'
+                Write-Output "Details: AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
+                Write-Output 'Fix: run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)'
+            } elseif ($env:AWS_PROFILE) {
                 Write-Output 'Status: OK'
                 Write-Output 'Details: AWS_PROFILE is set'
             } elseif ($env:AWS_ACCESS_KEY_ID -and $env:AWS_SECRET_ACCESS_KEY) {
@@ -162,12 +168,6 @@ function Write-DoctorCredentials {
                 $script:DoctorWarns += 1
                 Write-Output 'Status: WARN'
                 Write-Output 'Details: no IAM credentials in environment'
-            }
-            if ($env:AWS_BEARER_TOKEN_BEDROCK) {
-                $script:DoctorWarns += 1
-                Write-Output 'Status: WARN'
-                Write-Output "Details: AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
-                Write-Output 'Fix: run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)'
             }
         }
         'bedrock-api-key' {
