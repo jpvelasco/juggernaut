@@ -621,6 +621,56 @@ else
   fail "fish profile must contain POSIX-escaped key (got: $(printf '%s' "$FISH_BLOCK" | grep AWS_BEARER || true))"
 fi
 
+# ---------------------------------------------------------------------------
+# Auth conflict guard: stored "iam" + live AWS_BEARER_TOKEN_BEDROCK → auto-correct
+# ---------------------------------------------------------------------------
+section "auth conflict guard — stored iam + live bearer token auto-corrects"
+CONFLICT_HOME="$(mktemp -d)"
+mkdir -p "$CONFLICT_HOME/.claude"
+CONFLICT_SETTINGS="$CONFLICT_HOME/.claude/settings.json"
+
+# Write a corrupted settings.json with auth.mode=iam.
+J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_OPUSPLAN=false \
+  J_1M_CONTEXT=true J_USE_MANTLE=false J_MANTLE_BASE_URL="" \
+  J_STORAGE=profile J_SCOPE=user J_PROVIDER=bedrock J_VERSION="$EXPECTED_VERSION" \
+  J_SHELL_FALLBACK_MODE=both \
+  _corrupt_block="$(schema_new_juggernaut_block)"
+config_write_atomic "$CONFLICT_SETTINGS" "$(jq -n --argjson b "$_corrupt_block" '{juggernaut:$b}')"
+
+# Run dry-run with a bearer token in env; should warn and switch to bedrock-api-key.
+CONFLICT_OUT="$(
+  AWS_BEARER_TOKEN_BEDROCK=testkey \
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$CONFLICT_HOME" bash "$REPO_ROOT/commands/apply.sh" \
+    --dry-run --no-shell-fallback 2>&1
+)"
+if printf '%s' "$CONFLICT_OUT" | grep -q "Auto-correcting"; then
+  pass
+else
+  fail "auth conflict guard: expected 'Auto-correcting' warning (got: $CONFLICT_OUT)"
+fi
+# The resulting block should show bedrock-api-key.
+CONFLICT_JSON="$(printf '%s' "$CONFLICT_OUT" | sed -n '/^{/,/^}$/p')"
+CONFLICT_AUTH="$(printf '%s' "$CONFLICT_JSON" | jq -r '.juggernaut.auth.mode // ""' 2>/dev/null)"
+assert_eq "conflict guard/auth.mode" "$CONFLICT_AUTH" "bedrock-api-key"
+
+# With explicit --auth=iam the guard must be silent.
+CONFLICT_EXPLICIT_OUT="$(
+  AWS_BEARER_TOKEN_BEDROCK=testkey \
+  BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
+    HOME="$CONFLICT_HOME" bash "$REPO_ROOT/commands/apply.sh" \
+    --auth=iam --dry-run --no-shell-fallback 2>&1
+)"
+if printf '%s' "$CONFLICT_EXPLICIT_OUT" | grep -q "Auto-correcting"; then
+  fail "conflict guard: should NOT warn when --auth=iam is explicit"
+else
+  pass
+fi
+CONFLICT_EXPLICIT_AUTH="$(printf '%s' "$CONFLICT_EXPLICIT_OUT" | sed -n '/^{/,/^}$/p' | jq -r '.juggernaut.auth.mode // ""' 2>/dev/null)"
+assert_eq "conflict guard explicit/auth.mode" "$CONFLICT_EXPLICIT_AUTH" "iam"
+
+rm -rf "$CONFLICT_HOME"
+
 echo
 echo "apply.sh tests: $PASS passed, $FAIL failed"
 exit "$FAIL"

@@ -122,7 +122,7 @@ if [[ -n "$LEGACY_VAL" ]]; then pass; else fail "legacyEnv.snapshot should captu
 section "v1_bare_exports — all fields from export lines only"
 BLOCK="$(build_from_fixture "$FIXTURES/v1_bare_exports.sh")"
 
-assert_eq "bare/auth.mode"   "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"   "iam"
+assert_eq "bare/auth.mode"   "$(printf '%s' "$BLOCK" | jq -r '.auth.mode')"   "bedrock-api-key"
 assert_eq "bare/auth.region" "$(printf '%s' "$BLOCK" | jq -r '.auth.region')" "us-west-2"
 assert_eq "bare/model"       "$(printf '%s' "$BLOCK" | jq -r '.model')"       "global.anthropic.claude-sonnet-4-6"
 
@@ -308,6 +308,15 @@ MARKER_COUNT="$(grep -c "^# MigrationDeclined:" "$TMP_PROFILE")"
 if [[ "$MARKER_COUNT" == "1" ]]; then pass; else fail "duplicate decline marker written ($MARKER_COUNT markers)"; fi
 
 rm -f "$TMP_PROFILE"
+
+# ---------------------------------------------------------------------------
+# migrator_parse_v1_block infers bedrock-api-key from AWS_BEARER_TOKEN_BEDROCK
+# when the # Auth mode: comment is absent.
+# ---------------------------------------------------------------------------
+section "migrator_parse_v1_block — infers bedrock-api-key from AWS_BEARER_TOKEN_BEDROCK"
+BARE_RAW="$(migrator_extract_block "$FIXTURES/v1_bare_exports.sh")"
+BARE_PARSED="$(migrator_parse_v1_block "$BARE_RAW")"
+assert_eq "bare/auth.mode" "$(printf '%s' "$BARE_PARSED" | jq -r '.authMode')" "bedrock-api-key"
 
 echo
 echo "migrator.sh tests: $PASS passed, $FAIL failed"

@@ -164,7 +164,10 @@ function Write-DoctorCredentials {
                 Write-Output 'Details: no IAM credentials in environment'
             }
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
-                Write-Output 'Note: AWS_BEARER_TOKEN_BEDROCK is set but this config uses IAM'
+                $script:DoctorWarns += 1
+                Write-Output 'Status: WARN'
+                Write-Output "Details: AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
+                Write-Output 'Fix: run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)'
             }
         }
         'bedrock-api-key' {

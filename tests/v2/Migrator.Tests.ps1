@@ -137,7 +137,9 @@ Describe 'ConvertFrom-MigratorV1Block — v1_bare_exports' {
         $script:parsedBare = ConvertFrom-MigratorV1Block -RawBlock $raw
     }
 
-    It 'authMode defaults to iam'       { $script:parsedBare.authMode    | Should -Be 'iam' }
+    It 'authMode inferred as bedrock-api-key from AWS_BEARER_TOKEN_BEDROCK line' {
+        $script:parsedBare.authMode | Should -Be 'bedrock-api-key'
+    }
     It 'region parsed from export line' { $script:parsedBare.region      | Should -Be 'us-west-2' }
     It 'model parsed from export line'  { $script:parsedBare.model       | Should -Be 'global.anthropic.claude-sonnet-4-6' }
     It 'legacyEnv has unquoted AWS_BEARER_TOKEN_BEDROCK' {

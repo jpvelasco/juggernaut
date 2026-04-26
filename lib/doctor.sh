@@ -121,7 +121,9 @@ doctor_credentials() {
         doctor_kv "Details" "no IAM credentials in environment"
       fi
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-        doctor_kv "Note" "AWS_BEARER_TOKEN_BEDROCK is set but this config uses IAM"
+        doctor_warn
+        doctor_kv "Details" "AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
+        doctor_kv "Fix" "run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)"
       fi
       ;;
     bedrock-api-key)
