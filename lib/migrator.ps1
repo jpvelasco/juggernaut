@@ -64,6 +64,11 @@ function ConvertFrom-MigratorV1Block {
 
     $authMode    = ($lines | Where-Object { $_ -match '^# Auth mode: (.+)' } | Select-Object -First 1) -replace '^# Auth mode: ', ''
     if (-not $authMode) { $authMode = 'iam' }
+    # If the block *assigns* AWS_BEARER_TOKEN_BEDROCK (export/set -gx, not set -e/unset)
+    # it was running in API-key mode regardless of the metadata comment.
+    if ($authMode -eq 'iam' -and ($lines | Where-Object { $_ -match '^export AWS_BEARER_TOKEN_BEDROCK=|^set -gx AWS_BEARER_TOKEN_BEDROCK ' })) {
+        $authMode = 'bedrock-api-key'
+    }
 
     $storage = 'profile'
     if ($lines | Where-Object { $_ -match '^# Storage: keychain' }) { $storage = 'keychain' }

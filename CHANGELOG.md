@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.2.5] - 2026-04-26
+
+### Fixed
+
+- **Auth-conflict guard** — `apply` now detects when the stored Juggernaut block says `auth.mode = "iam"` but `AWS_BEARER_TOKEN_BEDROCK` is live in the environment (or a key exists in the system keychain). It warns and auto-corrects to `bedrock-api-key` with `--preserve-key`. Passing `--auth=iam` explicitly suppresses the guard. Fixes silent misconfiguration caused by earlier botched releases.
+- **Migrator auth inference** — `migrator_parse_v1_block` / `ConvertFrom-MigratorV1Block` now infer `bedrock-api-key` from v1 blocks that export `AWS_BEARER_TOKEN_BEDROCK` even when the `# Auth mode:` metadata comment is absent or says `iam`.
+- **Preserve-key probe widened** — `--preserve-key` / `-PreserveKey` now probes env → keychain → shell profile unconditionally, regardless of the stored `auth.storage` preference. Previously a corrupted `storage=keychain` + empty keychain would immediately fail.
+- **Doctor auth-mode contradiction** — `doctor` now emits a WARN (not a silent note) when `auth.mode = "iam"` is stored but `AWS_BEARER_TOKEN_BEDROCK` is present, with a remediation hint to run `juggernaut apply --v2`.
+- **Version bumped to 2.2.5** in `VERSION`, `bedrock-config.json`, and v2 schema defaults.
+
 ## [2.2.4] - 2026-04-25
 
 ### Fixed
@@ -137,6 +147,7 @@ All notable changes to Juggernaut will be documented in this file.
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.5
 [2.2.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.4
 [2.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.3
 [2.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.2

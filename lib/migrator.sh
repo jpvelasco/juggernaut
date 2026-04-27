@@ -95,6 +95,11 @@ migrator_parse_v1_block() {
 
   auth_mode="$(_migrator_meta "$block" "Auth mode")"
   [[ -z "$auth_mode" ]] && auth_mode="iam"
+  # If the block *assigns* AWS_BEARER_TOKEN_BEDROCK (export/set -gx, not set -e/unset)
+  # it was running in API-key mode regardless of the metadata comment.
+  if [[ "$auth_mode" == "iam" ]] && printf '%s' "$block" | grep -qE '(^export AWS_BEARER_TOKEN_BEDROCK=|^set -gx AWS_BEARER_TOKEN_BEDROCK )'; then
+    auth_mode="bedrock-api-key"
+  fi
 
   storage="profile"
   if printf '%s' "$block" | grep -q "^# Storage: keychain"; then

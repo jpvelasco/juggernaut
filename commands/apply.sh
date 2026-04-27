@@ -266,11 +266,30 @@ fi
 # ---------------------------------------------------------------------------
 # Step 4: Apply hard defaults for anything still unset.
 # ---------------------------------------------------------------------------
-if [[ "$J_AUTH_EXPLICIT" == "false" && -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-  J_AUTH_MODE="bedrock-api-key"
-  J_PRESERVE_KEY=true
-  if [[ "$J_MANTLE_EXPLICIT" == "false" ]]; then
-    J_USE_MANTLE=true
+
+# Bearer-token / keychain auto-detection: if no explicit --auth flag, infer
+# bedrock-api-key from live evidence. When a stored block says "iam" but a key
+# exists, warn (corrupted install); for fresh installs just silently switch.
+if [[ "$J_AUTH_EXPLICIT" == "false" ]]; then
+  if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
+    if [[ "$J_AUTH_MODE" == "iam" && -n "${EXISTING_BLOCK:-}" ]]; then
+      echo "apply: WARNING — stored auth mode is 'iam' but AWS_BEARER_TOKEN_BEDROCK is set." >&2
+      echo "apply: Auto-correcting to bedrock-api-key. Pass --auth=iam to suppress." >&2
+    fi
+    J_AUTH_MODE="bedrock-api-key"
+    J_PRESERVE_KEY=true
+    if [[ "$J_MANTLE_EXPLICIT" == "false" ]]; then J_USE_MANTLE=true; fi
+  elif [[ "$J_AUTH_MODE" == "iam" && -n "${EXISTING_BLOCK:-}" ]]; then
+    _existing_storage="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.auth.storage // ""')"
+    if [[ "$_existing_storage" == "keychain" ]] && keychain_available 2>/dev/null; then
+      _kc_val="$(keychain_get 2>/dev/null || true)"
+      if [[ -n "$_kc_val" ]]; then
+        echo "apply: WARNING — stored auth mode is 'iam' but a key exists in the system keychain." >&2
+        echo "apply: Auto-correcting to bedrock-api-key. Pass --auth=iam to suppress." >&2
+        J_AUTH_MODE="bedrock-api-key"
+        J_PRESERVE_KEY=true
+      fi
+    fi
   fi
 fi
 : "${J_AUTH_MODE:=iam}"
@@ -319,11 +338,11 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
   if [[ "$J_PRESERVE_KEY" == "true" ]]; then
     if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
       J_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
-    elif [[ "$J_STORAGE" == "keychain" ]] && keychain_available 2>/dev/null; then
+    fi
+    # Try keychain regardless of stored storage preference — the storage setting
+    # may have been corrupted alongside the auth mode.
+    if [[ -z "$J_API_KEY" ]] && keychain_available 2>/dev/null; then
       # keychain_get exit codes: 0 found, 1 not found, 2 tool error.
-      # For preserve-key resolution we treat "not found" as "nothing to
-      # preserve"; a genuine tool error is surfaced and then falls through
-      # to the "no existing key" message.
       _kc_val="$(keychain_get 2>&1)"
       _kc_rc=$?
       case "$_kc_rc" in
@@ -331,7 +350,9 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
         1) : ;;
         *) echo "apply: warning — keychain read failed: $_kc_val" >&2 ;;
       esac
-    elif [[ "$J_STORAGE" == "profile" ]]; then
+    fi
+    # Fall back to shell profile plaintext.
+    if [[ -z "$J_API_KEY" ]]; then
       _profile_path="$(profile_writer_detect_shell_config_path "$SHELL_TYPE")"
       J_API_KEY="$(profile_writer_read_api_key "$_profile_path" 2>/dev/null || true)"
     fi
