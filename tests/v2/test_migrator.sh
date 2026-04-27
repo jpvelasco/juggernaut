@@ -280,6 +280,35 @@ assert_eq "clean/managedBy" "$(printf '%s' "$READBACK" | jq -r '.juggernaut.meta
 
 rm -rf "$TMP_DIR"
 
+# ---------------------------------------------------------------------------
+# migrator_mark_migration_declined — inserts decline marker and suppresses detection
+# ---------------------------------------------------------------------------
+section "migrator_mark_migration_declined — suppresses re-detection"
+TMP_PROFILE="$(mktemp)"
+cp "$FIXTURES/v1_iam_default.sh" "$TMP_PROFILE"
+
+if migrator_has_v1_block "$TMP_PROFILE"; then pass; else fail "pre-decline: should detect v1 block"; fi
+
+migrator_mark_migration_declined "$TMP_PROFILE"
+
+if grep -q "^# MigrationDeclined:" "$TMP_PROFILE"; then pass; else fail "decline marker not written"; fi
+
+if ! migrator_has_v1_block "$TMP_PROFILE"; then pass; else fail "decline marker should suppress detection"; fi
+
+# Force-prompt override re-enables detection.
+if JUGGERNAUT_FORCE_MIGRATION_PROMPT=1 migrator_has_v1_block "$TMP_PROFILE"; then
+  pass
+else
+  fail "JUGGERNAUT_FORCE_MIGRATION_PROMPT=1 should re-enable detection"
+fi
+
+# Calling mark again is a no-op (does not duplicate marker).
+migrator_mark_migration_declined "$TMP_PROFILE"
+MARKER_COUNT="$(grep -c "^# MigrationDeclined:" "$TMP_PROFILE")"
+if [[ "$MARKER_COUNT" == "1" ]]; then pass; else fail "duplicate decline marker written ($MARKER_COUNT markers)"; fi
+
+rm -f "$TMP_PROFILE"
+
 echo
 echo "migrator.sh tests: $PASS passed, $FAIL failed"
 exit "$FAIL"

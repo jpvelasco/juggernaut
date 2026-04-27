@@ -46,6 +46,7 @@ J_SCOPE="user"
 J_NO_SHELL_FALLBACK=false
 J_SHELL_FALLBACK_ONLY=false
 J_SKIP_PREFLIGHT=false
+J_FORCE_MIGRATION_PROMPT=false
 SHELL_TYPE=""
 
 # ---------------------------------------------------------------------------
@@ -55,7 +56,10 @@ _apply_help() {
   cat <<'EOF'
 juggernaut apply — configure Claude Code for Amazon Bedrock
 
-Usage: juggernaut apply [options]
+Usage: juggernaut apply [options] [bash|zsh|fish]
+
+Positional argument (optional): override shell detection for the profile
+fallback block. Defaults to $SHELL. Only bash, zsh, and fish are supported.
 
 Options:
   --auth=iam|bedrock-api-key  Authentication mode (legacy: api-key)
@@ -79,6 +83,7 @@ Options:
   --shell-fallback-only    Write profile block only
   --dry-run                Preview without writing
   --yes, --force, -f       Confirm migration prompts
+  --force-migration-prompt Ignore previous migration decline marker
   --skip-preflight         Skip dependency checks
   --help, -h               Show this help
 
@@ -93,6 +98,7 @@ for arg in "$@"; do
     --dry-run)              DRY_RUN=true ;;
     --yes|--force|-f)       J_YES=true ;;
     --skip-preflight)       J_SKIP_PREFLIGHT=true ;;
+    --force-migration-prompt) J_FORCE_MIGRATION_PROMPT=true ;;
     --auth=*)               J_AUTH_MODE="${arg#--auth=}"; J_AUTH_EXPLICIT=true ;;
     --bedrock-key=*)        J_API_KEY="${arg#--bedrock-key=}" ;;
     --preserve-key)         J_PRESERVE_KEY=true ;;
@@ -191,6 +197,7 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
     "$HOME/.zshrc"
     "$HOME/.config/fish/config.fish"
   )
+  [[ "$J_FORCE_MIGRATION_PROMPT" == "true" ]] && export JUGGERNAUT_FORCE_MIGRATION_PROMPT=1
   for candidate in "${V1_CANDIDATES[@]}"; do
     if migrator_has_v1_block "$candidate" 2>/dev/null; then
       echo "Juggernaut found an existing v1 profile block:" >&2
@@ -207,7 +214,11 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
           read -r -p "Migrate this v1 block now? [y/N] " _answer
           case "$_answer" in
             y|Y|yes|YES) ;;
-            *) echo "apply: migration skipped. Re-run with --yes to confirm non-interactively." >&2; exit 1 ;;
+            *)
+              migrator_mark_migration_declined "$candidate" 2>/dev/null || true
+              echo "apply: migration skipped. Re-run with --force-migration-prompt to re-prompt, or --yes to confirm non-interactively." >&2
+              exit 1
+              ;;
           esac
         else
           echo "apply: migration requires confirmation. Re-run with --yes, or run juggernaut migrate --dry-run first." >&2
@@ -309,7 +320,17 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
     if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
       J_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
     elif [[ "$J_STORAGE" == "keychain" ]] && keychain_available 2>/dev/null; then
-      J_API_KEY="$(keychain_get 2>/dev/null || true)"
+      # keychain_get exit codes: 0 found, 1 not found, 2 tool error.
+      # For preserve-key resolution we treat "not found" as "nothing to
+      # preserve"; a genuine tool error is surfaced and then falls through
+      # to the "no existing key" message.
+      _kc_val="$(keychain_get 2>&1)"
+      _kc_rc=$?
+      case "$_kc_rc" in
+        0) J_API_KEY="$_kc_val" ;;
+        1) : ;;
+        *) echo "apply: warning — keychain read failed: $_kc_val" >&2 ;;
+      esac
     elif [[ "$J_STORAGE" == "profile" ]]; then
       _profile_path="$(profile_writer_detect_shell_config_path "$SHELL_TYPE")"
       J_API_KEY="$(profile_writer_read_api_key "$_profile_path" 2>/dev/null || true)"
@@ -355,13 +376,11 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
   if [[ "$J_STORAGE" == "keychain" ]]; then
     API_KEY_EXPR="$(keychain_get_command "$SHELL_TYPE")"
   else
-    # Profile storage: single-quote the key.
+    # Profile storage: single-quote the key. The POSIX `'abc'\''def'` idiom
+    # works identically in bash, zsh, and fish — never emit fish-specific
+    # backslash escapes inside single quotes (fish treats them literally).
     _J_ESCAPED="${J_API_KEY//\'/\'\\\'\'}"
-    if [[ "$SHELL_TYPE" == "fish" ]]; then
-      API_KEY_EXPR="'${J_API_KEY//\'/\\\'}'"
-    else
-      API_KEY_EXPR="'$_J_ESCAPED'"
-    fi
+    API_KEY_EXPR="'$_J_ESCAPED'"
   fi
 fi
 
@@ -375,7 +394,8 @@ export J_MANTLE_BASE_URL="$J_MANTLE_URL"
 export J_OPUSPLAN
 export J_USE_1M="$J_1M_CONTEXT"
 export J_SCOPE
-export J_VERSION="2.2.2"
+J_VERSION="$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown")"
+export J_VERSION
 
 # Only export model overrides if explicitly set (schema uses bedrock-config.json defaults otherwise).
 [[ -n "$J_MODEL" ]]        && export J_MODEL

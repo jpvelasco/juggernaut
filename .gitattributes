@@ -26,3 +26,7 @@ juggernaut text eol=lf
 
 # Keep VERSION file with LF
 VERSION text eol=lf
+
+# Intentionally-CRLF test fixture for profile detection/removal tests.
+# Do not normalize on checkout; bash profile_writer must handle CRLF.
+tests/v2/fixtures/profile_crlf.sh -text eol=crlf

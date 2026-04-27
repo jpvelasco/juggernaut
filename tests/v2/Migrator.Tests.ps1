@@ -213,6 +213,47 @@ Describe 'Invoke-MigratorRun — full round-trip' {
 # ---------------------------------------------------------------------------
 # Rollback
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Migration decline marker
+# ---------------------------------------------------------------------------
+Describe 'Set-MigratorDeclinedMarker' {
+    BeforeAll {
+        $tmp = [IO.Path]::GetTempFileName()
+        Copy-Item (Join-Path $script:Fixtures 'v1_iam_default.sh') $tmp -Force
+        $script:declineTmp = $tmp
+    }
+    AfterAll {
+        if ($script:declineTmp -and (Test-Path $script:declineTmp)) {
+            Remove-Item $script:declineTmp -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'detects v1 block before decline' {
+        Test-MigratorHasV1Block -ProfileFile $script:declineTmp | Should -BeTrue
+    }
+    It 'writes the decline marker line' {
+        Set-MigratorDeclinedMarker -ProfileFile $script:declineTmp
+        $content = Get-Content -Path $script:declineTmp -Raw
+        $content | Should -Match '(?m)^# MigrationDeclined:'
+    }
+    It 'suppresses detection after decline' {
+        Test-MigratorHasV1Block -ProfileFile $script:declineTmp | Should -BeFalse
+    }
+    It 'JUGGERNAUT_FORCE_MIGRATION_PROMPT=1 re-enables detection' {
+        $env:JUGGERNAUT_FORCE_MIGRATION_PROMPT = '1'
+        try {
+            Test-MigratorHasV1Block -ProfileFile $script:declineTmp | Should -BeTrue
+        } finally {
+            Remove-Item Env:\JUGGERNAUT_FORCE_MIGRATION_PROMPT -ErrorAction SilentlyContinue
+        }
+    }
+    It 'calling mark again does not duplicate the marker' {
+        Set-MigratorDeclinedMarker -ProfileFile $script:declineTmp
+        $count = (Select-String -Path $script:declineTmp -Pattern '^# MigrationDeclined:' -AllMatches).Matches.Count
+        $count | Should -Be 1
+    }
+}
+
 Describe 'Invoke-MigratorRollback' {
     BeforeAll {
         $tmpDir  = Join-Path ([IO.Path]::GetTempPath()) ("jug-rb-" + [Guid]::NewGuid().ToString('N'))

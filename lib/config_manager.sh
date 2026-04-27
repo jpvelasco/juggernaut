@@ -6,6 +6,8 @@
 set -euo pipefail
 
 CONFIG_BACKUP_RETAIN=5
+CONFIG_LOCK_TIMEOUT_SECS=10
+CONFIG_STALE_LOCK_SECS=30
 
 # Copy the mode from $1 to $2 using a portable stat (GNU or BSD) and chmod.
 # Falls back to 0600 on failure — settings.json may hold keys, err on tighter.
@@ -234,8 +236,8 @@ config_with_lock() {
   if command -v flock >/dev/null 2>&1; then
     local rc
     {
-      if ! flock -x -w 10 9; then
-        echo "config_with_lock: could not acquire flock on $lockfile within 10s" >&2
+      if ! flock -x -w "$CONFIG_LOCK_TIMEOUT_SECS" 9; then
+        echo "config_with_lock: could not acquire flock on $lockfile within ${CONFIG_LOCK_TIMEOUT_SECS}s" >&2
         return 1
       fi
       "$@"
@@ -245,9 +247,10 @@ config_with_lock() {
   fi
 
   # Fallback: mkdir-based mutex (POSIX-atomic: mkdir succeeds only for one caller).
-  # Stale-lock recovery: if the lockdir is older than 30s, assume the prior holder
-  # died without cleanup and remove it. The 30s window is generous enough to cover
-  # any real write, but short enough not to block a manual re-run after a crash.
+  # Stale-lock recovery: if the lockdir is older than CONFIG_STALE_LOCK_SECS, assume
+  # the prior holder died without cleanup and remove it. The window is generous
+  # enough to cover any real write, but short enough not to block a manual re-run
+  # after a crash.
   local lockdir="${path}.lockdir"
   local waited=0
   until mkdir -- "$lockdir" 2>/dev/null; do
@@ -257,13 +260,13 @@ config_with_lock() {
       now="$(date +%s)"
       mtime="$(stat -c '%Y' "$lockdir" 2>/dev/null || stat -f '%m' "$lockdir" 2>/dev/null || echo "0")"
       lockage=$(( now - mtime ))
-      if (( lockage > 30 )); then
+      if (( lockage > CONFIG_STALE_LOCK_SECS )); then
         rmdir -- "$lockdir" 2>/dev/null || true
         continue
       fi
     fi
-    if (( waited >= 10 )); then
-      echo "config_with_lock: could not acquire mkdir lock on $lockdir within 10s" >&2
+    if (( waited >= CONFIG_LOCK_TIMEOUT_SECS )); then
+      echo "config_with_lock: could not acquire mkdir lock on $lockdir within ${CONFIG_LOCK_TIMEOUT_SECS}s" >&2
       return 1
     fi
     sleep 1

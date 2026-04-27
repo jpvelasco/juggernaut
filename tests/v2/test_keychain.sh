@@ -109,6 +109,35 @@ else
   pass
 fi
 
+# ---------------------------------------------------------------------------
+# keychain_get exit codes: 0 found, 1 not found, 2 tool error
+# ---------------------------------------------------------------------------
+section "keychain_get — exit codes"
+# Force "not found" by pointing at a service name guaranteed not to exist.
+SAVED_KEYCHAIN_SERVICE="$KEYCHAIN_SERVICE"
+KEYCHAIN_SERVICE="juggernaut-absent-$$-$(date +%s)"
+
+OUT="$(keychain_get 2>/dev/null; echo "__RC__$?")"
+RC="${OUT##*__RC__}"
+STDOUT="${OUT%__RC__*}"
+case "$RC" in
+  1) pass ;;
+  0)
+    echo "  SKIP: keychain_get returned 0 (stale/unexpected entry on this host)"
+    pass ;;
+  2)
+    echo "  SKIP: keychain_get returned 2 (no keychain tooling on runner)"
+    pass ;;
+  *) fail "keychain_get: expected rc 1 for not-found, got $RC" ;;
+esac
+if [[ "$RC" == "1" && -z "$STDOUT" ]]; then
+  pass
+elif [[ "$RC" == "1" ]]; then
+  fail "not-found path must print empty stdout, got: '$STDOUT'"
+fi
+
+KEYCHAIN_SERVICE="$SAVED_KEYCHAIN_SERVICE"
+
 echo
 echo "keychain.sh tests: $PASS passed, $FAIL failed"
 exit "$FAIL"

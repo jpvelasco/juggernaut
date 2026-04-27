@@ -10,6 +10,7 @@ BeforeAll {
     . (Join-Path $script:repoRoot 'lib\profile_writer.ps1')
     $script:BedrockConfigPath = Join-Path $script:repoRoot 'bedrock-config.json'
     $script:Fixtures          = Join-Path $script:repoRoot 'tests\v2\fixtures'
+    $script:ExpectedVersion   = (Get-Content (Join-Path $script:repoRoot 'VERSION') -Raw).Trim()
     $env:JUGGERNAUT_USE_V2    = '1'
     $env:BEDROCK_CONFIG_PATH  = $script:BedrockConfigPath
 }
@@ -33,7 +34,7 @@ Describe 'New-JuggernautBlock — IAM defaults' {
     It 'effortLevel = xhigh'   { $script:block.effortLevel   | Should -Be 'xhigh' }
     It 'opusplan = false'      { $script:block.opusplan       | Should -BeFalse }
     It 'meta.managedBy = juggernaut' { $script:block.meta.managedBy | Should -Be 'juggernaut' }
-    It 'meta.version = 2.2.3'  { $script:block.meta.version  | Should -Be '2.2.3' }
+    It 'meta.version matches VERSION' { $script:block.meta.version | Should -Be $script:ExpectedVersion }
     It 'env.AWS_REGION = us-east-1' {
         $script:block.env['AWS_REGION'] | Should -Be 'us-east-1'
     }
@@ -312,7 +313,7 @@ Describe 'Keychain storage round-trip' {
             Set-KeychainEntry -Key 'br-test-roundtrip' | Should -BeTrue
             Get-KeychainEntry | Should -Be 'br-test-roundtrip'
             Remove-KeychainEntry
-            Get-KeychainEntry | Should -Be ''
+            Get-KeychainEntry | Should -Be $null
         } finally {
             Remove-KeychainEntry
             if ($null -eq $oldService) { Remove-Item Env:\JUGGERNAUT_KEYCHAIN_SERVICE -ErrorAction SilentlyContinue }

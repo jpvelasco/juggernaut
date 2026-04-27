@@ -97,17 +97,38 @@ public struct CREDENTIAL {
 }
 
 function Get-KeychainEntry {
+    # Returns the stored key as a non-empty string when found.
+    # Returns $null when the entry does not exist (silent).
+    # Throws on tool/platform errors so callers can distinguish
+    # "not found" from "something is broken".
     $svc = Get-KeychainServiceName
     $acc = Get-KeychainAccountName
     $os  = Get-KeychainOS
     switch ($os) {
         'macos' {
+            if (-not (Get-Command 'security' -ErrorAction SilentlyContinue)) {
+                throw "Get-KeychainEntry: 'security' not found on PATH"
+            }
             $val = security find-generic-password -s $svc -a $acc -w 2>$null
-            return ($val -replace "`r","").Trim()
+            $rc  = $LASTEXITCODE
+            switch ($rc) {
+                0  { return ($val -replace "`r","").Trim() }
+                44 { return $null }
+                default { throw "Get-KeychainEntry: 'security' failed (exit $rc)" }
+            }
         }
         { $_ -in 'linux','wsl' } {
+            if (-not (Get-Command 'secret-tool' -ErrorAction SilentlyContinue)) {
+                throw "Get-KeychainEntry: 'secret-tool' not found on PATH"
+            }
             $val = secret-tool lookup service $svc account $acc 2>$null
-            return ($val -replace "`r","").Trim()
+            $rc  = $LASTEXITCODE
+            if ($rc -in 0,1) {
+                $val = if ($val) { ($val -replace "`r","").Trim() } else { '' }
+                if ([string]::IsNullOrEmpty($val)) { return $null }
+                return $val
+            }
+            throw "Get-KeychainEntry: 'secret-tool' failed (exit $rc)"
         }
         'windows' {
             # Read via advapi32 CredRead (same approach as keychain.sh PS inline block).
@@ -126,7 +147,11 @@ public struct CREDENTIAL {
     public string TargetAlias; public string UserName;
 }
 '@
-            Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition $src -ErrorAction SilentlyContinue
+            try {
+                Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition $src -ErrorAction SilentlyContinue
+            } catch {
+                throw "Get-KeychainEntry: failed to load advapi32 bindings: $_"
+            }
             $ptr = [IntPtr]::Zero
             if ([Win32.Cred]::CredRead($svc, 1, 0, [ref]$ptr)) {
                 $c = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Win32.Cred+CREDENTIAL])
@@ -135,11 +160,15 @@ public struct CREDENTIAL {
                     $val = [Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob, $c.CredentialBlobSize / 2)
                 }
                 [Win32.Cred]::CredFree($ptr)
+                if ([string]::IsNullOrEmpty($val)) { return $null }
                 return $val
             }
-            return ''
+            # CredRead returning false is "not found" (ERROR_NOT_FOUND = 1168).
+            return $null
         }
-        default { return '' }
+        default {
+            throw "Get-KeychainEntry: unsupported OS '$os'"
+        }
     }
 }
 

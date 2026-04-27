@@ -35,13 +35,14 @@ export HOME="$TMP_HOME"
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export JUGGERNAUT_USE_V2=1
 export SHELL="/bin/zsh"
+EXPECTED_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
 
 . "$REPO_ROOT/lib/schema.sh"
 . "$REPO_ROOT/lib/config_manager.sh"
 set +e
 
 J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
-  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION=2.2.2 \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=both \
   USER_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
@@ -66,7 +67,7 @@ fi
 
 section "human-readable output without shell fallback"
 J_AUTH_MODE=api-key J_REGION=eu-west-1 J_EFFORT=xhigh J_STORAGE=keychain \
-  J_USE_MANTLE=true J_OPUSPLAN=true J_SCOPE=user J_VERSION=2.2.2 \
+  J_USE_MANTLE=true J_OPUSPLAN=true J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=settings-only \
   USER_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
@@ -90,7 +91,7 @@ fi
 section "shows both scopes when both exist"
 mkdir -p "$TMP_WORK/.claude"
 J_AUTH_MODE=iam J_REGION=ap-southeast-1 J_EFFORT=xhigh J_STORAGE=profile \
-  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=project J_VERSION=2.2.2 \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=project J_VERSION="$EXPECTED_VERSION" \
   J_SHELL_FALLBACK_MODE=settings-only \
   PROJECT_BLOCK="$(schema_new_juggernaut_block)"
 config_write_atomic "$TMP_WORK/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"

@@ -69,21 +69,53 @@ keychain_store() {
 }
 
 # keychain_get
-# Prints the stored key to stdout. Returns 1 if not found.
+# Prints the stored key to stdout. Exit codes:
+#   0 — found, value printed to stdout
+#   1 — not found (silent)
+#   2 — tool error (human-readable message on stderr)
 keychain_get() {
-  local os
+  local os rc value
   os="$(keychain_detect_os)"
   case "$os" in
     macos)
-      security find-generic-password \
-        -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null
+      # `security` exits 44 when the item is not found, 0 on success, other
+      # non-zero codes on tool errors (missing binary, locked keychain).
+      value="$(security find-generic-password \
+        -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null)"
+      rc=$?
+      case "$rc" in
+        0) printf '%s' "$value"; return 0 ;;
+        44) return 1 ;;
+        *) echo "keychain_get: macOS 'security' failed (exit $rc)" >&2; return 2 ;;
+      esac
       ;;
     linux|wsl)
-      secret-tool lookup \
-        service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null
+      # `secret-tool lookup` prints nothing and exits 0 when the attribute
+      # tuple isn't present, making "not found" indistinguishable from
+      # "found empty". Treat empty output as not-found. Non-zero exit that
+      # isn't a missing attribute (e.g. D-Bus error, missing binary) → 2.
+      if ! command -v secret-tool >/dev/null 2>&1; then
+        echo "keychain_get: 'secret-tool' not found on PATH" >&2
+        return 2
+      fi
+      value="$(secret-tool lookup \
+        service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null)"
+      rc=$?
+      if [[ "$rc" -eq 0 && -n "$value" ]]; then
+        printf '%s' "$value"; return 0
+      fi
+      if [[ "$rc" -eq 0 || "$rc" -eq 1 ]]; then
+        return 1
+      fi
+      echo "keychain_get: 'secret-tool' failed (exit $rc)" >&2
+      return 2
       ;;
     gitbash|cygwin)
-      powershell.exe -NoProfile -Command "
+      if ! command -v powershell.exe >/dev/null 2>&1; then
+        echo "keychain_get: 'powershell.exe' not found on PATH" >&2
+        return 2
+      fi
+      value="$(powershell.exe -NoProfile -Command "
         Add-Type -Namespace 'Win32' -Name 'Credential' -MemberDefinition '
           [DllImport(\"advapi32.dll\", SetLastError = true, CharSet = CharSet.Unicode)]
           public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
@@ -107,10 +139,20 @@ keychain_get() {
           }
           [Win32.Credential]::CredFree(\$ptr)
         }
-      " 2>/dev/null | tr -d '\r'
+      " 2>/dev/null | tr -d '\r')"
+      rc=$?
+      if [[ "$rc" -ne 0 ]]; then
+        echo "keychain_get: 'powershell.exe' failed (exit $rc)" >&2
+        return 2
+      fi
+      if [[ -n "$value" ]]; then
+        printf '%s' "$value"; return 0
+      fi
+      return 1
       ;;
     *)
-      return 1
+      echo "keychain_get: unsupported OS '$os'" >&2
+      return 2
       ;;
   esac
 }

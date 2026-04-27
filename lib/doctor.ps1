@@ -172,7 +172,7 @@ function Write-DoctorCredentials {
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
                 Write-Output 'Source: AWS_BEARER_TOKEN_BEDROCK'
                 Write-Output 'Status: OK'
-            } elseif ($storage -eq 'keychain' -and (Test-KeychainAvailable) -and (Get-KeychainEntry)) {
+            } elseif ($storage -eq 'keychain' -and (Test-KeychainAvailable) -and ((try { Get-KeychainEntry } catch { $null }))) {
                 Write-Output 'Source: system keychain'
                 Write-Output 'Status: OK'
             } elseif ($ProfilePath -and (Test-DoctorShellHasKeyAssignment -ProfilePath $ProfilePath -Key 'AWS_BEARER_TOKEN_BEDROCK')) {

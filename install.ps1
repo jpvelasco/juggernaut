@@ -39,10 +39,11 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 }
 
 function Clone-Install {
+    param([string]$Target = $InstallDir)
     if ($Version) {
-        git clone --branch $Version --depth 1 --quiet $RepoUrl $InstallDir
+        git clone --branch $Version --depth 1 --quiet $RepoUrl $Target
     } else {
-        git clone --quiet $RepoUrl $InstallDir
+        git clone --quiet $RepoUrl $Target
     }
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
 }
@@ -76,8 +77,18 @@ function Test-InstallTreeDirty {
 if (Test-Path $InstallDir) {
     if (Test-InstallTreeDirty) {
         Write-Host 'Existing installation has local changes or is not a clean Git checkout.'
-        Backup-ExistingInstall
-        Clone-Install
+        # Clone to a sibling directory first so a failed clone cannot destroy the
+        # existing install. Only if the clone succeeds do we swap directories.
+        $NewDir = "$InstallDir.new"
+        if (Test-Path $NewDir) { Remove-Item -LiteralPath $NewDir -Recurse -Force }
+        try {
+            Clone-Install -Target $NewDir
+            Backup-ExistingInstall
+            Move-Item -LiteralPath $NewDir -Destination $InstallDir
+        } catch {
+            if (Test-Path $NewDir) { Remove-Item -LiteralPath $NewDir -Recurse -Force -ErrorAction SilentlyContinue }
+            throw
+        }
     } else {
         Write-Host "Updating existing installation in $InstallDir"
         git -C $InstallDir fetch --tags --quiet

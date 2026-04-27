@@ -9,10 +9,41 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 # migrator_has_v1_block <profile_file>
-# Returns 0 if a Juggernaut v1 BEGIN/END marker block is present.
+# Returns 0 if a Juggernaut v1 BEGIN/END marker block is present AND the
+# user has not previously declined migration. Normalizes CRLF before
+# matching so Windows Git Bash profiles are detected correctly.
 migrator_has_v1_block() {
   local file="$1"
-  [[ -f "$file" ]] && grep -q "# BEGIN: Claude Code Bedrock Configuration" "$file"
+  [[ -f "$file" ]] || return 1
+  tr -d '\r' < "$file" 2>/dev/null | grep -q "# BEGIN: Claude Code Bedrock Configuration" || return 1
+  # Suppress detection if a MigrationDeclined marker is present.
+  if [[ "${JUGGERNAUT_FORCE_MIGRATION_PROMPT:-}" != "1" ]] \
+     && tr -d '\r' < "$file" 2>/dev/null | grep -q "^# MigrationDeclined:"; then
+    return 1
+  fi
+  return 0
+}
+
+# migrator_mark_migration_declined <profile_file>
+# Inserts a "# MigrationDeclined: <ISO8601>" comment immediately after the
+# BEGIN marker so subsequent apply invocations don't re-prompt. Users can
+# re-enable the prompt with JUGGERNAUT_FORCE_MIGRATION_PROMPT=1 or by
+# removing the marker line by hand.
+migrator_mark_migration_declined() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  # No-op if a decline marker already exists.
+  if tr -d '\r' < "$file" | grep -q "^# MigrationDeclined:"; then
+    return 0
+  fi
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local tmp
+  tmp="$(mktemp)"
+  awk -v marker="# MigrationDeclined: $ts" '
+    { print }
+    /^# BEGIN: Claude Code Bedrock Configuration/ && !done { print marker; done=1 }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
 # migrator_extract_block <profile_file>
