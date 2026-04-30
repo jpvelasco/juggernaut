@@ -45,6 +45,20 @@ apply_dry_run() {
 }
 
 # ---------------------------------------------------------------------------
+# Interactive prompts work from piped installers by reading /dev/tty.
+# ---------------------------------------------------------------------------
+section "interactive prompts prefer /dev/tty"
+APPLY_SH="$(cat "$REPO_ROOT/commands/apply.sh")"
+if [[ "$APPLY_SH" == *"/dev/tty"* &&
+      "$APPLY_SH" == *"_apply_prompt_secret"* &&
+      "$APPLY_SH" == *"_apply_prompt_confirm"* &&
+      "$APPLY_SH" != *"elif ! _apply_has_tty"* ]]; then
+  pass
+else
+  fail "apply.sh should attempt /dev/tty prompts instead of pre-classifying piped installers as non-interactive"
+fi
+
+# ---------------------------------------------------------------------------
 # Feature flag gate: apply.sh exits non-zero without JUGGERNAUT_USE_V2=1
 # ---------------------------------------------------------------------------
 section "feature flag gate"
@@ -311,7 +325,7 @@ mkdir -p "$FAKE_HOME_CONFIRM/.claude"
 cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME_CONFIRM/.bashrc"
 
 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
-  HOME="$FAKE_HOME_CONFIRM" bash "$REPO_ROOT/commands/apply.sh" \
+  JUGGERNAUT_NO_TTY_PROMPTS=1 HOME="$FAKE_HOME_CONFIRM" bash "$REPO_ROOT/commands/apply.sh" \
   --auth=iam --no-shell-fallback \
   >/dev/null 2>&1
 RC=$?

@@ -103,10 +103,21 @@ doctor_scope_block() {
 
 doctor_credentials() {
   local block="$1" profile="$2"
-  local auth_mode storage
+  local auth_mode storage keychain_value keychain_rc keychain_error
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   storage="$(jq -r '.auth.storage // ""' <<<"$block")"
   [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
+  keychain_value=""
+  keychain_rc=1
+  keychain_error=""
+  if [[ "$auth_mode" == "bedrock-api-key" && "$storage" == "keychain" ]] && keychain_available 2>/dev/null; then
+    keychain_value="$(keychain_get 2>&1)"
+    keychain_rc=$?
+    if [[ "$keychain_rc" -ne 0 && "$keychain_rc" -ne 1 ]]; then
+      keychain_error="$keychain_value"
+      keychain_value=""
+    fi
+  fi
   case "$auth_mode" in
     iam)
       doctor_kv "Auth" "IAM"
@@ -131,13 +142,17 @@ doctor_credentials() {
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
         doctor_kv "Source" "AWS_BEARER_TOKEN_BEDROCK"
         doctor_ok
-      elif [[ "$storage" == "keychain" ]] && keychain_available 2>/dev/null && [[ -n "$(keychain_get 2>/dev/null || true)" ]]; then
+      elif [[ -n "$keychain_value" ]]; then
         doctor_kv "Source" "system keychain"
         doctor_ok
       elif [[ -n "$profile" ]] && doctor_shell_has_key_assignment "$profile" "AWS_BEARER_TOKEN_BEDROCK"; then
         doctor_kv "Source" "shell profile"
         doctor_ok
       else
+        if [[ -n "$keychain_error" ]]; then
+          DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+          doctor_kv "Keychain" "WARN ($keychain_error)"
+        fi
         doctor_fail
         doctor_kv "Details" "no API key found in env, keychain, or shell profile"
       fi

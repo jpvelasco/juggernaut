@@ -51,6 +51,15 @@ keychain_available 2>/dev/null || true
 # No assert — just verify it returns 0 or 1 (the call above didn't crash).
 pass
 
+section "macOS keychain store updates existing item"
+KEYCHAIN_SH="$(cat "$REPO_ROOT/lib/keychain.sh")"
+if [[ "$KEYCHAIN_SH" == *"security add-generic-password"* &&
+      "$KEYCHAIN_SH" == *"-U -s"* ]]; then
+  pass
+else
+  fail "macOS keychain store should use security add-generic-password -U"
+fi
+
 # ---------------------------------------------------------------------------
 # keychain_get_command — bash syntax
 # ---------------------------------------------------------------------------

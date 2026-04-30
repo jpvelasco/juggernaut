@@ -40,7 +40,29 @@ unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 
 . "$REPO_ROOT/lib/schema.sh"
 . "$REPO_ROOT/lib/config_manager.sh"
+. "$REPO_ROOT/lib/profile_writer.sh"
+. "$REPO_ROOT/lib/keychain.sh"
+. "$REPO_ROOT/lib/doctor.sh"
 set +e
+
+section "keychain read errors are visible"
+keychain_available() { return 0; }
+keychain_get() { echo "simulated keychain failure" >&2; return 2; }
+ERR_BLOCK="$(
+  J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+    J_SHELL_FALLBACK_MODE=settings-only \
+    schema_new_juggernaut_block
+)"
+OUTPUT="$(doctor_credentials "$ERR_BLOCK" "$TMP_HOME/.missing-profile" 2>&1)"
+if [[ "$OUTPUT" == *"Keychain: WARN (simulated keychain failure)"* &&
+      "$OUTPUT" == *"Details: no API key found in env, keychain, or shell profile"* ]]; then
+  pass
+else
+  fail "expected visible keychain read failure"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+unset -f keychain_available keychain_get
 
 write_scope_settings() {
   local scope="$1" target="$2" region="$3"

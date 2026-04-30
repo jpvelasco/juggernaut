@@ -4,14 +4,17 @@
 # Usage:
 #   irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.2
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Ref fix-branch
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
 #   .\install.ps1 -Version 2.1.2
+#   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest
 
 param(
     [string]$Version = '',
+    [string]$Ref = '',
     [switch]$Latest,
     [switch]$Configure,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$SetupArgs
@@ -19,7 +22,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if ($Latest) { $Version = '' }
+if (-not $Ref -and $env:JUGGERNAUT_REF) { $Ref = $env:JUGGERNAUT_REF }
+if ($Latest) { $Version = ''; $Ref = '' }
+if ($Ref) { $Version = '' }
 
 # Normalize version: accept "2.1.2" or "v2.1.2" - tags are always v-prefixed.
 if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
@@ -27,7 +32,9 @@ if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 $RepoUrl    = if ($env:JUGGERNAUT_REPO_URL) { $env:JUGGERNAUT_REPO_URL } else { 'https://github.com/jpvelasco/juggernaut.git' }
 $InstallDir = if ($env:JUGGERNAUT_DIR) { $env:JUGGERNAUT_DIR } else { Join-Path $HOME '.juggernaut' }
 
-if ($Version) {
+if ($Ref) {
+    Write-Host "Installing Juggernaut $Ref..."
+} elseif ($Version) {
     Write-Host "Installing Juggernaut $Version..."
 } else {
     Write-Host 'Installing Juggernaut (latest)...'
@@ -40,7 +47,9 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 
 function Clone-Install {
     param([string]$Target = $InstallDir)
-    if ($Version) {
+    if ($Ref) {
+        git clone --branch $Ref --depth 1 --quiet $RepoUrl $Target
+    } elseif ($Version) {
         git clone --branch $Version --depth 1 --quiet $RepoUrl $Target
     } else {
         git clone --quiet $RepoUrl $Target
@@ -74,6 +83,51 @@ function Test-InstallTreeDirty {
     return [bool]$untracked
 }
 
+function Convert-InstallerApplyArgs {
+    param([string[]]$InputArgs)
+    $converted = @{}
+    for ($i = 0; $i -lt $InputArgs.Count; $i++) {
+        $arg = [string]$InputArgs[$i]
+        switch -Regex ($arg) {
+            '^--([^=]+)=(.*)$' {
+                $name = ($Matches[1] -replace '-', '')
+                $converted[$name] = $Matches[2]
+                continue
+            }
+            '^--(.+)$' {
+                $name = ($Matches[1] -replace '-', '')
+                if (($i + 1) -lt $InputArgs.Count -and ([string]$InputArgs[$i + 1]) -notlike '-*') {
+                    $converted[$name] = [string]$InputArgs[$i + 1]
+                    $i++
+                } else {
+                    $converted[$name] = $true
+                }
+                continue
+            }
+            '^-([^=]+)=(.*)$' {
+                $name = ($Matches[1] -replace '-', '')
+                $converted[$name] = $Matches[2]
+                continue
+            }
+            '^-([^-].*)$' {
+                $name = ($Matches[1] -replace '-', '')
+                if (($i + 1) -lt $InputArgs.Count -and ([string]$InputArgs[$i + 1]) -notlike '-*') {
+                    $converted[$name] = [string]$InputArgs[$i + 1]
+                    $i++
+                } else {
+                    $converted[$name] = $true
+                }
+                continue
+            }
+            default {
+                if (-not $converted.ContainsKey('RemainingArgs')) { $converted['RemainingArgs'] = @() }
+                $converted['RemainingArgs'] += $arg
+            }
+        }
+    }
+    return $converted
+}
+
 if (Test-Path $InstallDir) {
     if (Test-InstallTreeDirty) {
         Write-Host 'Existing installation has local changes or is not a clean Git checkout.'
@@ -93,7 +147,12 @@ if (Test-Path $InstallDir) {
         Write-Host "Updating existing installation in $InstallDir"
         git -C $InstallDir fetch --tags --quiet
         if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
-        if ($Version) {
+        if ($Ref) {
+            git -C $InstallDir fetch --quiet origin $Ref
+            if ($LASTEXITCODE -ne 0) { throw "git fetch $Ref failed" }
+            git -C $InstallDir checkout --quiet FETCH_HEAD
+            if ($LASTEXITCODE -ne 0) { throw "git checkout $Ref failed" }
+        } elseif ($Version) {
             git -C $InstallDir checkout --quiet $Version
             if ($LASTEXITCODE -ne 0) { throw "git checkout $Version failed" }
         } else {
@@ -119,7 +178,8 @@ $TargetPs1 = Join-Path $InstallDir 'juggernaut.ps1'
 @"
 param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)
 & '$TargetPs1' @Args
-exit `$LASTEXITCODE
+if (`$?) { exit 0 }
+exit 1
 "@ | Set-Content -Path $ShimPs1 -Encoding utf8
 
 @"
@@ -127,8 +187,10 @@ exit `$LASTEXITCODE
 where pwsh.exe >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
   pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "$ShimPs1" %*
+  exit /b %ERRORLEVEL%
 ) else (
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$ShimPs1" %*
+  exit /b %ERRORLEVEL%
 )
 "@ | Set-Content -Path $ShimCmd -Encoding ascii
 
@@ -144,9 +206,15 @@ Write-Host '  juggernaut apply --v2 --auth=bedrock-api-key'
 Write-Host '  juggernaut apply --v2 --auth=iam'
 
 if ($Configure) {
-    Set-Location $InstallDir
-    & .\juggernaut.ps1 apply --v2 @SetupArgs
-    exit $LASTEXITCODE
+    $oldLocation = (Get-Location).Path
+    try {
+        Set-Location $InstallDir
+        $applyArgs = Convert-InstallerApplyArgs -InputArgs $SetupArgs
+        & (Join-Path $InstallDir 'commands\apply.ps1') @applyArgs
+    } finally {
+        Set-Location $oldLocation
+    }
+    return
 } elseif ($SetupArgs.Count -gt 0) {
     Write-Warning 'Install arguments after -Version were ignored. Use -Configure to run apply during install.'
 }

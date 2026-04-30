@@ -102,7 +102,7 @@ if ((Get-KeychainOS) -eq 'windows') {
 $profileTargets = @($profileTargets | Select-Object -Unique)
 
 $hasKeychain = $false
-if (Test-KeychainAvailable) {
+if (($hasUser -or $hasProject -or $profileTargets.Count -gt 0) -and (Test-KeychainAvailable)) {
     $kv = try { Get-KeychainEntry } catch { $null }
     if ($kv) { $hasKeychain = $true }
 }

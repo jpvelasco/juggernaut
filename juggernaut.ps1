@@ -118,6 +118,16 @@ Run 'juggernaut.ps1 apply --help' for apply-specific options.
 '@
 }
 
+function Invoke-JuggernautPowerShellScript {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [hashtable]$Arguments = @{}
+    )
+    & $Path @Arguments
+    if ($?) { exit 0 }
+    exit 1
+}
+
 if (-not $v2Active) {
     switch ($Subcommand) {
         { $_ -in '--version','-v' } {
@@ -142,28 +152,23 @@ $subcommandArgs = Convert-GnuStyleArgs -InputArgs $subcommandArgs
 switch ($Subcommand) {
     'apply' {
         $applyScript = Join-Path $PSScriptRoot_ 'commands\apply.ps1'
-        & $applyScript @subcommandArgs
-        exit $LASTEXITCODE
+        Invoke-JuggernautPowerShellScript -Path $applyScript -Arguments $subcommandArgs
     }
     'migrate' {
         $migrateScript = Join-Path $PSScriptRoot_ 'commands\migrate.ps1'
-        & $migrateScript @subcommandArgs
-        exit $LASTEXITCODE
+        Invoke-JuggernautPowerShellScript -Path $migrateScript -Arguments $subcommandArgs
     }
     'show' {
         $showScript = Join-Path $PSScriptRoot_ 'commands\show.ps1'
-        & $showScript @subcommandArgs
-        exit $LASTEXITCODE
+        Invoke-JuggernautPowerShellScript -Path $showScript -Arguments $subcommandArgs
     }
     'doctor' {
         $doctorScript = Join-Path $PSScriptRoot_ 'commands\doctor.ps1'
-        & $doctorScript @subcommandArgs
-        exit $LASTEXITCODE
+        Invoke-JuggernautPowerShellScript -Path $doctorScript -Arguments $subcommandArgs
     }
     'uninstall' {
         $uninstallScript = Join-Path $PSScriptRoot_ 'commands\uninstall.ps1'
-        & $uninstallScript @subcommandArgs
-        exit $LASTEXITCODE
+        Invoke-JuggernautPowerShellScript -Path $uninstallScript -Arguments $subcommandArgs
     }
     { $_ -in '--version','-v' } {
         $vf = Join-Path $PSScriptRoot_ 'VERSION'

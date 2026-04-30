@@ -4,10 +4,12 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.2
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
 #   bash install.sh --version 2.1.2
+#   bash install.sh --ref fix-branch
 #   bash install.sh --latest
 
 set -e
@@ -15,6 +17,7 @@ set -e
 REPO_URL="${JUGGERNAUT_REPO_URL:-https://github.com/jpvelasco/juggernaut.git}"
 INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
 VERSION=""
+REF="${JUGGERNAUT_REF:-}"
 CONFIGURE=0
 SETUP_ARGS=()
 
@@ -26,14 +29,31 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       VERSION="$2"
+      REF=""
       shift 2
       ;;
     --version=*)
       VERSION="${1#--version=}"
+      REF=""
+      shift
+      ;;
+    --ref)
+      if [[ -z "${2:-}" ]]; then
+        echo "Error: --ref requires a branch, tag, or commit" >&2
+        exit 1
+      fi
+      REF="$2"
+      VERSION=""
+      shift 2
+      ;;
+    --ref=*)
+      REF="${1#--ref=}"
+      VERSION=""
       shift
       ;;
     --latest)
       VERSION=""
+      REF=""
       shift
       ;;
     --configure)
@@ -57,7 +77,9 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -n "$VERSION" ]]; then
+if [[ -n "$REF" ]]; then
+  echo "Installing Juggernaut $REF..."
+elif [[ -n "$VERSION" ]]; then
   echo "Installing Juggernaut $VERSION..."
 else
   echo "Installing Juggernaut (latest)..."
@@ -65,7 +87,9 @@ fi
 
 clone_install() {
   local target="${1:-$INSTALL_DIR}"
-  if [[ -n "$VERSION" ]]; then
+  if [[ -n "$REF" ]]; then
+    git clone --branch "$REF" --depth 1 --quiet "$REPO_URL" "$target"
+  elif [[ -n "$VERSION" ]]; then
     git clone --branch "$VERSION" --depth 1 --quiet "$REPO_URL" "$target"
   else
     git clone --quiet "$REPO_URL" "$target"
@@ -113,7 +137,10 @@ if [[ -d "$INSTALL_DIR" ]]; then
   else
     echo "Updating existing installation in $INSTALL_DIR"
     git -C "$INSTALL_DIR" fetch --tags --quiet
-    if [[ -n "$VERSION" ]]; then
+    if [[ -n "$REF" ]]; then
+      git -C "$INSTALL_DIR" fetch --quiet origin "$REF"
+      git -C "$INSTALL_DIR" checkout --quiet FETCH_HEAD
+    elif [[ -n "$VERSION" ]]; then
       git -C "$INSTALL_DIR" checkout --quiet "$VERSION"
     else
       git -C "$INSTALL_DIR" checkout --quiet main

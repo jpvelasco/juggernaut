@@ -149,6 +149,11 @@ function Write-DoctorCredentials {
     $authMode = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
     $storage = Get-DoctorNestedProp -Object $Block -Path @('auth','storage')
     if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
+    $keychainEntry = $null
+    $keychainError = ''
+    if ($authMode -eq 'bedrock-api-key' -and $storage -eq 'keychain' -and (Test-KeychainAvailable)) {
+        try { $keychainEntry = Get-KeychainEntry } catch { $keychainError = "$_"; $keychainEntry = $null }
+    }
     switch ($authMode) {
         'iam' {
             Write-Output 'Auth: IAM'
@@ -156,7 +161,7 @@ function Write-DoctorCredentials {
                 # Bearer token present but config says IAM — surface as the primary status.
                 $script:DoctorWarns += 1
                 Write-Output 'Status: WARN'
-                Write-Output "Details: AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
+                Write-Output "Details: AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' - possible misconfiguration"
                 Write-Output 'Fix: run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)'
             } elseif ($env:AWS_PROFILE) {
                 Write-Output 'Status: OK'
@@ -175,13 +180,17 @@ function Write-DoctorCredentials {
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
                 Write-Output 'Source: AWS_BEARER_TOKEN_BEDROCK'
                 Write-Output 'Status: OK'
-            } elseif ($storage -eq 'keychain' -and (Test-KeychainAvailable) -and ((try { Get-KeychainEntry } catch { $null }))) {
+            } elseif ($keychainEntry) {
                 Write-Output 'Source: system keychain'
                 Write-Output 'Status: OK'
             } elseif ($ProfilePath -and (Test-DoctorShellHasKeyAssignment -ProfilePath $ProfilePath -Key 'AWS_BEARER_TOKEN_BEDROCK')) {
                 Write-Output 'Source: shell profile'
                 Write-Output 'Status: OK'
             } else {
+                if ($keychainError) {
+                    $script:DoctorWarns += 1
+                    Write-Output ('Keychain: WARN ({0})' -f $keychainError)
+                }
                 $script:DoctorFails += 1
                 Write-Output 'Status: FAIL'
                 Write-Output 'Details: no API key found in env, keychain, or shell profile'
@@ -201,18 +210,20 @@ function Write-DoctorRegionModels {
     $model = Get-DoctorProp -Object $Block -Name 'model'
     $effort = Get-DoctorProp -Object $Block -Name 'effortLevel'
     if ($region -and (Test-SchemaSupportedRegion -Region $region)) {
-        Write-Output "Region: $region (OK)"
+        Write-Output ('Region: {0} (OK)' -f $region)
     } else {
         $script:DoctorFails += 1
-        Write-Output "Region: $(if ($region) { $region } else { '-' }) (FAIL)"
+        $displayRegion = if ($region) { $region } else { '-' }
+        Write-Output ('Region: {0} (FAIL)' -f $displayRegion)
     }
     if ($model) {
-        Write-Output "Model: $model (OK)"
+        Write-Output ('Model: {0} (OK)' -f $model)
     } else {
         $script:DoctorFails += 1
         Write-Output 'Model: - (FAIL)'
     }
-    Write-Output "Effort: $(if ($effort) { $effort } else { '-' })"
+    $displayEffort = if ($effort) { $effort } else { '-' }
+    Write-Output ('Effort: {0}' -f $displayEffort)
     $overrideNames = @('opus','sonnet','haiku','subagent')
     $missing = $false
     foreach ($name in $overrideNames) {
@@ -236,7 +247,7 @@ function Write-DoctorMantle {
     }
     Write-Output 'Status: enabled'
     if ($authMode -eq 'bedrock-api-key') { Write-Output 'Reason: Bedrock API key detected' }
-    if ($mantleUrl) { Write-Output "URL: $mantleUrl" }
+    if ($mantleUrl) { Write-Output ('URL: {0}' -f $mantleUrl) }
     $mantleEnv = Get-DoctorNestedProp -Object $Block -Path @('env','CLAUDE_CODE_USE_MANTLE')
     if ($mantleEnv -ne '1') {
         $script:DoctorWarns += 1
@@ -274,7 +285,7 @@ function Write-DoctorDrift {
         Write-Output 'Settings vs Shell Fallback: OK (no drift detected)'
     } else {
         $script:DoctorWarns += 1
-        Write-Output "Settings vs Shell Fallback: WARN ($mismatches differing value(s))"
+        Write-Output ('Settings vs Shell Fallback: WARN ({0} differing value(s))' -f $mismatches)
     }
 }
 
@@ -283,13 +294,13 @@ function Write-DoctorSummary {
     Write-Output 'Summary'
     if ($script:DoctorFails -gt 0) {
         Write-Output 'Status: FAIL'
-        Write-Output "$($script:DoctorFails) failure(s), $($script:DoctorWarns) warning(s)"
+        Write-Output ('{0} failure(s), {1} warning(s)' -f $script:DoctorFails, $script:DoctorWarns)
         Write-Output "Run 'juggernaut apply' to fix configuration issues."
         return
     }
     if ($script:DoctorWarns -gt 0) {
         Write-Output 'Status: WARN'
-        Write-Output "$($script:DoctorWarns) warning(s)"
+        Write-Output ('{0} warning(s)' -f $script:DoctorWarns)
         return
     }
     Write-Output 'Status: OK'

@@ -152,6 +152,27 @@ jobs:
           bash ./tests/v2/test_uninstall.sh
           bash ./tests/v2/test_install.sh
 
+      - name: Run piped installer scenario
+        run: |
+          tmp_remote="$(mktemp -d)"
+          tmp_src="$(mktemp -d)"
+          tmp_home="$(mktemp -d)"
+          trap 'rm -rf "$tmp_remote" "$tmp_src" "$tmp_home"' EXIT
+          git clone -q "$GITHUB_WORKSPACE" "$tmp_src"
+          git -C "$tmp_src" checkout -q -b ci-installer-ref
+          git -C "$tmp_src" config user.email test@example.invalid
+          git -C "$tmp_src" config user.name "Juggernaut CI"
+          printf 'ci-installer-ref\n' > "$tmp_src/VERSION"
+          git -C "$tmp_src" add VERSION
+          git -C "$tmp_src" commit -q -m "ci installer ref"
+          git clone --bare -q "$tmp_src" "$tmp_remote/repo.git"
+          HOME="$tmp_home" JUGGERNAUT_REPO_URL="$tmp_remote/repo.git" \
+            bash -s -- --ref ci-installer-ref --configure --auth=bedrock-api-key \
+              --bedrock-key=br-ci-token --storage=profile --no-shell-fallback \
+              < ./install.sh
+          test "$(tr -d '\r\n ' < "$tmp_home/.juggernaut/VERSION")" = "ci-installer-ref"
+          test "$(jq -r '.juggernaut.auth.mode' "$tmp_home/.claude/settings.json")" = "bedrock-api-key"
+
   test-windows-powershell:
     name: Test on Windows (PowerShell)
     runs-on: windows-latest

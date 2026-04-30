@@ -31,6 +31,11 @@ if [[ "$INSTALL_SH" == *'--configure'* && "$INSTALL_SH" == *'./juggernaut apply 
 else
   fail "install.sh should install-only by default and configure only when explicit"
 fi
+if [[ "$INSTALL_SH" == *'--ref'* && "$INSTALL_SH" == *'JUGGERNAUT_REF'* && "$INSTALL_SH" == *'git clone --branch "$REF"'* ]]; then
+  pass
+else
+  fail "install.sh should support installing an explicit branch/ref for PR testing"
+fi
 
 section "install.ps1 user launcher"
 for needle in '.local\bin' 'juggernaut.cmd' 'ExecutionPolicy Bypass' 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser' 'juggernaut doctor --v2'; do
@@ -41,10 +46,15 @@ if [[ "$INSTALL_PS1" == *"If PowerShell blocks first run scripts, run:"* ]]; the
 else
   fail "install.ps1 missing first-run execution-policy guidance"
 fi
-if [[ "$INSTALL_PS1" == *'[switch]$Configure'* && "$INSTALL_PS1" == *'juggernaut.ps1 apply --v2'* && "$INSTALL_PS1" != *'setup-claude-bedrock.ps1 @SetupArgs'* ]]; then
+if [[ "$INSTALL_PS1" == *'[switch]$Configure'* && "$INSTALL_PS1" == *'Convert-InstallerApplyArgs'* && "$INSTALL_PS1" == *'commands\apply.ps1'* && "$INSTALL_PS1" != *'juggernaut.ps1 apply --v2'* && "$INSTALL_PS1" != *'exit $LASTEXITCODE'* && "$INSTALL_PS1" != *'setup-claude-bedrock.ps1 @SetupArgs'* ]]; then
   pass
 else
-  fail "install.ps1 should install-only by default and configure only when explicit"
+  fail "install.ps1 should configure without routing through an exit-based dispatcher"
+fi
+if [[ "$INSTALL_PS1" == *'[string]$Ref'* && "$INSTALL_PS1" == *'JUGGERNAUT_REF'* && "$INSTALL_PS1" == *'git clone --branch $Ref'* ]]; then
+  pass
+else
+  fail "install.ps1 should support installing an explicit branch/ref for PR testing"
 fi
 
 section "dirty existing install is backed up before fresh clone"
@@ -96,6 +106,83 @@ else
   fail "dirty install should be backed up and replaced by a clean clone"
   printf '%s\n' "$OUTPUT" >&2
 fi
+
+section "--ref installs the requested branch"
+TMP_REF_HOME="$(mktemp -d)"
+git -C "$TMP_SRC" checkout -q -b fixture-ref
+printf 'fixture-ref\n' > "$TMP_SRC/VERSION"
+git -C "$TMP_SRC" add VERSION
+git -C "$TMP_SRC" commit -q -m "fixture ref"
+git -C "$TMP_SRC" push -q "$TMP_REMOTE/repo.git" fixture-ref
+
+if OUTPUT="$(HOME="$TMP_REF_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" bash "$REPO_ROOT/install.sh" --ref fixture-ref 2>&1)" &&
+   [[ "$OUTPUT" == *"Installing Juggernaut fixture-ref"* ]] &&
+   [[ "$(tr -d '\r\n ' < "$TMP_REF_HOME/.juggernaut/VERSION")" == "fixture-ref" ]]; then
+  pass
+else
+  fail "--ref should clone and install the requested branch"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+git -C "$TMP_SRC" checkout -q -b fixture-ref-2
+printf 'fixture-ref-2\n' > "$TMP_SRC/VERSION"
+git -C "$TMP_SRC" add VERSION
+git -C "$TMP_SRC" commit -q -m "fixture ref 2"
+git -C "$TMP_SRC" push -q "$TMP_REMOTE/repo.git" fixture-ref-2
+if OUTPUT="$(HOME="$TMP_REF_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" bash "$REPO_ROOT/install.sh" --ref fixture-ref-2 2>&1)" &&
+   [[ "$OUTPUT" == *"Updating existing installation"* ]] &&
+   [[ "$(tr -d '\r\n ' < "$TMP_REF_HOME/.juggernaut/VERSION")" == "fixture-ref-2" ]]; then
+  pass
+else
+  fail "--ref should update a clean existing install to the requested fetched ref"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$TMP_REF_HOME"
+
+section "piped installer --ref --configure writes Bedrock API-key settings"
+TMP_SCENARIO_SRC="$(mktemp -d)"
+TMP_SCENARIO_REMOTE="$(mktemp -d)"
+TMP_SCENARIO_HOME="$(mktemp -d)"
+git clone -q "$REPO_ROOT" "$TMP_SCENARIO_SRC"
+git -C "$TMP_SCENARIO_SRC" checkout -q -b scenario-ref
+git -C "$TMP_SCENARIO_SRC" config user.email test@example.invalid
+git -C "$TMP_SCENARIO_SRC" config user.name "Juggernaut Test"
+printf 'scenario-ref\n' > "$TMP_SCENARIO_SRC/VERSION"
+git -C "$TMP_SCENARIO_SRC" add VERSION
+git -C "$TMP_SCENARIO_SRC" commit -q -m "scenario ref"
+git clone --bare -q "$TMP_SCENARIO_SRC" "$TMP_SCENARIO_REMOTE/repo.git"
+
+OUTPUT="$(
+  HOME="$TMP_SCENARIO_HOME" JUGGERNAUT_REPO_URL="$TMP_SCENARIO_REMOTE/repo.git" \
+    bash -s -- --ref scenario-ref --configure --auth=bedrock-api-key \
+      --bedrock-key=br-ci-token --storage=profile --no-shell-fallback \
+      < "$REPO_ROOT/install.sh" 2>&1
+)"
+RC=$?
+if [[ "$RC" -eq 0 &&
+      "$OUTPUT" == *"Installing Juggernaut scenario-ref"* &&
+      "$OUTPUT" != *"unknown option '--ref'"* &&
+      "$OUTPUT" != *"unknown option '--auth'"* &&
+      "$(tr -d '\r\n ' < "$TMP_SCENARIO_HOME/.juggernaut/VERSION")" == "scenario-ref" &&
+      "$(jq -r '.juggernaut.auth.mode' "$TMP_SCENARIO_HOME/.claude/settings.json")" == "bedrock-api-key" &&
+      "$(jq -r '.juggernaut.auth.storage' "$TMP_SCENARIO_HOME/.claude/settings.json")" == "profile" ]]; then
+  pass
+else
+  fail "piped installer should install requested ref and pass configure args to apply"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
+if DOCTOR_OUTPUT="$(cd "$TMP_SCENARIO_HOME" && HOME="$TMP_SCENARIO_HOME" AWS_BEARER_TOKEN_BEDROCK=br-ci-token "$TMP_SCENARIO_HOME/.local/bin/juggernaut" doctor --v2 2>&1)" &&
+   [[ "$DOCTOR_OUTPUT" == *"Auth: Bedrock API key"* &&
+      "$DOCTOR_OUTPUT" == *"Status: OK"$'\n'"No issues found"* &&
+      "$DOCTOR_OUTPUT" != *"ParserError"* &&
+      "$DOCTOR_OUTPUT" != *"Unexpected token"* ]]; then
+  pass
+else
+  fail "installed launcher doctor should pass after piped API-key configure"
+  printf '%s\n' "$DOCTOR_OUTPUT" >&2
+fi
+rm -rf "$TMP_SCENARIO_SRC" "$TMP_SCENARIO_REMOTE" "$TMP_SCENARIO_HOME"
 
 section "fresh install doctor smoke"
 TMP_HOME="$(mktemp -d)"
