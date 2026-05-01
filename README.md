@@ -61,22 +61,22 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.2/install.sh | bash -s -- --version v2.3.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.3/install.sh | bash -s -- --version v2.3.3
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.2/install.ps1))) -Version v2.3.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.3/install.ps1))) -Version v2.3.3
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v2.3.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v2.3.3 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply
 ```
 
-The pinned installer commands above install v2.3.2 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
+The pinned installer commands above install v2.3.3 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
 
 v2 is the default and recommended path for new installs. The older shell-profile-only v1 setup is legacy compatibility only; use `./setup --legacy-v1` if you still need the old flow.
 
@@ -97,19 +97,19 @@ juggernaut apply --auth=iam
 Re-run the installer to upgrade:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.2/install.sh | bash -s -- --version v2.3.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.3/install.sh | bash -s -- --version v2.3.3
 ```
 
 The installer detects the version difference and prints an upgrade banner. If you have a v1 shell-profile block, the installer will ask whether to migrate it to settings.json. Say `y` to migrate automatically, or pass `--yes` for non-interactive use:
 
 ```bash
-curl -fsSL ... | bash -s -- --version v2.3.2 --yes
+curl -fsSL ... | bash -s -- --version v2.3.3 --yes
 ```
 
 To stay on v1 for one more release:
 
 ```bash
-curl -fsSL ... | bash -s -- --version v2.3.2 --legacy-v1
+curl -fsSL ... | bash -s -- --version v2.3.3 --legacy-v1
 ```
 
 After upgrading, verify the configuration:
@@ -131,7 +131,7 @@ v2 is now the default. Running `juggernaut <subcommand>` uses the settings.json-
 To stay on the older v1 shell-profile-only flow during installation or upgrade, pass `--legacy-v1`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.2/install.sh | bash -s -- --version v2.3.2 --legacy-v1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.3/install.sh | bash -s -- --version v2.3.3 --legacy-v1
 ```
 
 The upgrade banner appears when the installer detects an existing v1 profile block or an installed version change. It explains the migration target, asks before converting v1 profile settings to v2 settings.json, and requires `--yes` or `--legacy-v1` for non-interactive installs.
@@ -142,24 +142,24 @@ Use the pinned release tag URLs for a stable install:
 
 ```bash
 # Bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.2/install.sh | bash -s -- --version v2.3.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.3/install.sh | bash -s -- --version v2.3.3
 ```
 
 ```powershell
 # PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.2/install.ps1))) -Version v2.3.2
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.3/install.ps1))) -Version v2.3.3
 ```
 
 ```bash
 # After downloading
-bash install.sh --version 2.3.2
+bash install.sh --version 2.3.3
 ```
 
 ```powershell
-.\install.ps1 -Version 2.3.2
+.\install.ps1 -Version 2.3.3
 ```
 
-Both scripts normalize the version automatically — `2.3.2` and `v2.3.2` both work.
+Both scripts normalize the version automatically — `2.3.3` and `v2.3.3` both work.
 
 The installer repairs executable bits, creates a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and prints the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
 
@@ -579,7 +579,7 @@ juggernaut apply --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
 <details>
 <summary>Using v1 shell-profile-only mode (deprecated)</summary>
 
-v1 configuration writes env-var exports directly to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.). It continues to work in 2.3.2 but is deprecated; removal is planned for v3.0.
+v1 configuration writes env-var exports directly to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.). It continues to work in 2.3.3 but is deprecated; removal is planned for v3.0.
 
 To opt into v1 permanently:
 

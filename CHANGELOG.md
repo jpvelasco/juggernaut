@@ -2,6 +2,13 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.3.3] - 2026-05-01
+
+### Fixed
+
+- **PowerShell doctor credentials** — `doctor --v2` now fails when config says `auth.storage=keychain` but the OS keychain has no Bedrock API key, even if a shell fallback block still contains the keychain lookup stub.
+- **Pinned install examples** — README and QUICKSTART now pin the installer version to v2.3.3 so release-tagged install commands cannot drift to a later branch checkout.
+
 ## [2.3.2] - 2026-05-01
 
 ### Fixed
@@ -197,6 +204,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.3
 [2.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.2
 [2.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.1
 [2.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.0

@@ -184,6 +184,17 @@ function Write-DoctorCredentials {
                 Write-Output 'Source: system keychain'
                 Write-Output 'Status: OK'
             } elseif ($ProfilePath -and (Test-DoctorShellHasKeyAssignment -ProfilePath $ProfilePath -Key 'AWS_BEARER_TOKEN_BEDROCK')) {
+                if ($storage -eq 'keychain') {
+                    if ($keychainError) {
+                        $script:DoctorWarns += 1
+                        Write-Output ('Keychain: WARN ({0})' -f $keychainError)
+                    }
+                    $script:DoctorFails += 1
+                    Write-Output 'Status: FAIL'
+                    Write-Output 'Details: keychain storage is configured, but no keychain API key was found'
+                    Write-Output 'Fix: run: juggernaut apply --auth=bedrock-api-key'
+                    return
+                }
                 Write-Output 'Source: shell profile'
                 Write-Output 'Status: OK'
             } else {
