@@ -64,6 +64,51 @@ Describe 'doctor.ps1' {
         }
     }
 
+    It 'fails keychain storage when only a keychain shell fallback stub exists' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-keychain-stub-" + [Guid]::NewGuid().ToString('N'))
+        $profilePath = Join-Path $tmpHome 'PowerShell\profile.ps1'
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Split-Path $profilePath -Parent) -Force | Out-Null
+
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+        $oldKeychainService = $env:JUGGERNAUT_KEYCHAIN_SERVICE
+        try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $profilePath
+            $env:JUGGERNAUT_KEYCHAIN_SERVICE = "juggernaut-test-absent-$([Guid]::NewGuid().ToString('N'))"
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
+
+            $block = New-JuggernautBlock -AuthMode 'bedrock-api-key' -Region 'us-west-2' -Storage 'keychain' `
+                -UseMantle $false -ShellFallbackMode 'both' -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
+            $block.shellFallback.lastWrittenProfiles = @($profilePath)
+            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $block)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $merged
+
+            $profileBlock = Build-ProfileWriterBlock -Shell 'powershell' -Region 'us-west-2' -AuthMode 'bedrock-api-key' `
+                -StorageMode 'keychain' -ApiKeyExpr 'keychain' -BedrockConfigPath $script:BedrockConfigPath
+            Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $profileBlock
+
+            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') --v2 -Scope user 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 1
+            $output | Should -Match ([regex]::Escape('Details: keychain storage is configured, but no keychain API key was found'))
+        } finally {
+            Set-Variable -Name HOME -Value $oldHome -Scope Global -Force
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            if ($null -eq $oldBearer) { Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue }
+            else { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
+            if ($null -eq $oldKeychainService) { Remove-Item Env:\JUGGERNAUT_KEYCHAIN_SERVICE -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_KEYCHAIN_SERVICE = $oldKeychainService }
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'dispatcher returns success for successful doctor despite stale native exit code' {
         $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-dispatch-" + [Guid]::NewGuid().ToString('N'))
         $tmpWork = Join-Path $tmpHome 'work'
