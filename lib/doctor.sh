@@ -146,6 +146,16 @@ doctor_credentials() {
         doctor_kv "Source" "system keychain"
         doctor_ok
       elif [[ -n "$profile" ]] && doctor_shell_has_key_assignment "$profile" "AWS_BEARER_TOKEN_BEDROCK"; then
+        if [[ "$storage" == "keychain" ]]; then
+          if [[ -n "$keychain_error" ]]; then
+            DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+            doctor_kv "Keychain" "WARN ($keychain_error)"
+          fi
+          doctor_fail
+          doctor_kv "Details" "keychain storage is configured, but no keychain API key was found"
+          doctor_kv "Fix" "run: juggernaut apply --auth=bedrock-api-key"
+          return 0
+        fi
         doctor_kv "Source" "shell profile"
         doctor_ok
       else

@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.3.4] - 2026-05-01
+
+### Fixed
+
+- **Linux doctor scope detection** — running `doctor --v2` from `$HOME` no longer reports the user settings file as both user and project scope.
+- **Linux apply option parsing** — `--bedrock-key VALUE` now works in addition to `--bedrock-key=VALUE`.
+- **Linux doctor keychain validation** — keychain shell fallback stubs no longer count as a valid API key when the OS keychain is empty.
+
 ## [2.3.3] - 2026-05-01
 
 ### Fixed
@@ -204,6 +212,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.3.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.4
 [2.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.3
 [2.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.2
 [2.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.1

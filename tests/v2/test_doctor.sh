@@ -112,6 +112,18 @@ else
   printf '%s\n' "$OUTPUT" >&2
 fi
 
+section "does not treat home settings as project scope from home"
+OUTPUT="$(cd "$TMP_HOME" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"User Scope"* &&
+      "$OUTPUT" == *"Project Scope"* &&
+      "$OUTPUT" == *"Status: no Juggernaut config"* &&
+      "$OUTPUT" == *"Active Scope"$'\n'"user"* ]]; then
+  pass
+else
+  fail "expected active scope=user and missing project scope from home"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+
 section "no issues on a fresh apply"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
 if [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
@@ -140,6 +152,29 @@ else
   printf '%s\n' "$OUTPUT" >&2
 fi
 rm -rf "$API_HOME"
+
+section "keychain shell fallback stub is not enough when keychain is empty"
+KC_HOME="$(mktemp -d)"
+mkdir -p "$KC_HOME/.claude"
+KC_PROFILE="$KC_HOME/.bashrc"
+J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+  J_SHELL_FALLBACK_MODE=both \
+  KC_BLOCK="$(schema_new_juggernaut_block)"
+KC_BLOCK="$(jq --arg p "$KC_PROFILE" '.shellFallback.lastWrittenProfiles = [$p]' <<<"$KC_BLOCK")"
+config_write_atomic "$KC_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$KC_BLOCK" "$(schema_derive_native_keys "$KC_BLOCK")")"
+profile_writer_build_block bash us-west-2 bedrock-api-key keychain keychain "$BEDROCK_CONFIG_PATH" "" "" "" "" xhigh false true "" > "$KC_PROFILE"
+keychain_available() { return 0; }
+keychain_get() { return 1; }
+OUTPUT="$(doctor_credentials "$KC_BLOCK" "$KC_PROFILE" 2>&1)"
+if [[ "$OUTPUT" == *"Details: keychain storage is configured, but no keychain API key was found"* ]]; then
+  pass
+else
+  fail "expected keychain storage failure when only shell fallback stub exists"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+unset -f keychain_available keychain_get
+rm -rf "$KC_HOME"
 
 section "reports native drift"
 tmp_json="$TMP_HOME/.claude/settings.json.tmp"

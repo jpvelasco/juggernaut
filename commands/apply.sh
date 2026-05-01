@@ -123,29 +123,41 @@ _apply_prompt_secret() {
 # ---------------------------------------------------------------------------
 # Flag parsing
 # ---------------------------------------------------------------------------
-for arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+  arg="$1"
   case "$arg" in
     --dry-run)              DRY_RUN=true ;;
     --yes|--force|-f)       J_YES=true ;;
     --skip-preflight)       J_SKIP_PREFLIGHT=true ;;
     --force-migration-prompt) J_FORCE_MIGRATION_PROMPT=true ;;
     --auth=*)               J_AUTH_MODE="${arg#--auth=}"; J_AUTH_EXPLICIT=true ;;
+    --auth)                 shift; [[ $# -gt 0 ]] || { echo "apply: --auth requires a value" >&2; exit 1; }; J_AUTH_MODE="$1"; J_AUTH_EXPLICIT=true ;;
     --bedrock-key=*)        J_API_KEY="${arg#--bedrock-key=}" ;;
+    --bedrock-key)          shift; [[ $# -gt 0 ]] || { echo "apply: --bedrock-key requires a value" >&2; exit 1; }; J_API_KEY="$1" ;;
     --preserve-key)         J_PRESERVE_KEY=true ;;
     --storage=*)            J_STORAGE="${arg#--storage=}"; J_STORAGE_EXPLICIT=true ;;
+    --storage)              shift; [[ $# -gt 0 ]] || { echo "apply: --storage requires a value" >&2; exit 1; }; J_STORAGE="$1"; J_STORAGE_EXPLICIT=true ;;
     --region=*)             J_REGION="${arg#--region=}" ;;
+    --region)               shift; [[ $# -gt 0 ]] || { echo "apply: --region requires a value" >&2; exit 1; }; J_REGION="$1" ;;
     --model=*)              J_MODEL="${arg#--model=}" ;;
+    --model)                shift; [[ $# -gt 0 ]] || { echo "apply: --model requires a value" >&2; exit 1; }; J_MODEL="$1" ;;
     --opus-model=*)         J_OPUS_MODEL="${arg#--opus-model=}" ;;
+    --opus-model)           shift; [[ $# -gt 0 ]] || { echo "apply: --opus-model requires a value" >&2; exit 1; }; J_OPUS_MODEL="$1" ;;
     --sonnet-model=*)       J_SONNET_MODEL="${arg#--sonnet-model=}" ;;
+    --sonnet-model)         shift; [[ $# -gt 0 ]] || { echo "apply: --sonnet-model requires a value" >&2; exit 1; }; J_SONNET_MODEL="$1" ;;
     --haiku-model=*)        J_HAIKU_MODEL="${arg#--haiku-model=}" ;;
+    --haiku-model)          shift; [[ $# -gt 0 ]] || { echo "apply: --haiku-model requires a value" >&2; exit 1; }; J_HAIKU_MODEL="$1" ;;
     --effort=*)             J_EFFORT="${arg#--effort=}" ;;
+    --effort)               shift; [[ $# -gt 0 ]] || { echo "apply: --effort requires a value" >&2; exit 1; }; J_EFFORT="$1" ;;
     --opusplan)             J_OPUSPLAN=true ;;
     --no-opusplan)          J_OPUSPLAN=false ;;
     --1m-context)           J_1M_CONTEXT=true ;;
     --no-1m-context)        J_1M_CONTEXT=false ;;
     --mantle)               J_USE_MANTLE=true; J_MANTLE_EXPLICIT=true ;;
     --mantle-url=*)         J_MANTLE_URL="${arg#--mantle-url=}"; J_USE_MANTLE=true; J_MANTLE_EXPLICIT=true ;;
+    --mantle-url)           shift; [[ $# -gt 0 ]] || { echo "apply: --mantle-url requires a value" >&2; exit 1; }; J_MANTLE_URL="$1"; J_USE_MANTLE=true; J_MANTLE_EXPLICIT=true ;;
     --scope=*)              J_SCOPE="${arg#--scope=}" ;;
+    --scope)                shift; [[ $# -gt 0 ]] || { echo "apply: --scope requires a value" >&2; exit 1; }; J_SCOPE="$1" ;;
     --no-shell-fallback)    J_NO_SHELL_FALLBACK=true ;;
     --shell-fallback-only)  J_SHELL_FALLBACK_ONLY=true ;;
     bash|zsh|fish)          SHELL_TYPE="$arg" ;;
@@ -156,6 +168,7 @@ for arg in "$@"; do
     *)
       echo "apply: unknown option '$arg' (ignored)" >&2 ;;
   esac
+  shift
 done
 
 case "$J_AUTH_MODE" in
