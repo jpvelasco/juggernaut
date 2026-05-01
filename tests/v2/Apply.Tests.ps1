@@ -13,6 +13,16 @@ BeforeAll {
     $script:ExpectedVersion   = (Get-Content (Join-Path $script:repoRoot 'VERSION') -Raw).Trim()
     $env:JUGGERNAUT_USE_V2    = '1'
     $env:BEDROCK_CONFIG_PATH  = $script:BedrockConfigPath
+    $script:OldPowerShellProfileTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+    $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path ([IO.Path]::GetTempPath()) 'juggernaut-test-nonexistent-profile.ps1'
+}
+
+AfterAll {
+    if ($null -eq $script:OldPowerShellProfileTargets) {
+        Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue
+    } else {
+        $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $script:OldPowerShellProfileTargets
+    }
 }
 
 # ---------------------------------------------------------------------------

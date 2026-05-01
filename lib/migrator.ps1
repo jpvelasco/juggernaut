@@ -10,6 +10,7 @@ function Test-MigratorHasV1Block {
     if (-not (Test-Path $ProfileFile)) { return $false }
     $content = Get-Content -Path $ProfileFile -Raw
     if ($content -notmatch '# BEGIN: Claude Code Bedrock Configuration') { return $false }
+    if ($content.Contains('# Juggernaut v2 shell fallback')) { return $false }
     # Suppress detection if the user has previously declined migration.
     if ($env:JUGGERNAUT_FORCE_MIGRATION_PROMPT -ne '1' -and $content -match '(?m)^# MigrationDeclined:') {
         return $false

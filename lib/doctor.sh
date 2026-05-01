@@ -217,8 +217,9 @@ doctor_v1_artifacts() {
 
   while IFS= read -r candidate; do
     [[ -z "$candidate" ]] && continue
-    if [[ -f "$candidate" ]] && tr -d '\r' < "$candidate" 2>/dev/null \
-       | grep -q "# BEGIN: Claude Code Bedrock Configuration"; then
+    if [[ -f "$candidate" ]] \
+       && tr -d '\r' < "$candidate" 2>/dev/null | grep -q "# BEGIN: Claude Code Bedrock Configuration" \
+       && ! tr -d '\r' < "$candidate" 2>/dev/null | grep -q "^# Juggernaut v2 shell fallback$"; then
       found_v1=true
       profiles+=("$candidate")
     fi

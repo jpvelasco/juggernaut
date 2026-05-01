@@ -184,6 +184,7 @@ profile_writer_build_block() {
 
   local block=""
   block+=$'\n'"$PROFILE_WRITER_BEGIN_MARKER"$'\n'
+  block+="# Juggernaut v2 shell fallback"$'\n'
 
   # Metadata comments (parsed by migrator on v1→v2 upgrade)
   block+="# Auth mode: $auth_mode"$'\n'

@@ -16,6 +16,7 @@ migrator_has_v1_block() {
   local file="$1"
   [[ -f "$file" ]] || return 1
   tr -d '\r' < "$file" 2>/dev/null | grep -q "# BEGIN: Claude Code Bedrock Configuration" || return 1
+  tr -d '\r' < "$file" 2>/dev/null | grep -q "^# Juggernaut v2 shell fallback$" && return 1
   # Suppress detection if a MigrationDeclined marker is present.
   if [[ "${JUGGERNAUT_FORCE_MIGRATION_PROMPT:-}" != "1" ]] \
      && tr -d '\r' < "$file" 2>/dev/null | grep -q "^# MigrationDeclined:"; then

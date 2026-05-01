@@ -224,11 +224,11 @@ if ((Test-Path $bannerLib) -and (Test-Path $profilePathsLib) -and (Test-Path $mi
             if ($bannerState.has_v1) {
                 Write-Host 'Migrating v1 configuration to v2...'
                 $settingsPath = Join-Path (if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }) '.claude/settings.json'
-                foreach ($profile in $bannerState.v1_profiles) {
+                foreach ($profilePath in $bannerState.v1_profiles) {
                     try {
-                        Invoke-MigratorRun -ProfileFile $profile -SettingsPath $settingsPath -BedrockConfigPath (Join-Path $InstallDir 'bedrock-config.json')
+                        Invoke-MigratorRun -ProfileFile $profilePath -SettingsPath $settingsPath -BedrockConfigPath (Join-Path $InstallDir 'bedrock-config.json')
                     } catch {
-                        Write-Warning "Migration of $profile encountered an error: $_"
+                        Write-Warning "Migration of $profilePath encountered an error: $_"
                     }
                 }
             }

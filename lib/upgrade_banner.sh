@@ -40,7 +40,7 @@ upgrade_banner_detect_state() {
 
   # If no profiles have an active (non-declined) v1 block, treat as no v1.
   local has_v1=false
-  if $any_v1 && ! $migration_declined; then
+  if [[ "$any_v1" == "true" && "$migration_declined" != "true" ]]; then
     has_v1=true
   fi
 

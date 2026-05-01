@@ -264,7 +264,8 @@ function Write-DoctorV1Artifacts {
     foreach ($candidate in (Get-ProfilePathsV1Candidates)) {
         if (-not (Test-Path $candidate)) { continue }
         $content = try { Get-Content -Path $candidate -Raw -Encoding utf8 -ErrorAction Stop } catch { '' }
-        if ($content -match '# BEGIN: Claude Code Bedrock Configuration') {
+        if (($content -match '# BEGIN: Claude Code Bedrock Configuration') -and
+            (-not $content.Contains('# Juggernaut v2 shell fallback'))) {
             $foundV1 = $true
             $v1Profiles.Add($candidate)
         }

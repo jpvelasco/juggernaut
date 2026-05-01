@@ -7,6 +7,16 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib\schema.ps1')
     . (Join-Path $script:RepoRoot 'lib\config_manager.ps1')
     $script:BedrockConfigPath = Join-Path $script:RepoRoot 'bedrock-config.json'
+    $script:OldPowerShellProfileTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+    $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path ([IO.Path]::GetTempPath()) 'juggernaut-installer-test-nonexistent-profile.ps1'
+}
+
+AfterAll {
+    if ($null -eq $script:OldPowerShellProfileTargets) {
+        Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue
+    } else {
+        $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $script:OldPowerShellProfileTargets
+    }
 }
 
 Describe 'install.sh robustness' {
@@ -155,10 +165,11 @@ Describe 'install.ps1 robustness' {
             $env:HOME = $testHome; $env:USERPROFILE = $testHome
             $env:JUGGERNAUT_REPO_URL = $remote
             $env:JUGGERNAUT_DIR = Join-Path $testHome '.juggernaut'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $testHome 'PowerShell\profile.ps1'
 
             $installer = Get-Content (Join-Path $script:RepoRoot 'install.ps1') -Raw
             $output = & ([scriptblock]::Create($installer)) -Ref scenario-ref -Configure `
-                -Auth bedrock-api-key -BedrockKey br-ci-token -Storage profile -NoShellFallback 2>&1 | Out-String
+                -Auth bedrock-api-key -BedrockKey br-ci-token -Storage profile 2>&1 | Out-String
             $afterConfigure = 'still-running-after-configure'
 
             $output | Should -Not -Match ([regex]::Escape("unknown option '--ref'"))
@@ -167,6 +178,7 @@ Describe 'install.ps1 robustness' {
             $settings = Read-Settings -Path (Join-Path $testHome '.claude\settings.json')
             $settings['juggernaut']['auth']['mode'] | Should -Be 'bedrock-api-key'
             $settings['juggernaut']['auth']['storage'] | Should -Be 'profile'
+            (Get-Content $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -Raw) | Should -Match ([regex]::Escape('br-ci-token'))
             $afterConfigure | Should -Be 'still-running-after-configure'
 
             $doctorOutput = & (Join-Path $testHome '.local\bin\juggernaut.cmd') doctor --v2 2>&1 | Out-String

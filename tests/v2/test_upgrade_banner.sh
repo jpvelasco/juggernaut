@@ -16,6 +16,7 @@ export BEDROCK_CONFIG_PATH
 . "$REPO_ROOT/lib/config_manager.sh"
 . "$REPO_ROOT/lib/migrator.sh"
 . "$REPO_ROOT/lib/upgrade_banner.sh"
+set +e
 
 PASS=0; FAIL=0
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }

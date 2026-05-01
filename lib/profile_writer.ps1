@@ -117,6 +117,7 @@ function Build-ProfileWriterBlock {
     $nl = [Environment]::NewLine
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine($script:ProfileWriterBegin)
+    [void]$sb.AppendLine('# Juggernaut v2 shell fallback')
 
     [void]$sb.AppendLine("# Auth mode: $AuthMode")
     if ($StorageMode -eq 'keychain') { [void]$sb.AppendLine('# Storage: keychain (encrypted)') }
