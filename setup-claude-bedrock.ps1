@@ -52,6 +52,10 @@ $EffortExplicit = $PSBoundParameters.ContainsKey('Effort')
 
 $ErrorActionPreference = "Stop"
 
+if ($env:JUGGERNAUT_SUPPRESS_DEPRECATION -ne '1') {
+    [Console]::Error.WriteLine("Juggernaut v1 is deprecated and will be removed in v3.0. Run 'juggernaut apply' to upgrade.")
+}
+
 if ($Auth -eq "bedrock-api-key") {
     $Auth = "api-key"
 }

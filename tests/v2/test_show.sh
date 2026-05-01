@@ -13,16 +13,10 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
 
-section "v2 gate"
-if output="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"; then
-  if [[ "$output" == *"Juggernaut v2 is not active. Use --v2 to enable v2 commands."* ]]; then
-    pass
-  else
-    fail "expected inactive message, got: $output"
-  fi
-else
-  fail "show.sh should exit 0 when v2 is inactive"
-fi
+section "v2 gate — JUGGERNAUT_USE_V2=0 exits 2"
+JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/show.sh" >/dev/null 2>&1
+_RC=$?
+if [[ "$_RC" -eq 2 ]]; then pass; else fail "show.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $_RC)"; fi
 
 section "human-readable output"
 TMP_HOME="$(mktemp -d)"

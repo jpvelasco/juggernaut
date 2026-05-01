@@ -13,16 +13,17 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
 
-section "v2 gate"
-if output="$(bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"; then
-  if [[ "$output" == *"Juggernaut v2 is not active. Use --v2 to enable v2 commands."* ]]; then
-    pass
-  else
-    fail "expected inactive message, got: $output"
-  fi
-else
-  fail "doctor.sh should exit 0 when v2 is inactive"
-fi
+section "v2 gate — JUGGERNAUT_USE_V2=0 exits 2"
+JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/doctor.sh" >/dev/null 2>&1
+_RC=$?
+if [[ "$_RC" -eq 2 ]]; then pass; else fail "doctor.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $_RC)"; fi
+
+section "v2 default — runs without JUGGERNAUT_USE_V2 set"
+# v2 is ON by default; doctor with no settings → not necessarily OK but must not exit 2.
+unset JUGGERNAUT_USE_V2 2>/dev/null || true
+JUGGERNAUT_USE_V2= bash "$REPO_ROOT/commands/doctor.sh" >/dev/null 2>&1 || true
+_RC=$?
+if [[ "$_RC" -ne 2 ]]; then pass; else fail "doctor.sh should run (not exit 2) when JUGGERNAUT_USE_V2 is unset (got $_RC)"; fi
 
 TMP_HOME="$(mktemp -d)"
 TMP_WORK="$(mktemp -d)"

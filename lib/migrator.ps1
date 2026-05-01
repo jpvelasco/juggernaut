@@ -84,10 +84,16 @@ function ConvertFrom-MigratorV1Block {
     $sonnetModel = ($lines | Where-Object { $_ -match '^# SonnetModel: (.+)' } | Select-Object -First 1) -replace '^# SonnetModel: ', ''
     $haikuModel  = ($lines | Where-Object { $_ -match '^# HaikuModel: (.+)' }  | Select-Object -First 1) -replace '^# HaikuModel: ', ''
 
-    # Fall back to export lines (bash/zsh) then fish set -gx lines for values
-    # when metadata comments are absent.
+    # Fall back to export lines (bash/zsh), fish set -gx lines, and PowerShell
+    # $env: assignment lines for values when metadata comments are absent.
     $exportLines  = $lines | Where-Object { $_ -match '^export ([A-Z_][A-Z0-9_]*)=' }
     $fishSetLines = $lines | Where-Object { $_ -match '^set -gx ([A-Z_][A-Z0-9_]*) ' }
+    # PowerShell profiles written by Build-ProfileWriterBlock use: $env:KEY = 'VALUE'
+    # Only scan when JUGGERNAUT_PS_V1_SCAN=1 (opt-in for 2.3.0; default-on in 2.4.0).
+    $psEnvLines = @()
+    if ($env:JUGGERNAUT_PS_V1_SCAN -eq '1') {
+        $psEnvLines = $lines | Where-Object { $_ -match '^\$env:[A-Z_][A-Z0-9_]*\s*=' }
+    }
 
     $getExport = {
         param($key)
@@ -101,23 +107,41 @@ function ConvertFrom-MigratorV1Block {
         if ($hit -match "^set -gx ${key} (.+)$") { return $Matches[1] }
         return ''
     }
+    $getPsEnv = {
+        param($key)
+        $hit = $psEnvLines | Where-Object { $_ -match "^\`$env:${key}\s*=" } | Select-Object -First 1
+        if ($hit -match "^\`$env:${key}\s*=\s*['\`"](.+)['\`"]$") { return $Matches[1] }
+        return ''
+    }
 
     if (-not $model) {
         $model = & $getExport 'ANTHROPIC_MODEL'
         if (-not $model) { $model = & $getFish 'ANTHROPIC_MODEL' }
+        if (-not $model) { $model = & $getPsEnv 'ANTHROPIC_MODEL' }
         if ($model -eq 'opusplan') { $model = '' }
     }
-    if (-not $opusModel)   { $opusModel   = & $getExport 'ANTHROPIC_DEFAULT_OPUS_MODEL';   if (-not $opusModel)   { $opusModel   = & $getFish 'ANTHROPIC_DEFAULT_OPUS_MODEL' } }
-    if (-not $sonnetModel) { $sonnetModel = & $getExport 'ANTHROPIC_DEFAULT_SONNET_MODEL'; if (-not $sonnetModel) { $sonnetModel = & $getFish 'ANTHROPIC_DEFAULT_SONNET_MODEL' } }
-    if (-not $haikuModel)  { $haikuModel  = & $getExport 'ANTHROPIC_DEFAULT_HAIKU_MODEL';  if (-not $haikuModel)  { $haikuModel  = & $getFish 'ANTHROPIC_DEFAULT_HAIKU_MODEL' } }
+    if (-not $opusModel)   { $opusModel   = & $getExport 'ANTHROPIC_DEFAULT_OPUS_MODEL';   if (-not $opusModel)   { $opusModel   = & $getFish 'ANTHROPIC_DEFAULT_OPUS_MODEL';   if (-not $opusModel)   { $opusModel   = & $getPsEnv 'ANTHROPIC_DEFAULT_OPUS_MODEL' } } }
+    if (-not $sonnetModel) { $sonnetModel = & $getExport 'ANTHROPIC_DEFAULT_SONNET_MODEL'; if (-not $sonnetModel) { $sonnetModel = & $getFish 'ANTHROPIC_DEFAULT_SONNET_MODEL'; if (-not $sonnetModel) { $sonnetModel = & $getPsEnv 'ANTHROPIC_DEFAULT_SONNET_MODEL' } } }
+    if (-not $haikuModel)  { $haikuModel  = & $getExport 'ANTHROPIC_DEFAULT_HAIKU_MODEL';  if (-not $haikuModel)  { $haikuModel  = & $getFish 'ANTHROPIC_DEFAULT_HAIKU_MODEL';  if (-not $haikuModel)  { $haikuModel  = & $getPsEnv 'ANTHROPIC_DEFAULT_HAIKU_MODEL' } } }
 
-    # Region: export line -> fish set -gx -> default.
+    # Region: export line -> fish set -gx -> PowerShell $env: -> default.
     # auth.region is the single source of truth in v2; sourced from AWS_REGION.
     $region = & $getExport 'AWS_REGION'
     if (-not $region) { $region = & $getFish 'AWS_REGION' }
+    if (-not $region) { $region = & $getPsEnv 'AWS_REGION' }
     if (-not $region) { $region = 'us-east-1' }
 
-    # Build legacyEnv snapshot from export lines and fish set -gx lines.
+    # Also check PowerShell $env: lines for auth-mode override (keychain blocks use
+    # $env:AWS_BEARER_TOKEN_BEDROCK; but keychain mode is already caught by # Storage: keychain
+    # so we only need to look at inline plaintext assignment. Do NOT parse the
+    # Get-JuggernautBedrockApiKey heredoc — storage=keychain guards that path.
+    if ($authMode -eq 'iam' -and $psEnvLines.Count -gt 0 -and $storage -ne 'keychain') {
+        if ($psEnvLines | Where-Object { $_ -match '^\$env:AWS_BEARER_TOKEN_BEDROCK\s*=' }) {
+            $authMode = 'bedrock-api-key'
+        }
+    }
+
+    # Build legacyEnv snapshot from export lines, fish set -gx lines, and PS $env: lines.
     $legacyEnv = [ordered]@{}
     foreach ($line in $exportLines) {
         if ($line -match "^export ([A-Z_][A-Z0-9_]*)=(.+)$") {
@@ -126,6 +150,13 @@ function ConvertFrom-MigratorV1Block {
     }
     foreach ($line in $fishSetLines) {
         if ($line -match "^set -gx ([A-Z_][A-Z0-9_]*) (.+)$") {
+            if (-not $legacyEnv.Contains($Matches[1])) {
+                $legacyEnv[$Matches[1]] = $Matches[2]
+            }
+        }
+    }
+    foreach ($line in $psEnvLines) {
+        if ($line -match "^\`$env:([A-Z_][A-Z0-9_]*)\s*=\s*['\`"](.+)['\`"]$") {
             if (-not $legacyEnv.Contains($Matches[1])) {
                 $legacyEnv[$Matches[1]] = $Matches[2]
             }

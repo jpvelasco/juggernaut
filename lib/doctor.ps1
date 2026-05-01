@@ -255,6 +255,35 @@ function Write-DoctorMantle {
     }
 }
 
+function Write-DoctorV1Artifacts {
+    param([AllowNull()]$Settings, [bool]$HasV2Block)
+
+    $foundV1 = $false
+    $v1Profiles = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($candidate in (Get-ProfilePathsV1Candidates)) {
+        if (-not (Test-Path $candidate)) { continue }
+        $content = try { Get-Content -Path $candidate -Raw -Encoding utf8 -ErrorAction Stop } catch { '' }
+        if ($content -match '# BEGIN: Claude Code Bedrock Configuration') {
+            $foundV1 = $true
+            $v1Profiles.Add($candidate)
+        }
+    }
+
+    if (-not $foundV1) { return }
+
+    if ($HasV2Block) {
+        $script:DoctorWarns += 1
+        Write-Output 'v1 profile block: WARN — found alongside v2 settings.json'
+        foreach ($p in $v1Profiles) { Write-Output "  Profile: $p" }
+        Write-Output '  Fix: run juggernaut migrate --clean'
+    } else {
+        Write-Output 'v1 profile block: INFO — v1 configuration detected'
+        foreach ($p in $v1Profiles) { Write-Output "  Profile: $p" }
+        Write-Output '  Upgrade: run juggernaut apply   (or pass --legacy-v1 to keep v1)'
+    }
+}
+
 function Write-DoctorDrift {
     param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)]$Block, [AllowNull()][string]$ProfilePath)
     if (Test-DoctorNativeKeysMatch -Settings $Settings -Block $Block) {

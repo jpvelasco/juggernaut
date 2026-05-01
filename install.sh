@@ -19,6 +19,9 @@ INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
 VERSION=""
 REF="${JUGGERNAUT_REF:-}"
 CONFIGURE=0
+YES=0
+LEGACY_V1=0
+KEEP_ALL_BACKUPS=0
 SETUP_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -58,6 +61,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --configure)
       CONFIGURE=1
+      shift
+      ;;
+    --yes|-y)
+      YES=1
+      shift
+      ;;
+    --legacy-v1)
+      LEGACY_V1=1
+      shift
+      ;;
+    --keep-all-backups)
+      KEEP_ALL_BACKUPS=1
       shift
       ;;
     *)
@@ -107,6 +122,16 @@ backup_existing_install() {
   done
   echo "Backup created: $backup"
   mv "$INSTALL_DIR" "$backup"
+
+  # Rotate: keep only the 5 most recent backups unless --keep-all-backups was passed.
+  if [[ "$KEEP_ALL_BACKUPS" != "1" ]]; then
+    local -a old_backups
+    # shellcheck disable=SC2012
+    mapfile -t old_backups < <(ls -1dt "${INSTALL_DIR}.backup."* 2>/dev/null | tail -n +6)
+    for old in "${old_backups[@]+"${old_backups[@]}"}"; do
+      rm -rf -- "$old"
+    done
+  fi
 }
 
 install_tree_dirty() {
@@ -169,14 +194,57 @@ case ":$PATH:" in
   *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' from any directory." ;;
 esac
 
-echo "Verify after install with: juggernaut doctor --v2"
+# ---------------------------------------------------------------------------
+# Upgrade banner — show version diff and handle v1→v2 migration prompt.
+# ---------------------------------------------------------------------------
+RELEASE_VERSION="$(tr -d '\r\n ' < "$INSTALL_DIR/VERSION" 2>/dev/null || true)"
+
+if [[ -f "$INSTALL_DIR/lib/upgrade_banner.sh" && -f "$INSTALL_DIR/lib/profile_paths.sh" && -f "$INSTALL_DIR/lib/migrator.sh" && -f "$INSTALL_DIR/lib/config_manager.sh" ]]; then
+  . "$INSTALL_DIR/lib/profile_paths.sh"
+  . "$INSTALL_DIR/lib/config_manager.sh"
+  . "$INSTALL_DIR/lib/migrator.sh"
+  . "$INSTALL_DIR/lib/upgrade_banner.sh"
+
+  BANNER_STATE="$(upgrade_banner_detect_state "$HOME/.claude/settings.json" 2>/dev/null || true)"
+  if [[ -n "$BANNER_STATE" ]]; then
+    upgrade_banner_print "$BANNER_STATE"
+    _confirm_result=0
+    upgrade_banner_confirm "$BANNER_STATE" "$([[ $YES == 1 ]] && echo true || echo false)" "$([[ $LEGACY_V1 == 1 ]] && echo true || echo false)" || _confirm_result=$?
+    if [[ "$_confirm_result" == "1" ]]; then
+      echo "Install complete. Re-run with --yes to migrate to v2, or --legacy-v1 to keep v1." >&2
+      exit 3
+    elif [[ "$_confirm_result" == "2" ]]; then
+      echo "Keeping v1 configuration. Run 'juggernaut apply' whenever you are ready to upgrade."
+      if [[ "${JUGGERNAUT_SUPPRESS_DEPRECATION:-0}" != "1" ]]; then
+        echo "Note: Juggernaut v1 is deprecated and will be removed in v3.0." >&2
+      fi
+    else
+      # Auto-migrate v1 → v2 if a v1 block is present.
+      HAS_V1="$(printf '%s' "$BANNER_STATE" | jq -r '.has_v1')"
+      if [[ "$HAS_V1" == "true" ]]; then
+        echo "Migrating v1 configuration to v2..."
+        V1_PROFILES=()
+        while IFS= read -r p; do
+          [[ -n "$p" ]] && V1_PROFILES+=("$p")
+        done < <(printf '%s' "$BANNER_STATE" | jq -r '.v1_profiles[]')
+        for profile in "${V1_PROFILES[@]+"${V1_PROFILES[@]}"}"; do
+          if migrator_has_v1_block "$profile" 2>/dev/null; then
+            migrator_run "$profile" "$HOME/.claude/settings.json" "$INSTALL_DIR/bedrock-config.json" 2>/dev/null || true
+          fi
+        done
+      fi
+    fi
+  fi
+fi
+
+echo "Verify with: juggernaut doctor"
 echo "Configure with one of:"
-echo "  juggernaut apply --v2 --auth=bedrock-api-key"
-echo "  juggernaut apply --v2 --auth=iam"
+echo "  juggernaut apply --auth=bedrock-api-key"
+echo "  juggernaut apply --auth=iam"
 
 if [[ "$CONFIGURE" == "1" ]]; then
   cd "$INSTALL_DIR"
-  exec bash ./juggernaut apply --v2 "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
+  exec bash ./juggernaut apply "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
 elif [[ ${#SETUP_ARGS[@]} -gt 0 ]]; then
   echo "Note: install arguments after --version were ignored. Use --configure to run apply during install." >&2
 fi

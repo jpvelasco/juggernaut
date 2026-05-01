@@ -19,12 +19,12 @@ Describe 'install.sh robustness' {
     It 'creates a user-local juggernaut launcher and prints verification guidance' {
         $script:InstallSh | Should -Match ([regex]::Escape('.local/bin'))
         $script:InstallSh | Should -Match 'ln -sfn'
-        $script:InstallSh | Should -Match 'juggernaut doctor --v2'
+        $script:InstallSh | Should -Match 'juggernaut doctor'
     }
 
     It 'does not run setup by default' {
         $script:InstallSh | Should -Match ([regex]::Escape('--configure'))
-        $script:InstallSh | Should -Match ([regex]::Escape('./juggernaut apply --v2'))
+        $script:InstallSh | Should -Match ([regex]::Escape('./juggernaut apply'))
         $script:InstallSh | Should -Not -Match ([regex]::Escape('exec bash ./setup'))
     }
 
@@ -54,12 +54,12 @@ Describe 'install.ps1 robustness' {
         $script:InstallPs1 | Should -Match 'PATH'
         $script:InstallPs1 | Should -Match ([regex]::Escape('If PowerShell blocks first run scripts, run:'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'))
-        $script:InstallPs1 | Should -Match 'juggernaut doctor --v2'
+        $script:InstallPs1 | Should -Match 'juggernaut doctor'
     }
 
     It 'does not run setup by default' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('[switch]$Configure'))
-        $script:InstallPs1 | Should -Match ([regex]::Escape('Convert-InstallerApplyArgs'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('Convert-GnuStyleArgs'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('commands\apply.ps1'))
         $script:InstallPs1 | Should -Not -Match ([regex]::Escape('juggernaut.ps1 apply --v2'))
         $script:InstallPs1 | Should -Not -Match ([regex]::Escape('exit $LASTEXITCODE'))

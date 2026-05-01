@@ -17,6 +17,7 @@ export BEDROCK_CONFIG_PATH
 . "$SCRIPT_DIR/lib/migrator.sh"
 . "$SCRIPT_DIR/lib/keychain.sh"
 . "$SCRIPT_DIR/lib/profile_writer.sh"
+. "$SCRIPT_DIR/lib/profile_paths.sh"
 # Lib files call `set -euo pipefail`; restore manual error handling.
 set +e
 
@@ -221,11 +222,7 @@ fi
 # Step 2: Explicit migration — if no v2 block, look for v1 profile blocks.
 # ---------------------------------------------------------------------------
 if [[ "$HAS_V2_BLOCK" == "false" ]]; then
-  V1_CANDIDATES=(
-    "$HOME/.bashrc"
-    "$HOME/.zshrc"
-    "$HOME/.config/fish/config.fish"
-  )
+  mapfile -t V1_CANDIDATES < <(profile_paths_v1_candidates)
   [[ "$J_FORCE_MIGRATION_PROMPT" == "true" ]] && export JUGGERNAUT_FORCE_MIGRATION_PROMPT=1
   for candidate in "${V1_CANDIDATES[@]}"; do
     if migrator_has_v1_block "$candidate" 2>/dev/null; then

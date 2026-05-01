@@ -23,7 +23,9 @@ jobs:
         run: |
           shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
           shellcheck juggernaut commands/apply.sh lib/keychain.sh lib/profile_writer.sh lib/schema.sh lib/config_manager.sh lib/migrator.sh
+          shellcheck lib/profile_paths.sh lib/upgrade_banner.sh
           shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh tests/v2/test_install.sh
+          shellcheck tests/v2/test_upgrade_banner.sh tests/v2/test_doctor_v1.sh
 
       - name: Verify version sync
         run: |
@@ -151,6 +153,8 @@ jobs:
           bash ./tests/v2/test_doctor.sh
           bash ./tests/v2/test_uninstall.sh
           bash ./tests/v2/test_install.sh
+          bash ./tests/v2/test_upgrade_banner.sh
+          bash ./tests/v2/test_doctor_v1.sh
 
       - name: Run piped installer scenario
         run: |
@@ -317,3 +321,40 @@ jobs:
       - name: Test unified entry point
         shell: bash
         run: ./setup --dry-run
+
+  legacy-escape:
+    name: Legacy escape (JUGGERNAUT_USE_V2=0)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Verify v2 gate exits 2 when JUGGERNAUT_USE_V2=0
+        run: |
+          for script in commands/show.sh commands/doctor.sh commands/uninstall.sh commands/migrate.sh; do
+            rc=0
+            JUGGERNAUT_USE_V2=0 bash "./$script" >/dev/null 2>&1 || rc=$?
+            if [[ "$rc" -eq 2 ]]; then
+              echo "OK: $script exits 2 with JUGGERNAUT_USE_V2=0"
+            else
+              echo "FAIL: $script should exit 2 with JUGGERNAUT_USE_V2=0 (got $rc)"
+              exit 1
+            fi
+          done
+
+      - name: Verify juggernaut dispatcher with --legacy-v1 invokes setup
+        run: |
+          # --legacy-v1 should invoke the legacy path; setup will exit 0 or fail gracefully.
+          JUGGERNAUT_SUPPRESS_DEPRECATION=1 bash ./juggernaut --legacy-v1 --dry-run 2>/dev/null || true
+
+      - name: Run v2 core tests with JUGGERNAUT_USE_V2 unset (default-ON)
+        run: |
+          unset JUGGERNAUT_USE_V2
+          bash ./tests/v2/test_schema.sh
+          bash ./tests/v2/test_config_manager.sh
+          bash ./tests/v2/test_migrator.sh

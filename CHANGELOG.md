@@ -2,6 +2,39 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.3.0] - 2026-04-30
+
+### Upgrade Notes
+
+**v2 is now the default.** Running `juggernaut <subcommand>` activates v2 without any extra flag. Pass `--legacy-v1` (or set `JUGGERNAUT_USE_V2=0`) to keep the v1 shell-profile-only path. The `--v2` flag is accepted as a no-op alias for backwards compatibility.
+
+### Changed (breaking default)
+
+- **v2 is ON by default.** `juggernaut` and `juggernaut.ps1` now default `JUGGERNAUT_USE_V2` to `1` instead of `0`. CI scripts or wrappers that pinned `JUGGERNAUT_USE_V2=0` can continue to do so — explicit `=0` is a supported first-class opt-out.
+- **Subcommand gate exits 2 (not 0).** `commands/show`, `doctor`, `migrate`, and `uninstall` now exit 2 with an error message when invoked standalone with `JUGGERNAUT_USE_V2=0`. Previously they silently exited 0 with a "not active" note.
+
+### Added
+
+- **Upgrade banner** (`lib/upgrade_banner.sh`, `lib/upgrade_banner.ps1`) — detects v1 profile blocks and version upgrades on installer entry. Shows version diff, prompts for migration consent. Non-TTY installs require `--yes` or `--legacy-v1`; aborts with exit 3 otherwise.
+- **Unified profile-path source of truth** (`lib/profile_paths.sh`, `lib/profile_paths.ps1`) — single canonical list of v1 candidate profiles consumed by `apply`, `migrate`, `uninstall`, `doctor`, and `upgrade_banner`.
+- **Shared PowerShell arg-parser** (`lib/arg_parsing.ps1`) — `Convert-GnuStyleArgs` extracted from `juggernaut.ps1` so `install.ps1` can dot-source it without duplication.
+- **Doctor v1 artifact awareness** — `doctor` now reports a WARN when a v1 profile block coexists with v2 settings (hints `juggernaut migrate --clean`), and an INFO when only a v1 block is present (hints `juggernaut apply`). Previously a v1-only machine reported FAIL as if unconfigured.
+- **Backup rotation** — installers keep the 5 most-recent `.backup.*` directories and delete older ones. Pass `--keep-all-backups` to opt out.
+- **Windows shim install-dir resolver** — `juggernaut.ps1` and `juggernaut.cmd` shims now read `juggernaut-install-dir.txt` at runtime so moving the install directory works after updating the `.txt`.
+- **PowerShell v1 parser** (`ConvertFrom-MigratorV1Block`) — extended to parse `$env:KEY = 'VALUE'` lines from PowerShell-style v1 profile blocks. Ships behind `JUGGERNAUT_PS_V1_SCAN=1` opt-in; default-on planned for 2.4.0.
+- **v1 deprecation notice** — running any subcommand via `--legacy-v1` now prints a one-line deprecation notice to stderr. Suppress with `JUGGERNAUT_SUPPRESS_DEPRECATION=1`.
+- **`--yes` / `--legacy-v1` / `--keep-all-backups` installer flags** (`install.sh`, `install.ps1`).
+
+### Deprecated
+
+- **v1 shell-profile-only mode** — reachable via `--legacy-v1` or `JUGGERNAUT_USE_V2=0`. Removal planned for v3.0.
+
+### Fixed
+
+- `apply.ps1` no longer sets `$env:JUGGERNAUT_USE_V2 = '1'` unconditionally on load (was asymmetric with `apply.sh`).
+- `Convert-InstallerApplyArgs` duplication in `install.ps1` removed; replaced with dot-sourced `lib/arg_parsing.ps1`.
+- Profile scan candidates are now identical across `apply`, `migrate`, `uninstall`, and `doctor` (no more detection drift).
+
 ## [2.2.5] - 2026-04-26
 
 ### Fixed

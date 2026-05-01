@@ -9,6 +9,10 @@
 
 set -e
 
+if [[ "${JUGGERNAUT_SUPPRESS_DEPRECATION:-0}" != "1" ]]; then
+    echo "Juggernaut v1 is deprecated and will be removed in v3.0. Run 'juggernaut apply' to upgrade." >&2
+fi
+
 #───────────────────────────────────────────────────────────────────────────────
 # Bash Version Check
 #───────────────────────────────────────────────────────────────────────────────

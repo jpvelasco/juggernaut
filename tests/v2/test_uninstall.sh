@@ -12,10 +12,9 @@ pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
 
 # ── v2 gate ──────────────────────────────────────────────────────────────────
-section "v2 gate"
-output="$(bash "$REPO_ROOT/commands/uninstall.sh" 2>&1)"; rc=$?
-if [[ $rc -eq 0 && "$output" == *"Juggernaut v2 is not active"* ]]; then pass
-else fail "expected inactive msg (rc=$rc): $output"; fi
+section "v2 gate — JUGGERNAUT_USE_V2=0 exits 2"
+JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/uninstall.sh" >/dev/null 2>&1; _rc=$?
+if [[ $_rc -eq 2 ]]; then pass; else fail "uninstall.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $_rc)"; fi
 
 # ── Setup fixtures ────────────────────────────────────────────────────────────
 TMP_HOME="$(mktemp -d)"

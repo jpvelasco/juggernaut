@@ -13,14 +13,18 @@ The project has two active code paths:
 ## Commands
 
 ```bash
-# Run all v2 bash tests
-bash ./tests/v2/test_apply.sh
+# Run all v2 bash tests (order matches CI)
 bash ./tests/v2/test_schema.sh
 bash ./tests/v2/test_config_manager.sh
+bash ./tests/v2/test_feature_flag.sh
 bash ./tests/v2/test_migrator.sh
 bash ./tests/v2/test_keychain.sh
-bash ./tests/v2/test_doctor.sh
+bash ./tests/v2/test_apply.sh
 bash ./tests/v2/test_show.sh
+bash ./tests/v2/test_doctor.sh
+bash ./tests/v2/test_uninstall.sh
+bash ./tests/v2/test_install.sh
+bash ./tests/v2/test_profile_writer.sh
 
 # Run all v2 PowerShell tests (Pester 5 required)
 pwsh -Command "Invoke-Pester ./tests/v2 -CI"
@@ -29,12 +33,12 @@ pwsh -Command "Invoke-Pester ./tests/v2 -CI"
 bash ./test.sh
 
 # Dry-run v2 apply (preview without writing files)
-JUGGERNAUT_USE_V2=1 ./juggernaut apply --dry-run
+./juggernaut apply --v2 --dry-run
 
 # Lint shell scripts
 shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
 shellcheck juggernaut commands/apply.sh lib/keychain.sh lib/profile_writer.sh lib/schema.sh lib/config_manager.sh lib/migrator.sh
-shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh
+shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh tests/v2/test_install.sh
 ```
 
 ## v2 Architecture
@@ -46,6 +50,7 @@ shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh
 - `show.{sh,ps1}` — prints current config from settings.json
 - `doctor.{sh,ps1}` — reads `lib/doctor.{sh,ps1}` for diagnostics
 - `migrate.{sh,ps1}` — migrates v1 profile block to settings.json
+- `uninstall.{sh,ps1}` — removes the Juggernaut block and optional profile entries
 
 **Library in `lib/`:**
 - `schema.{sh,ps1}` — constructs/validates the Juggernaut JSON block; requires `jq`
@@ -85,7 +90,7 @@ Version must stay in sync across two places: `VERSION` file and `bedrock-config.
 
 ## Gotchas
 
-- **v2 gate:** All v2 paths check `JUGGERNAUT_USE_V2=1` or `--v2`. Without it, `juggernaut` exits 0 with a message rather than running subcommands.
+- **v2 gate (asymmetric):** `setup` defaults to v2 (`JUGGERNAUT_USE_V2:-1`); use `--legacy-v1` to force v1. `juggernaut` binary still requires explicit `JUGGERNAUT_USE_V2=1` or `--v2` — without it, it exits 0 with a message.
 - **`setup` and `juggernaut` have no `.sh` extension** — both must be included in shellcheck linting explicitly.
 - **README drift:** README hardcodes model names and token values. `bedrock-config.json` is authoritative; update README when defaults change.
 - **Fish syntax differs:** Profile writer must emit `set -gx VAR value` for fish, not `export`.

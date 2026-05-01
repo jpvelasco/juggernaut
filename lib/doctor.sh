@@ -209,6 +209,39 @@ doctor_mantle() {
   fi
 }
 
+doctor_v1_artifacts() {
+  local settings="$1" has_v2_block="$2"
+
+  local found_v1=false
+  local profiles=()
+
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] && continue
+    if [[ -f "$candidate" ]] && tr -d '\r' < "$candidate" 2>/dev/null \
+       | grep -q "# BEGIN: Claude Code Bedrock Configuration"; then
+      found_v1=true
+      profiles+=("$candidate")
+    fi
+  done < <(profile_paths_v1_candidates)
+
+  [[ "$found_v1" == "false" ]] && return 0
+
+  if [[ "$has_v2_block" == "true" ]]; then
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "v1 profile block" "WARN — found alongside v2 settings.json"
+    for p in "${profiles[@]}"; do
+      doctor_kv "  Profile" "$p"
+    done
+    doctor_kv "  Fix" "run: juggernaut migrate --clean"
+  else
+    doctor_kv "v1 profile block" "INFO — v1 configuration detected"
+    for p in "${profiles[@]}"; do
+      doctor_kv "  Profile" "$p"
+    done
+    doctor_kv "  Upgrade" "run: juggernaut apply   (or pass --legacy-v1 to keep v1)"
+  fi
+}
+
 doctor_drift() {
   local settings="$1" block="$2" profile="$3"
   local expected

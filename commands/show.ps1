@@ -11,7 +11,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$v2Active = ($env:JUGGERNAUT_USE_V2 -eq '1') -or $UseV2
+$v2Active = if ($env:JUGGERNAUT_USE_V2 -eq '0') { $false } else { $true }
+if ($UseV2) { $v2Active = $true }
 foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
         '^--v2$' { $v2Active = $true; break }
@@ -45,8 +46,8 @@ if ($Version) {
 }
 
 if (-not $v2Active) {
-    Write-Output 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
-    return
+    Write-Error "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)."
+    exit 2
 }
 
 if ($Scope -and $Scope -notin @('user','project')) {

@@ -17,6 +17,9 @@ param(
     [string]$Ref = '',
     [switch]$Latest,
     [switch]$Configure,
+    [switch]$Yes,
+    [switch]$LegacyV1,
+    [switch]$KeepAllBackups,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$SetupArgs
 )
 
@@ -67,6 +70,16 @@ function Backup-ExistingInstall {
     }
     Write-Host "Backup created: $backup"
     Move-Item -LiteralPath $InstallDir -Destination $backup
+
+    # Rotate: keep only 5 most recent backups unless -KeepAllBackups was passed.
+    if (-not $KeepAllBackups) {
+        $oldBackups = Get-ChildItem -Path (Split-Path $InstallDir -Parent) -Filter "$(Split-Path $InstallDir -Leaf).backup.*" -Directory -ErrorAction SilentlyContinue |
+                      Sort-Object LastWriteTime -Descending |
+                      Select-Object -Skip 5
+        foreach ($old in $oldBackups) {
+            Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Test-InstallTreeDirty {
@@ -83,50 +96,9 @@ function Test-InstallTreeDirty {
     return [bool]$untracked
 }
 
-function Convert-InstallerApplyArgs {
-    param([string[]]$InputArgs)
-    $converted = @{}
-    for ($i = 0; $i -lt $InputArgs.Count; $i++) {
-        $arg = [string]$InputArgs[$i]
-        switch -Regex ($arg) {
-            '^--([^=]+)=(.*)$' {
-                $name = ($Matches[1] -replace '-', '')
-                $converted[$name] = $Matches[2]
-                continue
-            }
-            '^--(.+)$' {
-                $name = ($Matches[1] -replace '-', '')
-                if (($i + 1) -lt $InputArgs.Count -and ([string]$InputArgs[$i + 1]) -notlike '-*') {
-                    $converted[$name] = [string]$InputArgs[$i + 1]
-                    $i++
-                } else {
-                    $converted[$name] = $true
-                }
-                continue
-            }
-            '^-([^=]+)=(.*)$' {
-                $name = ($Matches[1] -replace '-', '')
-                $converted[$name] = $Matches[2]
-                continue
-            }
-            '^-([^-].*)$' {
-                $name = ($Matches[1] -replace '-', '')
-                if (($i + 1) -lt $InputArgs.Count -and ([string]$InputArgs[$i + 1]) -notlike '-*') {
-                    $converted[$name] = [string]$InputArgs[$i + 1]
-                    $i++
-                } else {
-                    $converted[$name] = $true
-                }
-                continue
-            }
-            default {
-                if (-not $converted.ContainsKey('RemainingArgs')) { $converted['RemainingArgs'] = @() }
-                $converted['RemainingArgs'] += $arg
-            }
-        }
-    }
-    return $converted
-}
+# Shared arg parser (extracted to lib/arg_parsing.ps1 so install.ps1 and juggernaut.ps1 share one copy).
+# We dot-source it after $InstallDir is known (below), or fall back to the repo-local copy when running
+# the installer directly from the repo.  At the point this function is needed $InstallDir already exists.
 
 if (Test-Path $InstallDir) {
     if (Test-InstallTreeDirty) {
@@ -173,14 +145,29 @@ New-Item -ItemType Directory -Path $ShimDir -Force | Out-Null
 
 $ShimPs1 = Join-Path $ShimDir 'juggernaut.ps1'
 $ShimCmd = Join-Path $ShimDir 'juggernaut.cmd'
-$TargetPs1 = Join-Path $InstallDir 'juggernaut.ps1'
+# Write the install dir into a sidecar file so the shim resolves at runtime.
+# This means moving the install dir only requires updating the .txt file.
+$InstallDirTxt = Join-Path $ShimDir 'juggernaut-install-dir.txt'
+Set-Content -Path $InstallDirTxt -Value $InstallDir -Encoding utf8 -NoNewline
 
-@"
-param([Parameter(ValueFromRemainingArguments=`$true)][string[]]`$Args)
-& '$TargetPs1' @Args
-if (`$?) { exit 0 }
-exit 1
-"@ | Set-Content -Path $ShimPs1 -Encoding utf8
+@'
+param([Parameter(ValueFromRemainingArguments=$true)][string[]]$PassArgs)
+$shimDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$dirFile  = Join-Path $shimDir 'juggernaut-install-dir.txt'
+if (-not (Test-Path $dirFile)) {
+    Write-Error "juggernaut shim: install-dir file not found at $dirFile. Re-run install.ps1."
+    exit 1
+}
+$installDir = (Get-Content $dirFile -Raw -Encoding utf8).Trim()
+$target = Join-Path $installDir 'juggernaut.ps1'
+if (-not (Test-Path $target)) {
+    Write-Error "juggernaut shim: target not found at $target. Re-run install.ps1."
+    exit 1
+}
+$env:JUGGERNAUT_USE_V2 = '1'
+& $target @PassArgs
+exit $LASTEXITCODE
+'@ | Set-Content -Path $ShimPs1 -Encoding utf8
 
 @"
 @echo off
@@ -200,16 +187,64 @@ if (-not (($env:PATH -split ';') -contains $ShimDir)) {
 }
 Write-Host 'If PowerShell blocks first run scripts, run:'
 Write-Host '  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
-Write-Host 'Verify after install with: juggernaut doctor --v2'
+
+# ---------------------------------------------------------------------------
+# Upgrade banner — show version diff and handle v1→v2 migration prompt.
+# ---------------------------------------------------------------------------
+$argParsingLib = Join-Path $InstallDir 'lib\arg_parsing.ps1'
+if (Test-Path $argParsingLib) { . $argParsingLib }
+
+$bannerLib = Join-Path $InstallDir 'lib\upgrade_banner.ps1'
+$profilePathsLib = Join-Path $InstallDir 'lib\profile_paths.ps1'
+$migratorLib = Join-Path $InstallDir 'lib\migrator.ps1'
+$configMgrLib = Join-Path $InstallDir 'lib\config_manager.ps1'
+if ((Test-Path $bannerLib) -and (Test-Path $profilePathsLib) -and (Test-Path $migratorLib) -and (Test-Path $configMgrLib)) {
+    . $profilePathsLib
+    . $configMgrLib
+    . (Join-Path $InstallDir 'lib\schema.ps1')
+    . $migratorLib
+    . $bannerLib
+
+    $bannerState = Get-UpgradeBannerState
+    Write-UpgradeBanner -State $bannerState
+    $confirmResult = Confirm-UpgradeBanner -State $bannerState -Yes:([bool]$Yes) -LegacyV1:([bool]$LegacyV1)
+    switch ($confirmResult) {
+        'abort' {
+            Write-Host 'Install complete. Re-run with -Yes to migrate to v2, or -LegacyV1 to keep v1.'
+            exit 3
+        }
+        'legacy' {
+            Write-Host 'Keeping v1 configuration. Run juggernaut apply whenever you are ready to upgrade.'
+            if ($env:JUGGERNAUT_SUPPRESS_DEPRECATION -ne '1') {
+                [Console]::Error.WriteLine('Note: Juggernaut v1 is deprecated and will be removed in v3.0.')
+            }
+        }
+        'proceed' {
+            if ($bannerState.has_v1) {
+                Write-Host 'Migrating v1 configuration to v2...'
+                $settingsPath = Join-Path (if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }) '.claude/settings.json'
+                foreach ($profile in $bannerState.v1_profiles) {
+                    try {
+                        Invoke-MigratorRun -ProfileFile $profile -SettingsPath $settingsPath -BedrockConfigPath (Join-Path $InstallDir 'bedrock-config.json')
+                    } catch {
+                        Write-Warning "Migration of $profile encountered an error: $_"
+                    }
+                }
+            }
+        }
+    }
+}
+
+Write-Host 'Verify with: juggernaut doctor'
 Write-Host 'Configure with one of:'
-Write-Host '  juggernaut apply --v2 --auth=bedrock-api-key'
-Write-Host '  juggernaut apply --v2 --auth=iam'
+Write-Host '  juggernaut apply --auth=bedrock-api-key'
+Write-Host '  juggernaut apply --auth=iam'
 
 if ($Configure) {
     $oldLocation = (Get-Location).Path
     try {
         Set-Location $InstallDir
-        $applyArgs = Convert-InstallerApplyArgs -InputArgs $SetupArgs
+        $applyArgs = Convert-GnuStyleArgs -InputArgs $SetupArgs
         & (Join-Path $InstallDir 'commands\apply.ps1') @applyArgs
     } finally {
         Set-Location $oldLocation

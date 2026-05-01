@@ -18,18 +18,25 @@ resolve_script_dir() {
 }
 
 SCRIPT_DIR="$(resolve_script_dir "${BASH_SOURCE[0]}")"
-JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-0}"
+# v2 is the default since 2.3.0. Set JUGGERNAUT_USE_V2=0 or pass --legacy-v1 to use v1.
+JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-1}"
+[[ "${JUGGERNAUT_USE_V1:-}" == "1" ]] && JUGGERNAUT_V2_ACTIVE=0
 FILTERED_ARGS=()
 for arg in "$@"; do
-  if [[ "$arg" == "--v2" ]]; then
-    JUGGERNAUT_V2_ACTIVE=1
-  else
-    FILTERED_ARGS+=("$arg")
-  fi
+  case "$arg" in
+    --v2)         JUGGERNAUT_V2_ACTIVE=1 ;;
+    --legacy-v1|-v1)
+      JUGGERNAUT_V2_ACTIVE=0
+      ;;
+    *)            FILTERED_ARGS+=("$arg") ;;
+  esac
 done
 set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
 
 if [[ "$JUGGERNAUT_V2_ACTIVE" != "1" ]]; then
+  if [[ "${JUGGERNAUT_SUPPRESS_DEPRECATION:-0}" != "1" ]]; then
+    echo "Juggernaut v1 is deprecated and will be removed in v3.0. Run without --legacy-v1 for v2." >&2
+  fi
   case "${1:-}" in
     --version|-v)
       cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
@@ -40,8 +47,7 @@ if [[ "$JUGGERNAUT_V2_ACTIVE" != "1" ]]; then
       exit 0
       ;;
     *)
-      echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
-      exit 0
+      exec "$SCRIPT_DIR/setup" "${@}"
       ;;
   esac
 fi
