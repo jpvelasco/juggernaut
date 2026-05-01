@@ -2,13 +2,12 @@
 # install.ps1 - Juggernaut installer
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.1.2
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.3.1
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Ref fix-branch
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
-#   .\install.ps1 -Version 2.1.2
+#   .\install.ps1 -Version 2.3.1
 #   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest
 
@@ -24,6 +23,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $PSCommandPath -and
+    $MyInvocation.CommandOrigin -eq [System.Management.Automation.CommandOrigin]::Runspace -and
+    [string]::IsNullOrEmpty($MyInvocation.InvocationName)) {
+    Write-Error @'
+The Windows installer cannot be run with:
+  irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1 | iex
+
+Use the safer scriptblock form instead:
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
+
+For a pinned release:
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.1/install.ps1))) -Version v2.3.1
+'@
+    exit 1
+}
 
 if (-not $Ref -and $env:JUGGERNAUT_REF) { $Ref = $env:JUGGERNAUT_REF }
 if ($Latest) { $Version = ''; $Ref = '' }

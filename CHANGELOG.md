@@ -2,6 +2,13 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.3.1] - 2026-05-01
+
+### Fixed
+
+- **Windows installer one-liner guard** — `install.ps1` now detects the fragile `irm ... install.ps1 | iex` invocation path and exits with a clear message recommending the safer scriptblock form.
+- **Windows install docs** — README and QUICKSTART pin Windows examples to the scriptblock installer command for v2.3.1.
+
 ## [2.3.0] - 2026-04-30
 
 ### Migration Notes
@@ -182,6 +189,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.1
+[2.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.0
 [2.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.5
 [2.2.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.4
 [2.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.3

@@ -67,6 +67,20 @@ Describe 'install.ps1 robustness' {
         $script:InstallPs1 | Should -Match 'juggernaut doctor'
     }
 
+    It 'rejects pipe-to-iex invocation with safer scriptblock guidance' {
+        $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)
+        if (-not $pwsh) { $pwsh = Get-Command powershell -ErrorAction Stop }
+        $installerPath = Join-Path $script:RepoRoot 'install.ps1'
+        $command = @"
+`$installer = Get-Content -Path '$($installerPath -replace "'", "''")' -Raw
+`$installer | iex
+"@
+        $output = & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $output | Should -Match ([regex]::Escape('cannot be run with'))
+        $output | Should -Match ([regex]::Escape('[scriptblock]::Create'))
+    }
+
     It 'does not run setup by default' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('[switch]$Configure'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('Convert-GnuStyleArgs'))
