@@ -14,16 +14,95 @@ Describe 'doctor.ps1' {
         $script:BedrockConfigPath = Join-Path $repoRoot 'bedrock-config.json'
     }
 
-    It 'prints a calm inactive message when v2 is off' {
-        $oldFlag = $env:JUGGERNAUT_USE_V2
+    It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
+        $doctor = Join-Path $repoRoot 'commands\doctor.ps1'
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$doctor`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
+    }
+
+    It 'loads and reports missing keychain credentials under Windows PowerShell' {
+        if (-not (Get-Command powershell -ErrorAction SilentlyContinue)) {
+            Set-ItResult -Skipped -Because 'Windows PowerShell is not available'
+            return
+        }
+
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-winps-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldKeychainService = $env:JUGGERNAUT_KEYCHAIN_SERVICE
         try {
-            $env:JUGGERNAUT_USE_V2 = '0'
-            $output = & (Join-Path $repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
-            if ($output -notmatch 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.') {
-                throw "Expected inactive message, got: $output"
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '1'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:JUGGERNAUT_KEYCHAIN_SERVICE = "juggernaut-test-absent-$([Guid]::NewGuid().ToString('N'))"
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
+
+            $ub = New-JuggernautBlock -AuthMode 'bedrock-api-key' -Region 'us-west-2' -Storage 'keychain' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
+            $ub.shellFallback.lastWrittenProfiles = @((Join-Path $tmpHome 'missing-profile.ps1'))
+            $um = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $ub -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $ub)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $um
+
+            $output = & powershell -NoProfile -File (Join-Path $repoRoot 'commands\doctor.ps1') --v2 -Scope user 2>&1 | Out-String
+            if ($output -match 'ParserError' -or $output -match "The term 'try' is not recognized") {
+                throw "Expected Windows PowerShell to parse and run doctor, got: $output"
+            }
+            if ($output -notmatch [regex]::Escape('Details: no API key found in env, keychain, or shell profile')) {
+                throw "Expected missing API key report, got: $output"
             }
         } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            if ($null -eq $oldBearer) { Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue }
+            else { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            if ($null -eq $oldKeychainService) { Remove-Item Env:\JUGGERNAUT_KEYCHAIN_SERVICE -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_KEYCHAIN_SERVICE = $oldKeychainService }
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'dispatcher returns success for successful doctor despite stale native exit code' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-dr-dispatch-" + [Guid]::NewGuid().ToString('N'))
+        $tmpWork = Join-Path $tmpHome 'work'
+        New-Item -ItemType Directory -Path (Join-Path $tmpHome '.claude') -Force | Out-Null
+        New-Item -ItemType Directory -Path $tmpWork -Force | Out-Null
+
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
+        $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldShell = $env:SHELL
+        $oldAwsProfile = $env:AWS_PROFILE; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+        $oldLocation = (Get-Location).Path
+        try {
+            Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_USE_V2 = '0'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:SHELL = 'bash'; $env:AWS_PROFILE = 'juggernaut-test'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $tmpHome 'missing-profile.ps1'
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
+
+            $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'user' -BedrockConfigPath $script:BedrockConfigPath
+            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $block)
+            Write-SettingsAtomic -Path (Join-Path $tmpHome '.claude/settings.json') -Content $merged
+
+            git --not-a-real-git-option *> $null
+            Set-Location $tmpWork
+            $output = & (Join-Path $repoRoot 'juggernaut.ps1') doctor --v2 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0
+            $output | Should -Match ([regex]::Escape('No issues found'))
+        } finally {
+            Set-Location $oldLocation
+            Set-Variable -Name HOME -Value $oldHome -Scope Global -Force
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
+            $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
+            if ($null -eq $oldBearer) { Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue }
+            else { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 
@@ -36,12 +115,14 @@ Describe 'doctor.ps1' {
         $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
         $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldShell = $env:SHELL
         $oldAwsProfile = $env:AWS_PROFILE; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
         $oldLocation = (Get-Location).Path
         try {
             Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
             $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
             $env:JUGGERNAUT_USE_V2 = '1'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
             $env:SHELL = 'bash'; $env:AWS_PROFILE = 'juggernaut-test'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $tmpHome 'missing-profile.ps1'
             Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
 
             $ub = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
@@ -74,6 +155,8 @@ Describe 'doctor.ps1' {
             $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
             $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
             if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
             Remove-Item -Path $tmpHome,$tmpWork -Recurse -Force -ErrorAction SilentlyContinue
         }
     }

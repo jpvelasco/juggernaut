@@ -11,10 +11,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Feature flag gate — v2 commands are dormant until explicitly enabled.
-if [[ "${JUGGERNAUT_USE_V2:-0}" != "1" ]]; then
-  echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
-  exit 0
+# Subcommand safety — must be invoked via the juggernaut dispatcher.
+if [[ "${JUGGERNAUT_USE_V2:-1}" != "1" ]]; then
+  echo "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)." >&2
+  exit 2
 fi
 
 . "$REPO_ROOT/lib/schema.sh"

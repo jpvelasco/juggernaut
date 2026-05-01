@@ -15,17 +15,12 @@ Describe 'show.ps1' {
         . (Join-Path $repoRoot 'lib\profile_writer.ps1')
     }
 
-    It 'prints a calm inactive message when v2 is off' {
-        $oldFlag = $env:JUGGERNAUT_USE_V2
-        try {
-            $env:JUGGERNAUT_USE_V2 = '0'
-            $output = & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-String
-            if ($output -notmatch 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.') {
-                throw "Expected inactive message, got: $output"
-            }
-        } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldFlag
-        }
+    It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
+        $show = Join-Path $repoRoot 'commands\show.ps1'
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$show`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
     }
 
     It 'prints the calm section headers and values' {

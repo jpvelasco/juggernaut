@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BEDROCK_CONFIG_PATH="${BEDROCK_CONFIG_PATH:-$SCRIPT_DIR/bedrock-config.json}"
 export BEDROCK_CONFIG_PATH
 
-v2_active="${JUGGERNAUT_USE_V2:-0}"
+v2_active="${JUGGERNAUT_USE_V2:-1}"
 DRY_RUN=false
 FORCE=false
 REQUESTED_SCOPE=""
@@ -36,8 +36,8 @@ EOF
 done
 
 if [[ "$v2_active" != "1" ]]; then
-  echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
-  exit 0
+  echo "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)." >&2
+  exit 2
 fi
 
 case "${REQUESTED_SCOPE:-}" in
@@ -47,6 +47,7 @@ esac
 
 . "$SCRIPT_DIR/lib/config_manager.sh"
 . "$SCRIPT_DIR/lib/profile_writer.sh"
+. "$SCRIPT_DIR/lib/profile_paths.sh"
 . "$SCRIPT_DIR/lib/keychain.sh"
 
 # ---------------------------------------------------------------------------
@@ -71,11 +72,12 @@ fi
 [[ "$REQUESTED_SCOPE" == "user" ]]    && has_project=false
 [[ "$REQUESTED_SCOPE" == "project" ]] && has_user=false
 
-# Scan all known shell profiles for the marker block
+# Scan all known shell profiles for the marker block (canonical candidate list)
 profile_targets=()
-for _p in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish"; do
+while IFS= read -r _p; do
+  [[ -z "$_p" ]] && continue
   profile_writer_has_block "$_p" && profile_targets+=("$_p")
-done
+done < <(profile_paths_v1_candidates)
 
 # Detect keychain
 has_keychain=false

@@ -61,38 +61,80 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ```bash
 # Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.sh | bash -s -- --version v2.2.4
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.sh | bash -s -- --version v2.3.0
 ```
 
 ```powershell
 # Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.ps1))) -Version v2.2.4
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.ps1))) -Version v2.3.0
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v2.2.4 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
-
-export JUGGERNAUT_USE_V2=1
+git clone --branch v2.3.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply
 ```
 
-The pinned installer commands above install v2.2.4 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
+The pinned installer commands above install v2.3.0 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
 
-Juggernaut v2 is the default and recommended path for new installs. The older shell-profile-only v1 setup is legacy compatibility only; use `./setup --legacy-v1` if you still need the old flow.
+v2 is the default and recommended path for new installs. The older shell-profile-only v1 setup is legacy compatibility only; use `./setup --legacy-v1` if you still need the old flow.
 
 **Configure after install:**
 
 ```bash
 # Bedrock API key
-juggernaut apply --v2 --auth=bedrock-api-key
+juggernaut apply --auth=bedrock-api-key
 ```
 
 ```bash
 # IAM/SSO
-juggernaut apply --v2 --auth=iam
+juggernaut apply --auth=iam
 ```
+
+## Upgrading
+
+Re-run the installer to upgrade:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.sh | bash -s -- --version v2.3.0
+```
+
+The installer detects the version difference and prints an upgrade banner. If you have a v1 shell-profile block, the installer will ask whether to migrate it to settings.json. Say `y` to migrate automatically, or pass `--yes` for non-interactive use:
+
+```bash
+curl -fsSL ... | bash -s -- --version v2.3.0 --yes
+```
+
+To stay on v1 for one more release:
+
+```bash
+curl -fsSL ... | bash -s -- --version v2.3.0 --legacy-v1
+```
+
+After upgrading, verify the configuration:
+
+```bash
+juggernaut doctor
+```
+
+If both a v1 profile block and v2 settings coexist, doctor will warn you to clean up:
+
+```bash
+juggernaut migrate --clean
+```
+
+## Migration Notes
+
+v2 is now the default. Running `juggernaut <subcommand>` uses the settings.json-based v2 flow without requiring `--v2`.
+
+To stay on the older v1 shell-profile-only flow during installation or upgrade, pass `--legacy-v1`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.sh | bash -s -- --version v2.3.0 --legacy-v1
+```
+
+The upgrade banner appears when the installer detects an existing v1 profile block or an installed version change. It explains the migration target, asks before converting v1 profile settings to v2 settings.json, and requires `--yes` or `--legacy-v1` for non-interactive installs.
 
 ### Version Pinning
 
@@ -100,26 +142,26 @@ Use the pinned release tag URLs for a stable install:
 
 ```bash
 # Bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.sh | bash -s -- --version v2.2.4
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.sh | bash -s -- --version v2.3.0
 ```
 
 ```powershell
 # PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.2.4/install.ps1))) -Version v2.2.4
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.ps1))) -Version v2.3.0
 ```
 
 ```bash
 # After downloading
-bash install.sh --version 2.2.4
+bash install.sh --version 2.3.0
 ```
 
 ```powershell
-.\install.ps1 -Version 2.2.4
+.\install.ps1 -Version 2.3.0
 ```
 
-Both scripts normalize the version automatically — `2.2.4` and `v2.2.4` both work.
+Both scripts normalize the version automatically — `2.3.0` and `v2.3.0` both work.
 
-The v2.2 installers repair executable bits, create a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and print the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
+The installer repairs executable bits, creates a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and prints the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
 
 ```powershell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -138,14 +180,6 @@ To stay on the old shell-profile-only setup path, run:
 ```
 
 ## Commands
-
-Activate v2 permanently for your session:
-
-```bash
-export JUGGERNAUT_USE_V2=1
-```
-
-Or pass `--v2` per command. Then:
 
 ```bash
 juggernaut apply       # Configure Claude Code for Bedrock
@@ -173,11 +207,11 @@ Fresh installs and `./setup` now default to v2. If you maintain an older v1-only
 ./setup --legacy-v1
 ```
 
-`juggernaut apply --v2` no longer migrates a v1 shell profile block silently. In an interactive terminal it asks before writing; in non-interactive use it exits with a clear message unless you pass `--yes`. Use `--dry-run` to preview the proposed migration without writing anything.
+`juggernaut apply` no longer migrates a v1 shell profile block silently. In an interactive terminal it asks before writing; in non-interactive use it exits with a clear message unless you pass `--yes`. Use `--dry-run` to preview the proposed migration without writing anything.
 
 ```bash
-juggernaut apply --v2 --dry-run
-juggernaut apply --v2 --yes
+juggernaut apply --dry-run
+juggernaut apply --yes
 juggernaut migrate --dry-run
 juggernaut migrate --yes
 ```
@@ -226,29 +260,27 @@ aws sts get-caller-identity
 ### 3. Run Setup
 
 ```bash
-export JUGGERNAUT_USE_V2=1
-
 # Preview changes first
-juggernaut apply --v2 --dry-run
+juggernaut apply --dry-run
 
 # Apply
-juggernaut apply --v2
+juggernaut apply
 
 # Check everything looks right
-juggernaut doctor --v2
+juggernaut doctor
 ```
 
 **Custom region (default: us-west-2):**
 
 ```bash
-juggernaut apply --v2 --region=us-east-1
+juggernaut apply --region=us-east-1
 ```
 
 **Skip pre-flight dependency checks:**
 
 ```bash
-juggernaut apply --v2 --skip-preflight
-JUGGERNAUT_SKIP_PREFLIGHT=1 juggernaut apply --v2   # via environment variable
+juggernaut apply --skip-preflight
+JUGGERNAUT_SKIP_PREFLIGHT=1 juggernaut apply   # via environment variable
 ```
 
 ### API Key Authentication (Alternative)
@@ -258,13 +290,13 @@ Instead of IAM/SSO, you can use a Bedrock API key:
 **Interactive mode (recommended — secure):**
 
 ```bash
-juggernaut apply --v2 --auth=bedrock-api-key
+juggernaut apply --auth=bedrock-api-key
 ```
 
 **Inline mode (for CI/CD and scripting):**
 
 ```bash
-juggernaut apply --v2 --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
+juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
 ```
 
 > **Note:** In non-interactive environments (CI/CD, piped input, cron), you must use `--bedrock-key` as the script cannot prompt for input.
@@ -324,13 +356,13 @@ Key environment variables set:
 Opus 4.7 uses its native 1M context window without a suffix. Enable 1M context for Sonnet with:
 
 ```bash
-juggernaut apply --v2 --1m-context
+juggernaut apply --1m-context
 ```
 
 This records the 1M-context preference in the Juggernaut settings block while keeping the official Bedrock model ID intact. To revert:
 
 ```bash
-juggernaut apply --v2 --no-1m-context
+juggernaut apply --no-1m-context
 ```
 
 ### Model Capabilities
@@ -350,17 +382,17 @@ Juggernaut sets `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` for Opus and 
 Override individual model IDs:
 
 ```bash
-juggernaut apply --v2 --opus-model=us.anthropic.claude-opus-4-7
-juggernaut apply --v2 --sonnet-model=eu.anthropic.claude-sonnet-4-6
-juggernaut apply --v2 --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
-juggernaut apply --v2 --model-prefix=us    # All models use us.anthropic.* prefix
+juggernaut apply --opus-model=us.anthropic.claude-opus-4-7
+juggernaut apply --sonnet-model=eu.anthropic.claude-sonnet-4-6
+juggernaut apply --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
+juggernaut apply --model-prefix=us    # All models use us.anthropic.* prefix
 ```
 
 ### OpusPlan and Effort
 
 ```bash
-juggernaut apply --v2 --opusplan            # Opus during /plan, Sonnet during execution
-juggernaut apply --v2 --effort=xhigh        # low | medium | high | xhigh (default) | max
+juggernaut apply --opusplan            # Opus during /plan, Sonnet during execution
+juggernaut apply --effort=xhigh        # low | medium | high | xhigh (default) | max
 ```
 
 ## Architecture
@@ -424,7 +456,6 @@ juggernaut apply --v2 --effort=xhigh        # low | medium | high | xhigh (defau
 
 Run diagnostics first:
 ```bash
-export JUGGERNAUT_USE_V2=1
 juggernaut doctor
 ```
 
@@ -483,8 +514,6 @@ aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 ## Uninstalling
 
 ```bash
-export JUGGERNAUT_USE_V2=1
-
 # Preview what will be removed
 juggernaut uninstall --dry-run
 
@@ -522,7 +551,7 @@ See `iam-policy.json` for the complete policy.
 
 ### API Key Authentication
 
-**Interactive mode (`juggernaut apply --v2 --auth=bedrock-api-key`)** is secure:
+**Interactive mode (`juggernaut apply --auth=bedrock-api-key`)** is secure:
 - Key entered with hidden input (not displayed while typing)
 - Not visible in `ps aux` or process listings
 - Not saved to shell history
@@ -535,7 +564,7 @@ See `iam-policy.json` for the complete policy.
 
 ```bash
 # GitHub Actions
-juggernaut apply --v2 --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
+juggernaut apply --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
 ```
 
 ### Shell Profile Security
@@ -544,6 +573,40 @@ juggernaut apply --v2 --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_K
 - Ensure proper file permissions: `chmod 600 ~/.bashrc`
 - Backups are created before modifications (`.backup.YYYYMMDD_HHMMSS`)
 - Use `--storage=keychain` to store API keys in your OS keychain instead of plaintext profiles
+
+## Legacy v1
+
+<details>
+<summary>Using v1 shell-profile-only mode (deprecated)</summary>
+
+v1 configuration writes env-var exports directly to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.). It continues to work in 2.3.0 but is deprecated; removal is planned for v3.0.
+
+To opt into v1 permanently:
+
+```bash
+export JUGGERNAUT_USE_V2=0   # or: JUGGERNAUT_USE_V1=1
+```
+
+To invoke a single command via v1:
+
+```bash
+juggernaut apply --legacy-v1
+juggernaut --legacy-v1 apply
+```
+
+On Windows:
+
+```powershell
+.\juggernaut.ps1 apply -LegacyV1
+```
+
+To suppress the deprecation notice:
+
+```bash
+export JUGGERNAUT_SUPPRESS_DEPRECATION=1
+```
+
+</details>
 
 ## Notes
 

@@ -17,6 +17,7 @@ export BEDROCK_CONFIG_PATH
 . "$SCRIPT_DIR/lib/migrator.sh"
 . "$SCRIPT_DIR/lib/keychain.sh"
 . "$SCRIPT_DIR/lib/profile_writer.sh"
+. "$SCRIPT_DIR/lib/profile_paths.sh"
 # Lib files call `set -euo pipefail`; restore manual error handling.
 set +e
 
@@ -88,6 +89,35 @@ Options:
   --help, -h               Show this help
 
 EOF
+}
+
+_apply_prompt_confirm() {
+  local prompt="$1" answer
+  if [[ "${JUGGERNAUT_NO_TTY_PROMPTS:-0}" != "1" ]] && printf '%s' "$prompt" > /dev/tty 2>/dev/null; then
+    IFS= read -r answer < /dev/tty || return 1
+  elif [[ -t 0 ]]; then
+    IFS= read -r -p "$prompt" answer || return 1
+  else
+    return 1
+  fi
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_apply_prompt_secret() {
+  local prompt="$1" value
+  if [[ "${JUGGERNAUT_NO_TTY_PROMPTS:-0}" != "1" ]] && printf '%s' "$prompt" > /dev/tty 2>/dev/null; then
+    IFS= read -r -s value < /dev/tty || return 1
+    printf '\n' > /dev/tty
+  elif [[ -t 0 ]]; then
+    IFS= read -r -s -p "$prompt" value || return 1
+    echo
+  else
+    return 1
+  fi
+  printf '%s' "$value"
 }
 
 # ---------------------------------------------------------------------------
@@ -192,11 +222,7 @@ fi
 # Step 2: Explicit migration — if no v2 block, look for v1 profile blocks.
 # ---------------------------------------------------------------------------
 if [[ "$HAS_V2_BLOCK" == "false" ]]; then
-  V1_CANDIDATES=(
-    "$HOME/.bashrc"
-    "$HOME/.zshrc"
-    "$HOME/.config/fish/config.fish"
-  )
+  mapfile -t V1_CANDIDATES < <(profile_paths_v1_candidates)
   [[ "$J_FORCE_MIGRATION_PROMPT" == "true" ]] && export JUGGERNAUT_FORCE_MIGRATION_PROMPT=1
   for candidate in "${V1_CANDIDATES[@]}"; do
     if migrator_has_v1_block "$candidate" 2>/dev/null; then
@@ -210,18 +236,13 @@ if [[ "$HAS_V2_BLOCK" == "false" ]]; then
         break
       fi
       if [[ "$J_YES" != "true" ]]; then
-        if [[ -t 0 ]]; then
-          read -r -p "Migrate this v1 block now? [y/N] " _answer
-          case "$_answer" in
-            y|Y|yes|YES) ;;
-            *)
-              migrator_mark_migration_declined "$candidate" 2>/dev/null || true
-              echo "apply: migration skipped. Re-run with --force-migration-prompt to re-prompt, or --yes to confirm non-interactively." >&2
-              exit 1
-              ;;
-          esac
-        else
-          echo "apply: migration requires confirmation. Re-run with --yes, or run juggernaut migrate --dry-run first." >&2
+        if ! _apply_prompt_confirm "Migrate this v1 block now? [y/N] "; then
+          if [[ "${JUGGERNAUT_NO_TTY_PROMPTS:-0}" == "1" || ! -t 0 ]]; then
+            echo "apply: migration requires confirmation. Re-run with --yes, or run juggernaut migrate --dry-run first." >&2
+          else
+            migrator_mark_migration_declined "$candidate" 2>/dev/null || true
+            echo "apply: migration skipped. Re-run with --force-migration-prompt to re-prompt, or --yes to confirm non-interactively." >&2
+          fi
           exit 1
         fi
       fi
@@ -365,13 +386,12 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
   if [[ -z "$J_API_KEY" ]]; then
     if [[ "$DRY_RUN" == "true" ]]; then
       J_API_KEY="dry-run-placeholder"
-    elif [[ ! -t 0 ]]; then
-      echo "apply: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
-      exit 1
     else
       echo "Get your Bedrock API key from: AWS Console → Amazon Bedrock → API keys"
-      read -rs -p "Enter your Bedrock API key: " J_API_KEY
-      echo
+      if ! J_API_KEY="$(_apply_prompt_secret "Enter your Bedrock API key: ")"; then
+        echo "apply: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
+        exit 1
+      fi
       J_API_KEY="${J_API_KEY%"${J_API_KEY##*[![:space:]]}"}"
       J_API_KEY="${J_API_KEY#"${J_API_KEY%%[![:space:]]*}"}"
       if [[ -z "$J_API_KEY" ]]; then

@@ -7,6 +7,16 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib\schema.ps1')
     . (Join-Path $script:RepoRoot 'lib\config_manager.ps1')
     $script:BedrockConfigPath = Join-Path $script:RepoRoot 'bedrock-config.json'
+    $script:OldPowerShellProfileTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+    $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path ([IO.Path]::GetTempPath()) 'juggernaut-installer-test-nonexistent-profile.ps1'
+}
+
+AfterAll {
+    if ($null -eq $script:OldPowerShellProfileTargets) {
+        Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue
+    } else {
+        $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $script:OldPowerShellProfileTargets
+    }
 }
 
 Describe 'install.sh robustness' {
@@ -19,13 +29,19 @@ Describe 'install.sh robustness' {
     It 'creates a user-local juggernaut launcher and prints verification guidance' {
         $script:InstallSh | Should -Match ([regex]::Escape('.local/bin'))
         $script:InstallSh | Should -Match 'ln -sfn'
-        $script:InstallSh | Should -Match 'juggernaut doctor --v2'
+        $script:InstallSh | Should -Match 'juggernaut doctor'
     }
 
     It 'does not run setup by default' {
         $script:InstallSh | Should -Match ([regex]::Escape('--configure'))
-        $script:InstallSh | Should -Match ([regex]::Escape('./juggernaut apply --v2'))
+        $script:InstallSh | Should -Match ([regex]::Escape('./juggernaut apply'))
         $script:InstallSh | Should -Not -Match ([regex]::Escape('exec bash ./setup'))
+    }
+
+    It 'can install an explicit branch or ref for PR testing' {
+        $script:InstallSh | Should -Match ([regex]::Escape('--ref'))
+        $script:InstallSh | Should -Match ([regex]::Escape('JUGGERNAUT_REF'))
+        $script:InstallSh | Should -Match ([regex]::Escape('git clone --branch "$REF"'))
     }
 
     It 'backs up a dirty existing install before cloning a fresh copy' {
@@ -40,19 +56,31 @@ Describe 'install.ps1 robustness' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('.local\bin'))
         $script:InstallPs1 | Should -Match 'juggernaut\.ps1'
         $script:InstallPs1 | Should -Match 'juggernaut\.cmd'
+        $script:InstallPs1 | Should -Not -Match ([regex]::Escape('exit `$LASTEXITCODE'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('exit /b %ERRORLEVEL%'))
     }
 
     It 'prints PATH and execution-policy guidance' {
         $script:InstallPs1 | Should -Match 'PATH'
         $script:InstallPs1 | Should -Match ([regex]::Escape('If PowerShell blocks first run scripts, run:'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'))
-        $script:InstallPs1 | Should -Match 'juggernaut doctor --v2'
+        $script:InstallPs1 | Should -Match 'juggernaut doctor'
     }
 
     It 'does not run setup by default' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('[switch]$Configure'))
-        $script:InstallPs1 | Should -Match ([regex]::Escape('juggernaut.ps1 apply --v2'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('Convert-GnuStyleArgs'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('commands\apply.ps1'))
+        $script:InstallPs1 | Should -Not -Match ([regex]::Escape('juggernaut.ps1 apply --v2'))
+        $script:InstallPs1 | Should -Not -Match ([regex]::Escape('exit $LASTEXITCODE'))
         $script:InstallPs1 | Should -Not -Match ([regex]::Escape('setup-claude-bedrock.ps1 @SetupArgs'))
+    }
+
+    It 'can install an explicit branch or ref for PR testing' {
+        $script:InstallPs1 | Should -Match ([regex]::Escape('[string]$Ref'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('JUGGERNAUT_REF'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('git clone --branch $Ref'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('checkout --quiet FETCH_HEAD'))
     }
 
     It 'backs up a dirty existing install before cloning a fresh copy' {
@@ -111,6 +139,63 @@ Describe 'install.ps1 robustness' {
             $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
             if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
             Remove-Item -Path $tmpHome,$tmpWork -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'scriptblock installer -Ref -Configure returns and writes API-key settings' {
+        $tmpRoot = Join-Path ([IO.Path]::GetTempPath()) ("jug-inst-scenario-" + [Guid]::NewGuid().ToString('N'))
+        $src = Join-Path $tmpRoot 'src'
+        $remote = Join-Path $tmpRoot 'repo.git'
+        $testHome = Join-Path $tmpRoot 'home'
+        New-Item -ItemType Directory -Path $tmpRoot,$testHome -Force | Out-Null
+
+        $oldHomeVar = $HOME; $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldRepo = $env:JUGGERNAUT_REPO_URL
+        $oldDir = $env:JUGGERNAUT_DIR; $oldLocation = (Get-Location).Path
+        try {
+            git clone -q $script:RepoRoot $src
+            git -C $src checkout -q -b scenario-ref
+            git -C $src config user.email test@example.invalid
+            git -C $src config user.name 'Juggernaut Test'
+            Set-Content -Path (Join-Path $src 'VERSION') -Value 'scenario-ref' -Encoding ascii
+            git -C $src add VERSION
+            git -C $src commit -q -m 'scenario ref'
+            git clone --bare -q $src $remote
+
+            Set-Variable -Name HOME -Value $testHome -Scope Global -Force
+            $env:HOME = $testHome; $env:USERPROFILE = $testHome
+            $env:JUGGERNAUT_REPO_URL = $remote
+            $env:JUGGERNAUT_DIR = Join-Path $testHome '.juggernaut'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $testHome 'PowerShell\profile.ps1'
+
+            $installer = Get-Content (Join-Path $script:RepoRoot 'install.ps1') -Raw
+            $output = & ([scriptblock]::Create($installer)) -Ref scenario-ref -Configure `
+                -Auth bedrock-api-key -BedrockKey br-ci-token -Storage profile 2>&1 | Out-String
+            $afterConfigure = 'still-running-after-configure'
+
+            $output | Should -Not -Match ([regex]::Escape("unknown option '--ref'"))
+            $output | Should -Not -Match ([regex]::Escape("got: '-Auth'"))
+            (Get-Content (Join-Path $testHome '.juggernaut\VERSION') -Raw).Trim() | Should -Be 'scenario-ref'
+            $settings = Read-Settings -Path (Join-Path $testHome '.claude\settings.json')
+            $settings['juggernaut']['auth']['mode'] | Should -Be 'bedrock-api-key'
+            $settings['juggernaut']['auth']['storage'] | Should -Be 'profile'
+            (Get-Content $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -Raw) | Should -Match ([regex]::Escape('br-ci-token'))
+            $afterConfigure | Should -Be 'still-running-after-configure'
+
+            $doctorOutput = & (Join-Path $testHome '.local\bin\juggernaut.cmd') doctor --v2 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0
+            $doctorOutput | Should -Match ([regex]::Escape('Auth: Bedrock API key'))
+            $doctorOutput | Should -Match ([regex]::Escape('Status: OK'))
+            $doctorOutput | Should -Match ([regex]::Escape('No issues found'))
+            $doctorOutput | Should -Not -Match 'ParserError|Unexpected token'
+        } finally {
+            Set-Location $oldLocation
+            Set-Variable -Name HOME -Value $oldHomeVar -Scope Global -Force
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
+            if ($null -eq $oldRepo) { Remove-Item Env:\JUGGERNAUT_REPO_URL -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_REPO_URL = $oldRepo }
+            if ($null -eq $oldDir) { Remove-Item Env:\JUGGERNAUT_DIR -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_DIR = $oldDir }
+            Remove-Item -Path $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }

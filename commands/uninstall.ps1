@@ -15,7 +15,8 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $env:BEDROCK_CONFIG_PATH = if ($env:BEDROCK_CONFIG_PATH) { $env:BEDROCK_CONFIG_PATH } else { Join-Path $RepoRoot 'bedrock-config.json' }
 
-$v2Active = ($env:JUGGERNAUT_USE_V2 -eq '1') -or $UseV2
+$v2Active = if ($env:JUGGERNAUT_USE_V2 -eq '0') { $false } else { $true }
+if ($UseV2) { $v2Active = $true }
 foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
         '^--v2$'                   { $v2Active = $true }
@@ -50,8 +51,8 @@ if ($Version) {
 }
 
 if (-not $v2Active) {
-    Write-Output 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
-    exit 0
+    [Console]::Error.WriteLine("juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1).")
+    exit 2
 }
 
 if ($Scope -and $Scope -notin @('user', 'project')) {
@@ -61,6 +62,7 @@ if ($Scope -and $Scope -notin @('user', 'project')) {
 
 . (Join-Path $RepoRoot 'lib\config_manager.ps1')
 . (Join-Path $RepoRoot 'lib\profile_writer.ps1')
+. (Join-Path $RepoRoot 'lib\profile_paths.ps1')
 . (Join-Path $RepoRoot 'lib\keychain.ps1')
 
 # ---------------------------------------------------------------------------
@@ -83,26 +85,15 @@ if (Test-Path $projectPath) {
 if ($Scope -eq 'user')    { $hasProject = $false }
 if ($Scope -eq 'project') { $hasUser    = $false }
 
-# Scan known shell profiles for the marker block
-$homePath = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { '' }
-$profileTargets = @()
-foreach ($shell in @('bash', 'zsh', 'fish')) {
-    $p = Get-ProfileWriterShellConfigPath -Shell $shell
-    if ($p -and (Test-ProfileWriterHasBlock -ProfileFile $p)) {
-        $profileTargets += $p
-    }
-}
-if ((Get-KeychainOS) -eq 'windows') {
-    foreach ($p in (Get-ProfileWriterPowerShellProfileTargets)) {
-        if ($p -and (Test-ProfileWriterHasBlock -ProfileFile $p)) {
-            $profileTargets += $p
-        }
-    }
-}
-$profileTargets = @($profileTargets | Select-Object -Unique)
+# Scan all known shell profiles for the marker block (canonical candidate list)
+$profileTargets = @(
+    Get-ProfilePathsV1Candidates | Where-Object {
+        $_ -and (Test-ProfileWriterHasBlock -ProfileFile $_)
+    } | Select-Object -Unique
+)
 
 $hasKeychain = $false
-if (Test-KeychainAvailable) {
+if (($hasUser -or $hasProject -or $profileTargets.Count -gt 0) -and (Test-KeychainAvailable)) {
     $kv = try { Get-KeychainEntry } catch { $null }
     if ($kv) { $hasKeychain = $true }
 }

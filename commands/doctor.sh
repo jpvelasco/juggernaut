@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BEDROCK_CONFIG_PATH="${BEDROCK_CONFIG_PATH:-$SCRIPT_DIR/bedrock-config.json}"
 export BEDROCK_CONFIG_PATH
 
-v2_active="${JUGGERNAUT_USE_V2:-0}"
+v2_active="${JUGGERNAUT_USE_V2:-1}"
 requested_scope=""
 for arg in "$@"; do
   case "$arg" in
@@ -34,8 +34,8 @@ EOF
 done
 
 if [[ "$v2_active" != "1" ]]; then
-  echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
-  exit 0
+  echo "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)." >&2
+  exit 2
 fi
 
 case "${requested_scope:-}" in
@@ -46,6 +46,7 @@ esac
 . "$SCRIPT_DIR/lib/config_manager.sh"
 . "$SCRIPT_DIR/lib/schema.sh"
 . "$SCRIPT_DIR/lib/profile_writer.sh"
+. "$SCRIPT_DIR/lib/profile_paths.sh"
 . "$SCRIPT_DIR/lib/keychain.sh"
 . "$SCRIPT_DIR/lib/doctor.sh"
 
@@ -104,6 +105,10 @@ else
   DOCTOR_FAILS=$((DOCTOR_FAILS + 1))
   printf 'none (no Juggernaut v2 block found)\n'
 fi
+
+# ── v1 Artifacts ──────────────────────────────────────────────────────────────
+doctor_section "v1 Artifacts"
+doctor_v1_artifacts "${user_settings:-{\}}" "$user_has_block"
 
 # Resolve which block to use for the detailed checks below.
 # Honour --scope if given; otherwise use the active scope.

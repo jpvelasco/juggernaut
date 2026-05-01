@@ -16,10 +16,10 @@ param(
 
 if ($Force) { $Yes = $true }
 
-# Feature flag gate - v2 commands are dormant until explicitly enabled.
-if ($env:JUGGERNAUT_USE_V2 -ne '1') {
-    Write-Host 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
-    exit 0
+# Subcommand safety — must be invoked via the juggernaut dispatcher.
+if ($env:JUGGERNAUT_USE_V2 -eq '0') {
+    [Console]::Error.WriteLine("juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1).")
+    exit 2
 }
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path

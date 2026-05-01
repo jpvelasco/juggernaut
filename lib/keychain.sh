@@ -46,10 +46,8 @@ keychain_store() {
   os="$(keychain_detect_os)"
   case "$os" in
     macos)
-      security delete-generic-password \
-        -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" 2>/dev/null || true
       security add-generic-password \
-        -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w "$key" 2>/dev/null
+        -U -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w "$key" 2>/dev/null
       ;;
     linux|wsl)
       printf '%s' "$key" | secret-tool store \

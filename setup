@@ -60,6 +60,11 @@ if [[ "$JUGGERNAUT_LEGACY_V1" != "1" && "$JUGGERNAUT_V2_ACTIVE" == "1" ]]; then
     exec "$SCRIPT_DIR/juggernaut" apply "$@"
 fi
 
+# v1 legacy path — print deprecation notice then continue.
+if [[ "${JUGGERNAUT_SUPPRESS_DEPRECATION:-0}" != "1" ]]; then
+    echo "Juggernaut v1 is deprecated and will be removed in v3.0. Run without --legacy-v1 for v2." >&2
+fi
+
 # Pass through version/help flags
 for arg in "$@"; do
     [[ "$arg" == "--version" || "$arg" == "-v" ]] && {

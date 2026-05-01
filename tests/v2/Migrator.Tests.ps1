@@ -14,13 +14,13 @@ BeforeAll {
 # Feature flag gate
 # ---------------------------------------------------------------------------
 Describe 'migrate.ps1 feature flag' {
-    It 'exits 0 without JUGGERNAUT_USE_V2=1' {
+    It 'exits 2 with JUGGERNAUT_USE_V2=0' {
         $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
         $migrate  = Join-Path $repoRoot 'commands\migrate.ps1'
         $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$migrate`"" `
             -PassThru -Wait -NoNewWindow `
-            -Environment @{ JUGGERNAUT_USE_V2 = '' }
-        $proc.ExitCode | Should -Be 0
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
     }
 }
 

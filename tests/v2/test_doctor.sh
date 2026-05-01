@@ -13,16 +13,17 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
 
-section "v2 gate"
-if output="$(bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"; then
-  if [[ "$output" == *"Juggernaut v2 is not active. Use --v2 to enable v2 commands."* ]]; then
-    pass
-  else
-    fail "expected inactive message, got: $output"
-  fi
-else
-  fail "doctor.sh should exit 0 when v2 is inactive"
-fi
+section "v2 gate — JUGGERNAUT_USE_V2=0 exits 2"
+JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/doctor.sh" >/dev/null 2>&1
+_RC=$?
+if [[ "$_RC" -eq 2 ]]; then pass; else fail "doctor.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $_RC)"; fi
+
+section "v2 default — runs without JUGGERNAUT_USE_V2 set"
+# v2 is ON by default; doctor with no settings → not necessarily OK but must not exit 2.
+unset JUGGERNAUT_USE_V2 2>/dev/null || true
+JUGGERNAUT_USE_V2= bash "$REPO_ROOT/commands/doctor.sh" >/dev/null 2>&1 || true
+_RC=$?
+if [[ "$_RC" -ne 2 ]]; then pass; else fail "doctor.sh should run (not exit 2) when JUGGERNAUT_USE_V2 is unset (got $_RC)"; fi
 
 TMP_HOME="$(mktemp -d)"
 TMP_WORK="$(mktemp -d)"
@@ -40,7 +41,29 @@ unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 
 . "$REPO_ROOT/lib/schema.sh"
 . "$REPO_ROOT/lib/config_manager.sh"
+. "$REPO_ROOT/lib/profile_writer.sh"
+. "$REPO_ROOT/lib/keychain.sh"
+. "$REPO_ROOT/lib/doctor.sh"
 set +e
+
+section "keychain read errors are visible"
+keychain_available() { return 0; }
+keychain_get() { echo "simulated keychain failure" >&2; return 2; }
+ERR_BLOCK="$(
+  J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
+    J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+    J_SHELL_FALLBACK_MODE=settings-only \
+    schema_new_juggernaut_block
+)"
+OUTPUT="$(doctor_credentials "$ERR_BLOCK" "$TMP_HOME/.missing-profile" 2>&1)"
+if [[ "$OUTPUT" == *"Keychain: WARN (simulated keychain failure)"* &&
+      "$OUTPUT" == *"Details: no API key found in env, keychain, or shell profile"* ]]; then
+  pass
+else
+  fail "expected visible keychain read failure"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+unset -f keychain_available keychain_get
 
 write_scope_settings() {
   local scope="$1" target="$2" region="$3"

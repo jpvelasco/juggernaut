@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-v2_active="${JUGGERNAUT_USE_V2:-0}"
+v2_active="${JUGGERNAUT_USE_V2:-1}"
 requested_scope=""
 for arg in "$@"; do
   case "$arg" in
@@ -32,8 +32,8 @@ EOF
 done
 
 if [[ "$v2_active" != "1" ]]; then
-  echo "Juggernaut v2 is not active. Use --v2 to enable v2 commands." >&2
-  exit 0
+  echo "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)." >&2
+  exit 2
 fi
 
 case "${requested_scope:-}" in

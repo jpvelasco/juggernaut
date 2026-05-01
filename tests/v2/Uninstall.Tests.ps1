@@ -68,16 +68,11 @@ Describe 'uninstall.ps1' {
     # ---------------------------------------------------------------------------
     # v2 gate
     # ---------------------------------------------------------------------------
-    It 'exits 0 with inactive message when v2 flag absent' {
-        $oldV2 = $env:JUGGERNAUT_USE_V2
-        try {
-            $env:JUGGERNAUT_USE_V2 = '0'
-            $output = & $script:UninstallScript 2>&1 | Out-String
-            $output | Should -Match 'Juggernaut v2 is not active'
-            $LASTEXITCODE | Should -Be 0
-        } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldV2
-        }
+    It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$script:UninstallScript`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
     }
 
     # ---------------------------------------------------------------------------

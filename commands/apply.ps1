@@ -36,7 +36,6 @@ $RepoRoot      = Split-Path -Parent $PSScriptRoot_
 $versionFile = Join-Path $RepoRoot 'VERSION'
 $JuggernautVersion = if (Test-Path $versionFile) { (Get-Content $versionFile -Raw).Trim() } else { 'unknown' }
 
-$env:JUGGERNAUT_USE_V2 = '1'
 if (-not $env:BEDROCK_CONFIG_PATH) {
     $env:BEDROCK_CONFIG_PATH = Join-Path $RepoRoot 'bedrock-config.json'
 }
@@ -46,6 +45,7 @@ if (-not $env:BEDROCK_CONFIG_PATH) {
 . (Join-Path $RepoRoot 'lib\migrator.ps1')
 . (Join-Path $RepoRoot 'lib\keychain.ps1')
 . (Join-Path $RepoRoot 'lib\profile_writer.ps1')
+. (Join-Path $RepoRoot 'lib\profile_paths.ps1')
 
 if ($Help) {
     @'
@@ -117,11 +117,7 @@ $hasV2Block = Test-HasJuggernautBlock -Settings $existingSettings
 # Step 2: Explicit migration - detect and migrate v1 profile blocks.
 # ---------------------------------------------------------------------------
 if (-not $hasV2Block) {
-    $v1Candidates = @(
-        (Join-Path $HomeDir '.bashrc'),
-        (Join-Path $HomeDir '.zshrc'),
-        (Join-Path $HomeDir '.config\fish\config.fish')
-    )
+    $v1Candidates = @(Get-ProfilePathsV1Candidates)
     if ($ForceMigrationPrompt) { $env:JUGGERNAUT_FORCE_MIGRATION_PROMPT = '1' }
     foreach ($candidate in $v1Candidates) {
         if (Test-Path $candidate) {

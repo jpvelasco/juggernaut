@@ -14,7 +14,8 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $env:BEDROCK_CONFIG_PATH = if ($env:BEDROCK_CONFIG_PATH) { $env:BEDROCK_CONFIG_PATH } else { Join-Path $RepoRoot 'bedrock-config.json' }
 
-$v2Active = ($env:JUGGERNAUT_USE_V2 -eq '1') -or $UseV2
+$v2Active = if ($env:JUGGERNAUT_USE_V2 -eq '0') { $false } else { $true }
+if ($UseV2) { $v2Active = $true }
 foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
         '^--v2$' { $v2Active = $true; break }
@@ -46,8 +47,8 @@ if ($Version) {
 }
 
 if (-not $v2Active) {
-    Write-Output 'Juggernaut v2 is not active. Use --v2 to enable v2 commands.'
-    return
+    [Console]::Error.WriteLine("juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1).")
+    exit 2
 }
 
 if ($Scope -and $Scope -notin @('user','project')) {
@@ -58,6 +59,7 @@ if ($Scope -and $Scope -notin @('user','project')) {
 . (Join-Path $RepoRoot 'lib\config_manager.ps1')
 . (Join-Path $RepoRoot 'lib\schema.ps1')
 . (Join-Path $RepoRoot 'lib\profile_writer.ps1')
+. (Join-Path $RepoRoot 'lib\profile_paths.ps1')
 . (Join-Path $RepoRoot 'lib\keychain.ps1')
 . (Join-Path $RepoRoot 'lib\doctor.ps1')
 
@@ -108,6 +110,11 @@ if ($activeScope) {
     $script:DoctorFails += 1
     Write-Output 'none (no Juggernaut v2 block found)'
 }
+
+# -- v1 Artifacts --------------------------------------------------------------
+Write-Output ''
+Write-Output 'v1 Artifacts'
+Write-DoctorV1Artifacts -Settings $userSettings -HasV2Block ([bool]$userHasBlock)
 
 # Resolve which block to use for the detailed checks below.
 $checkScope = if ($Scope) { $Scope } else { $activeScope }

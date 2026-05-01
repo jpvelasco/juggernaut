@@ -45,15 +45,24 @@ apply_dry_run() {
 }
 
 # ---------------------------------------------------------------------------
-# Feature flag gate: apply.sh exits non-zero without JUGGERNAUT_USE_V2=1
+# Interactive prompts work from piped installers by reading /dev/tty.
 # ---------------------------------------------------------------------------
-section "feature flag gate"
-JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/apply.sh" --dry-run >/dev/null 2>&1
-RC=$?
-# The script sources lib/schema.sh which requires jq. Without the flag the
-# script still proceeds because apply.sh always requires v2. But the gate
-# applies at the dispatcher level (juggernaut). Verify apply.sh itself works
-# when JUGGERNAUT_USE_V2=1.
+section "interactive prompts prefer /dev/tty"
+APPLY_SH="$(cat "$REPO_ROOT/commands/apply.sh")"
+if [[ "$APPLY_SH" == *"/dev/tty"* &&
+      "$APPLY_SH" == *"_apply_prompt_secret"* &&
+      "$APPLY_SH" == *"_apply_prompt_confirm"* &&
+      "$APPLY_SH" != *"elif ! _apply_has_tty"* ]]; then
+  pass
+else
+  fail "apply.sh should attempt /dev/tty prompts instead of pre-classifying piped installers as non-interactive"
+fi
+
+# ---------------------------------------------------------------------------
+# apply.sh always runs (no gate — gate is at the dispatcher). Verify it works.
+# ---------------------------------------------------------------------------
+section "apply.sh runs regardless of JUGGERNAUT_USE_V2 (gate is dispatcher-only)"
+# apply.sh has no gate check; it proceeds even with JUGGERNAUT_USE_V2=0.
 JUGGERNAUT_USE_V2=1 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" \
   bash "$REPO_ROOT/commands/apply.sh" --dry-run --auth=iam >/dev/null 2>&1
 RC=$?
@@ -311,7 +320,7 @@ mkdir -p "$FAKE_HOME_CONFIRM/.claude"
 cp "$FIXTURES/v1_iam_default.sh" "$FAKE_HOME_CONFIRM/.bashrc"
 
 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" JUGGERNAUT_USE_V2=1 \
-  HOME="$FAKE_HOME_CONFIRM" bash "$REPO_ROOT/commands/apply.sh" \
+  JUGGERNAUT_NO_TTY_PROMPTS=1 HOME="$FAKE_HOME_CONFIRM" bash "$REPO_ROOT/commands/apply.sh" \
   --auth=iam --no-shell-fallback \
   >/dev/null 2>&1
 RC=$?
