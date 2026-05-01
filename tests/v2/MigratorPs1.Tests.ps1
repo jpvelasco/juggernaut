@@ -10,6 +10,8 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib\schema.ps1')
     . (Join-Path $script:RepoRoot 'lib\config_manager.ps1')
     . (Join-Path $script:RepoRoot 'lib\migrator.ps1')
+    . (Join-Path $script:RepoRoot 'lib\profile_paths.ps1')
+    . (Join-Path $script:RepoRoot 'lib\profile_writer.ps1')
     $script:BedrockConfigPath = Join-Path $script:RepoRoot 'bedrock-config.json'
     $script:Fixtures = Join-Path $script:RepoRoot 'tests\v2\fixtures'
 
@@ -212,6 +214,42 @@ $env:CLAUDE_CODE_USE_BEDROCK = '1'
         } finally {
             if ($null -eq $oldScan) { Remove-Item Env:\JUGGERNAUT_PS_V1_SCAN -ErrorAction SilentlyContinue }
             else { $env:JUGGERNAUT_PS_V1_SCAN = $oldScan }
+        }
+    }
+}
+
+Describe 'migrate.ps1 -Clean cleanup' {
+    It 'removes stale marked v2 fallback blocks even when no v1 blocks remain' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-clean-ps-" + [Guid]::NewGuid().ToString('N'))
+        $profilePath = Join-Path $tmpHome 'PowerShell\profile.ps1'
+        $settingsPath = Join-Path $tmpHome '.claude\settings.json'
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+        try {
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $profilePath
+            New-Item -ItemType Directory -Path (Split-Path $profilePath -Parent) -Force | Out-Null
+            @'
+# BEGIN: Claude Code Bedrock Configuration
+# Juggernaut v2 shell fallback
+$env:AWS_REGION = 'us-west-2'
+# END: Claude Code Bedrock Configuration
+'@ | Set-Content -Path $profilePath -Encoding utf8
+
+            $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
+                -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'user' `
+                -BedrockConfigPath $script:BedrockConfigPath
+            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block `
+                -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $block)
+            Write-SettingsAtomic -Path $settingsPath -Content $merged
+
+            & (Join-Path $script:RepoRoot 'commands\migrate.ps1') -Clean -Yes
+            $LASTEXITCODE | Should -Be 0
+            (Get-Content $profilePath -Raw) | Should -Not -Match 'BEGIN: Claude Code Bedrock Configuration'
+        } finally {
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }
