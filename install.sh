@@ -124,10 +124,14 @@ backup_existing_install() {
   mv "$INSTALL_DIR" "$backup"
 
   # Rotate: keep only the 5 most recent backups unless --keep-all-backups was passed.
-  if [[ "$KEEP_ALL_BACKUPS" != "1" ]]; then
+  if [[ "$KEEP_ALL_BACKUPS" != "1" ]] && [[ -n "$INSTALL_DIR" ]]; then
     local -a old_backups
-    # shellcheck disable=SC2012
-    mapfile -t old_backups < <(ls -1dt "${INSTALL_DIR}.backup."* 2>/dev/null | tail -n +6)
+    mapfile -t old_backups < <(
+      find "$(dirname "$INSTALL_DIR")" -maxdepth 1 \
+        -name "$(basename "$INSTALL_DIR").backup.*" -type d -print0 \
+        | xargs -0 ls -1dt 2>/dev/null \
+        | tail -n +6
+    )
     for old in "${old_backups[@]+"${old_backups[@]}"}"; do
       rm -rf -- "$old"
     done

@@ -148,7 +148,7 @@ $ShimCmd = Join-Path $ShimDir 'juggernaut.cmd'
 # Write the install dir into a sidecar file so the shim resolves at runtime.
 # This means moving the install dir only requires updating the .txt file.
 $InstallDirTxt = Join-Path $ShimDir 'juggernaut-install-dir.txt'
-Set-Content -Path $InstallDirTxt -Value $InstallDir -Encoding utf8 -NoNewline
+Set-Content -Path $InstallDirTxt -Value $InstallDir -Encoding utf8 -NoNewline -ErrorAction Stop
 
 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$PassArgs)
