@@ -201,8 +201,6 @@ esac
 # ---------------------------------------------------------------------------
 # Upgrade banner — show version diff and handle v1→v2 migration prompt.
 # ---------------------------------------------------------------------------
-RELEASE_VERSION="$(tr -d '\r\n ' < "$INSTALL_DIR/VERSION" 2>/dev/null || true)"
-
 if [[ -f "$INSTALL_DIR/lib/upgrade_banner.sh" && -f "$INSTALL_DIR/lib/profile_paths.sh" && -f "$INSTALL_DIR/lib/migrator.sh" && -f "$INSTALL_DIR/lib/config_manager.sh" ]]; then
   . "$INSTALL_DIR/lib/profile_paths.sh"
   . "$INSTALL_DIR/lib/config_manager.sh"
