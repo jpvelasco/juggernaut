@@ -74,7 +74,7 @@ schema_new_juggernaut_block() {
   local region="${J_REGION:-$(schema_default_region)}"
   local shell_mode="${J_SHELL_FALLBACK_MODE:-both}"
   local scope="${J_SCOPE:-user}"
-  local version="${J_VERSION:-2.3.0}"
+  local version="${J_VERSION:-2.3.1}"
 
   # Assemble env map: start from bedrock-config.json defaults, then overlay.
   local env_json
