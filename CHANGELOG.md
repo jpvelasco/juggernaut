@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [2.3.2] - 2026-05-01
+
+### Fixed
+
+- **PowerShell migration cleanup** — `migrate -Clean -Yes` now scans the canonical PowerShell profile paths and removes any Juggernaut-managed profile block, including stale blocks left by failed v2.3.0/v2.3.1 upgrade attempts.
+- **PowerShell upgrade detection** — marked v2 shell fallback blocks are no longer reported as v1 blocks by the upgrade banner.
+- **PowerShell banner output** — installer upgrade banners now use ASCII borders/arrows to avoid mojibake in legacy Windows consoles.
+
 ## [2.3.1] - 2026-05-01
 
 ### Fixed
@@ -189,6 +197,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[2.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.2
 [2.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.1
 [2.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.0
 [2.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.5

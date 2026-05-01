@@ -25,6 +25,17 @@ export CLAUDE_CODE_USE_BEDROCK="1"
 '@ | Set-Content -Path $path -Encoding utf8
     }
 
+    function New-V2FallbackProfile($path) {
+        $dir = Split-Path $path -Parent
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        @'
+# BEGIN: Claude Code Bedrock Configuration
+# Juggernaut v2 shell fallback
+$env:AWS_REGION = 'us-west-2'
+# END: Claude Code Bedrock Configuration
+'@ | Set-Content -Path $path -Encoding utf8
+    }
+
     function New-V2Settings($path, $region = 'us-west-2') {
         $dir = Split-Path $path -Parent
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -72,6 +83,27 @@ Describe 'Get-UpgradeBannerState' {
             $state.has_v1           | Should -BeTrue
             $state.has_v2_settings  | Should -BeFalse
             $state.v1_profiles.Count | Should -BeGreaterOrEqual 1
+        } finally {
+            $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
+            Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'ignores marked v2 shell fallback blocks when detecting v1' {
+        $tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-ub-v2fb-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tmpHome -Force | Out-Null
+        $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+        try {
+            $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
+            $profilePath = Join-Path $tmpHome 'PowerShell\profile.ps1'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $profilePath
+            New-V2FallbackProfile $profilePath
+            $state = Get-UpgradeBannerState -SettingsPath (Join-Path $tmpHome '.claude\settings.json')
+            $state.has_v1      | Should -BeFalse
+            $state.v1_profiles | Should -BeNullOrEmpty
         } finally {
             $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
             if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }

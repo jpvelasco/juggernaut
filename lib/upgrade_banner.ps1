@@ -24,6 +24,7 @@ function Get-UpgradeBannerState {
         $content = try { Get-Content -Path $candidate -Raw -Encoding utf8 -ErrorAction Stop } catch { '' }
         $content = $content -replace "`r", ''
         if ($content -notmatch '# BEGIN: Claude Code Bedrock Configuration') { continue }
+        if ($content.Contains('# Juggernaut v2 shell fallback')) { continue }
         $v1Profiles.Add($candidate)
         $anyV1 = $true
         if ($env:JUGGERNAUT_FORCE_MIGRATION_PROMPT -eq '1' -or $content -notmatch '(?m)^# MigrationDeclined:') {
@@ -79,9 +80,9 @@ function Write-UpgradeBanner {
 
     $err = [Console]::Error
     $err.WriteLine('')
-    $err.WriteLine('╔══════════════════════════════════════════════════════════════╗')
+    $err.WriteLine('+--------------------------------------------------------------+')
     if ($State.is_upgrade -and $State.installed_version) {
-        $err.WriteLine("  Juggernaut: upgrading $($State.installed_version) → $($State.release_version)")
+        $err.WriteLine("  Juggernaut: upgrading $($State.installed_version) -> $($State.release_version)")
     } else {
         $err.WriteLine("  Juggernaut $($State.release_version)")
     }
@@ -98,7 +99,7 @@ function Write-UpgradeBanner {
         $err.WriteLine('  Continue?  y = migrate to v2   n = exit')
         $err.WriteLine('  Keep v1?   pass -LegacyV1 to stay on v1 for now')
     }
-    $err.WriteLine('╚══════════════════════════════════════════════════════════════╝')
+    $err.WriteLine('+--------------------------------------------------------------+')
     $err.WriteLine('')
 }
 
