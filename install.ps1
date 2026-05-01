@@ -166,7 +166,8 @@ if (-not (Test-Path $target)) {
 }
 $env:JUGGERNAUT_USE_V2 = '1'
 & $target @PassArgs
-exit $LASTEXITCODE
+$code = $LASTEXITCODE
+exit $code
 '@ | Set-Content -Path $ShimPs1 -Encoding utf8
 
 @"
@@ -235,7 +236,7 @@ if ((Test-Path $bannerLib) -and (Test-Path $profilePathsLib) -and (Test-Path $mi
     }
 }
 
-Write-Host 'Verify with: juggernaut doctor'
+Write-Host 'Verify with: juggernaut doctor --v2'
 Write-Host 'Configure with one of:'
 Write-Host '  juggernaut apply --auth=bedrock-api-key'
 Write-Host '  juggernaut apply --auth=iam'
@@ -244,7 +245,11 @@ if ($Configure) {
     $oldLocation = (Get-Location).Path
     try {
         Set-Location $InstallDir
-        $applyArgs = Convert-GnuStyleArgs -InputArgs $SetupArgs
+        function Convert-InstallerApplyArgs {
+            param([string[]]$InputArgs)
+            Convert-GnuStyleArgs -InputArgs $InputArgs
+        }
+        $applyArgs = Convert-InstallerApplyArgs -InputArgs $SetupArgs
         & (Join-Path $InstallDir 'commands\apply.ps1') @applyArgs
     } finally {
         Set-Location $oldLocation

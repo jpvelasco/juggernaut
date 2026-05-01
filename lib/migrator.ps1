@@ -60,7 +60,7 @@ function Get-MigratorV1BlockRaw {
 function ConvertFrom-MigratorV1Block {
     param([Parameter(Mandatory)][string]$RawBlock)
 
-    $lines = $RawBlock -split "`n"
+    $lines = $RawBlock -split "`r?`n"
 
     $authMode    = ($lines | Where-Object { $_ -match '^# Auth mode: (.+)' } | Select-Object -First 1) -replace '^# Auth mode: ', ''
     if (-not $authMode) { $authMode = 'iam' }

@@ -239,14 +239,14 @@ if [[ -f "$INSTALL_DIR/lib/upgrade_banner.sh" && -f "$INSTALL_DIR/lib/profile_pa
   fi
 fi
 
-echo "Verify with: juggernaut doctor"
+echo "Verify with: juggernaut doctor --v2"
 echo "Configure with one of:"
 echo "  juggernaut apply --auth=bedrock-api-key"
 echo "  juggernaut apply --auth=iam"
 
 if [[ "$CONFIGURE" == "1" ]]; then
   cd "$INSTALL_DIR"
-  exec bash ./juggernaut apply "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
+  exec bash ./juggernaut apply --v2 "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
 elif [[ ${#SETUP_ARGS[@]} -gt 0 ]]; then
   echo "Note: install arguments after --version were ignored. Use --configure to run apply during install." >&2
 fi
