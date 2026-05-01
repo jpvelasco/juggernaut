@@ -44,6 +44,7 @@ make_v2_settings() {
     J_SHELL_FALLBACK_MODE=settings-only schema_new_juggernaut_block)"
   config_write_atomic "$settings_path" \
     "$(config_merge_juggernaut_block '{}' "$block" "$(schema_derive_native_keys "$block")")"
+  set +e
 }
 
 # ---------------------------------------------------------------------------
@@ -53,10 +54,12 @@ run_doctor() {
   local home="$1" work="${2:-}"
   [[ -z "$work" ]] && work="$home/work"
   (
+    # shellcheck disable=SC2030
     export HOME="$home" USERPROFILE="$home" SHELL="bash"
+    # shellcheck disable=SC2030
     export AWS_PROFILE="juggernaut-test"
     unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
-    cd "$work"
+    cd "$work" || exit
     bash "$REPO_ROOT/commands/doctor.sh" "$@"
   ) 2>&1
 }
@@ -71,7 +74,7 @@ mkdir -p "$TMP_HOME/.claude" "$TMP_WORK"
 
 make_v1_profile "$TMP_HOME/.bashrc"
 
-OUTPUT="$(run_doctor "$TMP_HOME" "$TMP_WORK" 2>&1)"; RC=$?
+OUTPUT="$(run_doctor "$TMP_HOME" "$TMP_WORK" 2>&1)"
 # Must not exit with failure (doctor exits non-zero only on issues).
 # The key assertion: "INFO — v1 configuration detected" appears in output.
 if echo "$OUTPUT" | grep -q "INFO.*v1 configuration detected"; then pass
@@ -98,8 +101,8 @@ make_v1_profile "$TMP_HOME/.bashrc"
 make_v2_settings "$TMP_HOME/.claude/settings.json"
 
 OUTPUT="$(run_doctor "$TMP_HOME" "$TMP_WORK" 2>&1)"
-if echo "$OUTPUT" | grep -q "WARN.*v1.*alongside v2"; then pass
-else fail "expected 'WARN — found alongside v2', got: $OUTPUT"; fi
+if echo "$OUTPUT" | grep -q "v1 profile block: WARN.*found alongside v2 settings.json"; then pass
+else fail "expected 'v1 profile block: WARN — found alongside v2 settings.json', got: $OUTPUT"; fi
 if echo "$OUTPUT" | grep -q "migrate --clean"; then pass
 else fail "expected 'migrate --clean' hint, got: $OUTPUT"; fi
 
@@ -164,10 +167,12 @@ make_v1_profile "$TMP_HOME/.bashrc"
 make_v2_settings "$TMP_WORK/.claude/settings.json" "eu-west-1"
 
 OUTPUT="$(
+  # shellcheck disable=SC2031
   export HOME="$TMP_HOME" USERPROFILE="$TMP_HOME" SHELL="bash"
+  # shellcheck disable=SC2031
   export AWS_PROFILE="juggernaut-test"
   unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
-  cd "$TMP_WORK"
+  cd "$TMP_WORK" || exit
   bash "$REPO_ROOT/commands/doctor.sh" 2>&1
 )"
 
