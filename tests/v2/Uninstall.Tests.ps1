@@ -69,14 +69,10 @@ Describe 'uninstall.ps1' {
     # v2 gate
     # ---------------------------------------------------------------------------
     It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
-        $oldV2 = $env:JUGGERNAUT_USE_V2
-        try {
-            $env:JUGGERNAUT_USE_V2 = '0'
-            & $script:UninstallScript 2>&1 | Out-Null
-            $LASTEXITCODE | Should -Be 2
-        } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldV2
-        }
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$script:UninstallScript`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
     }
 
     # ---------------------------------------------------------------------------

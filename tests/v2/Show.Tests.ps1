@@ -16,14 +16,11 @@ Describe 'show.ps1' {
     }
 
     It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
-        $oldFlag = $env:JUGGERNAUT_USE_V2
-        try {
-            $env:JUGGERNAUT_USE_V2 = '0'
-            & (Join-Path $repoRoot 'commands\show.ps1') 2>&1 | Out-Null
-            $LASTEXITCODE | Should -Be 2
-        } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldFlag
-        }
+        $show = Join-Path $repoRoot 'commands\show.ps1'
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$show`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
     }
 
     It 'prints the calm section headers and values' {

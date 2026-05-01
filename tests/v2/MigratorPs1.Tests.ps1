@@ -136,6 +136,7 @@ Describe 'ConvertFrom-MigratorV1Block — powershell_v1_opusplan.ps1' {
 # ---------------------------------------------------------------------------
 Describe 'ConvertFrom-MigratorV1Block — PS profile with $env:AWS_BEARER_TOKEN_BEDROCK, no metadata comment' {
     It 'infers authMode=bedrock-api-key from $env: line when metadata comment is absent' {
+        $oldScan = $env:JUGGERNAUT_PS_V1_SCAN
         $rawBlock = @'
 # BEGIN: Claude Code Bedrock Configuration
 $env:AWS_REGION = 'us-west-2'
@@ -143,10 +144,16 @@ $env:CLAUDE_CODE_USE_BEDROCK = '1'
 $env:AWS_BEARER_TOKEN_BEDROCK = 'inferred-key'
 # END: Claude Code Bedrock Configuration
 '@
-        $parsed = ConvertFrom-MigratorV1Block -RawBlock $rawBlock
-        $parsed.authMode | Should -Be 'bedrock-api-key'
-        $parsed.storage  | Should -Be 'profile'
-        $parsed.legacyEnv.Contains('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
+        try {
+            $env:JUGGERNAUT_PS_V1_SCAN = '1'
+            $parsed = ConvertFrom-MigratorV1Block -RawBlock $rawBlock
+            $parsed.authMode | Should -Be 'bedrock-api-key'
+            $parsed.storage  | Should -Be 'profile'
+            $parsed.legacyEnv.Contains('AWS_BEARER_TOKEN_BEDROCK') | Should -BeTrue
+        } finally {
+            if ($null -eq $oldScan) { Remove-Item Env:\JUGGERNAUT_PS_V1_SCAN -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_PS_V1_SCAN = $oldScan }
+        }
     }
 }
 

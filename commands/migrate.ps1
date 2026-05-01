@@ -18,7 +18,7 @@ if ($Force) { $Yes = $true }
 
 # Subcommand safety — must be invoked via the juggernaut dispatcher.
 if ($env:JUGGERNAUT_USE_V2 -eq '0') {
-    Write-Error "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)."
+    [Console]::Error.WriteLine("juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1).")
     exit 2
 }
 

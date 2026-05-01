@@ -15,14 +15,11 @@ Describe 'doctor.ps1' {
     }
 
     It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
-        $oldFlag = $env:JUGGERNAUT_USE_V2
-        try {
-            $env:JUGGERNAUT_USE_V2 = '0'
-            & (Join-Path $repoRoot 'commands\doctor.ps1') 2>&1 | Out-Null
-            $LASTEXITCODE | Should -Be 2
-        } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldFlag
-        }
+        $doctor = Join-Path $repoRoot 'commands\doctor.ps1'
+        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$doctor`"" `
+            -PassThru -Wait -NoNewWindow `
+            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
+        $proc.ExitCode | Should -Be 2
     }
 
     It 'loads and reports missing keychain credentials under Windows PowerShell' {
@@ -76,12 +73,14 @@ Describe 'doctor.ps1' {
         $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
         $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldShell = $env:SHELL
         $oldAwsProfile = $env:AWS_PROFILE; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
         $oldLocation = (Get-Location).Path
         try {
             Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
             $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
             $env:JUGGERNAUT_USE_V2 = '0'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
             $env:SHELL = 'bash'; $env:AWS_PROFILE = 'juggernaut-test'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $tmpHome 'missing-profile.ps1'
             Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
 
             $block = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
@@ -101,6 +100,8 @@ Describe 'doctor.ps1' {
             $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
             if ($null -eq $oldBearer) { Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue }
             else { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
             Remove-Item -Path $tmpHome -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
@@ -114,12 +115,14 @@ Describe 'doctor.ps1' {
         $oldHome = $env:HOME; $oldProfile = $env:USERPROFILE; $oldFlag = $env:JUGGERNAUT_USE_V2
         $oldBedrock = $env:BEDROCK_CONFIG_PATH; $oldShell = $env:SHELL
         $oldAwsProfile = $env:AWS_PROFILE; $oldBearer = $env:AWS_BEARER_TOKEN_BEDROCK
+        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
         $oldLocation = (Get-Location).Path
         try {
             Set-Variable -Name HOME -Value $tmpHome -Scope Global -Force
             $env:HOME = $tmpHome; $env:USERPROFILE = $tmpHome
             $env:JUGGERNAUT_USE_V2 = '1'; $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
             $env:SHELL = 'bash'; $env:AWS_PROFILE = 'juggernaut-test'
+            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $tmpHome 'missing-profile.ps1'
             Remove-Item Env:AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
 
             $ub = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Storage 'profile' `
@@ -152,6 +155,8 @@ Describe 'doctor.ps1' {
             $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile; $env:JUGGERNAUT_USE_V2 = $oldFlag
             $env:BEDROCK_CONFIG_PATH = $oldBedrock; $env:SHELL = $oldShell; $env:AWS_PROFILE = $oldAwsProfile
             if ($oldBearer) { $env:AWS_BEARER_TOKEN_BEDROCK = $oldBearer }
+            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
+            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
             Remove-Item -Path $tmpHome,$tmpWork -Recurse -Force -ErrorAction SilentlyContinue
         }
     }

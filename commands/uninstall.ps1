@@ -51,7 +51,7 @@ if ($Version) {
 }
 
 if (-not $v2Active) {
-    Write-Error "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)."
+    [Console]::Error.WriteLine("juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1).")
     exit 2
 }
 

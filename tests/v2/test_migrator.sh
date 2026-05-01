@@ -216,12 +216,13 @@ fi
 rm -rf "$TMP_DIR"
 
 # ---------------------------------------------------------------------------
-# Feature flag gate: migrate.sh exits 0 without JUGGERNAUT_USE_V2=1
+# Feature flag gate: migrate.sh exits 2 when v2 is explicitly disabled.
 # ---------------------------------------------------------------------------
-section "migrate.sh feature flag — graceful no-op without JUGGERNAUT_USE_V2"
+section "migrate.sh feature flag - exits 2 when v2 is disabled"
 TMP_DIR="$(mktemp -d)"
 TMP_SETTINGS="$TMP_DIR/settings.json"
 
+set +e
 JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/migrate.sh" >/dev/null 2>&1
 RC=$?
 if [[ "$RC" -eq 2 ]]; then pass; else fail "migrate.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $RC)"; fi
