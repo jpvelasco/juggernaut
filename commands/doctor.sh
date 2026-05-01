@@ -59,13 +59,19 @@ read_settings_or_empty() {
 user_path="$(config_user_settings_path)"
 project_path="$(config_project_settings_path "$PWD" 2>/dev/null || true)"
 [[ -n "$project_path" ]] || project_path="$PWD/.claude/settings.json"
+project_is_user_scope=false
+if [[ "$project_path" == "$user_path" ]]; then
+  project_is_user_scope=true
+fi
 
 user_settings=""
 project_settings=""
 if ! user_settings="$(read_settings_or_empty "$user_path")"; then
   user_settings=""
 fi
-if ! project_settings="$(read_settings_or_empty "$project_path")"; then
+if [[ "$project_is_user_scope" == "true" ]]; then
+  project_settings="{}"
+elif ! project_settings="$(read_settings_or_empty "$project_path")"; then
   project_settings=""
 fi
 
