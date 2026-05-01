@@ -124,6 +124,18 @@ If both a v1 profile block and v2 settings coexist, doctor will warn you to clea
 juggernaut migrate --clean
 ```
 
+## Migration Notes
+
+v2 is now the default. Running `juggernaut <subcommand>` uses the settings.json-based v2 flow without requiring `--v2`.
+
+To stay on the older v1 shell-profile-only flow during installation or upgrade, pass `--legacy-v1`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.0/install.sh | bash -s -- --version v2.3.0 --legacy-v1
+```
+
+The upgrade banner appears when the installer detects an existing v1 profile block or an installed version change. It explains the migration target, asks before converting v1 profile settings to v2 settings.json, and requires `--yes` or `--legacy-v1` for non-interactive installs.
+
 ### Version Pinning
 
 Use the pinned release tag URLs for a stable install:

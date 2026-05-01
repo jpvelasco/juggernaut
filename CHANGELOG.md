@@ -4,9 +4,11 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [2.3.0] - 2026-04-30
 
-### Upgrade Notes
+### Migration Notes
 
 **v2 is now the default.** Running `juggernaut <subcommand>` activates v2 without any extra flag. Pass `--legacy-v1` (or set `JUGGERNAUT_USE_V2=0`) to keep the v1 shell-profile-only path. The `--v2` flag is accepted as a no-op alias for backwards compatibility.
+
+The installer now shows an upgrade banner when it detects a v1 profile block or version change. The banner explains the v2 settings.json migration target, asks before migrating, and requires `--yes` or `--legacy-v1` for non-interactive installs.
 
 ### Changed (breaking default)
 
