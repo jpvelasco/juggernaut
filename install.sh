@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
-# install.sh — Juggernaut installer
+# install.sh - Juggernaut v3 installer (wipe-and-reinstall)
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version 2.1.2
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.0
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version 2.1.2
+#   bash install.sh --version v3.0.0
 #   bash install.sh --ref fix-branch
-#   bash install.sh --latest
+#   bash install.sh --latest --dry-run
+#
+# Destructive behavior (v3):
+#   - Strips Juggernaut and legacy "Claude Code Bedrock Configuration" BEGIN/END
+#     blocks from every known shell profile on this machine.
+#   - Removes the "juggernaut" key from ~/.claude/settings.json (backup rotation
+#     via config_manager preserves the 5 most recent copies).
+#   - Removes the "juggernaut-bedrock" OS-keychain entry.
+#   - Does NOT auto-apply. Run 'juggernaut apply --auth=iam' or
+#     'juggernaut apply --auth=bedrock-api-key' explicitly after install.
 
 set -e
 
@@ -18,11 +27,7 @@ REPO_URL="${JUGGERNAUT_REPO_URL:-https://github.com/jpvelasco/juggernaut.git}"
 INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
 VERSION=""
 REF="${JUGGERNAUT_REF:-}"
-CONFIGURE=0
-YES=0
-LEGACY_V1=0
-KEEP_ALL_BACKUPS=0
-SETUP_ARGS=()
+DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,30 +64,34 @@ while [[ $# -gt 0 ]]; do
       REF=""
       shift
       ;;
-    --configure)
-      CONFIGURE=1
+    --dry-run)
+      DRY_RUN=1
       shift
       ;;
-    --yes|-y)
-      YES=1
-      shift
-      ;;
-    --legacy-v1)
-      LEGACY_V1=1
-      shift
-      ;;
-    --keep-all-backups)
-      KEEP_ALL_BACKUPS=1
-      shift
+    --help|-h)
+      cat <<'EOF'
+Juggernaut v3 installer
+
+Usage:
+  install.sh [--version <tag>] [--ref <branch|sha>] [--latest] [--dry-run]
+
+Installs Juggernaut to ~/.juggernaut (override with JUGGERNAUT_DIR).
+Before installing, strips legacy Juggernaut/Claude-Code-Bedrock blocks from
+shell profiles, removes the 'juggernaut' key from ~/.claude/settings.json,
+and deletes the 'juggernaut-bedrock' keychain entry.
+
+--dry-run prints what would be wiped and exits without writing anything.
+EOF
+      exit 0
       ;;
     *)
-      SETUP_ARGS+=("$1")
-      shift
+      echo "Error: unknown argument '$1'" >&2
+      echo "Run 'install.sh --help' for usage." >&2
+      exit 1
       ;;
   esac
 done
 
-# Normalize version: accept "2.1.2" or "v2.1.2" — tags are always v-prefixed.
 if [[ -n "$VERSION" && "$VERSION" != v* ]]; then
   VERSION="v${VERSION}"
 fi
@@ -92,6 +101,144 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Pre-wipe summary
+# ---------------------------------------------------------------------------
+SETTINGS_PATH="$HOME/.claude/settings.json"
+KEYCHAIN_SERVICE_NAME="juggernaut-bedrock"
+
+# Shell profile candidates (must stay in sync with lib/profile_paths.sh)
+PROFILE_CANDIDATES=(
+  "$HOME/.bashrc"
+  "$HOME/.bash_profile"
+  "$HOME/.zshrc"
+  "$HOME/.config/fish/config.fish"
+  "$HOME/.profile"
+)
+
+profile_has_juggernaut_block() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  grep -qE '^# BEGIN: Juggernaut|^# BEGIN: Claude Code Bedrock Configuration' "$path" 2>/dev/null
+}
+
+settings_has_juggernaut() {
+  [[ -f "$SETTINGS_PATH" ]] || return 1
+  if command -v jq >/dev/null 2>&1; then
+    jq -e '.juggernaut // empty' "$SETTINGS_PATH" >/dev/null 2>&1
+  else
+    grep -qE '"juggernaut"[[:space:]]*:' "$SETTINGS_PATH" 2>/dev/null
+  fi
+}
+
+keychain_has_entry() {
+  case "$OSTYPE" in
+    darwin*)
+      command -v security >/dev/null 2>&1 \
+        && security find-generic-password -s "$KEYCHAIN_SERVICE_NAME" -a api-key -w >/dev/null 2>&1
+      ;;
+    linux*)
+      command -v secret-tool >/dev/null 2>&1 \
+        && [[ -n "$(secret-tool lookup service "$KEYCHAIN_SERVICE_NAME" account api-key 2>/dev/null)" ]]
+      ;;
+    msys*|mingw*|cygwin*)
+      command -v cmdkey.exe >/dev/null 2>&1 \
+        && cmdkey.exe /list:"$KEYCHAIN_SERVICE_NAME" 2>/dev/null | grep -q "$KEYCHAIN_SERVICE_NAME"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+TO_STRIP_PROFILES=()
+for p in "${PROFILE_CANDIDATES[@]}"; do
+  if profile_has_juggernaut_block "$p"; then
+    TO_STRIP_PROFILES+=("$p")
+  fi
+done
+
+STRIP_SETTINGS=0
+settings_has_juggernaut && STRIP_SETTINGS=1
+
+STRIP_KEYCHAIN=0
+keychain_has_entry && STRIP_KEYCHAIN=1
+
+echo "Juggernaut installer - wipe-and-reinstall"
+echo ""
+echo "Pre-wipe summary:"
+if [[ ${#TO_STRIP_PROFILES[@]} -gt 0 ]]; then
+  for p in "${TO_STRIP_PROFILES[@]}"; do
+    echo "  - strip Juggernaut/v1 block from $p"
+  done
+else
+  echo "  - shell profiles: no Juggernaut/v1 blocks found"
+fi
+if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
+  echo "  - remove 'juggernaut' key from $SETTINGS_PATH"
+else
+  echo "  - settings.json: no 'juggernaut' key found"
+fi
+if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
+  echo "  - remove OS-keychain entry '$KEYCHAIN_SERVICE_NAME'"
+else
+  echo "  - keychain: no '$KEYCHAIN_SERVICE_NAME' entry found"
+fi
+echo ""
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "--dry-run: no changes written. Exiting."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Wipe
+# ---------------------------------------------------------------------------
+strip_profile_block() {
+  local path="$1"
+  [[ -f "$path" ]] || return 0
+  local tmp
+  tmp="$(mktemp "${path}.wipeXXXXXX")"
+  awk '
+    BEGIN { skip = 0 }
+    /^# BEGIN: Juggernaut/ || /^# BEGIN: Claude Code Bedrock Configuration/ { skip = 1; next }
+    /^# END: Juggernaut/   || /^# END: Claude Code Bedrock Configuration/   { skip = 0; next }
+    skip == 0 { print }
+  ' "$path" > "$tmp"
+  mv "$tmp" "$path"
+}
+
+for p in "${TO_STRIP_PROFILES[@]}"; do
+  strip_profile_block "$p"
+  echo "Stripped Juggernaut block from $p"
+done
+
+if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
+  if command -v jq >/dev/null 2>&1; then
+    tmp="$(mktemp "${SETTINGS_PATH}.wipeXXXXXX")"
+    jq 'del(.juggernaut)' "$SETTINGS_PATH" > "$tmp" && mv "$tmp" "$SETTINGS_PATH"
+    echo "Removed 'juggernaut' key from $SETTINGS_PATH"
+  else
+    echo "Warning: jq not found; leaving 'juggernaut' key in $SETTINGS_PATH" >&2
+    echo "  Install jq and re-run 'install.sh' to complete the wipe." >&2
+  fi
+fi
+
+if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
+  case "$OSTYPE" in
+    darwin*)
+      security delete-generic-password -s "$KEYCHAIN_SERVICE_NAME" -a api-key >/dev/null 2>&1 || true ;;
+    linux*)
+      secret-tool clear service "$KEYCHAIN_SERVICE_NAME" account api-key >/dev/null 2>&1 || true ;;
+    msys*|mingw*|cygwin*)
+      cmdkey.exe /delete:"$KEYCHAIN_SERVICE_NAME" >/dev/null 2>&1 || true ;;
+  esac
+  echo "Removed keychain entry: $KEYCHAIN_SERVICE_NAME"
+fi
+
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
 if [[ -n "$REF" ]]; then
   echo "Installing Juggernaut $REF..."
 elif [[ -n "$VERSION" ]]; then
@@ -123,8 +270,8 @@ backup_existing_install() {
   echo "Backup created: $backup"
   mv "$INSTALL_DIR" "$backup"
 
-  # Rotate: keep only the 5 most recent backups unless --keep-all-backups was passed.
-  if [[ "$KEEP_ALL_BACKUPS" != "1" ]] && [[ -n "$INSTALL_DIR" ]]; then
+  # Always rotate: keep only the 5 most recent backups.
+  if [[ -n "$INSTALL_DIR" ]]; then
     local -a old_backups
     mapfile -t old_backups < <(
       find "$(dirname "$INSTALL_DIR")" -maxdepth 1 \
@@ -154,8 +301,6 @@ install_tree_dirty() {
 if [[ -d "$INSTALL_DIR" ]]; then
   if install_tree_dirty; then
     echo "Existing installation has local changes or is not a clean Git checkout."
-    # Clone to a sibling directory first so a failed clone cannot destroy the
-    # existing install. Only if the clone succeeds do we swap directories.
     NEW_DIR="${INSTALL_DIR}.new"
     rm -rf "$NEW_DIR"
     trap 'rm -rf "$NEW_DIR"' EXIT
@@ -181,9 +326,10 @@ else
 fi
 
 echo "Installed to $INSTALL_DIR"
-chmod +x "$INSTALL_DIR/juggernaut" "$INSTALL_DIR/setup" "$INSTALL_DIR"/commands/*.sh "$INSTALL_DIR"/lib/*.sh 2>/dev/null || {
-  echo "Warning: could not update executable permissions for all Juggernaut scripts" >&2
-}
+
+# Executable bits only matter on non-Windows; chmod on Git Bash silently
+# misbehaves but does not fail. Suppress errors so Windows runs stay clean.
+chmod +x "$INSTALL_DIR/juggernaut" "$INSTALL_DIR"/commands/*.sh "$INSTALL_DIR"/lib/*.sh 2>/dev/null || true
 
 BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"
@@ -198,55 +344,10 @@ case ":$PATH:" in
   *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' from any directory." ;;
 esac
 
-# ---------------------------------------------------------------------------
-# Upgrade banner — show version diff and handle v1→v2 migration prompt.
-# ---------------------------------------------------------------------------
-if [[ -f "$INSTALL_DIR/lib/upgrade_banner.sh" && -f "$INSTALL_DIR/lib/profile_paths.sh" && -f "$INSTALL_DIR/lib/migrator.sh" && -f "$INSTALL_DIR/lib/config_manager.sh" ]]; then
-  . "$INSTALL_DIR/lib/profile_paths.sh"
-  . "$INSTALL_DIR/lib/config_manager.sh"
-  . "$INSTALL_DIR/lib/migrator.sh"
-  . "$INSTALL_DIR/lib/upgrade_banner.sh"
-
-  BANNER_STATE="$(upgrade_banner_detect_state "$HOME/.claude/settings.json" 2>/dev/null || true)"
-  if [[ -n "$BANNER_STATE" ]]; then
-    upgrade_banner_print "$BANNER_STATE"
-    _confirm_result=0
-    upgrade_banner_confirm "$BANNER_STATE" "$([[ $YES == 1 ]] && echo true || echo false)" "$([[ $LEGACY_V1 == 1 ]] && echo true || echo false)" || _confirm_result=$?
-    if [[ "$_confirm_result" == "1" ]]; then
-      echo "Install complete. Re-run with --yes to migrate to v2, or --legacy-v1 to keep v1." >&2
-      exit 3
-    elif [[ "$_confirm_result" == "2" ]]; then
-      echo "Keeping v1 configuration. Run 'juggernaut apply' whenever you are ready to upgrade."
-      if [[ "${JUGGERNAUT_SUPPRESS_DEPRECATION:-0}" != "1" ]]; then
-        echo "Note: Juggernaut v1 is deprecated and will be removed in v3.0." >&2
-      fi
-    else
-      # Auto-migrate v1 → v2 if a v1 block is present.
-      HAS_V1="$(printf '%s' "$BANNER_STATE" | jq -r '.has_v1')"
-      if [[ "$HAS_V1" == "true" ]]; then
-        echo "Migrating v1 configuration to v2..."
-        V1_PROFILES=()
-        while IFS= read -r p; do
-          [[ -n "$p" ]] && V1_PROFILES+=("$p")
-        done < <(printf '%s' "$BANNER_STATE" | jq -r '.v1_profiles[]')
-        for profile in "${V1_PROFILES[@]+"${V1_PROFILES[@]}"}"; do
-          if migrator_has_v1_block "$profile" 2>/dev/null; then
-            migrator_run "$profile" "$HOME/.claude/settings.json" "$INSTALL_DIR/bedrock-config.json" 2>/dev/null || true
-          fi
-        done
-      fi
-    fi
-  fi
-fi
-
-echo "Verify with: juggernaut doctor --v2"
-echo "Configure with one of:"
-echo "  juggernaut apply --auth=bedrock-api-key"
+echo ""
+echo "Install complete. No configuration has been written."
+echo "Configure Juggernaut explicitly with one of:"
 echo "  juggernaut apply --auth=iam"
-
-if [[ "$CONFIGURE" == "1" ]]; then
-  cd "$INSTALL_DIR"
-  exec bash ./juggernaut apply --v2 "${SETUP_ARGS[@]+"${SETUP_ARGS[@]}"}"
-elif [[ ${#SETUP_ARGS[@]} -gt 0 ]]; then
-  echo "Note: install arguments after --version were ignored. Use --configure to run apply during install." >&2
-fi
+echo "  juggernaut apply --auth=bedrock-api-key"
+echo ""
+echo "Verify with: juggernaut doctor"

@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "2.3.4",
+  "version": "3.0.0",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -8,8 +8,10 @@
     "sonnet": "global.anthropic.claude-sonnet-4-6",
     "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
+  "environment_bedrock_auth": {
+    "CLAUDE_CODE_USE_BEDROCK": "1"
+  },
   "environment": {
-    "CLAUDE_CODE_USE_BEDROCK": "1",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
     "ANTHROPIC_MODEL": "global.anthropic.claude-sonnet-4-6",

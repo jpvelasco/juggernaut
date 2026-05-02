@@ -27,7 +27,9 @@ trap 'rm -rf "$TMPDIR_LOCAL"' EXIT
 TARGET="$TMPDIR_LOCAL/settings.json"
 
 section "Write-read round trip on fresh file"
+export J_AUTH_VALIDATED=true
 block="$(schema_new_juggernaut_block)"
+unset J_AUTH_VALIDATED
 native="$(schema_derive_native_keys "$block")"
 existing="$(config_read "$TARGET")"
 merged="$(config_merge_juggernaut_block "$existing" "$block" "$native")"

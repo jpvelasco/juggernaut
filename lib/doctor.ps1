@@ -1,4 +1,4 @@
-# lib/doctor.ps1 - read-only diagnostics for Juggernaut v2.
+# lib/doctor.ps1 - read-only diagnostics for Juggernaut v3.
 
 $script:DoctorFails = 0
 $script:DoctorWarns = 0
@@ -35,87 +35,6 @@ function Get-DoctorNestedProp {
     return $cur
 }
 
-function Get-DoctorShellBlock {
-    param([Parameter(Mandatory)][string]$ProfilePath)
-    if (-not (Test-Path $ProfilePath)) { return @() }
-    $lines = Get-Content -Path $ProfilePath -Encoding utf8
-    $inside = $false
-    $out = New-Object System.Collections.Generic.List[string]
-    foreach ($line in $lines) {
-        if ($line -eq $script:ProfileWriterBegin) { $inside = $true; continue }
-        if ($line -eq $script:ProfileWriterEnd) { $inside = $false; continue }
-        if ($inside) { $out.Add($line) }
-    }
-    return $out.ToArray()
-}
-
-function Get-DoctorShellValue {
-    param([Parameter(Mandatory)][string]$ProfilePath, [Parameter(Mandatory)][string]$Key)
-    foreach ($line in (Get-DoctorShellBlock -ProfilePath $ProfilePath)) {
-        if ($line -match "^\s*export\s+$([regex]::Escape($Key))=(.+)$") {
-            return (($Matches[1] -replace '^"', '') -replace '"$', '')
-        }
-        if ($line -match "^\s*set\s+-gx\s+$([regex]::Escape($Key))\s+(.+)$") {
-            return (($Matches[1] -replace '^"', '') -replace '"$', '')
-        }
-        if ($line -match "^\s*\`$env:$([regex]::Escape($Key))\s*=\s*(.+)$") {
-            return ((($Matches[1] -replace "^'", '') -replace "'$", '') -replace '^"', '') -replace '"$', ''
-        }
-    }
-    return ''
-}
-
-function Test-DoctorShellHasKeyAssignment {
-    param([Parameter(Mandatory)][string]$ProfilePath, [Parameter(Mandatory)][string]$Key)
-    foreach ($line in (Get-DoctorShellBlock -ProfilePath $ProfilePath)) {
-        if ($line -match "^\s*export\s+$([regex]::Escape($Key))=") { return $true }
-        if ($line -match "^\s*set\s+-gx\s+$([regex]::Escape($Key))\s+") { return $true }
-        if ($line -match "^\s*\`$env:$([regex]::Escape($Key))\s*=") { return $true }
-    }
-    return $false
-}
-
-function Test-DoctorNativeKeysMatch {
-    param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)]$Block)
-    $expected = Get-NativeKeysFromJuggernautBlock -Block $Block
-    if ((Get-DoctorProp -Object $Settings -Name 'model') -ne $expected.model) { return $false }
-    foreach ($name in @('opus','sonnet','haiku','subagent')) {
-        $actual = Get-DoctorNestedProp -Object $Settings -Path @('modelOverrides', $name)
-        $want = Get-DoctorNestedProp -Object $expected -Path @('modelOverrides', $name)
-        if ($actual -ne $want) { return $false }
-    }
-    foreach ($prop in $expected.env.Keys) {
-        $actual = Get-DoctorNestedProp -Object $Settings -Path @('env', $prop)
-        if ($actual -ne $expected.env[$prop]) { return $false }
-    }
-    return $true
-}
-
-function Get-DoctorProfilePath {
-    param([AllowNull()]$Block)
-
-    $profiles = @()
-    if ($Block) {
-        $rawProfiles = Get-DoctorNestedProp -Object $Block -Path @('shellFallback','lastWrittenProfiles')
-        if ($rawProfiles) { $profiles = @($rawProfiles) }
-    }
-    foreach ($profilePath in $profiles) {
-        if ($profilePath -and (Test-ProfileWriterHasBlock -ProfileFile $profilePath)) { return $profilePath }
-    }
-    if ($profiles.Count -gt 0) { return [string]$profiles[0] }
-
-    if ($IsWindows -or $env:OS -match 'Windows') {
-        $targets = @(Get-ProfileWriterPowerShellProfileTargets)
-        foreach ($target in $targets) {
-            if ($target -and (Test-ProfileWriterHasBlock -ProfileFile $target)) { return $target }
-        }
-        if ($targets.Count -gt 0) { return [string]$targets[0] }
-    }
-
-    $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
-    Get-ProfileWriterShellConfigPath -Shell $shellName
-}
-
 function Write-DoctorScopeBlock {
     param([Parameter(Mandatory)][string]$Path, [AllowNull()]$Settings)
     Write-Output (Show-DoctorHomePath $Path)
@@ -145,7 +64,7 @@ function Write-DoctorScopeBlock {
 }
 
 function Write-DoctorCredentials {
-    param([Parameter(Mandatory)]$Block, [AllowNull()][string]$ProfilePath)
+    param([Parameter(Mandatory)]$Block)
     $authMode = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
     $storage = Get-DoctorNestedProp -Object $Block -Path @('auth','storage')
     if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
@@ -158,11 +77,10 @@ function Write-DoctorCredentials {
         'iam' {
             Write-Output 'Auth: IAM'
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
-                # Bearer token present but config says IAM — surface as the primary status.
                 $script:DoctorWarns += 1
                 Write-Output 'Status: WARN'
                 Write-Output "Details: AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' - possible misconfiguration"
-                Write-Output 'Fix: run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)'
+                Write-Output 'Fix: run: juggernaut apply --auth=bedrock-api-key'
             } elseif ($env:AWS_PROFILE) {
                 Write-Output 'Status: OK'
                 Write-Output 'Details: AWS_PROFILE is set'
@@ -183,20 +101,6 @@ function Write-DoctorCredentials {
             } elseif ($keychainEntry) {
                 Write-Output 'Source: system keychain'
                 Write-Output 'Status: OK'
-            } elseif ($ProfilePath -and (Test-DoctorShellHasKeyAssignment -ProfilePath $ProfilePath -Key 'AWS_BEARER_TOKEN_BEDROCK')) {
-                if ($storage -eq 'keychain') {
-                    if ($keychainError) {
-                        $script:DoctorWarns += 1
-                        Write-Output ('Keychain: WARN ({0})' -f $keychainError)
-                    }
-                    $script:DoctorFails += 1
-                    Write-Output 'Status: FAIL'
-                    Write-Output 'Details: keychain storage is configured, but no keychain API key was found'
-                    Write-Output 'Fix: run: juggernaut apply --auth=bedrock-api-key'
-                    return
-                }
-                Write-Output 'Source: shell profile'
-                Write-Output 'Status: OK'
             } else {
                 if ($keychainError) {
                     $script:DoctorWarns += 1
@@ -204,7 +108,7 @@ function Write-DoctorCredentials {
                 }
                 $script:DoctorFails += 1
                 Write-Output 'Status: FAIL'
-                Write-Output 'Details: no API key found in env, keychain, or shell profile'
+                Write-Output 'Details: no API key found in env or keychain'
             }
         }
         default {
@@ -250,14 +154,11 @@ function Write-DoctorMantle {
     param([Parameter(Mandatory)]$Block)
     $useMantle = Get-DoctorProp -Object $Block -Name 'useMantle'
     $mantleUrl = Get-DoctorNestedProp -Object $Block -Path @('mantle','baseUrl')
-    $authMode = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
-    if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
     if (-not $useMantle) {
-        Write-Output 'Status: disabled'
+        Write-Output 'Status: disabled (INFO)'
         return
     }
     Write-Output 'Status: enabled'
-    if ($authMode -eq 'bedrock-api-key') { Write-Output 'Reason: Bedrock API key detected' }
     if ($mantleUrl) { Write-Output ('URL: {0}' -f $mantleUrl) }
     $mantleEnv = Get-DoctorNestedProp -Object $Block -Path @('env','CLAUDE_CODE_USE_MANTLE')
     if ($mantleEnv -ne '1') {
@@ -266,67 +167,26 @@ function Write-DoctorMantle {
     }
 }
 
-function Write-DoctorV1Artifacts {
-    param([AllowNull()]$Settings, [bool]$HasV2Block)
-
-    $foundV1 = $false
-    $v1Profiles = [System.Collections.Generic.List[string]]::new()
-
-    foreach ($candidate in (Get-ProfilePathsV1Candidates)) {
-        if (-not (Test-Path $candidate)) { continue }
-        $content = try { Get-Content -Path $candidate -Raw -Encoding utf8 -ErrorAction Stop } catch { '' }
-        if (($content -match '# BEGIN: Claude Code Bedrock Configuration') -and
-            (-not $content.Contains('# Juggernaut v2 shell fallback'))) {
-            $foundV1 = $true
-            $v1Profiles.Add($candidate)
-        }
-    }
-
-    if (-not $foundV1) { return }
-
-    if ($HasV2Block) {
-        $script:DoctorWarns += 1
-        Write-Output 'v1 profile block: WARN — found alongside v2 settings.json'
-        foreach ($p in $v1Profiles) { Write-Output "  Profile: $p" }
-        Write-Output '  Fix: run juggernaut migrate --clean'
-    } else {
-        Write-Output 'v1 profile block: INFO — v1 configuration detected'
-        foreach ($p in $v1Profiles) { Write-Output "  Profile: $p" }
-        Write-Output '  Upgrade: run juggernaut apply   (or pass --legacy-v1 to keep v1)'
-    }
-}
-
-function Write-DoctorDrift {
-    param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)]$Block, [AllowNull()][string]$ProfilePath)
-    if (Test-DoctorNativeKeysMatch -Settings $Settings -Block $Block) {
-        Write-Output 'Settings native keys: OK (in sync)'
-    } else {
-        $script:DoctorWarns += 1
-        Write-Output 'Settings native keys: WARN (differ from juggernaut block)'
-    }
-    $enabled = [bool](Get-DoctorNestedProp -Object $Block -Path @('shellFallback','enabled'))
-    $mode = Get-DoctorNestedProp -Object $Block -Path @('shellFallback','mode')
-    if (-not $enabled -or $mode -eq 'settings-only') {
-        Write-Output 'Settings vs Shell Fallback: OK (no fallback configured)'
+function Write-DoctorOpusplan {
+    param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)]$Block)
+    $opusplanOn = [bool](Get-DoctorNestedProp -Object $Settings -Path @('juggernaut','opusplan'))
+    if (-not $opusplanOn) {
+        Write-Output 'Status: disabled'
         return
     }
-    if (-not $ProfilePath -or -not (Test-Path $ProfilePath) -or -not (Test-ProfileWriterHasBlock -ProfileFile $ProfilePath)) {
-        $script:DoctorWarns += 1
-        Write-Output 'Settings vs Shell Fallback: WARN (expected but not found)'
-        return
-    }
-    $mismatches = 0
-    foreach ($key in @('AWS_REGION','ANTHROPIC_MODEL','ANTHROPIC_DEFAULT_OPUS_MODEL','ANTHROPIC_DEFAULT_SONNET_MODEL','ANTHROPIC_DEFAULT_HAIKU_MODEL','CLAUDE_CODE_SUBAGENT_MODEL','CLAUDE_CODE_EFFORT_LEVEL','CLAUDE_CODE_USE_MANTLE','ANTHROPIC_BEDROCK_MANTLE_BASE_URL')) {
-        $expected = Get-DoctorNestedProp -Object $Block -Path @('env', $key)
-        if ($null -eq $expected -or $expected -eq '') { continue }
-        $actual = Get-DoctorShellValue -ProfilePath $ProfilePath -Key $key
-        if ($actual -ne $expected) { $mismatches += 1 }
-    }
-    if ($mismatches -eq 0) {
-        Write-Output 'Settings vs Shell Fallback: OK (no drift detected)'
+    Write-Output 'Status: enabled'
+    # Expected: both .env.ANTHROPIC_MODEL in the block and the top-level .env.ANTHROPIC_MODEL
+    # in settings.json should read "opusplan".
+    $settingsModel = Get-DoctorNestedProp -Object $Settings -Path @('env','ANTHROPIC_MODEL')
+    $envModel      = Get-DoctorNestedProp -Object $Block    -Path @('env','ANTHROPIC_MODEL')
+    if ($settingsModel -eq 'opusplan' -and $envModel -eq 'opusplan') {
+        Write-Output 'Status: OK'
     } else {
         $script:DoctorWarns += 1
-        Write-Output ('Settings vs Shell Fallback: WARN ({0} differing value(s))' -f $mismatches)
+        $sm = if ($settingsModel) { $settingsModel } else { '' }
+        $em = if ($envModel) { $envModel } else { '' }
+        Write-Output ("Warning: ANTHROPIC_MODEL mismatch (settings.env='{0}', block.env='{1}'; expected 'opusplan')" -f $sm, $em)
+        Write-Output 'Fix: run: juggernaut apply --opusplan'
     }
 }
 

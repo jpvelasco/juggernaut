@@ -1,28 +1,52 @@
 #Requires -Version 5.1
-# install.ps1 - Juggernaut installer
+# install.ps1 - Juggernaut v3 installer (wipe-and-reinstall)
 #
 # Usage:
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version 2.3.1
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version v3.0.0
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Ref fix-branch
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
-#   .\install.ps1 -Version 2.3.1
+#   .\install.ps1 -Version v3.0.0
 #   .\install.ps1 -Ref fix-branch
-#   .\install.ps1 -Latest
+#   .\install.ps1 -Latest -DryRun
+#
+# Destructive behavior (v3):
+#   - Strips Juggernaut and legacy "Claude Code Bedrock Configuration" BEGIN/END
+#     blocks from every known shell profile (including both PS 5.1 and PS 7
+#     CurrentUser/AllUsers AllHosts profiles).
+#   - Removes the 'juggernaut' key from ~/.claude/settings.json.
+#   - Removes the 'juggernaut-bedrock' Windows Credential Manager entry.
+#   - Does NOT auto-apply. Run 'juggernaut apply -Auth iam' or
+#     'juggernaut apply -Auth bedrock-api-key' explicitly after install.
 
 param(
     [string]$Version = '',
     [string]$Ref = '',
     [switch]$Latest,
-    [switch]$Configure,
-    [switch]$Yes,
-    [switch]$LegacyV1,
-    [switch]$KeepAllBackups,
-    [Parameter(ValueFromRemainingArguments=$true)][string[]]$SetupArgs
+    [switch]$DryRun,
+    [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($Help) {
+    @'
+Juggernaut v3 installer
+
+Usage:
+  install.ps1 [-Version <tag>] [-Ref <branch|sha>] [-Latest] [-DryRun]
+
+Installs Juggernaut to $HOME\.juggernaut (override with $env:JUGGERNAUT_DIR).
+Before installing, strips legacy Juggernaut/Claude-Code-Bedrock blocks from
+shell profiles, removes the 'juggernaut' key from ~/.claude/settings.json,
+and deletes the 'juggernaut-bedrock' Credential Manager entry.
+
+-DryRun prints what would be wiped and exits without writing anything.
+'@
+    return
+}
 
 if (-not $PSCommandPath -and
     $MyInvocation.CommandOrigin -eq [System.Management.Automation.CommandOrigin]::Runspace -and
@@ -35,43 +59,183 @@ Use the safer scriptblock form instead:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
 
 For a pinned release:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.1/install.ps1))) -Version v2.3.1
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0
 '@
     exit 1
 }
 
 if (-not $Ref -and $env:JUGGERNAUT_REF) { $Ref = $env:JUGGERNAUT_REF }
 if ($Latest) { $Version = ''; $Ref = '' }
-if ($Ref) { $Version = '' }
+if ($Ref)    { $Version = '' }
 
-# Normalize version: accept "2.1.2" or "v2.1.2" - tags are always v-prefixed.
 if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 
 $RepoUrl    = if ($env:JUGGERNAUT_REPO_URL) { $env:JUGGERNAUT_REPO_URL } else { 'https://github.com/jpvelasco/juggernaut.git' }
 $InstallDir = if ($env:JUGGERNAUT_DIR) { $env:JUGGERNAUT_DIR } else { Join-Path $HOME '.juggernaut' }
-
-if ($Ref) {
-    Write-Host "Installing Juggernaut $Ref..."
-} elseif ($Version) {
-    Write-Host "Installing Juggernaut $Version..."
-} else {
-    Write-Host 'Installing Juggernaut (latest)...'
-}
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Error 'git is required but not installed'
     exit 1
 }
 
-function Clone-Install {
-    param([string]$Target = $InstallDir)
-    if ($Ref) {
-        git clone --branch $Ref --depth 1 --quiet $RepoUrl $Target
-    } elseif ($Version) {
-        git clone --branch $Version --depth 1 --quiet $RepoUrl $Target
-    } else {
-        git clone --quiet $RepoUrl $Target
+# ---------------------------------------------------------------------------
+# Pre-wipe discovery
+# ---------------------------------------------------------------------------
+$SettingsPath = Join-Path $HOME '.claude\settings.json'
+$KeychainServiceName = 'juggernaut-bedrock'
+
+function Get-ProfileCandidates {
+    $home2 = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
+    $candidates = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($rel in @('.bashrc', '.bash_profile', '.zshrc', '.config/fish/config.fish', '.profile')) {
+        $candidates.Add((Join-Path $home2 $rel))
     }
+
+    try {
+        if ($PROFILE.CurrentUserAllHosts) { $candidates.Add([string]$PROFILE.CurrentUserAllHosts) }
+        if ($PROFILE.AllUsersAllHosts)    { $candidates.Add([string]$PROFILE.AllUsersAllHosts) }
+    } catch {}
+
+    $documents = [Environment]::GetFolderPath('MyDocuments')
+    if ($documents) {
+        $candidates.Add((Join-Path $documents 'PowerShell\profile.ps1'))
+        $candidates.Add((Join-Path $documents 'WindowsPowerShell\profile.ps1'))
+    }
+
+    return @($candidates | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Test-ProfileHasJuggernautBlock {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return $false }
+    try {
+        $content = Get-Content -Path $Path -Raw -ErrorAction Stop
+    } catch { return $false }
+    return ($content -match '(?m)^# BEGIN: Juggernaut' -or
+            $content -match '(?m)^# BEGIN: Claude Code Bedrock Configuration')
+}
+
+function Test-SettingsHasJuggernautKey {
+    if (-not (Test-Path $SettingsPath)) { return $false }
+    try {
+        $obj = Get-Content -Path $SettingsPath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+    } catch { return $false }
+    return ($null -ne $obj.juggernaut)
+}
+
+function Test-WindowsKeychainHasEntry {
+    try {
+        $src = @'
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+[DllImport("advapi32.dll")]
+public static extern void CredFree(IntPtr credential);
+'@
+        Add-Type -Namespace 'Win32Installer' -Name 'CredProbe' -MemberDefinition $src -ErrorAction SilentlyContinue
+        $ptr = [IntPtr]::Zero
+        $ok = [Win32Installer.CredProbe]::CredRead($KeychainServiceName, 1, 0, [ref]$ptr)
+        if ($ok) { [Win32Installer.CredProbe]::CredFree($ptr) | Out-Null }
+        return [bool]$ok
+    } catch { return $false }
+}
+
+$toStripProfiles = @(Get-ProfileCandidates | Where-Object { Test-ProfileHasJuggernautBlock $_ })
+$stripSettings   = Test-SettingsHasJuggernautKey
+$stripKeychain   = Test-WindowsKeychainHasEntry
+
+Write-Host 'Juggernaut installer - wipe-and-reinstall'
+Write-Host ''
+Write-Host 'Pre-wipe summary:'
+if ($toStripProfiles.Count -gt 0) {
+    foreach ($p in $toStripProfiles) { Write-Host "  - strip Juggernaut/v1 block from $p" }
+} else {
+    Write-Host '  - shell profiles: no Juggernaut/v1 blocks found'
+}
+if ($stripSettings) { Write-Host "  - remove 'juggernaut' key from $SettingsPath" }
+else                { Write-Host "  - settings.json: no 'juggernaut' key found" }
+if ($stripKeychain) { Write-Host "  - remove Credential Manager entry '$KeychainServiceName'" }
+else                { Write-Host "  - keychain: no '$KeychainServiceName' entry found" }
+Write-Host ''
+
+if ($DryRun) {
+    Write-Host '-DryRun: no changes written. Exiting.'
+    return
+}
+
+# ---------------------------------------------------------------------------
+# Wipe
+# ---------------------------------------------------------------------------
+function Remove-ProfileBlocks {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    try {
+        $lines = Get-Content -Path $Path -ErrorAction Stop
+    } catch {
+        Write-Warning "Could not read $Path - $($_.Exception.Message). Skipping (may require elevation)."
+        return
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    $skip = $false
+    foreach ($line in $lines) {
+        if ($line -match '^# BEGIN: Juggernaut' -or $line -match '^# BEGIN: Claude Code Bedrock Configuration') {
+            $skip = $true; continue
+        }
+        if ($line -match '^# END: Juggernaut' -or $line -match '^# END: Claude Code Bedrock Configuration') {
+            $skip = $false; continue
+        }
+        if (-not $skip) { $out.Add($line) }
+    }
+    try {
+        Set-Content -Path $Path -Value $out -Encoding utf8 -ErrorAction Stop
+        Write-Host "Stripped Juggernaut block from $Path"
+    } catch {
+        Write-Warning "Could not write $Path - $($_.Exception.Message). Skipping (may require elevation)."
+    }
+}
+
+foreach ($p in $toStripProfiles) { Remove-ProfileBlocks $p }
+
+if ($stripSettings) {
+    try {
+        $raw = Get-Content -Path $SettingsPath -Raw -Encoding utf8
+        $obj = $raw | ConvertFrom-Json
+        if ($obj.PSObject.Properties['juggernaut']) {
+            $obj.PSObject.Properties.Remove('juggernaut')
+        }
+        ($obj | ConvertTo-Json -Depth 64) | Set-Content -Path $SettingsPath -Encoding utf8
+        Write-Host "Removed 'juggernaut' key from $SettingsPath"
+    } catch {
+        Write-Warning "Could not update $SettingsPath - $($_.Exception.Message)"
+    }
+}
+
+if ($stripKeychain) {
+    try {
+        $src = @'
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredDelete(string target, int type, int flags);
+'@
+        Add-Type -Namespace 'Win32Installer' -Name 'CredDel' -MemberDefinition $src -ErrorAction SilentlyContinue
+        [Win32Installer.CredDel]::CredDelete($KeychainServiceName, 1, 0) | Out-Null
+        Write-Host "Removed keychain entry: $KeychainServiceName"
+    } catch {
+        Write-Warning "Could not remove keychain entry: $($_.Exception.Message)"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
+if ($Ref)         { Write-Host "Installing Juggernaut $Ref..." }
+elseif ($Version) { Write-Host "Installing Juggernaut $Version..." }
+else              { Write-Host 'Installing Juggernaut (latest)...' }
+
+function Invoke-CloneInstall {
+    param([string]$Target = $InstallDir)
+    if ($Ref)         { git clone --branch $Ref      --depth 1 --quiet $RepoUrl $Target }
+    elseif ($Version) { git clone --branch $Version  --depth 1 --quiet $RepoUrl $Target }
+    else              { git clone --quiet                                $RepoUrl $Target }
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
 }
 
@@ -79,51 +243,37 @@ function Backup-ExistingInstall {
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $backup = "$InstallDir.backup.$timestamp"
     $n = 1
-    while (Test-Path $backup) {
-        $backup = "$InstallDir.backup.$timestamp.$n"
-        $n++
-    }
+    while (Test-Path $backup) { $backup = "$InstallDir.backup.$timestamp.$n"; $n++ }
     Write-Host "Backup created: $backup"
     Move-Item -LiteralPath $InstallDir -Destination $backup
 
-    # Rotate: keep only 5 most recent backups unless -KeepAllBackups was passed.
-    if (-not $KeepAllBackups) {
-        $oldBackups = Get-ChildItem -Path (Split-Path $InstallDir -Parent) -Filter "$(Split-Path $InstallDir -Leaf).backup.*" -Directory -ErrorAction SilentlyContinue |
-                      Sort-Object LastWriteTime -Descending |
-                      Select-Object -Skip 5
-        foreach ($old in $oldBackups) {
-            Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue
-        }
+    # Always rotate: keep only 5 most recent backups.
+    $oldBackups = Get-ChildItem -Path (Split-Path $InstallDir -Parent) -Filter "$(Split-Path $InstallDir -Leaf).backup.*" -Directory -ErrorAction SilentlyContinue |
+                  Sort-Object LastWriteTime -Descending |
+                  Select-Object -Skip 5
+    foreach ($old in $oldBackups) {
+        Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
 function Test-InstallTreeDirty {
     git -C $InstallDir rev-parse --git-dir *> $null
     if ($LASTEXITCODE -ne 0) { return $true }
-
     git -C $InstallDir diff --quiet --ignore-submodules --
     if ($LASTEXITCODE -ne 0) { return $true }
-
     git -C $InstallDir diff --cached --quiet --ignore-submodules --
     if ($LASTEXITCODE -ne 0) { return $true }
-
     $untracked = git -C $InstallDir ls-files --others --exclude-standard
     return [bool]$untracked
 }
 
-# Shared arg parser (extracted to lib/arg_parsing.ps1 so install.ps1 and juggernaut.ps1 share one copy).
-# We dot-source it after $InstallDir is known (below), or fall back to the repo-local copy when running
-# the installer directly from the repo.  At the point this function is needed $InstallDir already exists.
-
 if (Test-Path $InstallDir) {
     if (Test-InstallTreeDirty) {
         Write-Host 'Existing installation has local changes or is not a clean Git checkout.'
-        # Clone to a sibling directory first so a failed clone cannot destroy the
-        # existing install. Only if the clone succeeds do we swap directories.
         $NewDir = "$InstallDir.new"
         if (Test-Path $NewDir) { Remove-Item -LiteralPath $NewDir -Recurse -Force }
         try {
-            Clone-Install -Target $NewDir
+            Invoke-CloneInstall -Target $NewDir
             Backup-ExistingInstall
             Move-Item -LiteralPath $NewDir -Destination $InstallDir
         } catch {
@@ -150,18 +300,19 @@ if (Test-Path $InstallDir) {
         }
     }
 } else {
-    Clone-Install
+    Invoke-CloneInstall
 }
 
 Write-Host "Installed to $InstallDir"
 
+# ---------------------------------------------------------------------------
+# Shim
+# ---------------------------------------------------------------------------
 $ShimDir = Join-Path $HOME '.local\bin'
 New-Item -ItemType Directory -Path $ShimDir -Force | Out-Null
 
-$ShimPs1 = Join-Path $ShimDir 'juggernaut.ps1'
-$ShimCmd = Join-Path $ShimDir 'juggernaut.cmd'
-# Write the install dir into a sidecar file so the shim resolves at runtime.
-# This means moving the install dir only requires updating the .txt file.
+$ShimPs1       = Join-Path $ShimDir 'juggernaut.ps1'
+$ShimCmd       = Join-Path $ShimDir 'juggernaut.cmd'
 $InstallDirTxt = Join-Path $ShimDir 'juggernaut-install-dir.txt'
 Set-Content -Path $InstallDirTxt -Value $InstallDir -Encoding utf8 -NoNewline -ErrorAction Stop
 
@@ -179,7 +330,6 @@ if (-not (Test-Path $target)) {
     Write-Error "juggernaut shim: target not found at $target. Re-run install.ps1."
     exit 1
 }
-$env:JUGGERNAUT_USE_V2 = '1'
 & $target @PassArgs
 $code = $LASTEXITCODE
 exit $code
@@ -204,72 +354,10 @@ if (-not (($env:PATH -split ';') -contains $ShimDir)) {
 Write-Host 'If PowerShell blocks first run scripts, run:'
 Write-Host '  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
 
-# ---------------------------------------------------------------------------
-# Upgrade banner — show version diff and handle v1→v2 migration prompt.
-# ---------------------------------------------------------------------------
-$argParsingLib = Join-Path $InstallDir 'lib\arg_parsing.ps1'
-if (Test-Path $argParsingLib) { . $argParsingLib }
-
-$bannerLib = Join-Path $InstallDir 'lib\upgrade_banner.ps1'
-$profilePathsLib = Join-Path $InstallDir 'lib\profile_paths.ps1'
-$migratorLib = Join-Path $InstallDir 'lib\migrator.ps1'
-$configMgrLib = Join-Path $InstallDir 'lib\config_manager.ps1'
-if ((Test-Path $bannerLib) -and (Test-Path $profilePathsLib) -and (Test-Path $migratorLib) -and (Test-Path $configMgrLib)) {
-    . $profilePathsLib
-    . $configMgrLib
-    . (Join-Path $InstallDir 'lib\schema.ps1')
-    . $migratorLib
-    . $bannerLib
-
-    $bannerState = Get-UpgradeBannerState
-    Write-UpgradeBanner -State $bannerState
-    $confirmResult = Confirm-UpgradeBanner -State $bannerState -Yes:([bool]$Yes) -LegacyV1:([bool]$LegacyV1)
-    switch ($confirmResult) {
-        'abort' {
-            Write-Host 'Install complete. Re-run with -Yes to migrate to v2, or -LegacyV1 to keep v1.'
-            exit 3
-        }
-        'legacy' {
-            Write-Host 'Keeping v1 configuration. Run juggernaut apply whenever you are ready to upgrade.'
-            if ($env:JUGGERNAUT_SUPPRESS_DEPRECATION -ne '1') {
-                [Console]::Error.WriteLine('Note: Juggernaut v1 is deprecated and will be removed in v3.0.')
-            }
-        }
-        'proceed' {
-            if ($bannerState.has_v1) {
-                Write-Host 'Migrating v1 configuration to v2...'
-                $settingsPath = Join-Path (if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }) '.claude/settings.json'
-                foreach ($profilePath in $bannerState.v1_profiles) {
-                    try {
-                        Invoke-MigratorRun -ProfileFile $profilePath -SettingsPath $settingsPath -BedrockConfigPath (Join-Path $InstallDir 'bedrock-config.json')
-                    } catch {
-                        Write-Warning "Migration of $profilePath encountered an error: $_"
-                    }
-                }
-            }
-        }
-    }
-}
-
-Write-Host 'Verify with: juggernaut doctor --v2'
-Write-Host 'Configure with one of:'
-Write-Host '  juggernaut apply --auth=bedrock-api-key'
-Write-Host '  juggernaut apply --auth=iam'
-
-if ($Configure) {
-    $oldLocation = (Get-Location).Path
-    try {
-        Set-Location $InstallDir
-        function Convert-InstallerApplyArgs {
-            param([string[]]$InputArgs)
-            Convert-GnuStyleArgs -InputArgs $InputArgs
-        }
-        $applyArgs = Convert-InstallerApplyArgs -InputArgs $SetupArgs
-        & (Join-Path $InstallDir 'commands\apply.ps1') @applyArgs
-    } finally {
-        Set-Location $oldLocation
-    }
-    return
-} elseif ($SetupArgs.Count -gt 0) {
-    Write-Warning 'Install arguments after -Version were ignored. Use -Configure to run apply during install.'
-}
+Write-Host ''
+Write-Host 'Install complete. No configuration has been written.'
+Write-Host 'Configure Juggernaut explicitly with one of:'
+Write-Host '  juggernaut apply -Auth iam'
+Write-Host '  juggernaut apply -Auth bedrock-api-key'
+Write-Host ''
+Write-Host 'Verify with: juggernaut doctor'

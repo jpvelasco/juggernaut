@@ -56,11 +56,12 @@ function New-JuggernautBlock {
         # "api-key" is accepted only as a legacy read alias. New writes emit
         # "bedrock-api-key" so persisted config is explicit about Bedrock auth.
         [ValidateSet('iam','api-key','bedrock-api-key')][string]$AuthMode = 'iam',
+        [bool]$AuthValidated = $false,
         [ValidateSet('profile','keychain')][string]$Storage = 'keychain',
         [string]$Region = '',
-        [ValidateSet('both','settings-only','shell-only')][string]$ShellFallbackMode = 'both',
+        [ValidateSet('both','settings-only','shell-only')][string]$ShellFallbackMode = 'settings-only',
         [ValidateSet('user','project')][string]$Scope = 'user',
-        [string]$Version = '2.3.4',
+        [string]$Version = '3.0.0',
         [string]$BedrockConfigPath
     )
 
@@ -73,6 +74,14 @@ function New-JuggernautBlock {
     $env = [ordered]@{}
     foreach ($prop in $bedrock.environment.PSObject.Properties) {
         $env[$prop.Name] = $prop.Value
+    }
+    # CLAUDE_CODE_USE_BEDROCK is gated behind validated auth — merge only when
+    # apply has confirmed a working credential path. Prevents hang-on-launch
+    # when Bedrock routing is enabled without a usable AWS/API-key credential.
+    if ($AuthValidated -and $bedrock.environment_bedrock_auth) {
+        foreach ($prop in $bedrock.environment_bedrock_auth.PSObject.Properties) {
+            $env[$prop.Name] = $prop.Value
+        }
     }
     $env['AWS_REGION']                     = $Region
     $env['ANTHROPIC_MODEL']                = if ($OpusPlan) { 'opusplan' } else { $Model }

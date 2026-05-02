@@ -35,7 +35,7 @@ Describe 'Write → Read round trip' {
     }
 
     It 'fresh write then read preserves juggernaut.meta.managedBy' {
-        $block  = New-JuggernautBlock -BedrockConfigPath $script:BedrockConfigPath
+        $block  = New-JuggernautBlock -AuthValidated $true -BedrockConfigPath $script:BedrockConfigPath
         $native = Get-NativeKeysFromJuggernautBlock -Block $block
         $existing = Read-Settings -Path $script:target
         $merged = Merge-JuggernautBlock -Existing $existing -NewBlock $block -NativeKeys $native

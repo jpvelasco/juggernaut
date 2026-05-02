@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# tests/v2/test_install.sh - static acceptance checks for installer robustness.
+# tests/v2/test_install.sh — v3 installer acceptance tests.
+# v3 installer is a destructive wipe-and-reinstall: strips profile blocks,
+# removes the juggernaut key from settings.json, deletes the keychain entry,
+# clones a fresh tree, installs a launcher. It does NOT auto-apply.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-PASS=0
-FAIL=0
+PASS=0; FAIL=0
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
@@ -15,217 +17,192 @@ section() { echo; echo "== $1 =="; }
 INSTALL_SH="$(cat "$REPO_ROOT/install.sh")"
 INSTALL_PS1="$(cat "$REPO_ROOT/install.ps1")"
 
-section "install.sh executable permissions"
-for needle in 'chmod +x' 'commands/*.sh' 'lib/*.sh' 'juggernaut' 'setup'; do
-  if [[ "$INSTALL_SH" == *"$needle"* ]]; then pass; else fail "install.sh missing $needle"; fi
+# ---------------------------------------------------------------------------
+# Static checks: v3 installer contract
+# ---------------------------------------------------------------------------
+section "install.sh mentions wipe-and-reinstall behavior"
+for needle in 'wipe-and-reinstall' 'Pre-wipe summary' 'BEGIN: Juggernaut' 'BEGIN: Claude Code Bedrock Configuration' 'juggernaut-bedrock' '--dry-run' 'juggernaut apply --auth=iam'; do
+  if [[ "$INSTALL_SH" == *"$needle"* ]]; then pass; else fail "install.sh missing '$needle'"; fi
 done
 
-section "install.sh user launcher"
-if [[ "$INSTALL_SH" == *'.local/bin'* && "$INSTALL_SH" == *'ln -sfn'* && "$INSTALL_SH" == *'juggernaut doctor --v2'* ]]; then
-  pass
-else
-  fail "install.sh missing ~/.local/bin symlink or verification message"
-fi
-if [[ "$INSTALL_SH" == *'--configure'* && "$INSTALL_SH" == *'./juggernaut apply --v2'* && "$INSTALL_SH" != *'exec bash ./setup'* ]]; then
-  pass
-else
-  fail "install.sh should install-only by default and configure only when explicit"
-fi
-if [[ "$INSTALL_SH" == *'--ref'* && "$INSTALL_SH" == *'JUGGERNAUT_REF'* && "$INSTALL_SH" == *'git clone --branch "$REF"'* ]]; then
-  pass
-else
-  fail "install.sh should support installing an explicit branch/ref for PR testing"
-fi
-
-section "install.ps1 user launcher"
-for needle in '.local\bin' 'juggernaut.cmd' 'ExecutionPolicy Bypass' 'Set-ExecutionPolicy RemoteSigned -Scope CurrentUser' 'juggernaut doctor --v2'; do
-  if [[ "$INSTALL_PS1" == *"$needle"* ]]; then pass; else fail "install.ps1 missing $needle"; fi
-done
-if [[ "$INSTALL_PS1" == *"If PowerShell blocks first run scripts, run:"* ]]; then
-  pass
-else
-  fail "install.ps1 missing first-run execution-policy guidance"
-fi
-if [[ "$INSTALL_PS1" == *'[switch]$Configure'* && "$INSTALL_PS1" == *'Convert-InstallerApplyArgs'* && "$INSTALL_PS1" == *'commands\apply.ps1'* && "$INSTALL_PS1" != *'juggernaut.ps1 apply --v2'* && "$INSTALL_PS1" != *'exit $LASTEXITCODE'* && "$INSTALL_PS1" != *'setup-claude-bedrock.ps1 @SetupArgs'* ]]; then
-  pass
-else
-  fail "install.ps1 should configure without routing through an exit-based dispatcher"
-fi
-if [[ "$INSTALL_PS1" == *'[string]$Ref'* && "$INSTALL_PS1" == *'JUGGERNAUT_REF'* && "$INSTALL_PS1" == *'git clone --branch $Ref'* ]]; then
-  pass
-else
-  fail "install.ps1 should support installing an explicit branch/ref for PR testing"
-fi
-
-section "dirty existing install is backed up before fresh clone"
-for needle in 'JUGGERNAUT_REPO_URL' 'install_tree_dirty' 'backup_existing_install' '.backup.' 'Backup created:'; do
-  if [[ "$INSTALL_SH" == *"$needle"* ]]; then pass; else fail "install.sh missing dirty install backup behavior: $needle"; fi
-done
-for needle in 'JUGGERNAUT_REPO_URL' 'Test-InstallTreeDirty' 'Backup-ExistingInstall' '.backup.' 'Backup created:'; do
-  if [[ "$INSTALL_PS1" == *"$needle"* ]]; then pass; else fail "install.ps1 missing dirty install backup behavior: $needle"; fi
+section "install.sh does NOT auto-apply or mention legacy flags"
+for needle in '--configure' '--legacy-v1' '--v2' 'setup-claude-bedrock' 'JUGGERNAUT_USE_V2'; do
+  if [[ "$INSTALL_SH" != *"$needle"* ]]; then pass; else fail "install.sh still mentions '$needle'"; fi
 done
 
+section "install.sh sets up user launcher + --ref flag"
+if [[ "$INSTALL_SH" == *'.local/bin'* && "$INSTALL_SH" == *'ln -sfn'* ]]; then pass
+else fail "install.sh missing ~/.local/bin symlink"; fi
+if [[ "$INSTALL_SH" == *'--ref'* && "$INSTALL_SH" == *'git clone --branch "$REF"'* ]]; then pass
+else fail "install.sh should support installing an explicit branch/ref for PR testing"; fi
+
+section "install.sh executable bits and chmod suppress on Windows"
+for needle in 'chmod +x' 'commands/*.sh' 'lib/*.sh' '2>/dev/null || true'; do
+  if [[ "$INSTALL_SH" == *"$needle"* ]]; then pass; else fail "install.sh missing '$needle'"; fi
+done
+
+section "install.ps1 v3 wipe-and-reinstall"
+for needle in 'Pre-wipe summary' 'BEGIN: Juggernaut' 'BEGIN: Claude Code Bedrock Configuration' 'juggernaut-bedrock' '-DryRun'; do
+  if [[ "$INSTALL_PS1" == *"$needle"* ]]; then pass; else fail "install.ps1 missing '$needle'"; fi
+done
+
+section "install.ps1 does NOT auto-apply or mention legacy flags"
+for needle in '-Configure' '-LegacyV1' 'setup-claude-bedrock.ps1' 'JUGGERNAUT_USE_V2'; do
+  if [[ "$INSTALL_PS1" != *"$needle"* ]]; then pass; else fail "install.ps1 still mentions '$needle'"; fi
+done
+
+section "install.ps1 user launcher + ExecutionPolicy guidance"
+for needle in '.local\bin' 'juggernaut.cmd' 'ExecutionPolicy'; do
+  if [[ "$INSTALL_PS1" == *"$needle"* ]]; then pass; else fail "install.ps1 missing '$needle'"; fi
+done
+
+section "install.ps1 supports -Ref for branch/sha installs"
+if [[ "$INSTALL_PS1" == *'[string]$Ref'* && "$INSTALL_PS1" == *'JUGGERNAUT_REF'* ]]; then pass
+else fail "install.ps1 should accept -Ref"; fi
+
+# ---------------------------------------------------------------------------
+# Runtime: fixture-backed install scenarios
+# ---------------------------------------------------------------------------
 TMP_REMOTE="$(mktemp -d)"
 TMP_SRC="$(mktemp -d)"
 TMP_INSTALL_HOME="$(mktemp -d)"
-trap 'rm -rf "$TMP_HOME" "$TMP_WORK" "$TMP_REMOTE" "$TMP_SRC" "$TMP_INSTALL_HOME"' EXIT
+trap 'rm -rf "$TMP_REMOTE" "$TMP_SRC" "$TMP_INSTALL_HOME"' EXIT
 
 git -C "$TMP_SRC" init -q
 git -C "$TMP_SRC" config user.email test@example.invalid
 git -C "$TMP_SRC" config user.name "Juggernaut Test"
 mkdir -p "$TMP_SRC/commands" "$TMP_SRC/lib"
 printf '#!/usr/bin/env bash\n' > "$TMP_SRC/juggernaut"
-printf '#!/usr/bin/env bash\n' > "$TMP_SRC/setup"
 printf '#!/usr/bin/env bash\n' > "$TMP_SRC/commands/apply.sh"
 printf '#!/usr/bin/env bash\n' > "$TMP_SRC/lib/schema.sh"
 printf '9.9.9\n' > "$TMP_SRC/VERSION"
-chmod +x "$TMP_SRC/juggernaut" "$TMP_SRC/setup" "$TMP_SRC/commands/apply.sh" "$TMP_SRC/lib/schema.sh"
+chmod +x "$TMP_SRC/juggernaut" "$TMP_SRC/commands/apply.sh" "$TMP_SRC/lib/schema.sh"
 git -C "$TMP_SRC" add .
 git -C "$TMP_SRC" commit -q -m "fixture"
 git -C "$TMP_SRC" tag v9.9.9
 git clone --bare -q "$TMP_SRC" "$TMP_REMOTE/repo.git"
-git clone --branch v9.9.9 -q "$TMP_REMOTE/repo.git" "$TMP_INSTALL_HOME/.juggernaut"
-printf '# local edit\n' >> "$TMP_INSTALL_HOME/.juggernaut/lib/schema.sh"
 
-if OUTPUT="$(HOME="$TMP_INSTALL_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" bash "$REPO_ROOT/install.sh" --version v9.9.9 2>&1)" &&
-   [[ "$OUTPUT" == *"Existing installation has local changes"* ]] &&
-   [[ "$OUTPUT" == *"Backup created:"* ]] &&
-   [[ -d "$TMP_INSTALL_HOME/.juggernaut" ]] &&
-   [[ -z "$(git -C "$TMP_INSTALL_HOME/.juggernaut" status --short)" ]]; then
-  shopt -s nullglob
-  BACKUPS=("$TMP_INSTALL_HOME"/.juggernaut.backup.*)
-  shopt -u nullglob
-  if [[ "${#BACKUPS[@]}" -eq 1 && -f "${BACKUPS[0]}/lib/schema.sh" ]] &&
-     grep -q '# local edit' "${BACKUPS[0]}/lib/schema.sh"; then
-    pass
-  else
-    fail "dirty install backup should preserve the edited install tree"
-    printf '%s\n' "$OUTPUT" >&2
-  fi
+# ---------------------------------------------------------------------------
+# --dry-run prints pre-wipe summary and writes nothing
+# ---------------------------------------------------------------------------
+section "--dry-run prints summary and writes nothing"
+DRY_HOME="$(mktemp -d)"
+mkdir -p "$DRY_HOME/.claude"
+printf '{"juggernaut":{"meta":{"managedBy":"juggernaut"}}}\n' > "$DRY_HOME/.claude/settings.json"
+printf '# BEGIN: Juggernaut\nexport FOO=1\n# END: Juggernaut\n' > "$DRY_HOME/.bashrc"
+BEFORE_SETTINGS_MD5="$(md5sum "$DRY_HOME/.claude/settings.json" 2>/dev/null | awk '{print $1}')"
+BEFORE_BASHRC_MD5="$(md5sum "$DRY_HOME/.bashrc" 2>/dev/null | awk '{print $1}')"
+OUT="$(HOME="$DRY_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$DRY_HOME/.juggernaut" \
+  bash "$REPO_ROOT/install.sh" --version v9.9.9 --dry-run 2>&1)"
+RC=$?
+if [[ "$RC" -eq 0 && "$OUT" == *"Pre-wipe summary"* && "$OUT" == *"strip Juggernaut/v1 block"* && "$OUT" == *"remove 'juggernaut' key"* && "$OUT" == *"dry-run"* ]]; then
+  pass
 else
-  fail "dirty install should be backed up and replaced by a clean clone"
-  printf '%s\n' "$OUTPUT" >&2
+  fail "dry-run should emit summary and exit 0 (rc=$RC)"
+  printf '%s\n' "$OUT" >&2
+fi
+AFTER_SETTINGS_MD5="$(md5sum "$DRY_HOME/.claude/settings.json" 2>/dev/null | awk '{print $1}')"
+AFTER_BASHRC_MD5="$(md5sum "$DRY_HOME/.bashrc" 2>/dev/null | awk '{print $1}')"
+if [[ "$BEFORE_SETTINGS_MD5" == "$AFTER_SETTINGS_MD5" && "$BEFORE_BASHRC_MD5" == "$AFTER_BASHRC_MD5" ]]; then pass
+else fail "dry-run must not modify files"; fi
+if [[ ! -d "$DRY_HOME/.juggernaut" ]]; then pass
+else fail "dry-run must not clone into JUGGERNAUT_DIR"; fi
+rm -rf "$DRY_HOME"
+
+# ---------------------------------------------------------------------------
+# Full install wipes profile block + settings.json juggernaut key
+# ---------------------------------------------------------------------------
+section "full install wipes profile block and settings.json juggernaut key, does not auto-apply"
+WIPE_HOME="$(mktemp -d)"
+mkdir -p "$WIPE_HOME/.claude"
+printf '{"juggernaut":{"meta":{"managedBy":"juggernaut"}},"permissions":{"allow":["Bash"]}}\n' > "$WIPE_HOME/.claude/settings.json"
+printf '# keep this\n# BEGIN: Juggernaut\nexport FOO=1\n# END: Juggernaut\n# keep that\n' > "$WIPE_HOME/.bashrc"
+OUT="$(HOME="$WIPE_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$WIPE_HOME/.juggernaut" \
+  bash "$REPO_ROOT/install.sh" --version v9.9.9 2>&1)"
+RC=$?
+if [[ "$RC" -eq 0 && -d "$WIPE_HOME/.juggernaut" ]]; then pass
+else fail "install should succeed and clone into \$JUGGERNAUT_DIR (rc=$RC)"; printf '%s\n' "$OUT" >&2; fi
+
+if ! grep -q "BEGIN: Juggernaut" "$WIPE_HOME/.bashrc"; then pass
+else fail "install should strip profile Juggernaut block"; fi
+if grep -q "keep this" "$WIPE_HOME/.bashrc" && grep -q "keep that" "$WIPE_HOME/.bashrc"; then pass
+else fail "install should preserve unrelated profile content"; fi
+
+if command -v jq >/dev/null 2>&1; then
+  if jq -e '.juggernaut | not' "$WIPE_HOME/.claude/settings.json" >/dev/null 2>&1; then pass
+  else fail "install should remove .juggernaut from settings.json"; fi
+  if jq -e '.permissions.allow' "$WIPE_HOME/.claude/settings.json" >/dev/null 2>&1; then pass
+  else fail "install should preserve unrelated settings.json keys"; fi
 fi
 
+# v3: install must NOT auto-apply — no fresh juggernaut block present
+if command -v jq >/dev/null 2>&1; then
+  if ! jq -e '.juggernaut // empty' "$WIPE_HOME/.claude/settings.json" >/dev/null 2>&1; then pass
+  else fail "install must not auto-apply a juggernaut block"; fi
+fi
+
+# Post-install message tells user to run apply explicitly.
+if [[ "$OUT" == *"juggernaut apply --auth=iam"* && "$OUT" == *"No configuration has been written"* ]]; then pass
+else fail "install should tell user to run apply explicitly"; fi
+
+rm -rf "$WIPE_HOME"
+
+# ---------------------------------------------------------------------------
+# --ref installs the requested branch
+# ---------------------------------------------------------------------------
 section "--ref installs the requested branch"
-TMP_REF_HOME="$(mktemp -d)"
 git -C "$TMP_SRC" checkout -q -b fixture-ref
 printf 'fixture-ref\n' > "$TMP_SRC/VERSION"
 git -C "$TMP_SRC" add VERSION
 git -C "$TMP_SRC" commit -q -m "fixture ref"
 git -C "$TMP_SRC" push -q "$TMP_REMOTE/repo.git" fixture-ref
 
-if OUTPUT="$(HOME="$TMP_REF_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" bash "$REPO_ROOT/install.sh" --ref fixture-ref 2>&1)" &&
-   [[ "$OUTPUT" == *"Installing Juggernaut fixture-ref"* ]] &&
-   [[ "$(tr -d '\r\n ' < "$TMP_REF_HOME/.juggernaut/VERSION")" == "fixture-ref" ]]; then
+REF_HOME="$(mktemp -d)"
+if OUT="$(HOME="$REF_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$REF_HOME/.juggernaut" \
+    bash "$REPO_ROOT/install.sh" --ref fixture-ref 2>&1)" &&
+   [[ "$OUT" == *"Installing Juggernaut fixture-ref"* ]] &&
+   [[ "$(tr -d '\r\n ' < "$REF_HOME/.juggernaut/VERSION")" == "fixture-ref" ]]; then
   pass
 else
   fail "--ref should clone and install the requested branch"
-  printf '%s\n' "$OUTPUT" >&2
+  printf '%s\n' "$OUT" >&2
 fi
+rm -rf "$REF_HOME"
 
-git -C "$TMP_SRC" checkout -q -b fixture-ref-2
-printf 'fixture-ref-2\n' > "$TMP_SRC/VERSION"
-git -C "$TMP_SRC" add VERSION
-git -C "$TMP_SRC" commit -q -m "fixture ref 2"
-git -C "$TMP_SRC" push -q "$TMP_REMOTE/repo.git" fixture-ref-2
-if OUTPUT="$(HOME="$TMP_REF_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" bash "$REPO_ROOT/install.sh" --ref fixture-ref-2 2>&1)" &&
-   [[ "$OUTPUT" == *"Updating existing installation"* ]] &&
-   [[ "$(tr -d '\r\n ' < "$TMP_REF_HOME/.juggernaut/VERSION")" == "fixture-ref-2" ]]; then
-  pass
+# ---------------------------------------------------------------------------
+# Dirty install backup
+# ---------------------------------------------------------------------------
+section "dirty existing install is backed up before clone"
+git clone --branch v9.9.9 -q "$TMP_REMOTE/repo.git" "$TMP_INSTALL_HOME/.juggernaut"
+printf '# local edit\n' >> "$TMP_INSTALL_HOME/.juggernaut/lib/schema.sh"
+if OUT="$(HOME="$TMP_INSTALL_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$TMP_INSTALL_HOME/.juggernaut" \
+    bash "$REPO_ROOT/install.sh" --version v9.9.9 2>&1)" &&
+   [[ "$OUT" == *"Existing installation has local changes"* ]] &&
+   [[ "$OUT" == *"Backup created:"* ]] &&
+   [[ -d "$TMP_INSTALL_HOME/.juggernaut" ]] &&
+   [[ -z "$(git -C "$TMP_INSTALL_HOME/.juggernaut" status --short)" ]]; then
+  shopt -s nullglob
+  BACKUPS=("$TMP_INSTALL_HOME"/.juggernaut.backup.*)
+  shopt -u nullglob
+  if [[ "${#BACKUPS[@]}" -ge 1 && -f "${BACKUPS[0]}/lib/schema.sh" ]] &&
+     grep -q '# local edit' "${BACKUPS[0]}/lib/schema.sh"; then
+    pass
+  else
+    fail "dirty install backup should preserve the edited install tree"
+    printf '%s\n' "$OUT" >&2
+  fi
 else
-  fail "--ref should update a clean existing install to the requested fetched ref"
-  printf '%s\n' "$OUTPUT" >&2
-fi
-rm -rf "$TMP_REF_HOME"
-
-section "piped installer --ref --configure writes Bedrock API-key settings"
-TMP_SCENARIO_SRC="$(mktemp -d)"
-TMP_SCENARIO_REMOTE="$(mktemp -d)"
-TMP_SCENARIO_HOME="$(mktemp -d)"
-git clone -q "$REPO_ROOT" "$TMP_SCENARIO_SRC"
-git -C "$TMP_SCENARIO_SRC" checkout -q -b scenario-ref
-git -C "$TMP_SCENARIO_SRC" config user.email test@example.invalid
-git -C "$TMP_SCENARIO_SRC" config user.name "Juggernaut Test"
-printf 'scenario-ref\n' > "$TMP_SCENARIO_SRC/VERSION"
-git -C "$TMP_SCENARIO_SRC" add VERSION
-git -C "$TMP_SCENARIO_SRC" commit -q -m "scenario ref"
-git clone --bare -q "$TMP_SCENARIO_SRC" "$TMP_SCENARIO_REMOTE/repo.git"
-
-OUTPUT="$(
-  HOME="$TMP_SCENARIO_HOME" JUGGERNAUT_REPO_URL="$TMP_SCENARIO_REMOTE/repo.git" \
-    bash -s -- --ref scenario-ref --configure --auth=bedrock-api-key \
-      --bedrock-key=br-ci-token --storage=profile --no-shell-fallback \
-      < "$REPO_ROOT/install.sh" 2>&1
-)"
-RC=$?
-if [[ "$RC" -eq 0 &&
-      "$OUTPUT" == *"Installing Juggernaut scenario-ref"* &&
-      "$OUTPUT" != *"unknown option '--ref'"* &&
-      "$OUTPUT" != *"unknown option '--auth'"* &&
-      "$(tr -d '\r\n ' < "$TMP_SCENARIO_HOME/.juggernaut/VERSION")" == "scenario-ref" &&
-      "$(jq -r '.juggernaut.auth.mode' "$TMP_SCENARIO_HOME/.claude/settings.json")" == "bedrock-api-key" &&
-      "$(jq -r '.juggernaut.auth.storage' "$TMP_SCENARIO_HOME/.claude/settings.json")" == "profile" ]]; then
-  pass
-else
-  fail "piped installer should install requested ref and pass configure args to apply"
-  printf '%s\n' "$OUTPUT" >&2
+  fail "dirty install should be backed up and replaced by a clean clone"
+  printf '%s\n' "$OUT" >&2
 fi
 
-if DOCTOR_OUTPUT="$(cd "$TMP_SCENARIO_HOME" && HOME="$TMP_SCENARIO_HOME" AWS_BEARER_TOKEN_BEDROCK=br-ci-token "$TMP_SCENARIO_HOME/.local/bin/juggernaut" doctor --v2 2>&1)" &&
-   [[ "$DOCTOR_OUTPUT" == *"Auth: Bedrock API key"* &&
-      "$DOCTOR_OUTPUT" == *"Status: OK"$'\n'"No issues found"* &&
-      "$DOCTOR_OUTPUT" != *"ParserError"* &&
-      "$DOCTOR_OUTPUT" != *"Unexpected token"* ]]; then
-  pass
-else
-  fail "installed launcher doctor should pass after piped API-key configure"
-  printf '%s\n' "$DOCTOR_OUTPUT" >&2
-fi
-rm -rf "$TMP_SCENARIO_SRC" "$TMP_SCENARIO_REMOTE" "$TMP_SCENARIO_HOME"
-
-section "fresh install doctor smoke"
-TMP_HOME="$(mktemp -d)"
-TMP_WORK="$(mktemp -d)"
-mkdir -p "$TMP_HOME/.claude"
-
-. "$REPO_ROOT/lib/schema.sh"
-. "$REPO_ROOT/lib/config_manager.sh"
-set +e
-
-export J_AUTH_MODE=iam
-export J_REGION=us-west-2
-export J_EFFORT=xhigh
-export J_STORAGE=profile
-export J_USE_MANTLE=false
-export J_OPUSPLAN=false
-export J_SCOPE=user
-J_VERSION="$(tr -d '\r\n ' < "$REPO_ROOT/VERSION" 2>/dev/null)"
-export J_VERSION
-export J_SHELL_FALLBACK_MODE=settings-only
-BLOCK="$(schema_new_juggernaut_block)"
-config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
-
-chmod +x "$REPO_ROOT/juggernaut" "$REPO_ROOT/commands/doctor.sh"
-if OUTPUT="$(cd "$TMP_WORK" && HOME="$TMP_HOME" AWS_PROFILE=juggernaut-test SHELL=/bin/bash "$REPO_ROOT/juggernaut" doctor --v2 2>&1)" &&
-   [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
-  pass
-else
-  fail "fresh install doctor smoke failed"
-  printf '%s\n' "$OUTPUT" >&2
-fi
-
-section "symlinked launcher resolves install dir"
-TMP_BIN="$TMP_HOME/.local/bin"
-mkdir -p "$TMP_BIN"
-ln -sfn "$REPO_ROOT/juggernaut" "$TMP_BIN/juggernaut"
-if OUTPUT="$(cd "$TMP_WORK" && HOME="$TMP_HOME" AWS_PROFILE=juggernaut-test SHELL=/bin/bash "$TMP_BIN/juggernaut" doctor --v2 2>&1)" &&
-   [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
-  pass
-else
-  fail "symlinked launcher should resolve commands from install dir"
-  printf '%s\n' "$OUTPUT" >&2
-fi
+# ---------------------------------------------------------------------------
+# --help
+# ---------------------------------------------------------------------------
+section "install.sh --help exits 0"
+HELP="$(bash "$REPO_ROOT/install.sh" --help 2>&1)"; RC=$?
+if [[ $RC -eq 0 && "$HELP" == *"--dry-run"* && "$HELP" == *"--ref"* ]]; then pass
+else fail "install --help should exit 0 and document --dry-run/--ref"; fi
 
 echo
 echo "install tests: $PASS passed, $FAIL failed"

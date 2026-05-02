@@ -74,12 +74,20 @@ schema_new_juggernaut_block() {
   local region="${J_REGION:-$(schema_default_region)}"
   local shell_mode="${J_SHELL_FALLBACK_MODE:-both}"
   local scope="${J_SCOPE:-user}"
-  local version="${J_VERSION:-2.3.4}"
+  local version="${J_VERSION:-3.0.0}"
+  local auth_validated="${J_AUTH_VALIDATED:-false}"
+
+  # Read the auth-gated env overlay (CLAUDE_CODE_USE_BEDROCK=1) separately so
+  # it only merges when apply confirmed a working credential path.
+  local bedrock_auth_env
+  bedrock_auth_env="$(jq -c '.environment_bedrock_auth // {}' "${BEDROCK_CONFIG_PATH:-bedrock-config.json}")"
 
   # Assemble env map: start from bedrock-config.json defaults, then overlay.
   local env_json
   env_json="$(jq -n \
     --argjson base "$bedrock_env" \
+    --argjson bedrock_auth "$bedrock_auth_env" \
+    --argjson auth_validated "$auth_validated" \
     --arg region "$region" \
     --arg model "$model" \
     --arg opus "$opus_model" \
@@ -92,6 +100,7 @@ schema_new_juggernaut_block() {
     --arg mantle_base_url "$mantle_base_url" \
     '
     $base
+    + (if $auth_validated then $bedrock_auth else {} end)
     + { AWS_REGION: $region }
     + { ANTHROPIC_MODEL: (if $opusplan then "opusplan" else $model end) }
     + { ANTHROPIC_DEFAULT_OPUS_MODEL: $opus,

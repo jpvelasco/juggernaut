@@ -1,4 +1,4 @@
-# lib/keychain.ps1 - OS keychain abstraction for Juggernaut v2 (PowerShell).
+# lib/keychain.ps1 - OS keychain abstraction for Juggernaut (PowerShell).
 # Mirror of lib/keychain.sh. Requires PowerShell 5.1+.
 
 $script:KeychainService = 'juggernaut-bedrock'
@@ -188,45 +188,4 @@ public static extern bool CredDelete(string target, int type, int flags);
             [Win32.CredDeleteApi]::CredDelete($svc, 1, 0) | Out-Null
         }
     }
-}
-
-# Get-KeychainRetrievalExpression <shell>
-# Returns the shell expression to embed in a profile for runtime key retrieval.
-function Get-KeychainRetrievalExpression {
-    param([Parameter(Mandatory)][string]$Shell)
-    $svc = Get-KeychainServiceName
-    $acc = Get-KeychainAccountName
-    $os  = Get-KeychainOS
-    $cmd = switch ($os) {
-        'macos'             { "security find-generic-password -s '$svc' -a '$acc' -w 2>/dev/null" }
-        { $_ -in 'linux','wsl' } { "secret-tool lookup service '$svc' account '$acc' 2>/dev/null" }
-        'windows'           {
-            # Build the P/Invoke command using a here-string to avoid escaping hell.
-            $memberDef = @'
-[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
-public static extern bool CredRead(string t, int ty, int f, out IntPtr c);
-[DllImport("advapi32.dll")]
-public static extern void CredFree(IntPtr c);
-[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
-public struct CREDENTIAL {
-    public int Flags; public int Type; public string TargetName; public string Comment;
-    public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob;
-    public int Persist; public int AttributeCount; public IntPtr Attributes;
-    public string TargetAlias; public string UserName;
-}
-'@
-            # Escape double quotes in the member definition for inline shell embedding.
-            $memberDef = $memberDef -replace '"', '\"'
-            # Build the command: Add-Type + retrieve credential + cleanup.
-            $psCmd = "Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition `"$memberDef`"; " +
-                     "`$p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('$svc',1,0,[ref]`$p)){ " +
-                     "`$c=[Runtime.InteropServices.Marshal]::PtrToStructure(`$p,[Type][Win32.Cred+CREDENTIAL]); " +
-                     "if(`$c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::PtrToStringUni(`$c.CredentialBlob,`$c.CredentialBlobSize/2)}; " +
-                     "[Win32.Cred]::CredFree(`$p) }"
-            "powershell.exe -NoProfile -Command `"$psCmd`" 2>/dev/null | tr -d '`r'"
-        }
-        default { "echo ''" }
-    }
-    if ($Shell -eq 'fish') { return "($cmd)" }
-    return "`$($cmd)"
 }

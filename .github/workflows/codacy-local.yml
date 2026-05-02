@@ -1,0 +1,32 @@
+name: Codacy Local Analysis
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  codacy-local:
+    name: Codacy Local Analysis
+    runs-on: ubuntu-latest
+
+    env:
+      CODACY_CLI_V2_VERSION: 1.0.0-main.376.sha.799aab5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y curl tar
+
+      - name: Install Codacy tools
+        shell: bash
+        run: bash <(curl -Ls https://raw.githubusercontent.com/codacy/codacy-cli-v2/main/codacy-cli.sh) install
+
+      - name: Run Codacy local analysis
+        shell: bash
+        run: bash <(curl -Ls https://raw.githubusercontent.com/codacy/codacy-cli-v2/main/codacy-cli.sh) analyze --format sarif --output .codacy/codacy-results.sarif

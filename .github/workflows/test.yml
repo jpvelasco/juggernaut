@@ -21,11 +21,10 @@ jobs:
 
       - name: Run shellcheck
         run: |
-          shellcheck setup-claude-bedrock.sh uninstall.sh validate-setup.sh apply-config.sh install.sh setup
-          shellcheck juggernaut commands/apply.sh lib/keychain.sh lib/profile_writer.sh lib/schema.sh lib/config_manager.sh lib/migrator.sh
-          shellcheck lib/profile_paths.sh lib/upgrade_banner.sh
-          shellcheck tests/v2/test_keychain.sh tests/v2/test_apply.sh tests/v2/test_install.sh
-          shellcheck tests/v2/test_upgrade_banner.sh tests/v2/test_doctor_v1.sh
+          shellcheck juggernaut install.sh commands/*.sh \
+            lib/keychain.sh lib/schema.sh lib/config_manager.sh \
+            lib/profile_paths.sh lib/doctor.sh \
+            tests/v2/test_*.sh
 
       - name: Verify version sync
         run: |
@@ -74,89 +73,37 @@ jobs:
           echo "Bash: $(which bash)"
           bash --version | head -1
 
-      - name: Run test suite
-        run: bash ./test.sh
-
-      - name: Test dry-run (bash)
-        run: bash ./setup-claude-bedrock.sh bash --dry-run
-
-      - name: Test dry-run (zsh)
-        run: bash ./setup-claude-bedrock.sh zsh --dry-run
-
-      - name: Test dry-run (fish)
-        run: bash ./setup-claude-bedrock.sh fish --dry-run
-
-      - name: Test fish config syntax (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          # Generate fish config and validate syntax
-          bash ./setup-claude-bedrock.sh fish --dry-run | grep -A 100 "Would append" | grep "set -gx" > /tmp/fish_config.fish || true
-          if [[ -s /tmp/fish_config.fish ]]; then
-            fish -c "source /tmp/fish_config.fish && echo 'Fish syntax OK'"
-          fi
-
-      - name: Test unified entry point
-        run: bash ./setup --dry-run
-
-      - name: Test keychain storage (dry-run)
-        run: bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
-
-      - name: Test keychain with all shells (dry-run)
-        run: |
-          for shell in bash zsh fish; do
-            echo "Testing $shell..."
-            bash ./setup-claude-bedrock.sh $shell --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
-          done
-
-      - name: Test special characters in API key
-        run: |
-          # Test various special characters that could cause injection
-          bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test$var' --dry-run
-          bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test"quote' --dry-run
-          bash ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key="br-test'quote" --dry-run
-
-      - name: Test actual keychain store/retrieve (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          # Test actual keychain operations
-          TEST_KEY="br-citest-$(date +%s)"
-          SERVICE="juggernaut-bedrock-test"
-          ACCOUNT="test-key"
-
-          # Store in keychain
-          security add-generic-password -s "$SERVICE" -a "$ACCOUNT" -w "$TEST_KEY" 2>/dev/null || true
-
-          # Retrieve and verify
-          RETRIEVED=$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>/dev/null)
-          if [[ "$RETRIEVED" == "$TEST_KEY" ]]; then
-            echo "✓ Keychain store/retrieve works correctly"
-          else
-            echo "✗ Keychain mismatch: expected '$TEST_KEY', got '$RETRIEVED'"
-            exit 1
-          fi
-
-          # Cleanup
-          security delete-generic-password -s "$SERVICE" -a "$ACCOUNT" 2>/dev/null || true
-
-      - name: Test uninstall help
-        run: bash ./uninstall.sh --help
-
-      - name: Run v2 bash tests
+      - name: Run bash tests
         run: |
           bash ./tests/v2/test_schema.sh
           bash ./tests/v2/test_config_manager.sh
-          bash ./tests/v2/test_feature_flag.sh
-          bash ./tests/v2/test_migrator.sh
           bash ./tests/v2/test_keychain.sh
           bash ./tests/v2/test_apply.sh
           bash ./tests/v2/test_show.sh
           bash ./tests/v2/test_doctor.sh
           bash ./tests/v2/test_uninstall.sh
           bash ./tests/v2/test_install.sh
-          bash ./tests/v2/test_upgrade_banner.sh
-          bash ./tests/v2/test_doctor_v1.sh
 
-      - name: Run piped installer scenario
+      - name: Test actual keychain store/retrieve (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          TEST_KEY="br-citest-$(date +%s)"
+          SERVICE="juggernaut-bedrock-test"
+          ACCOUNT="test-key"
+
+          security add-generic-password -s "$SERVICE" -a "$ACCOUNT" -w "$TEST_KEY" 2>/dev/null || true
+
+          RETRIEVED=$(security find-generic-password -s "$SERVICE" -a "$ACCOUNT" -w 2>/dev/null)
+          if [[ "$RETRIEVED" == "$TEST_KEY" ]]; then
+            echo "Keychain store/retrieve works correctly"
+          else
+            echo "Keychain mismatch: expected '$TEST_KEY', got '$RETRIEVED'"
+            exit 1
+          fi
+
+          security delete-generic-password -s "$SERVICE" -a "$ACCOUNT" 2>/dev/null || true
+
+      - name: Run piped installer scenario (--dry-run)
         run: |
           tmp_remote="$(mktemp -d)"
           tmp_src="$(mktemp -d)"
@@ -171,11 +118,31 @@ jobs:
           git -C "$tmp_src" commit -q -m "ci installer ref"
           git clone --bare -q "$tmp_src" "$tmp_remote/repo.git"
           HOME="$tmp_home" JUGGERNAUT_REPO_URL="$tmp_remote/repo.git" \
-            bash -s -- --ref ci-installer-ref --configure --auth=bedrock-api-key \
-              --bedrock-key=br-ci-token --storage=profile --no-shell-fallback \
-              < ./install.sh
+            bash ./install.sh --ref ci-installer-ref --dry-run
+          test ! -d "$tmp_home/.juggernaut"
+
+      - name: Run piped installer scenario (install)
+        run: |
+          tmp_remote="$(mktemp -d)"
+          tmp_src="$(mktemp -d)"
+          tmp_home="$(mktemp -d)"
+          trap 'rm -rf "$tmp_remote" "$tmp_src" "$tmp_home"' EXIT
+          git clone -q "$GITHUB_WORKSPACE" "$tmp_src"
+          git -C "$tmp_src" checkout -q -b ci-installer-ref
+          git -C "$tmp_src" config user.email test@example.invalid
+          git -C "$tmp_src" config user.name "Juggernaut CI"
+          printf 'ci-installer-ref\n' > "$tmp_src/VERSION"
+          git -C "$tmp_src" add VERSION
+          git -C "$tmp_src" commit -q -m "ci installer ref"
+          git clone --bare -q "$tmp_src" "$tmp_remote/repo.git"
+          HOME="$tmp_home" JUGGERNAUT_REPO_URL="$tmp_remote/repo.git" \
+            bash ./install.sh --ref ci-installer-ref
           test "$(tr -d '\r\n ' < "$tmp_home/.juggernaut/VERSION")" = "ci-installer-ref"
-          test "$(jq -r '.juggernaut.auth.mode' "$tmp_home/.claude/settings.json")" = "bedrock-api-key"
+          # v3 installer no longer auto-applies — settings.json must NOT contain a juggernaut block
+          if [[ -f "$tmp_home/.claude/settings.json" ]]; then
+            jq -e '.juggernaut // empty' "$tmp_home/.claude/settings.json" >/dev/null && \
+              { echo "FAIL: installer auto-applied juggernaut block"; exit 1; } || true
+          fi
 
   test-windows-powershell:
     name: Test on Windows (PowerShell)
@@ -192,29 +159,13 @@ jobs:
           Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
           Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
 
-      - name: Test PowerShell setup (dry-run)
+      - name: Test installer dry-run
         shell: pwsh
-        run: .\setup-claude-bedrock.ps1 -DryRun
+        run: .\install.ps1 -DryRun
 
-      - name: Test PowerShell setup with region
+      - name: Test installer help
         shell: pwsh
-        run: .\setup-claude-bedrock.ps1 -DryRun -Region us-east-1
-
-      - name: Test PowerShell setup help
-        shell: pwsh
-        run: .\setup-claude-bedrock.ps1 -Help
-
-      - name: Test PowerShell keychain storage (dry-run)
-        shell: pwsh
-        run: .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey br-test123 -Storage keychain -DryRun
-
-      - name: Test PowerShell special characters in API key
-        shell: pwsh
-        run: |
-          # Test special characters that could cause issues
-          .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey 'br-test$var' -DryRun
-          .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey 'br-test"quote' -DryRun
-          .\setup-claude-bedrock.ps1 -Auth api-key -BedrockKey "br-test'quote" -DryRun
+        run: .\install.ps1 -Help
 
       - name: Test actual Credential Manager store/retrieve
         shell: pwsh
@@ -222,20 +173,17 @@ jobs:
           $testKey = "br-citest-$(Get-Date -Format 'yyyyMMddHHmmss')"
           $target = "juggernaut-bedrock-test"
 
-          # Store credential using cmdkey
           $null = cmdkey /delete:$target 2>$null
           cmdkey /generic:$target /user:api-key /pass:$testKey
 
-          # Verify it was stored
           $stored = cmdkey /list:$target 2>&1
           if ($stored -match $target) {
-            Write-Host "✓ Credential Manager store works"
+            Write-Host "Credential Manager store works"
           } else {
-            Write-Host "✗ Credential not found"
+            Write-Host "Credential not found"
             exit 1
           }
 
-          # Cleanup
           cmdkey /delete:$target
 
       - name: Validate JSON
@@ -249,7 +197,7 @@ jobs:
           Import-Module Pester -MinimumVersion 5.0.0
           Write-Host "Pester version: $((Get-Module Pester).Version)"
 
-      - name: Run v2 Pester tests
+      - name: Run Pester tests
         timeout-minutes: 5
         shell: pwsh
         run: |
@@ -279,23 +227,17 @@ jobs:
           echo "Shell: $SHELL"
           echo "Bash version: $BASH_VERSION"
 
-      - name: Run test suite
-        shell: bash
-        run: ./test.sh
-
-      - name: Test dry-run (bash)
-        shell: bash
-        run: ./setup-claude-bedrock.sh bash --dry-run
-
-      - name: Test keychain storage (dry-run)
-        shell: bash
-        run: ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key=br-test123 --storage=keychain --dry-run
-
-      - name: Test special characters in API key
+      - name: Run bash tests
         shell: bash
         run: |
-          ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test$var' --dry-run
-          ./setup-claude-bedrock.sh bash --auth=api-key --bedrock-key='br-test"quote' --dry-run
+          bash ./tests/v2/test_schema.sh
+          bash ./tests/v2/test_config_manager.sh
+          bash ./tests/v2/test_keychain.sh
+          bash ./tests/v2/test_apply.sh
+          bash ./tests/v2/test_show.sh
+          bash ./tests/v2/test_doctor.sh
+          bash ./tests/v2/test_uninstall.sh
+          bash ./tests/v2/test_install.sh
 
       - name: Test actual Credential Manager (Git Bash)
         shell: bash
@@ -303,58 +245,18 @@ jobs:
           TEST_KEY="br-citest-$(date +%s)"
           TARGET="juggernaut-bedrock-test"
 
-          # Store using cmdkey
           cmdkey.exe /delete:"$TARGET" >/dev/null 2>&1 || true
           cmdkey.exe /generic:"$TARGET" /user:api-key /pass:"$TEST_KEY"
 
-          # Verify stored
           if cmdkey.exe /list:"$TARGET" 2>&1 | grep -q "$TARGET"; then
-            echo "✓ Credential Manager store works from Git Bash"
+            echo "Credential Manager store works from Git Bash"
           else
-            echo "✗ Credential not found"
+            echo "Credential not found"
             exit 1
           fi
 
-          # Cleanup
           cmdkey.exe /delete:"$TARGET" >/dev/null 2>&1 || true
 
-      - name: Test unified entry point
+      - name: Test installer dry-run
         shell: bash
-        run: ./setup --dry-run
-
-  legacy-escape:
-    name: Legacy escape (JUGGERNAUT_USE_V2=0)
-    runs-on: ubuntu-latest
-    needs: lint
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Verify v2 gate exits 2 when JUGGERNAUT_USE_V2=0
-        run: |
-          for script in commands/show.sh commands/doctor.sh commands/uninstall.sh commands/migrate.sh; do
-            rc=0
-            JUGGERNAUT_USE_V2=0 bash "./$script" >/dev/null 2>&1 || rc=$?
-            if [[ "$rc" -eq 2 ]]; then
-              echo "OK: $script exits 2 with JUGGERNAUT_USE_V2=0"
-            else
-              echo "FAIL: $script should exit 2 with JUGGERNAUT_USE_V2=0 (got $rc)"
-              exit 1
-            fi
-          done
-
-      - name: Verify juggernaut dispatcher with --legacy-v1 invokes setup
-        run: |
-          # --legacy-v1 should invoke the legacy path; setup will exit 0 or fail gracefully.
-          JUGGERNAUT_SUPPRESS_DEPRECATION=1 bash ./juggernaut --legacy-v1 --dry-run 2>/dev/null || true
-
-      - name: Run v2 core tests with JUGGERNAUT_USE_V2 unset (default-ON)
-        run: |
-          unset JUGGERNAUT_USE_V2
-          bash ./tests/v2/test_schema.sh
-          bash ./tests/v2/test_config_manager.sh
-          bash ./tests/v2/test_migrator.sh
+        run: bash ./install.sh --dry-run

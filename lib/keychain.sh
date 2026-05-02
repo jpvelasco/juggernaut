@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# lib/keychain.sh — OS keychain abstraction for Juggernaut v2.
-# Extracted from setup-claude-bedrock.sh. setup-claude-bedrock.sh is unchanged.
+# lib/keychain.sh - OS keychain abstraction for Juggernaut.
 # Requires: bash 4+.
 
 set -euo pipefail
 
-KEYCHAIN_SERVICE="juggernaut-bedrock"
+KEYCHAIN_SERVICE_DEFAULT="juggernaut-bedrock"
 KEYCHAIN_ACCOUNT="api-key"
 
+# Resolve the active service name. The JUGGERNAUT_KEYCHAIN_SERVICE override
+# exists so tests can isolate against a guaranteed-absent service.
+keychain_service_name() {
+  printf '%s' "${JUGGERNAUT_KEYCHAIN_SERVICE:-$KEYCHAIN_SERVICE_DEFAULT}"
+}
+KEYCHAIN_SERVICE="$(keychain_service_name)"
+
 # keychain_detect_os
-# Same logic as detect_os in setup-claude-bedrock.sh, kept local to avoid
-# depending on the v1 script being sourced.
 keychain_detect_os() {
   case "$OSTYPE" in
     darwin*)      echo "macos" ;;
@@ -173,35 +177,4 @@ keychain_delete() {
       cmdkey.exe /delete:"$KEYCHAIN_SERVICE" >/dev/null 2>&1 || true
       ;;
   esac
-}
-
-# keychain_get_command <shell>
-# Prints the shell expression used at profile startup to retrieve the key.
-# Output is ready to embed verbatim in an export/set -gx line.
-keychain_get_command() {
-  local shell="$1"
-  local os cmd
-  os="$(keychain_detect_os)"
-
-  case "$os" in
-    macos)
-      cmd="security find-generic-password -s '$KEYCHAIN_SERVICE' -a '$KEYCHAIN_ACCOUNT' -w 2>/dev/null"
-      ;;
-    linux|wsl)
-      cmd="secret-tool lookup service '$KEYCHAIN_SERVICE' account '$KEYCHAIN_ACCOUNT' 2>/dev/null"
-      ;;
-    gitbash|cygwin)
-      # Single-line PowerShell command that reads from Windows Credential Manager.
-      cmd="powershell.exe -NoProfile -Command \"Add-Type -Namespace 'Win32' -Name 'Cred' -MemberDefinition '[DllImport(\\\"advapi32.dll\\\", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool CredRead(string t, int ty, int f, out IntPtr c); [DllImport(\\\"advapi32.dll\\\")] public static extern void CredFree(IntPtr c); [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment; public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist; public int AttributeCount; public IntPtr Attributes; public string TargetAlias; public string UserName; }'; \\\$p=[IntPtr]::Zero; if([Win32.Cred]::CredRead('$KEYCHAIN_SERVICE',1,0,[ref]\\\$p)){ \\\$c=[Runtime.InteropServices.Marshal]::PtrToStructure(\\\$p,[Type][Win32.Cred+CREDENTIAL]); if(\\\$c.CredentialBlobSize -gt 0){[Runtime.InteropServices.Marshal]::PtrToStringUni(\\\$c.CredentialBlob,\\\$c.CredentialBlobSize/2)}; [Win32.Cred]::CredFree(\\\$p) }\" 2>/dev/null | tr -d '\\r'"
-      ;;
-    *)
-      cmd="echo ''"
-      ;;
-  esac
-
-  if [[ "$shell" == "fish" ]]; then
-    printf '(%s)' "$cmd"
-  else
-    printf '$(%s)' "$cmd"
-  fi
 }

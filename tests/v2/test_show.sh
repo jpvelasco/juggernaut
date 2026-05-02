@@ -1,24 +1,17 @@
 #!/usr/bin/env bash
-# tests/v2/test_show.sh — integration checks for commands/show.sh.
+# tests/v2/test_show.sh — v3 tests for commands/show.sh.
+# Covers: human-readable output, active/selected scope hints, --scope flag.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-PASS=0
-FAIL=0
-
+PASS=0; FAIL=0
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
 
-section "v2 gate — JUGGERNAUT_USE_V2=0 exits 2"
-JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/show.sh" >/dev/null 2>&1
-_RC=$?
-if [[ "$_RC" -eq 2 ]]; then pass; else fail "show.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $_RC)"; fi
-
-section "human-readable output"
 TMP_HOME="$(mktemp -d)"
 TMP_WORK="$(mktemp -d)"
 trap 'rm -rf "$TMP_HOME" "$TMP_WORK"' EXIT
@@ -27,19 +20,24 @@ mkdir -p "$TMP_HOME/.claude"
 
 export HOME="$TMP_HOME"
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
-export JUGGERNAUT_USE_V2=1
 export SHELL="/bin/zsh"
-EXPECTED_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
+EXPECTED_VERSION="$(tr -d '\r\n ' < "$REPO_ROOT/VERSION" 2>/dev/null || echo "3.0.0")"
 
+# shellcheck source=/dev/null
 . "$REPO_ROOT/lib/schema.sh"
+# shellcheck source=/dev/null
 . "$REPO_ROOT/lib/config_manager.sh"
 set +e
 
-J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
+# ---------------------------------------------------------------------------
+# Human-readable IAM output
+# ---------------------------------------------------------------------------
+section "IAM + user scope — human-readable output"
+USER_BLOCK="$(J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
   J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
-  J_SHELL_FALLBACK_MODE=both \
-  USER_BLOCK="$(schema_new_juggernaut_block)"
-config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
+  J_AUTH_VALIDATED=true schema_new_juggernaut_block)"
+config_write_atomic "$TMP_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
 
 OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
 if [[ "$OUTPUT" == *"Scope Awareness"* &&
@@ -49,22 +47,26 @@ if [[ "$OUTPUT" == *"Scope Awareness"* &&
       "$OUTPUT" == *"Auth: IAM"* &&
       "$OUTPUT" == *"Region: us-west-2"* &&
       "$OUTPUT" == *"Project Scope"* &&
-      "$OUTPUT" == *"Status: No Juggernaut block"* &&
-      "$OUTPUT" == *"Shell Fallback"* &&
-      "$OUTPUT" == *"Present: yes"* &&
-      "$OUTPUT" == *"Storage: keychain"* ]]; then
+      "$OUTPUT" == *"Status: No Juggernaut block"* ]]; then
   pass
 else
-  fail "expected show output to match the calm layout"
+  fail "expected show output to describe IAM + user scope"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "human-readable output without shell fallback"
-J_AUTH_MODE=api-key J_REGION=eu-west-1 J_EFFORT=xhigh J_STORAGE=keychain \
+# v3: no "Shell Fallback" section anywhere in output.
+if [[ "$OUTPUT" != *"Shell Fallback"* ]]; then pass
+else fail "v3 show output should NOT include a Shell Fallback section"; fi
+
+# ---------------------------------------------------------------------------
+# Bedrock API-key + opusplan + Mantle
+# ---------------------------------------------------------------------------
+section "Bedrock API-key + opusplan + Mantle"
+USER_BLOCK="$(J_AUTH_MODE=bedrock-api-key J_REGION=eu-west-1 J_EFFORT=xhigh J_STORAGE=keychain \
   J_USE_MANTLE=true J_OPUSPLAN=true J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
-  J_SHELL_FALLBACK_MODE=settings-only \
-  USER_BLOCK="$(schema_new_juggernaut_block)"
-config_write_atomic "$TMP_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
+  J_AUTH_VALIDATED=true schema_new_juggernaut_block)"
+config_write_atomic "$TMP_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$USER_BLOCK" "$(schema_derive_native_keys "$USER_BLOCK")")"
 
 export SHELL="/bin/bash"
 OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" 2>&1)"
@@ -72,23 +74,23 @@ if [[ "$OUTPUT" == *"User Scope (active)"* &&
       "$OUTPUT" == *"Auth: Bedrock API key"* &&
       "$OUTPUT" == *"Region: eu-west-1"* &&
       "$OUTPUT" == *"Opus Plan: enabled"* &&
-      "$OUTPUT" == *"Mantle: enabled"* &&
-      "$OUTPUT" == *"Shell Fallback"* &&
-      "$OUTPUT" == *"Present: no"* &&
-      "$OUTPUT" != *"Storage: keychain"* ]]; then
+      "$OUTPUT" == *"Mantle: enabled"* ]]; then
   pass
 else
-  fail "expected disabled shell fallback output to omit storage"
+  fail "expected Bedrock API key + opusplan + Mantle output"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "shows both scopes when both exist"
+# ---------------------------------------------------------------------------
+# Both scopes — show with --scope=user, project still marked active
+# ---------------------------------------------------------------------------
+section "both scopes — --scope=user shows selected hint while project stays active"
 mkdir -p "$TMP_WORK/.claude"
-J_AUTH_MODE=iam J_REGION=ap-southeast-1 J_EFFORT=xhigh J_STORAGE=profile \
+PROJECT_BLOCK="$(J_AUTH_MODE=iam J_REGION=ap-southeast-1 J_EFFORT=xhigh J_STORAGE=profile \
   J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=project J_VERSION="$EXPECTED_VERSION" \
-  J_SHELL_FALLBACK_MODE=settings-only \
-  PROJECT_BLOCK="$(schema_new_juggernaut_block)"
-config_write_atomic "$TMP_WORK/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"
+  J_AUTH_VALIDATED=true schema_new_juggernaut_block)"
+config_write_atomic "$TMP_WORK/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$PROJECT_BLOCK" "$(schema_derive_native_keys "$PROJECT_BLOCK")")"
 
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/show.sh" --scope=user 2>&1)"
 if [[ "$OUTPUT" == *"Selected Scope: user"* &&
@@ -102,6 +104,16 @@ else
   fail "expected show to print both scopes and mark selected/active"
   printf '%s\n' "$OUTPUT" >&2
 fi
+
+# ---------------------------------------------------------------------------
+# Help text
+# ---------------------------------------------------------------------------
+section "show --help exits 0, does not mention legacy flags"
+help_out="$(bash "$REPO_ROOT/commands/show.sh" --help 2>&1)"; rc=$?
+if [[ $rc -eq 0 ]]; then pass; else fail "show --help should exit 0 (got $rc)"; fi
+if [[ "$help_out" == *"--scope"* ]]; then pass; else fail "show --help should mention --scope"; fi
+if [[ "$help_out" != *"--legacy-v1"* && "$help_out" != *"shell-fallback"* ]]; then pass
+else fail "show --help should NOT mention legacy flags"; fi
 
 echo
 echo "show.sh tests: $PASS passed, $FAIL failed"

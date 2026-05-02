@@ -2,6 +2,31 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.0] - 2026-05-01
+
+**Breaking release.** Clean break from v1 and v2's dual-code-path setup. Re-run the installer to upgrade — there is no migration script.
+
+### Removed
+
+- **v1 shell-profile-only mode** — every root-level v1 script (`setup`, `setup-claude-bedrock.{sh,ps1}`, `apply-config.{sh,ps1}`, `validate-setup.{sh,ps1}`, root `uninstall.{sh,ps1}`, `test.sh`), every v1 library (`lib/migrator.{sh,ps1}`, `lib/upgrade_banner.{sh,ps1}`), the `migrate` subcommand, and every v1 test fixture deleted. The `--legacy-v1`, `-LegacyV1`, `JUGGERNAUT_USE_V2`, `JUGGERNAUT_USE_V1`, `JUGGERNAUT_SUPPRESS_DEPRECATION`, `JUGGERNAUT_PS_V1_SCAN`, `JUGGERNAUT_FORCE_MIGRATION_PROMPT`, and `--force-migration-prompt` gates are gone.
+- **Shell-profile fallback** — `lib/profile_writer.{sh,ps1}`, `--no-shell-fallback`/`--shell-fallback-only` flags, the orphaned `keychain_get_command`/`Get-KeychainRetrievalExpression` helpers, and every profile-related doctor/show/uninstall code path deleted. `settings.json` is the sole output.
+- **Installer auto-apply** — `--configure`/`-Configure`, `--yes`/`-Yes`, `--keep-all-backups`/`-KeepAllBackups`, and `SETUP_ARGS` are gone. Installers never invoke `juggernaut apply`.
+
+### Changed (breaking)
+
+- **Installer is destructive wipe-and-reinstall.** Every run of `install.sh` / `install.ps1` strips legacy `# BEGIN: Juggernaut` and `# BEGIN: Claude Code Bedrock Configuration` blocks from all known shell-profile paths, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the `juggernaut-bedrock` OS-keychain entry before placing fresh files. Pre-wipe summary printed in every run. `--dry-run` / `-DryRun` previews without writing.
+- **`CLAUDE_CODE_USE_BEDROCK=1` now gated behind validated auth.** `juggernaut apply` refuses to write it unless `aws sts get-caller-identity` succeeds, `AWS_BEARER_TOKEN_BEDROCK` is set, or a `juggernaut-bedrock` keychain entry exists. Pass `--auth=iam` or `--auth=bedrock-api-key` (or `-Auth iam` / `-Auth bedrock-api-key` on PowerShell) to confirm. Internally threaded as `J_AUTH_VALIDATED=true` into `lib/schema.{sh,ps1}`.
+- **Mantle routing enabled by default.** `--mantle`/`-Mantle` replaced with `--no-mantle`/`-NoMantle`. Auto-enable on bearer-token detection removed (Mantle is always on unless opted out).
+- **Windows profile coverage.** Installer scans `Documents\WindowsPowerShell\profile.ps1` (5.1) and `Documents\PowerShell\profile.ps1` (7), plus `$PROFILE.AllUsersAllHosts` and `$PROFILE.CurrentUserAllHosts`. OneDrive-redirected `Documents\` followed automatically. Non-admin runs warn-and-skip AllUsers paths.
+
+### Added
+
+- **Opusplan drift diagnostic.** `juggernaut doctor` now compares `.env.ANTHROPIC_MODEL` in settings vs. the Juggernaut block and WARNs on mismatch when `opusplan` is enabled. Catches external `ANTHROPIC_MODEL` overrides.
+
+### Migration
+
+Re-run the installer. There is no other upgrade path.
+
 ## [2.3.4] - 2026-05-01
 
 ### Fixed
@@ -212,6 +237,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[3.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.0
 [2.3.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.4
 [2.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.3
 [2.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.2
