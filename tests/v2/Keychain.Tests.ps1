@@ -51,16 +51,3 @@ Describe 'Get-KeychainEntry — not found returns $null' {
     }
 }
 
-Describe 'Get-KeychainRetrievalExpression' {
-    It 'bash expression references the service' {
-        $expr = Get-KeychainRetrievalExpression -Shell 'bash'
-        $expr | Should -Not -BeNullOrEmpty
-        $expr | Should -Match 'juggernaut-bedrock'
-    }
-    It 'fish expression wraps with () instead of $()' {
-        $expr = Get-KeychainRetrievalExpression -Shell 'fish'
-        $expr | Should -Not -BeNullOrEmpty
-        $expr.StartsWith('$(') | Should -BeFalse
-        $expr.StartsWith('(')  | Should -BeTrue
-    }
-}

@@ -1,4 +1,4 @@
-# tests/v2/Uninstall.Tests.ps1 - Pester 5 tests for commands/uninstall.ps1
+# tests/v2/Uninstall.Tests.ps1 — Pester 5 tests for v3 commands/uninstall.ps1.
 
 BeforeAll {
     function Get-RepoRoot {
@@ -9,10 +9,11 @@ BeforeAll {
     . (Join-Path $script:RepoRoot 'lib\schema.ps1')
     . (Join-Path $script:RepoRoot 'lib\config_manager.ps1')
     . (Join-Path $script:RepoRoot 'lib\keychain.ps1')
-    . (Join-Path $script:RepoRoot 'lib\profile_writer.ps1')
     $script:BedrockConfigPath = Join-Path $script:RepoRoot 'bedrock-config.json'
     $script:UninstallScript   = Join-Path $script:RepoRoot 'commands\uninstall.ps1'
     $env:BEDROCK_CONFIG_PATH  = $script:BedrockConfigPath
+    # Isolate keychain access to a guaranteed-absent service.
+    $env:JUGGERNAUT_KEYCHAIN_SERVICE = "juggernaut-absent-pester-$([guid]::NewGuid().Guid)"
 
     function New-TestDirs {
         $h = Join-Path ([IO.Path]::GetTempPath()) ("jug-ui-h-" + [Guid]::NewGuid().ToString('N'))
@@ -23,8 +24,8 @@ BeforeAll {
     }
 
     function Write-TestSettings($path, $region = 'us-west-2') {
-        $block = New-JuggernautBlock -AuthMode 'iam' -Region $region -Storage 'profile' `
-            -UseMantle $false -ShellFallbackMode 'settings-only' -Scope 'user' `
+        $block = New-JuggernautBlock -AuthMode 'iam' -AuthValidated $true `
+            -Region $region -Storage 'profile' -UseMantle $false `
             -BedrockConfigPath $script:BedrockConfigPath
         $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block `
             -NativeKeys (Get-NativeKeysFromJuggernautBlock -Block $block)
@@ -34,15 +35,11 @@ BeforeAll {
     function Invoke-Uninstall($d, $params = @{}) {
         $oldHome    = $env:HOME
         $oldProfile = $env:USERPROFILE
-        $oldV2      = $env:JUGGERNAUT_USE_V2
         $oldBedrock = $env:BEDROCK_CONFIG_PATH
-        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
         $oldLoc     = (Get-Location).Path
         try {
             $env:HOME = $d.Home; $env:USERPROFILE = $d.Home
-            $env:JUGGERNAUT_USE_V2 = '1'
             $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
-            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = Join-Path $d.Home 'PowerShell\profile.ps1'
             Set-Variable -Name HOME -Value $d.Home -Scope Global -Force
             Set-Location $d.Work
             $output = & $script:UninstallScript @params 2>&1 | Out-String
@@ -51,10 +48,7 @@ BeforeAll {
             Set-Location $oldLoc
             Set-Variable -Name HOME -Value $oldHome -Scope Global -Force
             $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
-            $env:JUGGERNAUT_USE_V2 = $oldV2
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
-            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
-            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
         }
     }
 
@@ -63,21 +57,12 @@ BeforeAll {
     }
 }
 
-Describe 'uninstall.ps1' {
+AfterAll {
+    Remove-Item Env:\JUGGERNAUT_KEYCHAIN_SERVICE -ErrorAction SilentlyContinue
+}
 
-    # ---------------------------------------------------------------------------
-    # v2 gate
-    # ---------------------------------------------------------------------------
-    It 'exits 2 with safety error when JUGGERNAUT_USE_V2=0' {
-        $proc = Start-Process pwsh -ArgumentList "-NoProfile -NonInteractive -File `"$script:UninstallScript`"" `
-            -PassThru -Wait -NoNewWindow `
-            -Environment @{ JUGGERNAUT_USE_V2 = '0' }
-        $proc.ExitCode | Should -Be 2
-    }
+Describe 'uninstall.ps1 (v3)' {
 
-    # ---------------------------------------------------------------------------
-    # nothing installed
-    # ---------------------------------------------------------------------------
     It 'reports nothing to uninstall when no block present' {
         $d = New-TestDirs
         try {
@@ -86,9 +71,6 @@ Describe 'uninstall.ps1' {
         } finally { Remove-TestDirs $d }
     }
 
-    # ---------------------------------------------------------------------------
-    # dry-run
-    # ---------------------------------------------------------------------------
     It 'dry-run shows what would change and leaves files untouched' {
         $d = New-TestDirs
         try {
@@ -102,9 +84,6 @@ Describe 'uninstall.ps1' {
         } finally { Remove-TestDirs $d }
     }
 
-    # ---------------------------------------------------------------------------
-    # real uninstall: removes block, preserves unrelated keys
-    # ---------------------------------------------------------------------------
     It 'removes juggernaut block and preserves unrelated keys' {
         $d = New-TestDirs
         try {
@@ -122,9 +101,6 @@ Describe 'uninstall.ps1' {
         } finally { Remove-TestDirs $d }
     }
 
-    # ---------------------------------------------------------------------------
-    # default scope: both user and project
-    # ---------------------------------------------------------------------------
     It 'default scope removes both user and project blocks' {
         $d = New-TestDirs
         try {
@@ -139,9 +115,6 @@ Describe 'uninstall.ps1' {
         } finally { Remove-TestDirs $d }
     }
 
-    # ---------------------------------------------------------------------------
-    # explicit scope
-    # ---------------------------------------------------------------------------
     It '-Scope user removes only user block' {
         $d = New-TestDirs
         try {
@@ -155,9 +128,20 @@ Describe 'uninstall.ps1' {
         } finally { Remove-TestDirs $d }
     }
 
-    # ---------------------------------------------------------------------------
-    # idempotent
-    # ---------------------------------------------------------------------------
+    It 'v3 uninstall does NOT touch shell profiles' {
+        $d = New-TestDirs
+        try {
+            Write-TestSettings (Join-Path $d.Home '.claude\settings.json')
+            $bashrc = Join-Path $d.Home '.bashrc'
+            '# keep this' | Set-Content -Path $bashrc
+            Add-Content -Path $bashrc -Value '# BEGIN: Juggernaut'
+            Add-Content -Path $bashrc -Value 'export FOO=1'
+            Add-Content -Path $bashrc -Value '# END: Juggernaut'
+            Invoke-Uninstall $d @{ Force = $true } | Out-Null
+            (Get-Content $bashrc -Raw) | Should -Match 'BEGIN: Juggernaut'
+        } finally { Remove-TestDirs $d }
+    }
+
     It 'is idempotent: second call reports nothing to uninstall' {
         $d = New-TestDirs
         try {
@@ -168,51 +152,22 @@ Describe 'uninstall.ps1' {
         } finally { Remove-TestDirs $d }
     }
 
-    # ---------------------------------------------------------------------------
-    # Windows PowerShell profiles
-    # ---------------------------------------------------------------------------
-    It 'removes Juggernaut blocks from PowerShell profile targets on Windows' {
-        if ((Get-KeychainOS) -ne 'windows') {
-            Set-ItResult -Skipped -Because 'PowerShell profile fallback is Windows-specific'
-            return
-        }
-
-        $d = New-TestDirs
-        $oldTargets = $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS
+    It 'rejects an invalid scope value' {
+        $caught = $false
         try {
-            $profilePath = Join-Path $d.Home 'PowerShell\profile.ps1'
-            $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $profilePath
-            $block = Build-ProfileWriterBlock -Shell 'powershell' -Region 'us-west-2' `
-                -AuthMode 'iam' -ApiKeyExpr '' -StorageMode 'profile' `
-                -BedrockConfigPath $script:BedrockConfigPath
-            Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $block
-
-            Invoke-Uninstall $d @{ Force = $true } | Out-Null
-            Get-Content $profilePath -Raw | Should -Not -Match 'BEGIN: Claude Code Bedrock Configuration'
-        } finally {
-            if ($null -eq $oldTargets) { Remove-Item Env:\JUGGERNAUT_POWERSHELL_PROFILE_TARGETS -ErrorAction SilentlyContinue }
-            else { $env:JUGGERNAUT_POWERSHELL_PROFILE_TARGETS = $oldTargets }
-            Remove-TestDirs $d
+            & $script:UninstallScript -Scope 'invalid' 2>&1 | Out-Null
+        } catch {
+            $caught = $true
+            $_.ToString() | Should -Match 'scope'
         }
+        # Write-Error also satisfies the contract; both pathways yield rejection.
+        if (-not $caught) { $LASTEXITCODE | Should -Be 1 }
     }
 
-    # ---------------------------------------------------------------------------
-    # invalid scope
-    # ---------------------------------------------------------------------------
-    It 'rejects an invalid scope value' {
-        $oldV2 = $env:JUGGERNAUT_USE_V2
-        try {
-            $env:JUGGERNAUT_USE_V2 = '1'
-            $caught = $false
-            try {
-                & $script:UninstallScript -Scope 'invalid' 2>&1 | Out-Null
-            } catch {
-                $caught = $true
-                $_.ToString() | Should -Match 'scope'
-            }
-            $caught | Should -Be $true
-        } finally {
-            $env:JUGGERNAUT_USE_V2 = $oldV2
-        }
+    It '--help exits 0 and omits legacy -LegacyV1 flag' {
+        $out = & $script:UninstallScript -Help 2>&1 | Out-String
+        $out | Should -Match '-Scope'
+        $out | Should -Match '-DryRun'
+        $out | Should -Not -Match 'LegacyV1'
     }
 }

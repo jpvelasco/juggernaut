@@ -45,295 +45,186 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 1. AWS account with Bedrock access enabled
 2. Access to Claude models (Opus 4.7, Sonnet 4.6, Haiku 4.5) in Bedrock
-3. Claude Code installed
-4. Valid AWS credentials
-5. Bash 4.0+ (macOS users: `brew install bash`)
-6. `jq` or `python3` (for JSON parsing — the setup script checks this automatically)
+3. Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
+4. Valid AWS credentials (`aws configure` or SSO)
+5. Bash 4.0+ (macOS users: `brew install bash`) or PowerShell 5.1+
+6. `jq` (for JSON parsing — the installer checks this automatically)
 
-## Quick Setup
+## Install
 
-**Prerequisites:**
-- AWS account with Bedrock access
-- Claude Code installed (`npm install -g @anthropic-ai/claude-code`)
-- AWS CLI configured (`aws configure` or SSO)
+Juggernaut v3 ships as a **destructive wipe-and-reinstall**: the installer strips any legacy Juggernaut/Claude-Code-Bedrock blocks from your shell profiles, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the `juggernaut-bedrock` OS-keychain entry **before** placing fresh files. Re-running the installer is the only supported upgrade path — there are no migration scripts, no deprecation windows, no `--yes` flag.
 
-**Install a pinned version (recommended for stability):**
+The installer does **not** auto-apply. You run `juggernaut apply` explicitly after install with a chosen auth mode.
+
+**Pin a release tag for reproducible installs.**
 
 ```bash
-# Unix/macOS/Linux
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.4/install.sh | bash -s -- --version v2.3.4
+# Unix / macOS / Linux / Git Bash / WSL
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.sh | bash -s -- --version v3.0.0
 ```
 
 ```powershell
-# Windows PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.4/install.ps1))) -Version v2.3.4
+# Windows PowerShell (5.1 or 7)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0
+```
+
+**Preview what the wipe will remove (no writes):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.sh | bash -s -- --version v3.0.0 --dry-run
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0 -DryRun
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v2.3.4 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
-./juggernaut apply
+git clone --branch v3.0.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+./juggernaut apply --auth=iam
 ```
 
-The pinned installer commands above install v2.3.4 directly from the release tag. Installers do not change your Claude configuration unless you explicitly run `juggernaut apply`.
+The installer installs to `$HOME/.juggernaut` by default (override with `JUGGERNAUT_DIR`) and places a launcher at `$HOME/.local/bin/juggernaut`. Add that directory to your `PATH` to invoke `juggernaut` from anywhere.
 
-v2 is the default and recommended path for new installs. The older shell-profile-only v1 setup is legacy compatibility only; use `./setup --legacy-v1` if you still need the old flow.
-
-**Configure after install:**
-
-```bash
-# Bedrock API key
-juggernaut apply --auth=bedrock-api-key
-```
-
-```bash
-# IAM/SSO
-juggernaut apply --auth=iam
-```
-
-## Upgrading
-
-Re-run the installer to upgrade:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.4/install.sh | bash -s -- --version v2.3.4
-```
-
-The installer detects the version difference and prints an upgrade banner. If you have a v1 shell-profile block, the installer will ask whether to migrate it to settings.json. Say `y` to migrate automatically, or pass `--yes` for non-interactive use:
-
-```bash
-curl -fsSL ... | bash -s -- --version v2.3.4 --yes
-```
-
-To stay on v1 for one more release:
-
-```bash
-curl -fsSL ... | bash -s -- --version v2.3.4 --legacy-v1
-```
-
-After upgrading, verify the configuration:
-
-```bash
-juggernaut doctor
-```
-
-If both a v1 profile block and v2 settings coexist, doctor will warn you to clean up:
-
-```bash
-juggernaut migrate --clean
-```
-
-## Migration Notes
-
-v2 is now the default. Running `juggernaut <subcommand>` uses the settings.json-based v2 flow without requiring `--v2`.
-
-To stay on the older v1 shell-profile-only flow during installation or upgrade, pass `--legacy-v1`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.4/install.sh | bash -s -- --version v2.3.4 --legacy-v1
-```
-
-The upgrade banner appears when the installer detects an existing v1 profile block or an installed version change. It explains the migration target, asks before converting v1 profile settings to v2 settings.json, and requires `--yes` or `--legacy-v1` for non-interactive installs.
-
-### Version Pinning
-
-Use the pinned release tag URLs for a stable install:
-
-```bash
-# Bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.4/install.sh | bash -s -- --version v2.3.4
-```
-
-```powershell
-# PowerShell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v2.3.4/install.ps1))) -Version v2.3.4
-```
-
-```bash
-# After downloading
-bash install.sh --version 2.3.4
-```
-
-```powershell
-.\install.ps1 -Version 2.3.4
-```
-
-Both scripts normalize the version automatically — `2.3.4` and `v2.3.4` both work.
-
-The installer repairs executable bits, creates a user-local launcher (`~/.local/bin/juggernaut` on Unix-like systems or a PowerShell shim under `$HOME\.local\bin` on Windows), and prints the exact verification and configuration commands. On Windows, first-run script policy friction can usually be resolved with:
-
-```powershell
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
+Both scripts normalize the version automatically — `3.0.0` and `v3.0.0` both work.
 
 ### Windows Notes
 
-Juggernaut supports Windows PowerShell 5.1 and PowerShell 7. On Windows, v2 profile fallback writes to the all-hosts PowerShell profile locations for both editions instead of writing Bash-only `.bashrc` blocks.
+Juggernaut v3 supports Windows PowerShell 5.1 and PowerShell 7 side-by-side:
 
-For Bedrock API-key auth, `--storage=keychain` stores the key in Windows Credential Manager under the namespaced target `juggernaut-bedrock`. Standard non-admin users should be able to use Credential Manager. If keychain storage is explicitly requested and Windows refuses the write, Juggernaut stops with a clear error instead of silently falling back to plaintext profile storage.
+- The installer scans both PowerShell 5.1 (`Documents\WindowsPowerShell\profile.ps1`) and PowerShell 7 (`Documents\PowerShell\profile.ps1`) paths, plus `$PROFILE.CurrentUserAllHosts` and `$PROFILE.AllUsersAllHosts` from both editions.
+- If your `Documents\` folder is redirected by OneDrive, `$PROFILE.*` resolves correctly under `%OneDrive%\Documents\...` — the installer follows that redirection automatically.
+- Non-admin users: the `AllUsers` profile strip and any other All-Users writes may require elevation. If they do, the installer **warns and skips** those paths (not fails). `CurrentUser` paths, the settings.json removal, and the keychain delete all work without elevation.
+- API keys live in Windows Credential Manager under target name `juggernaut-bedrock` (per-user; no admin rights required).
+- First-run script policy friction: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
-To stay on the old shell-profile-only setup path, run:
+## Configure
+
+After install, pick an auth mode and run `juggernaut apply` explicitly. v3 refuses to write `CLAUDE_CODE_USE_BEDROCK=1` to `~/.claude/settings.json` unless a valid auth source is present (`aws sts get-caller-identity` succeeds, `$AWS_BEARER_TOKEN_BEDROCK` is set, or a `juggernaut-bedrock` keychain entry exists). This prevents the "installer silently routed me through Bedrock with no credentials" class of hang.
+
+**IAM / SSO (recommended):**
+
+```bash
+aws sso login --profile=<your-profile>          # or: aws configure
+export AWS_PROFILE=<your-profile>
+
+juggernaut apply --auth=iam
+```
 
 ```powershell
-.\setup --legacy-v1
+# Windows PowerShell
+.\juggernaut.ps1 apply -Auth iam
 ```
 
-## Commands
-
-```bash
-juggernaut apply       # Configure Claude Code for Bedrock
-juggernaut show        # Print current configuration
-juggernaut doctor      # Diagnose credential and config issues
-juggernaut migrate     # Upgrade from a v1 profile block
-juggernaut uninstall   # Safely remove all Juggernaut configuration
-```
-
-| Command | Description |
-|---------|-------------|
-| `apply` | Write Juggernaut config to `settings.json`. Supports `--scope=user\|project`, `--dry-run`, `--yes`, `--auth=iam\|bedrock-api-key`, `--1m-context`, `--opusplan`, `--effort`, `--mantle`, and more. |
-| `show` | Print the current Juggernaut block from both user and project scopes. |
-| `doctor` | Read-only diagnostics — checks credentials, region, models, Mantle status, and drift between settings.json and the shell fallback. |
-| `migrate` | Migrate a v1 shell profile block to settings.json. Supports `--dry-run`, `--yes`, `--clean`, `--rollback`. |
-| `uninstall` | Remove the Juggernaut block from settings.json (all scopes by default), shell profiles, and OS keychain. Supports `--dry-run`, `--force`, `--scope=user\|project`. |
-
-### v1 Migration
-
-v1 is legacy. Existing v1 profile blocks continue to work, but v2 is the supported path going forward because Claude Code now reads `settings.json` cleanly across clients.
-
-Fresh installs and `./setup` now default to v2. If you maintain an older v1-only environment, keep using the explicit legacy entrypoint:
-
-```bash
-./setup --legacy-v1
-```
-
-`juggernaut apply` no longer migrates a v1 shell profile block silently. In an interactive terminal it asks before writing; in non-interactive use it exits with a clear message unless you pass `--yes`. Use `--dry-run` to preview the proposed migration without writing anything.
-
-```bash
-juggernaut apply --dry-run
-juggernaut apply --yes
-juggernaut migrate --dry-run
-juggernaut migrate --yes
-```
-
-## Detailed Setup Steps
-
-### 1. Submit Use Case Details (One-time)
-
-First-time Anthropic model users must submit use case details:
-
-1. Go to [Amazon Bedrock Console](https://console.aws.amazon.com/bedrock/)
-2. Select **Chat/Text playground**
-3. Choose any Anthropic model
-4. Fill out the use case form when prompted
-
-### 2. Configure AWS Credentials
-
-Ensure your AWS credentials are configured. Choose one method:
-
-**Option A: AWS CLI**
-
-```bash
-aws configure
-```
-
-**Option B: SSO Profile (Recommended)**
-
-```bash
-aws sso login --profile=<your-profile-name>
-export AWS_PROFILE=your-profile-name
-```
-
-**Option C: Access Keys**
-
-```bash
-export AWS_ACCESS_KEY_ID=your-access-key-id
-export AWS_SECRET_ACCESS_KEY=your-secret-access-key
-```
-
-Verify credentials:
-
-```bash
-aws sts get-caller-identity
-```
-
-### 3. Run Setup
-
-```bash
-# Preview changes first
-juggernaut apply --dry-run
-
-# Apply
-juggernaut apply
-
-# Check everything looks right
-juggernaut doctor
-```
-
-**Custom region (default: us-west-2):**
-
-```bash
-juggernaut apply --region=us-east-1
-```
-
-**Skip pre-flight dependency checks:**
-
-```bash
-juggernaut apply --skip-preflight
-JUGGERNAUT_SKIP_PREFLIGHT=1 juggernaut apply   # via environment variable
-```
-
-### API Key Authentication (Alternative)
-
-Instead of IAM/SSO, you can use a Bedrock API key:
-
-**Interactive mode (recommended — secure):**
+**Bedrock API key (interactive — most secure non-IAM):**
 
 ```bash
 juggernaut apply --auth=bedrock-api-key
 ```
 
-**Inline mode (for CI/CD and scripting):**
+The key is read with hidden input and stored in the OS keychain (`juggernaut-bedrock` target). It never lands in shell history or process listings.
+
+**Bedrock API key (inline — CI/CD only):**
 
 ```bash
 juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
 ```
-
-> **Note:** In non-interactive environments (CI/CD, piped input, cron), you must use `--bedrock-key` as the script cannot prompt for input.
-
-`--auth=api-key` is accepted as a legacy compatibility alias. New v2 writes persist `auth.mode` as `bedrock-api-key`.
-
-**Secure keychain storage (optional):**
-
-Use `--storage=keychain` to store your API key in the OS keychain instead of your shell profile.
-
-**API Key Lifetime (AWS Bedrock):**
 
 | Type | Duration | Use Case |
 |------|----------|----------|
 | Short-term | Up to 12 hours | Production (recommended) |
 | Long-term | Up to 30 days | Exploration/testing only |
 
-### 4. Launch Claude Code
+**Custom region (default: us-west-2):**
 
 ```bash
-claude
+juggernaut apply --auth=iam --region=us-east-1
 ```
+
+**Custom models:**
+
+```bash
+juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-4-7
+juggernaut apply --auth=iam --sonnet-model=eu.anthropic.claude-sonnet-4-6
+juggernaut apply --auth=iam --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
+juggernaut apply --auth=iam --model-prefix=us
+```
+
+**OpusPlan and effort level:**
+
+```bash
+juggernaut apply --auth=iam --opusplan                # Opus in /plan, Sonnet in execute
+juggernaut apply --auth=iam --effort=xhigh            # low | medium | high | xhigh (default) | max
+```
+
+**1M context windows** (Opus uses its native 1M; enable on Sonnet with):
+
+```bash
+juggernaut apply --auth=iam --1m-context
+juggernaut apply --auth=iam --no-1m-context           # revert
+```
+
+**Mantle routing** is on by default in v3. Disable with:
+
+```bash
+juggernaut apply --auth=iam --no-mantle
+juggernaut apply --auth=iam --mantle-url=https://mantle.example.internal
+```
+
+**Scope and preview:**
+
+```bash
+juggernaut apply --auth=iam --scope=user              # ~/.claude/settings.json (default)
+juggernaut apply --auth=iam --scope=project           # ./.claude/settings.json
+juggernaut apply --auth=iam --dry-run                 # preview without writing
+```
+
+**Verify:**
+
+```bash
+juggernaut doctor
+claude                                                 # launch
+```
+
+A healthy bearer-token setup looks like:
+
+```text
+Credentials
+  Auth: Bedrock API key
+  Source: AWS_BEARER_TOKEN_BEDROCK
+  Status: OK
+
+Mantle
+  Status: enabled
+  Reason: Bedrock API key detected
+
+Opusplan
+  Status: enabled
+  Status: OK
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `apply` | Write Juggernaut config to `settings.json`. Requires `--auth=iam` or `--auth=bedrock-api-key` on first run. |
+| `show` | Print the current Juggernaut block from both user and project scopes. |
+| `doctor` | Read-only diagnostics — checks credentials, region, models, Mantle, and opusplan drift. |
+| `uninstall` | Remove the Juggernaut block from settings.json (all scopes by default) and delete the OS keychain entry. |
 
 ## Configuration Details
 
-Juggernaut stores all configuration under a `juggernaut` key in `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). An optional shell profile fallback block can be written alongside it.
+Juggernaut writes **only** to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). v3 does not write to shell profiles. The `juggernaut` key holds Juggernaut's own state; the `env` block holds the Claude Code environment variables:
 
-Key environment variables set:
-
-- `CLAUDE_CODE_USE_BEDROCK=1` — enables Bedrock integration
-- `AWS_REGION=us-west-2` — default region (change as needed)
-- `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32768` — required for Bedrock (allows longer responses)
-- `MAX_THINKING_TOKENS=65536` — extended reasoning for complex tasks
+- `CLAUDE_CODE_USE_BEDROCK=1` — gated behind explicit auth validation
+- `AWS_REGION=us-west-2` — default region
+- `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32768`
+- `MAX_THINKING_TOKENS=65536`
 - `ANTHROPIC_MODEL=global.anthropic.claude-sonnet-4-6` — primary model (Global CRIS)
 - `DISABLE_ERROR_REPORTING=1`, `DISABLE_TELEMETRY=1`, `DISABLE_AUTOUPDATE=1`, `DISABLE_BUG_COMMAND=1`
 - `ANTHROPIC_DEFAULT_OPUS_MODEL` / `SONNET` / `HAIKU` — `/model` picker entries
-- `ENABLE_PROMPT_CACHING_1H=1` — enables 1-hour prompt caching on Bedrock
+- `ENABLE_PROMPT_CACHING_1H=1` — Bedrock 1-hour prompt caching
 
 ## Default Models
 
@@ -343,31 +234,7 @@ Key environment variables set:
 | **Opus** | Claude Opus 4.7 | `global.anthropic.claude-opus-4-7` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
-### Model Picker (`/model`)
-
-| Picker Entry | Bedrock Model ID | Description |
-|-------------|-----------------|-------------|
-| Opus 4.7 (New flagship, native 1M context) | `global.anthropic.claude-opus-4-7` | Most capable — 1M context, high-res vision, stronger agentic reasoning |
-| Sonnet 4.6 (Recommended) | `global.anthropic.claude-sonnet-4-6` | Best balance of speed and intelligence |
-| Haiku 4.5 (Fast) | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Fastest model for everyday tasks and subagents |
-
-### 1M Context Windows
-
-Opus 4.7 uses its native 1M context window without a suffix. Enable 1M context for Sonnet with:
-
-```bash
-juggernaut apply --1m-context
-```
-
-This records the 1M-context preference in the Juggernaut settings block while keeping the official Bedrock model ID intact. To revert:
-
-```bash
-juggernaut apply --no-1m-context
-```
-
 ### Model Capabilities
-
-Juggernaut sets `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` for Opus and Sonnet, enabling features Claude Code can't auto-detect from Bedrock inference profile IDs:
 
 | Feature | Opus 4.7 | Sonnet 4.6 | Haiku 4.5 |
 |---------|----------|------------|-----------|
@@ -376,24 +243,6 @@ Juggernaut sets `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` for Opus and 
 | Extended thinking | Yes | Yes | No |
 | Adaptive thinking | Yes | Yes | No |
 | Interleaved thinking | Yes | Yes | No |
-
-### Custom Models
-
-Override individual model IDs:
-
-```bash
-juggernaut apply --opus-model=us.anthropic.claude-opus-4-7
-juggernaut apply --sonnet-model=eu.anthropic.claude-sonnet-4-6
-juggernaut apply --haiku-model=ap.anthropic.claude-haiku-4-5-20251001-v1:0
-juggernaut apply --model-prefix=us    # All models use us.anthropic.* prefix
-```
-
-### OpusPlan and Effort
-
-```bash
-juggernaut apply --opusplan            # Opus during /plan, Sonnet during execution
-juggernaut apply --effort=xhigh        # low | medium | high | xhigh (default) | max
-```
 
 ## Architecture
 
@@ -422,76 +271,63 @@ juggernaut apply --effort=xhigh        # low | medium | high | xhigh (default) |
 │                   ~/.claude/settings.json                           │
 │                                                                     │
 │  {                                                                  │
-│    "juggernaut": {                                                  │
-│      "region": "us-west-2",                                         │
-│      "model": "global.anthropic.claude-sonnet-4-6",                 │
-│      ...                                                            │
-│    }                                                                │
+│    "juggernaut": { … state … },                                     │
+│    "env":        { … Claude Code env vars … }                       │
 │  }                                                                  │
 └─────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    Claude Code → Amazon Bedrock                     │
-│            Uses configured env vars for authentication              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Design Decisions:**
-- **Single config file**: `bedrock-config.json` is the source of truth for both Bash and PowerShell
-- **Settings.json-first**: configuration lives in `~/.claude/settings.json`, the same file Claude Code reads natively
-- **Atomic writes**: config_manager handles backup rotation, file locking, and file-mode preservation
-- **Optional shell fallback**: `--shell-fallback-only` writes a profile block in addition to settings.json
+- **Single output target**: `~/.claude/settings.json`. No shell-profile fallback. No triple-write drift.
+- **Single config source**: `bedrock-config.json` — consumed by both Bash and PowerShell.
+- **Auth-gated writes**: `CLAUDE_CODE_USE_BEDROCK=1` only lands when auth is verified.
+- **Atomic writes**: `config_manager` handles backup rotation (5 backups retained), file locking, and mode preservation.
+- **Destructive installer**: wipe-and-reinstall on every run; there is no in-place upgrade.
 
 ## Files
 
-- `juggernaut` / `juggernaut.ps1` — v2 CLI entry point
-- `commands/` — subcommand implementations (apply, show, doctor, migrate, uninstall)
-- `lib/` — shared libraries (schema, config_manager, profile_writer, keychain, migrator, doctor)
-- `install.sh` / `install.ps1` — one-liner installers
+- `juggernaut` / `juggernaut.ps1` — CLI entry point
+- `commands/` — subcommand implementations (`apply`, `show`, `doctor`, `uninstall`)
+- `lib/` — shared libraries (`schema`, `config_manager`, `keychain`, `doctor`, `profile_paths`)
+- `install.sh` / `install.ps1` — wipe-and-reinstall installers
 - `bedrock-config.json` — single source of truth for env vars, regions, and defaults
 - `tests/v2/` — bash and Pester test suites
 
 ## Troubleshooting
 
-Run diagnostics first:
+### Run diagnostics first
+
 ```bash
 juggernaut doctor
 ```
 
-For a bearer-token setup, the credential section should look like:
-
-```text
-Credentials
-  Auth: Bedrock API key
-  Source: AWS_BEARER_TOKEN_BEDROCK
-  Status: OK
-
-Mantle
-  Status: enabled
-  Reason: Bedrock API key detected
-```
-
-### Check environment variables:
+### Check environment variables
 
 ```bash
 echo $CLAUDE_CODE_USE_BEDROCK
 echo $AWS_REGION
 ```
 
-### Verify AWS credentials:
+### Verify AWS credentials
 
 ```bash
 aws sts get-caller-identity
 ```
 
-### List available Bedrock models:
+### List available Bedrock models
 
 ```bash
 aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 ```
 
 ### Authentication Precedence
+
+Claude Code honors the following precedence (this is Claude Code behavior, not Juggernaut's):
 
 | Priority | Credential Source | Notes |
 |----------|-------------------|-------|
@@ -500,30 +336,32 @@ aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 | 3 | AWS credentials file | `~/.aws/credentials` |
 | 4 | AWS config/SSO | `~/.aws/config` with profiles |
 
-**Important:** If `AWS_BEARER_TOKEN_BEDROCK` is set but expired, Claude Code will hang — it does NOT fall back to AWS credentials. Unset it and re-run if this happens.
+If you manually set `AWS_BEARER_TOKEN_BEDROCK` in your own shell profile and it expires, Claude Code will hang. Juggernaut itself does not set that variable; unset it and re-run if you hit this.
 
 ### Common Issues
 
 1. **"API Error: exceeded token maximum"** — restart terminal or `source ~/.zshrc`
-2. **Claude Code hangs on startup** — API key may be expired: `unset AWS_BEARER_TOKEN_BEDROCK` then retry
+2. **`juggernaut apply` exits with "auth validation required"** — pass `--auth=iam` or `--auth=bedrock-api-key` explicitly
 3. **Authentication errors** — re-authenticate: `aws sso login --profile=<profile>`
 4. **Region errors** — verify model availability; try `us-east-1` or `us-west-2`
 5. **PowerShell execution policy error** — `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-6. **"jq or python3 is required"** — `brew install jq` / `sudo apt install jq` / `winget install jqlang.jq`
+6. **"jq is required"** — `brew install jq` / `sudo apt install jq` / `winget install jqlang.jq`
 
-## Uninstalling
+## Uninstall
 
 ```bash
 # Preview what will be removed
 juggernaut uninstall --dry-run
 
-# Remove all Juggernaut configuration (settings.json, profile block, keychain)
+# Remove the Juggernaut block from settings.json (all scopes) and the keychain entry
 juggernaut uninstall
 
 # Limit to one scope
 juggernaut uninstall --scope=user
 juggernaut uninstall --scope=project
 ```
+
+`juggernaut uninstall` removes the `juggernaut` key from settings.json and deletes the `juggernaut-bedrock` keychain entry. It does not touch shell profiles (v3 never writes to them). For a full filesystem-level wipe — including any legacy profile blocks left over from older versions — re-run `install.sh` / `install.ps1`; the installer runs its destructive wipe before every install.
 
 After uninstalling, Claude Code will prompt you to log in with your Anthropic account.
 
@@ -566,47 +404,6 @@ See `iam-policy.json` for the complete policy.
 # GitHub Actions
 juggernaut apply --auth=bedrock-api-key --bedrock-key=${{ secrets.BEDROCK_KEY }}
 ```
-
-### Shell Profile Security
-
-- API keys stored in shell profiles are readable by your user account
-- Ensure proper file permissions: `chmod 600 ~/.bashrc`
-- Backups are created before modifications (`.backup.YYYYMMDD_HHMMSS`)
-- Use `--storage=keychain` to store API keys in your OS keychain instead of plaintext profiles
-
-## Legacy v1
-
-<details>
-<summary>Using v1 shell-profile-only mode (deprecated)</summary>
-
-v1 configuration writes env-var exports directly to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.). It continues to work in 2.3.4 but is deprecated; removal is planned for v3.0.
-
-To opt into v1 permanently:
-
-```bash
-export JUGGERNAUT_USE_V2=0   # or: JUGGERNAUT_USE_V1=1
-```
-
-To invoke a single command via v1:
-
-```bash
-juggernaut apply --legacy-v1
-juggernaut --legacy-v1 apply
-```
-
-On Windows:
-
-```powershell
-.\juggernaut.ps1 apply -LegacyV1
-```
-
-To suppress the deprecation notice:
-
-```bash
-export JUGGERNAUT_SUPPRESS_DEPRECATION=1
-```
-
-</details>
 
 ## Notes
 

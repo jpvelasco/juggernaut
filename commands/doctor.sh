@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commands/doctor.sh - Juggernaut v2 doctor subcommand.
+# commands/doctor.sh - Juggernaut v3 doctor subcommand.
 
 set -euo pipefail
 
@@ -7,11 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BEDROCK_CONFIG_PATH="${BEDROCK_CONFIG_PATH:-$SCRIPT_DIR/bedrock-config.json}"
 export BEDROCK_CONFIG_PATH
 
-v2_active="${JUGGERNAUT_USE_V2:-1}"
 requested_scope=""
 for arg in "$@"; do
   case "$arg" in
-    --v2) v2_active=1 ;;
     --scope=*) requested_scope="${arg#--scope=}" ;;
     --version|-v)
       cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
@@ -19,12 +17,12 @@ for arg in "$@"; do
       ;;
     --help|-h)
       cat <<'EOF'
-juggernaut doctor - check Juggernaut v2 configuration
+juggernaut doctor - check Juggernaut v3 configuration
 
 Usage: juggernaut doctor [--scope=user|project]
 
-Checks user and project settings.json files, credentials, model/region settings,
-Mantle status, and drift between settings.json and the shell fallback.
+Checks user and project settings.json files, credentials, model/region
+settings, Mantle status, and opusplan wiring.
 EOF
       exit 0
       ;;
@@ -33,11 +31,6 @@ EOF
   esac
 done
 
-if [[ "$v2_active" != "1" ]]; then
-  echo "juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1)." >&2
-  exit 2
-fi
-
 case "${requested_scope:-}" in
   ""|user|project) ;;
   *) echo "doctor: --scope must be 'user' or 'project' (got: '$requested_scope')" >&2; exit 1 ;;
@@ -45,8 +38,6 @@ esac
 
 . "$SCRIPT_DIR/lib/config_manager.sh"
 . "$SCRIPT_DIR/lib/schema.sh"
-. "$SCRIPT_DIR/lib/profile_writer.sh"
-. "$SCRIPT_DIR/lib/profile_paths.sh"
 . "$SCRIPT_DIR/lib/keychain.sh"
 . "$SCRIPT_DIR/lib/doctor.sh"
 
@@ -91,8 +82,6 @@ elif [[ "$user_has_block" == "true" ]]; then
   active_scope="user"
 fi
 
-profile_path="$(doctor_profile_path)"
-
 printf 'Juggernaut doctor\n'
 
 # ── User Scope ───────────────────────────────────────────────────────────────
@@ -109,12 +98,8 @@ if [[ -n "$active_scope" ]]; then
   printf '%s\n' "$active_scope"
 else
   DOCTOR_FAILS=$((DOCTOR_FAILS + 1))
-  printf 'none (no Juggernaut v2 block found)\n'
+  printf 'none (no Juggernaut block found)\n'
 fi
-
-# ── v1 Artifacts ──────────────────────────────────────────────────────────────
-doctor_section "v1 Artifacts"
-doctor_v1_artifacts "${user_settings:-{\}}" "$user_has_block"
 
 # Resolve which block to use for the detailed checks below.
 # Honour --scope if given; otherwise use the active scope.
@@ -131,7 +116,7 @@ if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; 
 
   # ── Credentials ─────────────────────────────────────────────────────────────
   doctor_section "Credentials"
-  doctor_credentials "$check_block" "$profile_path"
+  doctor_credentials "$check_block"
 
   # ── Region & Models ──────────────────────────────────────────────────────────
   doctor_section "Region & Models"
@@ -141,9 +126,9 @@ if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; 
   doctor_section "Mantle"
   doctor_mantle "$check_block"
 
-  # ── Drift ────────────────────────────────────────────────────────────────────
-  doctor_section "Drift"
-  doctor_drift "$check_settings" "$check_block" "$profile_path"
+  # ── Opusplan ─────────────────────────────────────────────────────────────────
+  doctor_section "Opusplan"
+  doctor_opusplan "$check_settings" "$check_block"
 fi
 
 doctor_summary

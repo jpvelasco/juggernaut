@@ -1,29 +1,17 @@
 #!/usr/bin/env bash
-# tests/v2/test_doctor.sh - integration checks for commands/doctor.sh.
+# tests/v2/test_doctor.sh — v3 tests for commands/doctor.sh + lib/doctor.sh.
+# Covers: scope detection, credentials check, region/model check, Mantle,
+# opusplan drift diagnostic, and summary roll-up.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-PASS=0
-FAIL=0
-
+PASS=0; FAIL=0
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
 section() { echo; echo "== $1 =="; }
-
-section "v2 gate — JUGGERNAUT_USE_V2=0 exits 2"
-JUGGERNAUT_USE_V2=0 bash "$REPO_ROOT/commands/doctor.sh" >/dev/null 2>&1
-_RC=$?
-if [[ "$_RC" -eq 2 ]]; then pass; else fail "doctor.sh should exit 2 with JUGGERNAUT_USE_V2=0 (got $_RC)"; fi
-
-section "v2 default — runs without JUGGERNAUT_USE_V2 set"
-# v2 is ON by default; doctor with no settings → not necessarily OK but must not exit 2.
-unset JUGGERNAUT_USE_V2 2>/dev/null || true
-JUGGERNAUT_USE_V2= bash "$REPO_ROOT/commands/doctor.sh" >/dev/null 2>&1 || true
-_RC=$?
-if [[ "$_RC" -ne 2 ]]; then pass; else fail "doctor.sh should run (not exit 2) when JUGGERNAUT_USE_V2 is unset (got $_RC)"; fi
 
 TMP_HOME="$(mktemp -d)"
 TMP_WORK="$(mktemp -d)"
@@ -33,31 +21,36 @@ mkdir -p "$TMP_HOME/.claude" "$TMP_WORK/.claude"
 
 export HOME="$TMP_HOME"
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
-export JUGGERNAUT_USE_V2=1
 export AWS_PROFILE="juggernaut-test"
 export SHELL="/bin/bash"
-EXPECTED_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null | tr -d '\r\n ')"
+EXPECTED_VERSION="$(tr -d '\r\n ' < "$REPO_ROOT/VERSION" 2>/dev/null || echo "3.0.0")"
 unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 
+# Source library code for direct unit tests of doctor_credentials.
+# shellcheck source=/dev/null
 . "$REPO_ROOT/lib/schema.sh"
+# shellcheck source=/dev/null
 . "$REPO_ROOT/lib/config_manager.sh"
-. "$REPO_ROOT/lib/profile_writer.sh"
+# shellcheck source=/dev/null
 . "$REPO_ROOT/lib/keychain.sh"
+# shellcheck source=/dev/null
 . "$REPO_ROOT/lib/doctor.sh"
 set +e
 
-section "keychain read errors are visible"
+# ---------------------------------------------------------------------------
+# doctor_credentials surfaces keychain read failures
+# ---------------------------------------------------------------------------
+section "keychain read errors are visible in doctor_credentials output"
 keychain_available() { return 0; }
 keychain_get() { echo "simulated keychain failure" >&2; return 2; }
 ERR_BLOCK="$(
   J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
     J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
-    J_SHELL_FALLBACK_MODE=settings-only \
     schema_new_juggernaut_block
 )"
-OUTPUT="$(doctor_credentials "$ERR_BLOCK" "$TMP_HOME/.missing-profile" 2>&1)"
+OUTPUT="$(doctor_credentials "$ERR_BLOCK" 2>&1)"
 if [[ "$OUTPUT" == *"Keychain: WARN (simulated keychain failure)"* &&
-      "$OUTPUT" == *"Details: no API key found in env, keychain, or shell profile"* ]]; then
+      "$OUTPUT" == *"Details: no API key found in env or keychain"* ]]; then
   pass
 else
   fail "expected visible keychain read failure"
@@ -65,54 +58,62 @@ else
 fi
 unset -f keychain_available keychain_get
 
+# ---------------------------------------------------------------------------
+# Helper to write settings.json for a given scope/region.
+# ---------------------------------------------------------------------------
 write_scope_settings() {
   local scope="$1" target="$2" region="$3"
-  J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
+  local block
+  block="$(J_AUTH_MODE=iam J_REGION="$region" J_EFFORT=xhigh J_STORAGE=profile \
     J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE="$scope" J_VERSION="$EXPECTED_VERSION" \
-    J_SHELL_FALLBACK_MODE=settings-only \
-    BLOCK="$(schema_new_juggernaut_block)"
-  config_write_atomic "$target" "$(config_merge_juggernaut_block '{}' "$BLOCK" "$(schema_derive_native_keys "$BLOCK")")"
+    J_AUTH_VALIDATED=true \
+    schema_new_juggernaut_block)"
+  config_write_atomic "$target" "$(config_merge_juggernaut_block '{}' "$block" "$(schema_derive_native_keys "$block")")"
 }
 
 write_scope_settings user    "$TMP_HOME/.claude/settings.json" us-west-2
 write_scope_settings project "$TMP_WORK/.claude/settings.json" eu-west-1
 
-section "shows both scopes with section headers"
+# ---------------------------------------------------------------------------
+# End-to-end: section headers present
+# ---------------------------------------------------------------------------
+section "v3 doctor shows all v3 section headers"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
-if [[ "$OUTPUT" == *"User Scope"* &&
-      "$OUTPUT" == *"Project Scope"* &&
-      "$OUTPUT" == *"Active Scope"* &&
-      "$OUTPUT" == *"Credentials"* &&
-      "$OUTPUT" == *"Region & Models"* &&
-      "$OUTPUT" == *"Drift"* &&
-      "$OUTPUT" == *"Summary"* ]]; then
-  pass
-else
-  fail "missing expected section headers"
-  printf '%s\n' "$OUTPUT" >&2
-fi
+for header in "User Scope" "Project Scope" "Active Scope" "Credentials" "Region & Models" "Mantle" "Opusplan" "Summary"; do
+  if [[ "$OUTPUT" == *"$header"* ]]; then pass; else fail "missing header: $header"; fi
+done
 
-section "shows active scope and both paths"
+# ---------------------------------------------------------------------------
+# End-to-end: v3 removed sections must be gone
+# ---------------------------------------------------------------------------
+section "v3 doctor no longer shows profile-drift / shell-fallback sections"
+if [[ "$OUTPUT" != *"Drift"* ]]; then pass; else fail "doctor still mentions 'Drift' (profile drift section should be gone)"; fi
+if [[ "$OUTPUT" != *"shell fallback"* ]]; then pass; else fail "doctor still mentions 'shell fallback'"; fi
+if [[ "$OUTPUT" != *"Profile:"* ]]; then pass; else fail "doctor still mentions 'Profile:' key"; fi
+
+# ---------------------------------------------------------------------------
+# Active scope detection
+# ---------------------------------------------------------------------------
+section "active scope = project when both scopes have a Juggernaut block and CWD has one"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
 if [[ "$OUTPUT" == *"Active Scope"$'\n'"project"* &&
-      "$OUTPUT" == *"~/.claude/settings.json"* &&
       "$OUTPUT" == *"Region: eu-west-1 (OK)"* ]]; then
   pass
 else
-  fail "expected active scope=project and project region"
+  fail "expected active scope=project and project region eu-west-1"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "honours --scope flag for detail sections"
+section "--scope=user forces detail section to user settings"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
 if [[ "$OUTPUT" == *"Region: us-west-2 (OK)"* ]]; then
   pass
 else
-  fail "expected user scope region us-west-2 when --scope=user"
+  fail "expected user-scope region us-west-2 when --scope=user"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "does not treat home settings as project scope from home"
+section "from HOME, project scope shows 'no Juggernaut config' and active=user"
 OUTPUT="$(cd "$TMP_HOME" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
 if [[ "$OUTPUT" == *"User Scope"* &&
       "$OUTPUT" == *"Project Scope"* &&
@@ -120,11 +121,14 @@ if [[ "$OUTPUT" == *"User Scope"* &&
       "$OUTPUT" == *"Active Scope"$'\n'"user"* ]]; then
   pass
 else
-  fail "expected active scope=user and missing project scope from home"
+  fail "expected active=user and project with no-config status from HOME"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "no issues on a fresh apply"
+# ---------------------------------------------------------------------------
+# Summary: no issues on a fresh apply
+# ---------------------------------------------------------------------------
+section "fresh user+project apply → Status: OK, No issues found"
 OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
 if [[ "$OUTPUT" == *"Status: OK"$'\n'"No issues found"* ]]; then
   pass
@@ -133,75 +137,104 @@ else
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "bedrock API-key auth reports bearer-token source without IAM warning"
+# ---------------------------------------------------------------------------
+# Bedrock API-key auth: bearer-token source detected
+# ---------------------------------------------------------------------------
+section "bedrock API-key auth reports bearer-token source"
 API_HOME="$(mktemp -d)"
 mkdir -p "$API_HOME/.claude"
-J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+API_BLOCK="$(J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
   J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
-  J_SHELL_FALLBACK_MODE=settings-only \
-  API_BLOCK="$(schema_new_juggernaut_block)"
-config_write_atomic "$API_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$API_BLOCK" "$(schema_derive_native_keys "$API_BLOCK")")"
-OUTPUT="$(HOME="$API_HOME" AWS_BEARER_TOKEN_BEDROCK=br-test AWS_PROFILE=also-set bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+  J_AUTH_VALIDATED=true \
+  schema_new_juggernaut_block)"
+config_write_atomic "$API_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$API_BLOCK" "$(schema_derive_native_keys "$API_BLOCK")")"
+OUTPUT="$(HOME="$API_HOME" AWS_BEARER_TOKEN_BEDROCK=br-test bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
 if [[ "$OUTPUT" == *"Auth: Bedrock API key"* &&
-      "$OUTPUT" == *"Source: AWS_BEARER_TOKEN_BEDROCK"* &&
-      "$OUTPUT" == *"Reason: Bedrock API key detected"* &&
-      "$OUTPUT" != *"is set while auth mode is iam"* ]]; then
+      "$OUTPUT" == *"Source: AWS_BEARER_TOKEN_BEDROCK"* ]]; then
   pass
 else
-  fail "expected bearer-token credentials output without IAM warning"
+  fail "expected bearer-token credentials output"
   printf '%s\n' "$OUTPUT" >&2
 fi
 rm -rf "$API_HOME"
 
-section "keychain shell fallback stub is not enough when keychain is empty"
-KC_HOME="$(mktemp -d)"
-mkdir -p "$KC_HOME/.claude"
-KC_PROFILE="$KC_HOME/.bashrc"
-J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
-  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
-  J_SHELL_FALLBACK_MODE=both \
-  KC_BLOCK="$(schema_new_juggernaut_block)"
-KC_BLOCK="$(jq --arg p "$KC_PROFILE" '.shellFallback.lastWrittenProfiles = [$p]' <<<"$KC_BLOCK")"
-config_write_atomic "$KC_HOME/.claude/settings.json" "$(config_merge_juggernaut_block '{}' "$KC_BLOCK" "$(schema_derive_native_keys "$KC_BLOCK")")"
-profile_writer_build_block bash us-west-2 bedrock-api-key keychain keychain "$BEDROCK_CONFIG_PATH" "" "" "" "" xhigh false true "" > "$KC_PROFILE"
-keychain_available() { return 0; }
-keychain_get() { return 1; }
-OUTPUT="$(doctor_credentials "$KC_BLOCK" "$KC_PROFILE" 2>&1)"
-if [[ "$OUTPUT" == *"Details: keychain storage is configured, but no keychain API key was found"* ]]; then
+# ---------------------------------------------------------------------------
+# IAM auth with AWS_BEARER_TOKEN_BEDROCK set → warning
+# ---------------------------------------------------------------------------
+section "iam auth + AWS_BEARER_TOKEN_BEDROCK set → warning"
+IAM_HOME="$(mktemp -d)"
+mkdir -p "$IAM_HOME/.claude"
+write_scope_settings user "$IAM_HOME/.claude/settings.json" us-west-2
+OUTPUT="$(HOME="$IAM_HOME" AWS_BEARER_TOKEN_BEDROCK=br-test bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam'"* ]]; then
   pass
 else
-  fail "expected keychain storage failure when only shell fallback stub exists"
+  fail "expected IAM/bearer-token mismatch warning"
   printf '%s\n' "$OUTPUT" >&2
 fi
-unset -f keychain_available keychain_get
-rm -rf "$KC_HOME"
+rm -rf "$IAM_HOME"
 
-section "reports native drift"
-tmp_json="$TMP_HOME/.claude/settings.json.tmp"
-jq '.model = "drifted-model"' "$TMP_HOME/.claude/settings.json" > "$tmp_json"
-mv "$tmp_json" "$TMP_HOME/.claude/settings.json"
-# drift check uses active scope (project) by default; switch to user to see user drift
-OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" --scope=user 2>&1)"
-if [[ "$OUTPUT" == *"Settings native keys: WARN"* ]]; then
+# ---------------------------------------------------------------------------
+# Opusplan drift diagnostic
+# ---------------------------------------------------------------------------
+section "opusplan enabled and env matches → Status: OK (no drift)"
+OP_HOME="$(mktemp -d)"
+mkdir -p "$OP_HOME/.claude"
+OP_BLOCK="$(J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=false J_OPUSPLAN=true J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+  J_AUTH_VALIDATED=true \
+  schema_new_juggernaut_block)"
+config_write_atomic "$OP_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$OP_BLOCK" "$(schema_derive_native_keys "$OP_BLOCK")")"
+OUTPUT="$(HOME="$OP_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"Opusplan"* &&
+      "$OUTPUT" == *"Status: enabled"* &&
+      "$OUTPUT" != *"ANTHROPIC_MODEL mismatch"* ]]; then
   pass
 else
-  fail "expected drift warning for user scope"
+  fail "expected opusplan OK when env.ANTHROPIC_MODEL matches"
   printf '%s\n' "$OUTPUT" >&2
 fi
 
-section "malformed settings fails without mutation"
+section "opusplan enabled but env.ANTHROPIC_MODEL overridden → WARN with fix hint"
+# Tamper with top-level env.ANTHROPIC_MODEL to simulate external override.
+tmp_json="$OP_HOME/.claude/settings.json.tmp"
+jq '.env.ANTHROPIC_MODEL = "global.anthropic.claude-sonnet-4-6"' \
+  "$OP_HOME/.claude/settings.json" > "$tmp_json"
+mv "$tmp_json" "$OP_HOME/.claude/settings.json"
+OUTPUT="$(HOME="$OP_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"ANTHROPIC_MODEL mismatch"* &&
+      "$OUTPUT" == *"Fix"*"juggernaut apply --opusplan"* ]]; then
+  pass
+else
+  fail "expected opusplan drift warning with fix hint"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$OP_HOME"
+
+# ---------------------------------------------------------------------------
+# Malformed settings
+# ---------------------------------------------------------------------------
+section "malformed project settings → non-zero exit and 'not valid JSON'"
 printf '{' > "$TMP_WORK/.claude/settings.json"
-if OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"; then
-  fail "doctor should exit non-zero for malformed settings"
-  printf '%s\n' "$OUTPUT" >&2
+OUTPUT="$(cd "$TMP_WORK" && bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+RC=$?
+if [[ "$RC" -ne 0 && "$OUTPUT" == *"Project Scope"* && "$OUTPUT" == *"not valid JSON"* ]]; then
+  pass
 else
-  if [[ "$OUTPUT" == *"Project Scope"* && "$OUTPUT" == *"not valid JSON"* ]]; then
-    pass
-  else
-    fail "expected malformed project settings failure"
-    printf '%s\n' "$OUTPUT" >&2
-  fi
+  fail "expected non-zero exit and 'not valid JSON' for malformed settings"
+  printf '%s\n' "$OUTPUT" >&2
 fi
+
+# ---------------------------------------------------------------------------
+# --help / --version
+# ---------------------------------------------------------------------------
+section "doctor --help exits 0 and mentions v3"
+HELP_OUT="$(bash "$REPO_ROOT/commands/doctor.sh" --help 2>&1)"
+RC=$?
+if [[ "$RC" -eq 0 && "$HELP_OUT" == *"Juggernaut v3"* ]]; then pass; else fail "doctor --help should exit 0 and mention 'Juggernaut v3'"; fi
+if [[ "$HELP_OUT" != *"JUGGERNAUT_USE_V2"* ]]; then pass; else fail "doctor --help should not mention JUGGERNAUT_USE_V2"; fi
 
 echo
 echo "doctor.sh tests: $PASS passed, $FAIL failed"

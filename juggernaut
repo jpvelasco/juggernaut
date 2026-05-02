@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# juggernaut — v2 subcommand dispatcher.
+# juggernaut — v3 subcommand dispatcher.
 # Usage: juggernaut <subcommand> [options]
-# Subcommands: apply, migrate, show, doctor, uninstall
+# Subcommands: apply, show, doctor, uninstall
 
 set -euo pipefail
 
@@ -18,60 +18,24 @@ resolve_script_dir() {
 }
 
 SCRIPT_DIR="$(resolve_script_dir "${BASH_SOURCE[0]}")"
-# v2 is the default since 2.3.0. Set JUGGERNAUT_USE_V2=0 or pass --legacy-v1 to use v1.
-JUGGERNAUT_V2_ACTIVE="${JUGGERNAUT_USE_V2:-1}"
-[[ "${JUGGERNAUT_USE_V1:-}" == "1" ]] && JUGGERNAUT_V2_ACTIVE=0
-FILTERED_ARGS=()
-for arg in "$@"; do
-  case "$arg" in
-    --v2)         JUGGERNAUT_V2_ACTIVE=1 ;;
-    --legacy-v1|-v1)
-      JUGGERNAUT_V2_ACTIVE=0
-      ;;
-    *)            FILTERED_ARGS+=("$arg") ;;
-  esac
-done
-set -- "${FILTERED_ARGS[@]+"${FILTERED_ARGS[@]}"}"
-
-if [[ "$JUGGERNAUT_V2_ACTIVE" != "1" ]]; then
-  if [[ "${JUGGERNAUT_SUPPRESS_DEPRECATION:-0}" != "1" ]]; then
-    echo "Juggernaut v1 is deprecated and will be removed in v3.0. Run without --legacy-v1 for v2." >&2
-  fi
-  case "${1:-}" in
-    --version|-v)
-      cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
-      exit 0
-      ;;
-    --help|-h|help)
-      _juggernaut_help
-      exit 0
-      ;;
-    *)
-      exec "$SCRIPT_DIR/setup" "${@}"
-      ;;
-  esac
-fi
-
-export JUGGERNAUT_USE_V2=1
 
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
 _juggernaut_help() {
   cat <<'EOF'
-Juggernaut v2 — Claude Code Bedrock configurator
+Juggernaut v3 — Claude Code Bedrock configurator
 
 Usage: juggernaut <subcommand> [options]
 
 Subcommands:
   apply       Configure Claude Code to use Amazon Bedrock (default)
-  migrate     Migrate a v1 profile block to settings.json
   show        Print current Juggernaut configuration
   doctor      Verify configuration and credentials
   uninstall   Remove Juggernaut configuration
 
 Options (apply):
-  --auth=iam|bedrock-api-key  Authentication mode (default: iam; legacy: api-key)
+  --auth=iam|bedrock-api-key  Authentication mode (required on first run)
   --bedrock-key=KEY        Bedrock API key (bedrock-api-key mode)
   --preserve-key           Reuse existing key from env/keychain
   --storage=profile|keychain  API key storage (default: keychain on macOS/Windows)
@@ -85,13 +49,10 @@ Options (apply):
   --no-opusplan            Disable opusplan
   --1m-context             Enable 1M token context
   --no-1m-context          Disable 1M token context
-  --mantle                 Enable Mantle routing
+  --no-mantle              Disable Mantle routing (Mantle is on by default)
   --mantle-url=URL         Mantle base URL
   --scope=user|project     Write target (default: user)
-  --no-shell-fallback      Write settings.json only, skip profile block
-  --shell-fallback-only    Write profile block only, skip settings.json
   --dry-run                Preview changes without writing files
-  --yes, --force, -f       Confirm migration prompts
   --version, -v            Show version
   --help, -h               Show this help message
 
@@ -107,9 +68,6 @@ SUBCMD="${1:-apply}"
 case "$SUBCMD" in
   apply)
     exec "$SCRIPT_DIR/commands/apply.sh" "$@"
-    ;;
-  migrate)
-    exec "$SCRIPT_DIR/commands/migrate.sh" "$@"
     ;;
   show)
     exec "$SCRIPT_DIR/commands/show.sh" "$@"

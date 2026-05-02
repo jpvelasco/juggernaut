@@ -1,5 +1,5 @@
-# commands/apply.ps1 - Juggernaut v2 apply subcommand (PowerShell).
-# Configures Claude Code to use Amazon Bedrock via settings.json (+ optional shell fallback).
+# commands/apply.ps1 - Juggernaut v3 apply subcommand (PowerShell).
+# Configures Claude Code to use Amazon Bedrock via settings.json (sole output).
 
 param(
     [string]$Auth          = '',
@@ -16,16 +16,11 @@ param(
     [switch]$NoOpusPlan,
     [switch]$Use1MContext,
     [switch]$No1MContext,
-    [switch]$Mantle,
+    [switch]$NoMantle,
     [string]$MantleUrl     = '',
     [string]$Scope         = 'user',
-    [switch]$NoShellFallback,
-    [switch]$ShellFallbackOnly,
     [switch]$DryRun,
-    [switch]$Force,
-    [switch]$Yes,
     [switch]$SkipPreflight,
-    [switch]$ForceMigrationPrompt,
     [switch]$Help
 )
 
@@ -42,10 +37,7 @@ if (-not $env:BEDROCK_CONFIG_PATH) {
 
 . (Join-Path $RepoRoot 'lib\schema.ps1')
 . (Join-Path $RepoRoot 'lib\config_manager.ps1')
-. (Join-Path $RepoRoot 'lib\migrator.ps1')
 . (Join-Path $RepoRoot 'lib\keychain.ps1')
-. (Join-Path $RepoRoot 'lib\profile_writer.ps1')
-. (Join-Path $RepoRoot 'lib\profile_paths.ps1')
 
 if ($Help) {
     @'
@@ -53,7 +45,7 @@ juggernaut apply - configure Claude Code for Amazon Bedrock
 
 Usage: juggernaut.ps1 apply [options]
 
-  -Auth             iam|bedrock-api-key  (legacy: api-key)
+  -Auth             iam|bedrock-api-key  (required on first run)
   -BedrockKey       Bedrock API key
   -PreserveKey      Reuse existing key from env/keychain
   -Storage          profile|keychain
@@ -64,36 +56,25 @@ Usage: juggernaut.ps1 apply [options]
   -NoOpusPlan       Disable opusplan
   -Use1MContext     Enable 1M token context
   -No1MContext      Disable 1M token context
-  -Mantle           Enable Mantle routing
+  -NoMantle         Disable Mantle routing (Mantle is on by default)
   -MantleUrl        Mantle base URL
   -Scope            user|project (default: user)
-  -NoShellFallback  Write settings.json only
-  -ShellFallbackOnly  Write profile block only
   -DryRun           Preview without writing
-  -Yes / -Force     Confirm migration prompts
 '@
     exit 0
 }
 
 $authExplicit = $PSBoundParameters.ContainsKey('Auth')
 $storageExplicit = $PSBoundParameters.ContainsKey('Storage')
-$mantleExplicit = $PSBoundParameters.ContainsKey('Mantle') -or $PSBoundParameters.ContainsKey('MantleUrl')
 if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
-if ($Force) { $Yes = $true }
 $HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
 
-if ($NoShellFallback -and $ShellFallbackOnly) {
-    Write-Error 'apply: -NoShellFallback and -ShellFallbackOnly are mutually exclusive'
-    exit 1
-}
 if ($Scope -notin 'user','project') {
     Write-Error "apply: -Scope must be 'user' or 'project' (got: '$Scope')"
     exit 1
 }
 
-$shellMode = if ($NoShellFallback)       { 'settings-only' }
-             elseif ($ShellFallbackOnly) { 'shell-only' }
-             else                        { 'both' }
+$shellMode = 'settings-only'
 
 # ---------------------------------------------------------------------------
 # Resolve settings.json path  (--scope only changes write target, no merging)
@@ -111,92 +92,16 @@ if (Test-SettingsExists -Path $SettingsPath) {
         exit 1
     }
 }
-$hasV2Block = Test-HasJuggernautBlock -Settings $existingSettings
+$hasBlock = Test-HasJuggernautBlock -Settings $existingSettings
 
 # ---------------------------------------------------------------------------
-# Step 2: Explicit migration - detect and migrate v1 profile blocks.
+# Step 2: Load existing block and overlay CLI flags.
 # ---------------------------------------------------------------------------
-if (-not $hasV2Block) {
-    $v1Candidates = @(Get-ProfilePathsV1Candidates)
-    if ($ForceMigrationPrompt) { $env:JUGGERNAUT_FORCE_MIGRATION_PROMPT = '1' }
-    foreach ($candidate in $v1Candidates) {
-        if (Test-Path $candidate) {
-            $hasMig = $false
-            try { $hasMig = Test-MigratorHasV1Block -ProfileFile $candidate } catch {}
-            if ($hasMig) {
-                Write-Host 'Juggernaut found an existing v1 profile block:'
-                Write-Host "  $candidate"
-                Write-Host 'Migration writes the equivalent v2 settings to:'
-                Write-Host "  $SettingsPath"
-                Write-Host 'The old profile block remains as a fallback unless you later run migrate -Clean.'
-                if ($DryRun) {
-                    Write-Host "[dry-run] Would migrate $candidate to $SettingsPath"
-                    break
-                }
-                if (-not $Yes) {
-                    if ([Console]::IsInputRedirected) {
-                        Write-Error 'apply: migration requires confirmation. Re-run with -Yes, or run migrate -DryRun first.'
-                        exit 1
-                    }
-                    $answer = Read-Host 'Migrate this v1 block now? [y/N]'
-                    if ($answer -notmatch '^(y|yes)$') {
-                        try { Set-MigratorDeclinedMarker -ProfileFile $candidate } catch {}
-                        Write-Error 'apply: migration skipped. Re-run with -ForceMigrationPrompt to re-prompt, or -Yes to confirm non-interactively.'
-                        exit 1
-                    }
-                }
-                try {
-                    $ok = Invoke-MigratorRun -ProfileFile $candidate `
-                                             -SettingsPath $SettingsPath `
-                                             -BedrockConfigPath $env:BEDROCK_CONFIG_PATH
-                    if ($ok) {
-                        $existingSettings = Read-Settings -Path $SettingsPath
-                        $hasV2Block = $true
-                        Write-Host "Migration complete. Settings written to: $SettingsPath" -ForegroundColor Green
-                    } else {
-                        Write-Warning "apply: migration from $candidate returned false - continuing with defaults."
-                    }
-                } catch {
-                    Write-Warning "apply: migration from $candidate failed - continuing with defaults: $_"
-                }
-                break
-            }
-        }
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Step 3: Load existing block and overlay CLI flags.
-# ---------------------------------------------------------------------------
-$existingBlock = if ($hasV2Block) { Get-JuggernautBlockFromSettings -Settings $existingSettings } else { $null }
+$existingBlock = if ($hasBlock) { Get-JuggernautBlockFromSettings -Settings $existingSettings } else { $null }
 
 if ($existingBlock) {
     if (-not $Auth)        { $Auth        = $existingBlock.auth.mode            }
     if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
-
-    # Conflict guard: stored block says "iam" but live evidence of an API key
-    # exists. Auto-correct unless -Auth iam was passed explicitly.
-    if (-not $authExplicit -and $Auth -eq 'iam') {
-        if ($env:AWS_BEARER_TOKEN_BEDROCK) {
-            Write-Warning "apply: stored auth mode is 'iam' but AWS_BEARER_TOKEN_BEDROCK is set."
-            Write-Warning "apply: Auto-correcting to bedrock-api-key. Pass -Auth iam to suppress."
-            $Auth = 'bedrock-api-key'
-            $PreserveKey = $true
-            if (-not $mantleExplicit) { $Mantle = $true }
-        } else {
-            $existingStorage = if ($existingBlock.auth) { $existingBlock.auth.storage } else { '' }
-            if ($existingStorage -eq 'keychain' -and (Test-KeychainAvailable)) {
-                $kcVal = $null
-                try { $kcVal = Get-KeychainEntry } catch {}
-                if ($kcVal) {
-                    Write-Warning "apply: stored auth mode is 'iam' but a key exists in the system keychain."
-                    Write-Warning "apply: Auto-correcting to bedrock-api-key. Pass -Auth iam to suppress."
-                    $Auth = 'bedrock-api-key'
-                    $PreserveKey = $true
-                }
-            }
-        }
-    }
     if (-not $Storage)     { $Storage     = $existingBlock.auth.storage         }
     if (-not $Region)      { $Region      = $existingBlock.auth.region          }
     if (-not $Model)       { $Model       = $existingBlock.model                }
@@ -210,18 +115,44 @@ if ($existingBlock) {
     if (-not $Use1MContext -and -not $No1MContext) {
         if ($existingBlock.context.use1MContext) { $Use1MContext = $true } else { $No1MContext = $true }
     }
-    if (-not $mantleExplicit -and -not $Mantle -and $existingBlock.useMantle) { $Mantle = $true }
     if (-not $MantleUrl -and $existingBlock.mantle.baseUrl) { $MantleUrl = $existingBlock.mantle.baseUrl }
+}
+
+# ---------------------------------------------------------------------------
+# Step 3: Auth validation gate.
+# On first run (no stored auth), require an explicit -Auth flag UNLESS we can
+# detect live credentials. Prevents the installer-poisons-auth bug class where
+# CLAUDE_CODE_USE_BEDROCK=1 is written without a working credential path.
+# ---------------------------------------------------------------------------
+if (-not $authExplicit -and -not $existingBlock) {
+    $detected = ''
+    if ($env:AWS_BEARER_TOKEN_BEDROCK) {
+        $detected = 'bedrock-api-key'
+    } elseif ((Test-KeychainAvailable) -and (Get-KeychainEntry -ErrorAction SilentlyContinue)) {
+        $detected = 'bedrock-api-key'
+    } elseif (Get-Command 'aws' -ErrorAction SilentlyContinue) {
+        & aws sts get-caller-identity 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $detected = 'iam' }
+    }
+    if (-not $detected) {
+        Write-Error @'
+apply: no authentication mode specified and no credentials detected.
+
+Pass -Auth iam to use AWS IAM credentials (requires `aws configure` or `aws sso login`),
+or pass -Auth bedrock-api-key to use a Bedrock API key (supply -BedrockKey KEY or set
+AWS_BEARER_TOKEN_BEDROCK).
+
+Juggernaut will not enable CLAUDE_CODE_USE_BEDROCK without a validated auth path --
+this prevents Claude Code from hanging on launch.
+'@
+        exit 2
+    }
+    $Auth = $detected
 }
 
 # ---------------------------------------------------------------------------
 # Step 4: Hard defaults for unset fields.
 # ---------------------------------------------------------------------------
-if (-not $authExplicit -and $env:AWS_BEARER_TOKEN_BEDROCK) {
-    $Auth = 'bedrock-api-key'
-    $PreserveKey = $true
-    if (-not $mantleExplicit) { $Mantle = $true }
-}
 if (-not $Auth)   { $Auth   = 'iam' }
 if (-not $Effort) { $Effort = 'xhigh' }
 if (-not $Region) {
@@ -233,7 +164,7 @@ if (-not $Use1MContext -and -not $No1MContext) { $Use1MContext = $true }
 
 $useOpusPlan = [bool]($OpusPlan -and -not $NoOpusPlan)
 $use1M       = [bool]($Use1MContext -and -not $No1MContext)
-$useMantle   = [bool]$Mantle
+$useMantle   = -not $NoMantle
 
 if (-not $Storage) {
     $os = Get-KeychainOS
@@ -256,11 +187,8 @@ if (-not $SkipPreflight -and $Auth -eq 'iam') {
 # ---------------------------------------------------------------------------
 # Step 5: Resolve API key.
 # ---------------------------------------------------------------------------
-$apiKeyExpr = ''
 if ($Auth -eq 'bedrock-api-key') {
     if ($PreserveKey) {
-        # Probe all sources regardless of stored storage preference — the storage
-        # setting may have been corrupted alongside the auth mode.
         if ($env:AWS_BEARER_TOKEN_BEDROCK) {
             $BedrockKey = $env:AWS_BEARER_TOKEN_BEDROCK
         }
@@ -270,18 +198,7 @@ if ($Auth -eq 'bedrock-api-key') {
             if ($null -eq $BedrockKey) { $BedrockKey = '' }
         }
         if (-not $BedrockKey) {
-            foreach ($profilePath in (Get-ProfileWriterPowerShellProfileTargets)) {
-                if (Test-Path $profilePath) {
-                    $profileContent = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
-                    if ($profileContent -match '\$env:AWS_BEARER_TOKEN_BEDROCK\s*=\s*[''"]([^''"]+)[''"]') {
-                        $BedrockKey = $Matches[1]
-                        if ($BedrockKey) { break }
-                    }
-                }
-            }
-        }
-        if (-not $BedrockKey) {
-            Write-Error 'apply: -PreserveKey specified but no existing key found in env, keychain, or shell profile'; exit 1
+            Write-Error 'apply: -PreserveKey specified but no existing key found in env or keychain'; exit 1
         }
     }
     if (-not $BedrockKey) {
@@ -306,11 +223,6 @@ if ($Auth -eq 'bedrock-api-key') {
             $Storage = 'profile'
         }
     }
-    if ($Storage -eq 'keychain') {
-        $apiKeyExpr = 'keychain'
-    } else {
-        $apiKeyExpr = $BedrockKey
-    }
 }
 
 # ---------------------------------------------------------------------------
@@ -319,6 +231,7 @@ if ($Auth -eq 'bedrock-api-key') {
 $buildParams = @{
     Provider       = 'bedrock'
     AuthMode       = $Auth
+    AuthValidated  = $true
     Storage        = $Storage
     Region         = $Region
     EffortLevel    = $Effort
@@ -359,104 +272,34 @@ if ($DryRun) {
     Write-Host '-----------------------------------------'
     $mergedSettings | ConvertTo-Json -Depth 20
     Write-Host '-----------------------------------------'
-    if ($shellMode -ne 'settings-only') {
-        if ((Get-KeychainOS) -eq 'windows') {
-            Write-Host "Would also update PowerShell profiles:"
-            foreach ($profilePath in (Get-ProfileWriterPowerShellProfileTargets)) {
-                Write-Host "  $profilePath"
-            }
-        } else {
-            Write-Host "Would also update shell profile (bash): $(Join-Path $HomeDir '.bashrc')"
-        }
-    }
     Write-Host ''
     Write-Host '[dry-run] Done.'
     exit 0
 }
 
 # ---------------------------------------------------------------------------
-# Step 9: Write settings.json (unless shell-fallback-only).
+# Step 9: Write settings.json.
 # ---------------------------------------------------------------------------
-if (-not $ShellFallbackOnly) {
-    try {
-        Write-SettingsAtomic -Path $SettingsPath -Content $mergedSettings
-        Write-Host "Settings written to: $SettingsPath" -ForegroundColor Green
-    } catch {
-        Write-Error "apply: failed to write settings.json: $_"
-        exit 1
-    }
+try {
+    Write-SettingsAtomic -Path $SettingsPath -Content $mergedSettings
+    Write-Host "Settings written to: $SettingsPath" -ForegroundColor Green
+} catch {
+    Write-Error "apply: failed to write settings.json: $_"
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
-# Step 10: Write shell profile block (unless no-shell-fallback).
-# On Windows, write PowerShell all-hosts profiles so both Windows PowerShell 5.1
-# and PowerShell 7 can load the keychain/profile fallback.
-# ---------------------------------------------------------------------------
-if (-not $NoShellFallback) {
-    if ((Get-KeychainOS) -eq 'windows') {
-        $blockContent = Build-ProfileWriterBlock `
-            -Shell       'powershell' `
-            -Region      $Region `
-            -AuthMode    $Auth `
-            -ApiKeyExpr  $apiKeyExpr `
-            -StorageMode $Storage `
-            -BedrockConfigPath $env:BEDROCK_CONFIG_PATH `
-            -Model       $Model `
-            -OpusModel   $OpusModel `
-            -SonnetModel $SonnetModel `
-            -HaikuModel  $HaikuModel `
-            -EffortLevel $Effort `
-            -OpusPlan    $useOpusPlan `
-            -UseMantle   $useMantle `
-            -MantleUrl   $MantleUrl
-
-        foreach ($profilePath in (Get-ProfileWriterPowerShellProfileTargets)) {
-            try {
-                Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $blockContent
-                Write-Host "Profile block written to: $profilePath" -ForegroundColor Green
-            } catch {
-                Write-Warning "apply: could not write profile block to $profilePath`: $_"
-            }
-        }
-    } else {
-        $profilePath = Join-Path $HomeDir '.bashrc'
-        if (Test-Path (Split-Path $profilePath -Parent)) {
-            $blockContent = Build-ProfileWriterBlock `
-                -Shell       'bash' `
-                -Region      $Region `
-                -AuthMode    $Auth `
-                -ApiKeyExpr  $apiKeyExpr `
-                -StorageMode $Storage `
-                -BedrockConfigPath $env:BEDROCK_CONFIG_PATH `
-                -Model       $Model `
-                -OpusModel   $OpusModel `
-                -SonnetModel $SonnetModel `
-                -HaikuModel  $HaikuModel `
-                -EffortLevel $Effort `
-                -OpusPlan    $useOpusPlan `
-                -UseMantle   $useMantle `
-                -MantleUrl   $MantleUrl
-            try {
-                Write-ProfileWriterBlock -ProfileFile $profilePath -BlockContent $blockContent
-                Write-Host "Profile block written to: $profilePath" -ForegroundColor Green
-            } catch {
-                Write-Warning "apply: could not write profile block to $profilePath`: $_"
-            }
-        }
-    }
-}
-
-# ---------------------------------------------------------------------------
-# Step 11: Summary
+# Step 10: Summary
 # ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host 'Juggernaut v2 apply complete.' -ForegroundColor Cyan
+Write-Host 'Juggernaut v3 apply complete.' -ForegroundColor Cyan
 if ($Auth -eq 'bedrock-api-key') { Write-Host '  Auth:     Bedrock API key' }
 else { Write-Host '  Auth:     IAM' }
 Write-Host "  Region:   $Region"
 Write-Host "  Effort:   $Effort"
 Write-Host "  Opusplan: $useOpusPlan"
+Write-Host "  Mantle:   $useMantle"
 Write-Host ''
-Write-Host 'Restart your terminal to apply changes, then:'
+Write-Host 'Launch Claude Code:'
 if ($Auth -eq 'iam') { Write-Host '  aws sts get-caller-identity && claude' }
 else                 { Write-Host '  claude' }

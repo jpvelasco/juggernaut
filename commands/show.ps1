@@ -1,9 +1,8 @@
-# commands/show.ps1 - Juggernaut v2 show subcommand.
+# commands/show.ps1 - Juggernaut v3 show subcommand.
 
 [CmdletBinding(PositionalBinding=$false)]
 param(
     [string]$Scope = '',
-    [Alias('v2')][switch]$UseV2,
     [switch]$Help,
     [switch]$Version,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$RemainingArgs
@@ -11,11 +10,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$v2Active = if ($env:JUGGERNAUT_USE_V2 -eq '0') { $false } else { $true }
-if ($UseV2) { $v2Active = $true }
 foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
-        '^--v2$' { $v2Active = $true; break }
         '^--scope=(user|project)$' { $Scope = $Matches[1]; break }
         '^--scope=' { throw "show: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')" }
         '^--help$' { $Help = $true; break }
@@ -30,10 +26,9 @@ if ($Help) {
     @'
 juggernaut show - print the current Juggernaut configuration
 
-Usage: juggernaut.ps1 show
+Usage: juggernaut.ps1 show [-Scope user|project]
 
-Displays the current Juggernaut block, the effective user/project scopes, and
-shell fallback details when present.
+Displays the current Juggernaut block and the effective user/project scopes.
 '@
     return
 }
@@ -45,11 +40,6 @@ if ($Version) {
     return
 }
 
-if (-not $v2Active) {
-    [Console]::Error.WriteLine("juggernaut: invoke via the 'juggernaut' dispatcher (or set JUGGERNAUT_USE_V2=1).")
-    exit 2
-}
-
 if ($Scope -and $Scope -notin @('user','project')) {
     Write-Error "show: --scope must be 'user' or 'project' (got: '$Scope')"
     exit 1
@@ -57,20 +47,11 @@ if ($Scope -and $Scope -notin @('user','project')) {
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 . (Join-Path $RepoRoot 'lib\config_manager.ps1')
-. (Join-Path $RepoRoot 'lib\profile_writer.ps1')
 
 function Show-Value {
     param([AllowNull()]$Value)
     if ($null -eq $Value -or $Value -eq '') { return '-' }
     return [string]$Value
-}
-
-function Show-Bool {
-    param([AllowNull()]$Value)
-    if ($Value -is [bool]) { return $(if ($Value) { 'yes' } else { 'no' }) }
-    if ($Value -eq 'true') { return 'yes' }
-    if ($Value -eq 'false') { return 'no' }
-    return '-'
 }
 
 function Show-State {
@@ -101,66 +82,28 @@ function Show-Auth {
     }
 }
 
+function Show-HomePath {
+    param([AllowNull()][string]$Path)
+    if (-not $Path) { return '' }
+    $homePath = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { '' }
+    if ($homePath -and $Path.StartsWith($homePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return '~' + ($Path.Substring($homePath.Length) -replace '\\', '/')
+    }
+    return $Path
+}
+
 function Get-ShowBlock {
     param([AllowNull()]$Block)
     if (-not $Block) { return $null }
-
-    $profiles = @()
-    if ($Block.shellFallback.lastWrittenProfiles) {
-        $profiles = @($Block.shellFallback.lastWrittenProfiles)
-    }
-
     [ordered]@{
-        Scope        = $Block.meta.scope
-        AuthMode     = Show-Auth $Block.auth.mode
-        Region       = $Block.auth.region
-        Model        = $Block.model
-        Effort       = $Block.effortLevel
-        UseMantle    = [bool]$Block.useMantle
-        OpusPlan     = $Block.opusplan
-        Storage      = $Block.auth.storage
-        ShellEnabled = [bool]$Block.shellFallback.enabled
-        ShellProfiles = $profiles
+        Scope     = $Block.meta.scope
+        AuthMode  = Show-Auth $Block.auth.mode
+        Region    = $Block.auth.region
+        Model     = $Block.model
+        Effort    = $Block.effortLevel
+        UseMantle = [bool]$Block.useMantle
+        OpusPlan  = $Block.opusplan
     }
-}
-
-function Show-CurrentBlock {
-    param([AllowNull()]$Block)
-
-    Write-Output 'Current Juggernaut Block'
-
-    if (-not $Block) {
-        Show-Kv -Indent 2 -Label 'Status' -Value 'No active Juggernaut block'
-        return
-    }
-
-    $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 2 -Label 'Scope' -Value $view.Scope
-    Show-Kv -Indent 2 -Label 'Auth' -Value $view.AuthMode
-    Show-Kv -Indent 2 -Label 'Region' -Value $view.Region
-    Show-Kv -Indent 2 -Label 'Model' -Value $view.Model
-    Show-Kv -Indent 2 -Label 'Effort' -Value $view.Effort
-    Show-Kv -Indent 2 -Label 'Opus Plan' -Value (Show-State $view.OpusPlan)
-    Show-Kv -Indent 2 -Label 'Mantle' -Value (Show-State $view.UseMantle)
-}
-
-function Show-EffectiveConfig {
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [AllowNull()]$Block
-    )
-
-    Write-Output 'Effective Config'
-    Write-Output ('  ' + (Show-HomePath $Path))
-    if (-not $Block) {
-        Show-Kv -Indent 4 -Label 'Region' -Value '-'
-        Show-Kv -Indent 4 -Label 'Model' -Value '-'
-        return
-    }
-
-    $view = Get-ShowBlock -Block $Block
-    Show-Kv -Indent 4 -Label 'Region' -Value $view.Region
-    Show-Kv -Indent 4 -Label 'Model' -Value $view.Model
 }
 
 function Show-ScopeConfig {
@@ -195,42 +138,6 @@ function Show-ScopeConfig {
     Show-Kv -Indent 4 -Label 'Mantle' -Value (Show-State $view.UseMantle)
 }
 
-function Show-ShellFallback {
-    param([AllowNull()]$Block)
-    if (-not $Block) { return }
-
-    $view = Get-ShowBlock -Block $Block
-
-    Write-Output 'Shell Fallback'
-    $profiles = @($view.ShellProfiles | Where-Object { $_ })
-    if ($profiles.Count -eq 0) {
-        if ($IsWindows -or $env:OS -match 'Windows') {
-            $profiles = @(Get-ProfileWriterPowerShellProfileTargets)
-        } else {
-            $shellName = if ($env:SHELL) { Split-Path -Leaf $env:SHELL } else { 'bash' }
-            $shellPath = Get-ProfileWriterShellConfigPath -Shell $shellName
-            if ($shellPath) { $profiles = @($shellPath) }
-        }
-    }
-    foreach ($profilePath in $profiles) {
-        Write-Output ('  ' + (Show-HomePath $profilePath))
-    }
-    Show-Kv -Indent 4 -Label 'Present' -Value (Show-Bool $view.ShellEnabled)
-    if ($view.ShellEnabled) {
-        Show-Kv -Indent 4 -Label 'Storage' -Value $view.Storage
-    }
-}
-
-function Show-HomePath {
-    param([AllowNull()][string]$Path)
-    if (-not $Path) { return '' }
-    $homePath = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { '' }
-    if ($homePath -and $Path.StartsWith($homePath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return '~' + ($Path.Substring($homePath.Length) -replace '\\', '/')
-    }
-    return $Path
-}
-
 $effective = Get-EffectiveSettings
 $userPath = $effective.user.path
 $userBlock = if ($effective.user.settings -and (Test-HasJuggernautBlock -Settings $effective.user.settings)) {
@@ -246,13 +153,10 @@ if ($effective.project) {
     }
 }
 
-$activeBlock = $null
 $activeScope = ''
 if ($projectBlock) {
-    $activeBlock = $projectBlock
     $activeScope = 'project'
 } elseif ($userBlock) {
-    $activeBlock = $userBlock
     $activeScope = 'user'
 }
 
@@ -267,14 +171,10 @@ if ($Scope) {
 if ($activeScope) {
     Show-Kv -Indent 2 -Label 'Active Scope' -Value "$activeScope takes precedence for this session"
 } else {
-    Show-Kv -Indent 2 -Label 'Active Scope' -Value 'No Juggernaut v2 block found'
+    Show-Kv -Indent 2 -Label 'Active Scope' -Value 'No Juggernaut block found'
 }
 Write-Output ''
 Show-ScopeConfig -ScopeName 'user' -Path $userPath -Block $userBlock -Active:($activeScope -eq 'user') -Selected:($Scope -eq 'user')
 Write-Output ''
 $displayProjectPath = if ($projectPath) { $projectPath } else { Join-Path (Get-Location).Path '.claude/settings.json' }
 Show-ScopeConfig -ScopeName 'project' -Path $displayProjectPath -Block $projectBlock -Active:($activeScope -eq 'project') -Selected:($Scope -eq 'project')
-if ($activeBlock) {
-    Write-Output ''
-    Show-ShellFallback -Block $activeBlock
-}

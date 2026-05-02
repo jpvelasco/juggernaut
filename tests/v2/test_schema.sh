@@ -71,8 +71,15 @@ assert_not_cmd schema_validate "$(echo "$block" | jq '.auth.region = ""')"
 section "schema_derive_native_keys"
 native="$(schema_derive_native_keys "$block")"
 assert_eq "$(echo "$native" | jq 'has("env") and has("model") and has("modelOverrides")')" "true" "native keys should include env/model/modelOverrides"
-assert_eq "$(echo "$native" | jq -r '.env.CLAUDE_CODE_USE_BEDROCK')"                       "1"    "native env should carry CLAUDE_CODE_USE_BEDROCK"
+assert_eq "$(echo "$native" | jq '.env | has("CLAUDE_CODE_USE_BEDROCK")')"                 "false" "default block (auth not validated) should omit CLAUDE_CODE_USE_BEDROCK"
 assert_eq "$(echo "$native" | jq -r '.env.AWS_REGION')"                                    "us-east-1" "native env should carry AWS_REGION derived from juggernaut.auth.region"
+
+section "schema_derive_native_keys — auth validated"
+export J_AUTH_VALIDATED=true
+block_validated="$(schema_new_juggernaut_block)"
+unset J_AUTH_VALIDATED
+native_validated="$(schema_derive_native_keys "$block_validated")"
+assert_eq "$(echo "$native_validated" | jq -r '.env.CLAUDE_CODE_USE_BEDROCK')" "1" "auth-validated block should carry CLAUDE_CODE_USE_BEDROCK=1"
 
 echo
 echo "schema.sh tests: $PASS passed, $FAIL failed"

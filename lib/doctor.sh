@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib/doctor.sh - read-only diagnostics for Juggernaut v2.
+# lib/doctor.sh - read-only diagnostics for Juggernaut v3.
 
 set -euo pipefail
 
@@ -34,46 +34,6 @@ doctor_ok()   { printf 'Status: OK\n'; }
 doctor_warn() { DOCTOR_WARNS=$((DOCTOR_WARNS + 1)); printf 'Status: WARN\n'; }
 doctor_fail() { DOCTOR_FAILS=$((DOCTOR_FAILS + 1)); printf 'Status: FAIL\n'; }
 
-doctor_profile_path() {
-  local shell_name
-  shell_name="$(basename -- "${SHELL:-bash}")"
-  profile_writer_detect_shell_config_path "$shell_name"
-}
-
-doctor_shell_value() {
-  local profile="$1" key="$2"
-  [[ -f "$profile" ]] || return 1
-  awk -v begin="$PROFILE_WRITER_BEGIN_MARKER" -v end="$PROFILE_WRITER_END_MARKER" '
-    $0 == begin { in_block=1; next }
-    $0 == end { in_block=0; next }
-    in_block { print }
-  ' "$profile" | awk -v key="$key" '
-    $1 == "export" {
-      prefix = key "="
-      if (index($2, prefix) == 1) {
-        value = substr($2, length(prefix) + 1)
-        gsub(/^"/, "", value); gsub(/"$/, "", value)
-        print value; exit
-      }
-    }
-    $1 == "set" && $2 == "-gx" && $3 == key {
-      value = $4
-      gsub(/^"/, "", value); gsub(/"$/, "", value)
-      print value; exit
-    }
-  '
-}
-
-doctor_shell_has_key_assignment() {
-  local profile="$1" key="$2"
-  [[ -f "$profile" ]] || return 1
-  awk -v begin="$PROFILE_WRITER_BEGIN_MARKER" -v end="$PROFILE_WRITER_END_MARKER" '
-    $0 == begin { in_block=1; next }
-    $0 == end { in_block=0; next }
-    in_block { print }
-  ' "$profile" | grep -Eq "(export[[:space:]]+$key=|set[[:space:]]+-gx[[:space:]]+$key[[:space:]])"
-}
-
 doctor_scope_block() {
   local path="$1" settings="$2"
   printf '%s\n' "$(doctor_home_path "$path")"
@@ -102,7 +62,7 @@ doctor_scope_block() {
 }
 
 doctor_credentials() {
-  local block="$1" profile="$2"
+  local block="$1"
   local auth_mode storage keychain_value keychain_rc keychain_error
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   storage="$(jq -r '.auth.storage // ""' <<<"$block")"
@@ -122,10 +82,9 @@ doctor_credentials() {
     iam)
       doctor_kv "Auth" "IAM"
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
-        # Bearer token present but config says IAM — surface as the primary status.
         doctor_warn
         doctor_kv "Details" "AWS_BEARER_TOKEN_BEDROCK is set but auth mode is 'iam' — possible misconfiguration"
-        doctor_kv "Fix" "run: juggernaut apply --v2 (auto-corrects to bedrock-api-key)"
+        doctor_kv "Fix" "run: juggernaut apply --auth=bedrock-api-key"
       elif [[ -n "${AWS_PROFILE:-}" ]]; then
         doctor_ok
         doctor_kv "Details" "AWS_PROFILE is set"
@@ -145,26 +104,13 @@ doctor_credentials() {
       elif [[ -n "$keychain_value" ]]; then
         doctor_kv "Source" "system keychain"
         doctor_ok
-      elif [[ -n "$profile" ]] && doctor_shell_has_key_assignment "$profile" "AWS_BEARER_TOKEN_BEDROCK"; then
-        if [[ "$storage" == "keychain" ]]; then
-          if [[ -n "$keychain_error" ]]; then
-            DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-            doctor_kv "Keychain" "WARN ($keychain_error)"
-          fi
-          doctor_fail
-          doctor_kv "Details" "keychain storage is configured, but no keychain API key was found"
-          doctor_kv "Fix" "run: juggernaut apply --auth=bedrock-api-key"
-          return 0
-        fi
-        doctor_kv "Source" "shell profile"
-        doctor_ok
       else
         if [[ -n "$keychain_error" ]]; then
           DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
           doctor_kv "Keychain" "WARN ($keychain_error)"
         fi
         doctor_fail
-        doctor_kv "Details" "no API key found in env, keychain, or shell profile"
+        doctor_kv "Details" "no API key found in env or keychain"
       fi
       ;;
     *)
@@ -199,19 +145,14 @@ doctor_region_models() {
 
 doctor_mantle() {
   local block="$1"
-  local use_mantle mantle_url auth_mode
+  local use_mantle mantle_url
   use_mantle="$(jq -r '.useMantle // false' <<<"$block")"
   mantle_url="$(jq -r '.mantle.baseUrl // ""' <<<"$block")"
-  auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
-  [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
   if [[ "$use_mantle" != "true" ]]; then
-    doctor_kv "Status" "disabled"
+    doctor_kv "Status" "disabled (INFO)"
     return 0
   fi
   doctor_kv "Status" "enabled"
-  if [[ "$auth_mode" == "bedrock-api-key" ]]; then
-    doctor_kv "Reason" "Bedrock API key detected"
-  fi
   [[ -n "$mantle_url" ]] && doctor_kv "URL" "$mantle_url"
   if [[ "$(jq -r '.env.CLAUDE_CODE_USE_MANTLE // ""' <<<"$block")" != "1" ]]; then
     DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
@@ -219,78 +160,25 @@ doctor_mantle() {
   fi
 }
 
-doctor_v1_artifacts() {
-  local settings="$1" has_v2_block="$2"
-
-  local found_v1=false
-  local profiles=()
-
-  while IFS= read -r candidate; do
-    [[ -z "$candidate" ]] && continue
-    if [[ -f "$candidate" ]] \
-       && tr -d '\r' < "$candidate" 2>/dev/null | grep -q "# BEGIN: Claude Code Bedrock Configuration" \
-       && ! tr -d '\r' < "$candidate" 2>/dev/null | grep -q "^# Juggernaut v2 shell fallback$"; then
-      found_v1=true
-      profiles+=("$candidate")
-    fi
-  done < <(profile_paths_v1_candidates)
-
-  [[ "$found_v1" == "false" ]] && return 0
-
-  if [[ "$has_v2_block" == "true" ]]; then
-    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-    doctor_kv "v1 profile block" "WARN — found alongside v2 settings.json"
-    for p in "${profiles[@]}"; do
-      doctor_kv "  Profile" "$p"
-    done
-    doctor_kv "  Fix" "run: juggernaut migrate --clean"
-  else
-    doctor_kv "v1 profile block" "INFO — v1 configuration detected"
-    for p in "${profiles[@]}"; do
-      doctor_kv "  Profile" "$p"
-    done
-    doctor_kv "  Upgrade" "run: juggernaut apply   (or pass --legacy-v1 to keep v1)"
-  fi
-}
-
-doctor_drift() {
-  local settings="$1" block="$2" profile="$3"
-  local expected
-  expected="$(schema_derive_native_keys "$block")"
-  if jq -en --argjson settings "$settings" --argjson expected "$expected" '
-    (($settings.model // null) == ($expected.model // null))
-    and (($settings.modelOverrides // {}) == ($expected.modelOverrides // {}))
-    and (all((($expected.env // {}) | keys[]); (($settings.env // {})[.] // null) == $expected.env[.]))
-  ' >/dev/null; then
-    doctor_kv "Settings native keys" "OK (in sync)"
-  else
-    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-    doctor_kv "Settings native keys" "WARN (differ from juggernaut block)"
-  fi
-  local enabled mode
-  enabled="$(jq -r '.shellFallback.enabled // false' <<<"$block")"
-  mode="$(jq -r '.shellFallback.mode // "both"' <<<"$block")"
-  if [[ "$enabled" != "true" || "$mode" == "settings-only" ]]; then
-    doctor_kv "Settings vs Shell Fallback" "OK (no fallback configured)"
+doctor_opusplan() {
+  local settings="$1" block="$2"
+  local opusplan_on settings_model env_model
+  opusplan_on="$(jq -r '.juggernaut.opusplan // false' <<<"$settings")"
+  if [[ "$opusplan_on" != "true" ]]; then
+    doctor_kv "Status" "disabled"
     return 0
   fi
-  if [[ -z "$profile" || ! -f "$profile" ]] || ! profile_writer_has_block "$profile"; then
-    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-    doctor_kv "Settings vs Shell Fallback" "WARN (expected but not found)"
-    return 0
-  fi
-  local mismatches=0 key exp_val actual
-  for key in AWS_REGION ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_USE_MANTLE ANTHROPIC_BEDROCK_MANTLE_BASE_URL; do
-    exp_val="$(jq -r --arg key "$key" '.env[$key] // ""' <<<"$block")"
-    [[ -z "$exp_val" ]] && continue
-    actual="$(doctor_shell_value "$profile" "$key" || true)"
-    [[ "$actual" != "$exp_val" ]] && mismatches=$((mismatches + 1))
-  done
-  if (( mismatches == 0 )); then
-    doctor_kv "Settings vs Shell Fallback" "OK (no drift detected)"
+  doctor_kv "Status" "enabled"
+  # Expected: both .env.ANTHROPIC_MODEL in the block and the top-level .env.ANTHROPIC_MODEL
+  # in settings.json should read "opusplan".
+  settings_model="$(jq -r '.env.ANTHROPIC_MODEL // ""' <<<"$settings")"
+  env_model="$(jq -r '.env.ANTHROPIC_MODEL // ""' <<<"$block")"
+  if [[ "$settings_model" == "opusplan" && "$env_model" == "opusplan" ]]; then
+    doctor_ok
   else
     DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-    doctor_kv "Settings vs Shell Fallback" "WARN ($mismatches differing value(s))"
+    doctor_kv "Warning" "ANTHROPIC_MODEL mismatch (settings.env='$settings_model', block.env='$env_model'; expected 'opusplan')"
+    doctor_kv "Fix" "run: juggernaut apply --opusplan"
   fi
 }
 

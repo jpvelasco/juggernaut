@@ -97,7 +97,7 @@ Describe 'Test-JuggernautBlock — validation' {
 
 Describe 'Get-NativeKeysFromJuggernautBlock' {
     It 'returns env + model + modelOverrides' {
-        $b = New-JuggernautBlock -BedrockConfigPath $script:BedrockConfigPath
+        $b = New-JuggernautBlock -AuthValidated $true -BedrockConfigPath $script:BedrockConfigPath
         $n = Get-NativeKeysFromJuggernautBlock -Block $b
         $n.Keys | Should -Contain 'env'
         $n.Keys | Should -Contain 'model'
