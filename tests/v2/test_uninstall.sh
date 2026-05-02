@@ -22,7 +22,8 @@ export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export SHELL="/bin/bash"
 export JUGGERNAUT_NO_TTY_PROMPTS=1
 # Isolate keychain for CI: point at a guaranteed-absent service name.
-export JUGGERNAUT_KEYCHAIN_SERVICE="juggernaut-absent-uninstall-$$-$(date +%s%N 2>/dev/null || date +%s)"
+_stamp="$(date +%s%N 2>/dev/null || date +%s)"
+export JUGGERNAUT_KEYCHAIN_SERVICE="juggernaut-absent-uninstall-$$-${_stamp}"
 EXPECTED_VERSION="$(tr -d '\r\n ' < "$REPO_ROOT/VERSION" 2>/dev/null || echo "3.0.0")"
 unset AWS_BEARER_TOKEN_BEDROCK 2>/dev/null || true
 

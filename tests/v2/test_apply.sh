@@ -19,7 +19,9 @@ _clean_env() {
   unset AWS_BEARER_TOKEN_BEDROCK
   export JUGGERNAUT_NO_TTY_PROMPTS=1
   # Point keychain at a guaranteed-absent service name so we never find cached creds.
-  export JUGGERNAUT_KEYCHAIN_SERVICE="juggernaut-absent-apply-$$-$(date +%s%N 2>/dev/null || date +%s)"
+  local _stamp
+  _stamp="$(date +%s%N 2>/dev/null || date +%s)"
+  export JUGGERNAUT_KEYCHAIN_SERVICE="juggernaut-absent-apply-$$-${_stamp}"
 }
 
 # ---------------------------------------------------------------------------
@@ -118,11 +120,11 @@ rm -rf "$FAKE_HOME"
 section "--scope=project writes under CWD/.claude/settings.json"
 _clean_env
 PROJ_DIR="$(mktemp -d)"
-cd "$PROJ_DIR"
+cd "$PROJ_DIR" || exit 1
 BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$(mktemp -d)" \
   bash "$REPO_ROOT/commands/apply.sh" --auth=iam --scope=project --skip-preflight >/dev/null 2>&1
 if [[ -f "$PROJ_DIR/.claude/settings.json" ]]; then pass; else fail "--scope=project should write to CWD/.claude/settings.json"; fi
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 rm -rf "$PROJ_DIR"
 
 # ---------------------------------------------------------------------------

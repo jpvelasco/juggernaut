@@ -41,7 +41,9 @@ set +e
 # doctor_credentials surfaces keychain read failures
 # ---------------------------------------------------------------------------
 section "keychain read errors are visible in doctor_credentials output"
+# shellcheck disable=SC2317  # overrides invoked indirectly by doctor_credentials
 keychain_available() { return 0; }
+# shellcheck disable=SC2317
 keychain_get() { echo "simulated keychain failure" >&2; return 2; }
 ERR_BLOCK="$(
   J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \

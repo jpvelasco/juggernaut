@@ -25,11 +25,6 @@ assert_nonempty() {
   local label="$1" val="$2"
   if [[ -n "$val" ]]; then pass; else fail "$label: expected non-empty, got empty"; fi
 }
-assert_contains() {
-  local label="$1" haystack="$2" needle="$3"
-  if [[ "$haystack" == *"$needle"* ]]; then pass; else fail "$label: '$needle' not found in output"; fi
-}
-
 # ---------------------------------------------------------------------------
 # keychain_detect_os
 # ---------------------------------------------------------------------------
