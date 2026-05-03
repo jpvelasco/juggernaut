@@ -216,10 +216,16 @@ if ($Auth -eq 'bedrock-api-key') {
             Write-Host '[dry-run] would store API key in system keychain'
         } elseif (-not (Set-KeychainEntry -Key $BedrockKey)) {
             if ($storageExplicit) {
-                Write-Error 'apply: keychain store failed. Re-run with -Storage profile if you want plaintext profile storage.'
+                Write-Error 'apply: keychain store failed. On Windows, the Credential Manager CredWrite API caps blob size at ~1280 unicode chars; keys larger than that must use IAM auth or an externally-managed AWS_BEARER_TOKEN_BEDROCK env var until Juggernaut adds DPAPI-backed storage.'
                 exit 1
             }
-            Write-Warning 'apply: keychain store failed; falling back to profile storage because storage was not explicit.'
+            Write-Host ''
+            Write-Host '[apply] WARNING: keychain store failed - Claude Code will hang without' -ForegroundColor Yellow
+            Write-Host '[apply] a token source. On Windows the most common cause is a long-form'  -ForegroundColor Yellow
+            Write-Host '[apply] Bedrock API key exceeding the ~1280 unicode char CredWrite cap.'  -ForegroundColor Yellow
+            Write-Host '[apply] Workaround: export AWS_BEARER_TOKEN_BEDROCK yourself, or use'     -ForegroundColor Yellow
+            Write-Host '[apply] -Auth iam with AWS SSO/IAM credentials.'                          -ForegroundColor Yellow
+            Write-Host ''
             $Storage = 'profile'
         }
     }

@@ -60,34 +60,47 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.sh | bash -s -- --version v3.0.0
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.sh | bash -s -- --version v3.0.0 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1 --dry-run
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0 -DryRun
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1 -DryRun
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.0.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.0.1 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
 The installer installs to `$HOME/.juggernaut` by default (override with `JUGGERNAUT_DIR`) and places a launcher at `$HOME/.local/bin/juggernaut`. Add that directory to your `PATH` to invoke `juggernaut` from anywhere.
 
-Both scripts normalize the version automatically — `3.0.0` and `v3.0.0` both work.
+Both scripts normalize the version automatically — `3.0.1` and `v3.0.1` both work.
+
+### Launcher wrappers
+
+The installer also places a **claude launcher** so fresh shells pick up your bearer token automatically. On both platforms the launcher is a **shell function** that intercepts the `claude` command — it resolves before binaries on PATH, so it survives Anthropic's `claude update` self-rewrites that would clobber a symlink:
+
+- **Unix / macOS / Linux / Git Bash**: a bracketed `claude() { ... }` function block is appended to your `~/.bashrc`, `~/.zshrc`, and/or `~/.profile` (only files that already exist; if none do, the matching rc for `$SHELL` is seeded). The function reads `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain (when not already in env) via `lib/keychain.sh`, exports it, and runs the real binary via `command claude "$@"`.
+- **Windows PowerShell**: a `function claude { ... }` block is written to `$PROFILE.CurrentUserCurrentHost` (and the sibling host's profile when present). PowerShell resolves functions before applications on the command name `claude`, so the function intercepts the call, reads Windows Credential Manager, and invokes the real `claude.exe`.
+
+This closes a v3.0.0 gap: `settings.json` flips `CLAUDE_CODE_USE_BEDROCK=1`, but Claude Code reads the bearer token only from its own process env. Without the launcher, a fresh shell with the token only in the keychain would hang. With the launcher, the hand-off happens automatically — and because it's a shell function, not a file on disk, Anthropic's own installer (which writes `~/.local/bin/claude` directly) is never fighting us.
+
+**To skip the launcher** (set the token yourself): export `AWS_BEARER_TOKEN_BEDROCK` before running `claude`. The launcher preserves any pre-set value and only injects from the keychain when the env var is unset.
+
+**Editor / IDE note:** tools that invoke `claude.exe` directly (bypassing both interactive shells and the PowerShell profile function) won't get the injection and must set the env var themselves.
 
 ### Windows Notes
 

@@ -2,6 +2,31 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.1] - 2026-05-02
+
+**Patch release.** Closes the keychain → Claude Code hand-off gap introduced by v3.0.0's removal of the shell-profile fallback.
+
+### Added
+
+- **Claude launcher wrappers.** A bracketed `claude()` shell function appended to `~/.bashrc`/`~/.zshrc`/`~/.profile` (Unix) and a matching `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell) now read `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain and inject it into the child process's environment before invoking the real `claude` binary. Fixes the class of "fresh shell with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json hangs on `claude`" failures. Installers place both automatically; uninstall strips them. The shell-function approach (not a file-on-disk symlink) survives Anthropic's `claude update` self-rewrites that would clobber `~/.local/bin/claude`.
+- **Doctor launcher check.** `juggernaut doctor` now includes a **Launcher** section that warns when Bedrock is active, no bearer token is in env, and no launcher block is present in any shell profile — naming the fix ("re-run the installer or set `AWS_BEARER_TOKEN_BEDROCK`"). Not-applicable for IAM auth.
+- **Launcher test matrices.** `tests/v2/test_launcher.sh` (bash cases: env preservation, keychain hit, keychain miss, keychain error fall-through, keychain lib absent, argv passthrough, install idempotency, uninstall strip) and `tests/v2/Launcher.Tests.ps1` (Pester cases: static source checks, idempotent install/uninstall of the profile block, function precedence, runtime behavior via a stub `claude.cmd`).
+
+### Changed
+
+- **Louder keychain-store failure on Windows.** `Set-KeychainEntry` now surfaces the Win32 error code when `CredWrite` fails (instead of returning `$false` silently), and `apply` prints a yellow warning when it falls back from keychain to profile storage. This makes the Windows long-key limitation (below) obvious at the moment it bites, rather than only at `claude` launch time.
+
+### Notes
+
+- No `settings.json` schema change. The launcher is purely a runtime hand-off — it never writes to settings or to the keychain, only reads.
+- The launcher falls through silently on any keychain error so `claude` still launches (users can still pass `AWS_BEARER_TOKEN_BEDROCK` directly or use IAM auth).
+- Unix uninstall only removes a `~/.local/bin/claude` entry if it is a symlink (legacy v3.0.x-dev artifact). A regular file at that path — such as Anthropic's own `claude` binary — is never touched.
+- Editor / IDE integrations that invoke the `claude` binary directly, bypassing interactive shells and the PowerShell profile, will not get the env injection — they must set the token themselves.
+
+### Known limitations
+
+- **Windows long-form Bedrock API keys (>~1280 chars).** Windows Credential Manager's `CredWrite` API caps the credential blob at 2560 bytes (~1280 unicode chars). Long-form Bedrock keys (observed 2000–2400 chars) exceed this, so on Windows `apply -Auth bedrock-api-key` silently falls back to `profile` storage, which in v3 does not persist the key anywhere. Affected users should either use `-Auth iam` with AWS SSO/IAM credentials, or export `AWS_BEARER_TOKEN_BEDROCK` manually in their PowerShell profile. DPAPI-backed storage is planned for the next release to remove this limitation.
+
 ## [3.0.0] - 2026-05-01
 
 **Breaking release.** Clean break from v1 and v2's dual-code-path setup. Re-run the installer to upgrade — there is no migration script.

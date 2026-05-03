@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",

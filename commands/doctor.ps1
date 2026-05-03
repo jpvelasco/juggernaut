@@ -128,6 +128,11 @@ if ($checkSettings -and (Test-HasJuggernautBlock -Settings $checkSettings)) {
     Write-Output ''
     Write-Output 'Opusplan'
     Write-DoctorOpusplan -Settings $checkSettings -Block $checkBlock
+
+    # -- Launcher ---------------------------------------------------------------
+    Write-Output ''
+    Write-Output 'Launcher'
+    Write-DoctorLauncher -Block $checkBlock
 }
 
 Write-DoctorSummary

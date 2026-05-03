@@ -3,12 +3,12 @@
 #
 # Usage:
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version v3.0.0
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version v3.0.1
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Ref fix-branch
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
-#   .\install.ps1 -Version v3.0.0
+#   .\install.ps1 -Version v3.0.1
 #   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest -DryRun
 #
@@ -59,7 +59,7 @@ Use the safer scriptblock form instead:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
 
 For a pinned release:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1
 '@
     exit 1
 }
@@ -353,6 +353,132 @@ if (-not (($env:PATH -split ';') -contains $ShimDir)) {
 }
 Write-Host 'If PowerShell blocks first run scripts, run:'
 Write-Host '  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'
+
+# ---------------------------------------------------------------------------
+# Claude launcher profile block
+# ---------------------------------------------------------------------------
+# Writes a `function claude { ... }` block to the user's current-host profile
+# (plus the sibling host's profile when discoverable) so that running `claude`
+# in a fresh shell reads the bearer token from Windows Credential Manager and
+# injects it into the child's environment before exec'ing the real claude.exe.
+
+function Get-LauncherProfileTargets {
+    $targets = @()
+    try {
+        if ($PROFILE -and $PROFILE.CurrentUserCurrentHost) {
+            $targets += [string]$PROFILE.CurrentUserCurrentHost
+            # Cover the sibling host (PS 5.1 <-> PS 7) by path substitution.
+            $curr = [string]$PROFILE.CurrentUserCurrentHost
+            if ($curr -match '\\WindowsPowerShell\\') {
+                $targets += ($curr -replace '\\WindowsPowerShell\\', '\PowerShell\')
+            } elseif ($curr -match '\\PowerShell\\') {
+                $targets += ($curr -replace '\\PowerShell\\', '\WindowsPowerShell\')
+            }
+        }
+    } catch {}
+    return @($targets | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Install-LauncherProfileBlock {
+    $block = @'
+# BEGIN: Juggernaut Launcher
+function claude {
+    [CmdletBinding()]
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$PassArgs)
+
+    if (-not $env:AWS_BEARER_TOKEN_BEDROCK) {
+        try {
+            $src = @"
+[DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
+[DllImport("advapi32.dll")]
+public static extern void CredFree(IntPtr credential);
+[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+public struct CREDENTIAL {
+    public int Flags; public int Type;
+    public string TargetName; public string Comment;
+    public long LastWritten; public int CredentialBlobSize;
+    public IntPtr CredentialBlob; public int Persist;
+    public int AttributeCount; public IntPtr Attributes;
+    public string TargetAlias; public string UserName;
+}
+"@
+            if (-not ('Juggernaut.Launcher.Cred' -as [type])) {
+                Add-Type -Namespace 'Juggernaut.Launcher' -Name 'Cred' -MemberDefinition $src -ErrorAction Stop
+            }
+            $svc = if ($env:JUGGERNAUT_KEYCHAIN_SERVICE) { $env:JUGGERNAUT_KEYCHAIN_SERVICE } else { 'juggernaut-bedrock' }
+            $ptr = [IntPtr]::Zero
+            if ([Juggernaut.Launcher.Cred]::CredRead($svc, 1, 0, [ref]$ptr)) {
+                $c = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Juggernaut.Launcher.Cred+CREDENTIAL])
+                if ($c.CredentialBlobSize -gt 0) {
+                    $env:AWS_BEARER_TOKEN_BEDROCK = [Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob, $c.CredentialBlobSize / 2)
+                }
+                [Juggernaut.Launcher.Cred]::CredFree($ptr)
+            }
+        } catch {
+            # Silent fall-through: launcher must never block claude from launching.
+        }
+    }
+
+    $target = $env:JUGGERNAUT_CLAUDE_BIN
+    if (-not $target) {
+        $cmd = Get-Command claude.exe -CommandType Application -ErrorAction SilentlyContinue |
+               Where-Object { $_.Source -notlike '*\juggernaut*' -and $_.Source -notlike '*\.juggernaut*' } |
+               Select-Object -First 1
+        if ($cmd) { $target = $cmd.Source }
+    }
+
+    if (-not $target) {
+        Write-Error 'claude: no upstream claude.exe found on PATH (Juggernaut launcher function is active).'
+        return
+    }
+
+    & $target @PassArgs
+    $code = $LASTEXITCODE
+    if ($null -ne $code) { $global:LASTEXITCODE = $code }
+}
+# END: Juggernaut Launcher
+'@
+
+    foreach ($p in (Get-LauncherProfileTargets)) {
+        $dir = Split-Path -Parent $p
+        if (-not (Test-Path $dir)) {
+            try {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            } catch {
+                Write-Warning "Could not create profile directory $dir - $($_.Exception.Message). Skipping."
+                continue
+            }
+        }
+        $existing = @()
+        if (Test-Path $p) {
+            try {
+                $existing = Get-Content -Path $p -ErrorAction Stop
+            } catch {
+                Write-Warning "Could not read $p - $($_.Exception.Message). Skipping (may require elevation)."
+                continue
+            }
+        }
+        $out = New-Object System.Collections.Generic.List[string]
+        $skip = $false
+        foreach ($line in $existing) {
+            if ($line -match '^# BEGIN: Juggernaut Launcher') { $skip = $true; continue }
+            if ($line -match '^# END: Juggernaut Launcher')   { $skip = $false; continue }
+            if (-not $skip) { $out.Add($line) }
+        }
+        # Trailing blank line separator if file has content.
+        if ($out.Count -gt 0 -and $out[$out.Count - 1] -ne '') { $out.Add('') }
+        foreach ($line in ($block -split "`r?`n")) { $out.Add($line) }
+        try {
+            Set-Content -Path $p -Value $out -Encoding utf8 -ErrorAction Stop
+            Write-Host "Launcher block written to $p"
+        } catch {
+            Write-Warning "Could not write $p - $($_.Exception.Message). Skipping (may require elevation)."
+        }
+    }
+}
+
+Install-LauncherProfileBlock
 
 Write-Host ''
 Write-Host 'Install complete. No configuration has been written.'

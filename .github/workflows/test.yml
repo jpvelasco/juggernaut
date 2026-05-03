@@ -83,6 +83,7 @@ jobs:
           bash ./tests/v2/test_doctor.sh
           bash ./tests/v2/test_uninstall.sh
           bash ./tests/v2/test_install.sh
+          bash ./tests/v2/test_launcher.sh
 
       - name: Test actual keychain store/retrieve (macOS)
         if: runner.os == 'macOS'
@@ -238,6 +239,7 @@ jobs:
           bash ./tests/v2/test_doctor.sh
           bash ./tests/v2/test_uninstall.sh
           bash ./tests/v2/test_install.sh
+          bash ./tests/v2/test_launcher.sh
 
       - name: Test actual Credential Manager (Git Bash)
         shell: bash

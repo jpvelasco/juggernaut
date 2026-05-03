@@ -129,6 +129,10 @@ if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; 
   # ── Opusplan ─────────────────────────────────────────────────────────────────
   doctor_section "Opusplan"
   doctor_opusplan "$check_settings" "$check_block"
+
+  # ── Launcher ─────────────────────────────────────────────────────────────────
+  doctor_section "Launcher"
+  doctor_launcher "$check_block"
 fi
 
 doctor_summary

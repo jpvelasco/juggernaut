@@ -48,6 +48,8 @@ shellcheck juggernaut install.sh commands/*.sh lib/keychain.sh lib/schema.sh lib
 
 **Installer:** `install.sh` / `install.ps1` run a destructive wipe phase on every invocation — strip `# BEGIN: Juggernaut` and `# BEGIN: Claude Code Bedrock Configuration` blocks from all profile paths, remove the `juggernaut` key from settings.json, delete the `juggernaut-bedrock` keychain entry — then install fresh files. Does **not** auto-apply. Supports `--dry-run`/`-DryRun` to preview without writing.
 
+**Launcher:** a bracketed `claude()` shell function written by `install.sh`'s `install_launcher_profile_block` into `~/.bashrc`/`~/.zshrc`/`~/.profile` (Unix), and a `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell). Both are bracketed by `# BEGIN: Juggernaut Launcher` / `# END: Juggernaut Launcher` markers for idempotent install/uninstall. The function reads the bearer token from the OS keychain and injects it into `AWS_BEARER_TOKEN_BEDROCK` before calling the real binary (Unix: `command claude "$@"`; Windows: `& $target @PassArgs`). Without this, fresh shells with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json and no env var would hang — Claude Code only reads the token from process env, not the keychain. Shell-function resolution beats PATH, so Anthropic's `claude update` self-rewrite (which replaces `~/.local/bin/claude` directly) doesn't disturb us.
+
 **Tests in `tests/v2/`:** Each `lib/` and `commands/` module has a paired bash test file (`test_*.sh`) and PowerShell Pester file (`*.Tests.ps1`). Run each file individually or see CI for the full sequence.
 
 ## Key Design Patterns
@@ -74,7 +76,7 @@ All changes need `.sh` and `.ps1` variants. Targets: macOS (zsh/bash/fish), Linu
 
 ## Version Management
 
-Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.0}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
+Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.1}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
 
 ## Gotchas
 

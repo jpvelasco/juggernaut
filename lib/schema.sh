@@ -74,7 +74,7 @@ schema_new_juggernaut_block() {
   local region="${J_REGION:-$(schema_default_region)}"
   local shell_mode="${J_SHELL_FALLBACK_MODE:-both}"
   local scope="${J_SCOPE:-user}"
-  local version="${J_VERSION:-3.0.0}"
+  local version="${J_VERSION:-3.0.1}"
   local auth_validated="${J_AUTH_VALIDATED:-false}"
 
   # Read the auth-gated env overlay (CLAUDE_CODE_USE_BEDROCK=1) separately so
