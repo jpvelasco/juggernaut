@@ -75,6 +75,15 @@ if keychain_available; then
   [[ -n "$_key" ]] && has_keychain=true
 fi
 
+has_dpapi=false
+dpapi_file=""
+case "$(keychain_detect_os)" in
+  gitbash|cygwin)
+    dpapi_file="$(dpapi_path)"
+    [[ -f "$dpapi_file" ]] && has_dpapi=true
+    ;;
+esac
+
 _launcher_profile_candidates() {
   printf '%s\n' "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"
 }
@@ -104,8 +113,8 @@ has_legacy_symlink=false
 [[ -L "$legacy_symlink" ]] && has_legacy_symlink=true
 
 if [[ "$has_user" == "false" && "$has_project" == "false" \
-      && "$has_keychain" == "false" && "$has_launcher" == "false" \
-      && "$has_legacy_symlink" == "false" ]]; then
+      && "$has_keychain" == "false" && "$has_dpapi" == "false" \
+      && "$has_launcher" == "false" && "$has_legacy_symlink" == "false" ]]; then
   echo "Nothing to uninstall."
   exit 0
 fi
@@ -118,6 +127,7 @@ if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
   [[ "$has_user"    == "true" ]] && printf '  - Juggernaut block from %s\n' "$user_path"
   [[ "$has_project" == "true" ]] && printf '  - Juggernaut block from %s\n' "$project_path"
   [[ "$has_keychain" == "true" ]] && printf '  - Keychain entry: %s/%s\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
+  [[ "$has_dpapi" == "true" ]]    && printf '  - DPAPI file: %s\n' "$dpapi_file"
   for _lp in "${launcher_profiles[@]+"${launcher_profiles[@]}"}"; do
     printf '  - Launcher block from %s\n' "$_lp"
   done
@@ -159,6 +169,15 @@ if [[ "$has_keychain" == "true" ]]; then
   else
     keychain_delete
     printf 'Removed keychain entry: %s/%s\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
+  fi
+fi
+
+if [[ "$has_dpapi" == "true" ]]; then
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '[dry-run] Would remove DPAPI file: %s\n' "$dpapi_file"
+  else
+    dpapi_delete
+    printf 'Removed DPAPI file: %s\n' "$dpapi_file"
   fi
 fi
 

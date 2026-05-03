@@ -178,3 +178,81 @@ keychain_delete() {
       ;;
   esac
 }
+
+# dpapi_path - print the DPAPI bearer-token file path.
+# Honors JUGGERNAUT_HOME for tests; falls back to HOME.
+dpapi_path() {
+  local root="${JUGGERNAUT_HOME:-$HOME}"
+  printf '%s/.juggernaut/bearer-token.dpapi.bin' "$root"
+}
+
+# dpapi_get - read the DPAPI-encrypted bearer token on Windows shells.
+# Used by the Juggernaut launcher for keys larger than CredMan's ~1280-char cap.
+# Exit codes:
+#   0 - found, value printed to stdout
+#   1 - file not present (not found, silent)
+#   2 - tool/platform error (human-readable message on stderr)
+dpapi_get() {
+  local os file win_path value rc
+  os="$(keychain_detect_os)"
+  case "$os" in
+    gitbash|cygwin) ;;
+    *) return 1 ;;
+  esac
+  file="$(dpapi_path)"
+  [[ -f "$file" ]] || return 1
+  if ! command -v powershell.exe >/dev/null 2>&1; then
+    echo "dpapi_get: 'powershell.exe' not found on PATH" >&2
+    return 2
+  fi
+  if command -v cygpath >/dev/null 2>&1; then
+    win_path="$(cygpath -w "$file" 2>/dev/null || echo "$file")"
+  else
+    win_path="$file"
+  fi
+  value="$(powershell.exe -NoProfile -Command "
+    [Reflection.Assembly]::LoadWithPartialName('System.Security') | Out-Null
+    \$enc = [IO.File]::ReadAllBytes('$win_path')
+    \$entropy = [Text.Encoding]::UTF8.GetBytes('juggernaut-bedrock')
+    \$plain = [Security.Cryptography.ProtectedData]::Unprotect(
+      \$enc, \$entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+    [Text.Encoding]::UTF8.GetString(\$plain)
+  " 2>/dev/null | tr -d '\r')"
+  rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    echo "dpapi_get: 'powershell.exe' failed (exit $rc)" >&2
+    return 2
+  fi
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+  return 1
+}
+
+# dpapi_delete - remove the DPAPI bearer-token file, silent if missing.
+dpapi_delete() {
+  local file
+  file="$(dpapi_path)"
+  [[ -f "$file" ]] && rm -f -- "$file"
+  return 0
+}
+
+# bearer_token_get - launcher-facing read. Tries DPAPI first (Windows long-key
+# case), then falls through to keychain_get. Same exit codes as keychain_get.
+bearer_token_get() {
+  local v rc
+  v="$(dpapi_get 2>/dev/null)"
+  rc=$?
+  if [[ "$rc" -eq 0 && -n "$v" ]]; then
+    printf '%s' "$v"
+    return 0
+  fi
+  keychain_get
+}
+
+# bearer_token_delete - remove both storage backends (launcher/uninstall).
+bearer_token_delete() {
+  keychain_delete
+  dpapi_delete
+}

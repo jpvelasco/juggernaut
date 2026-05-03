@@ -52,7 +52,7 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ## Install
 
-Juggernaut v3 ships as a **destructive wipe-and-reinstall**: the installer strips any legacy Juggernaut/Claude-Code-Bedrock blocks from your shell profiles, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the `juggernaut-bedrock` OS-keychain entry **before** placing fresh files. Re-running the installer is the only supported upgrade path — there are no migration scripts, no deprecation windows, no `--yes` flag.
+Juggernaut v3 ships as a **destructive wipe-and-reinstall**: the installer strips any legacy Juggernaut/Claude-Code-Bedrock blocks from your shell profiles, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the bearer token storage (OS keychain on macOS/Windows for short keys, per-user DPAPI file at `~/.juggernaut/bearer-token.dpapi.bin` on Windows for long keys >1280 chars, profile file on Linux) **before** placing fresh files. Re-running the installer is the only supported upgrade path — there are no migration scripts, no deprecation windows, no `--yes` flag.
 
 The installer does **not** auto-apply. You run `juggernaut apply` explicitly after install with a chosen auth mode.
 
@@ -60,45 +60,45 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2 --dry-run
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1 -DryRun
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2 -DryRun
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.0.1 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.0.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
 The installer installs to `$HOME/.juggernaut` by default (override with `JUGGERNAUT_DIR`) and places a launcher at `$HOME/.local/bin/juggernaut`. Add that directory to your `PATH` to invoke `juggernaut` from anywhere.
 
-Both scripts normalize the version automatically — `3.0.1` and `v3.0.1` both work.
+Both scripts normalize the version automatically — `3.0.2` and `v3.0.2` both work.
 
 ### Launcher wrappers
 
 The installer also places a **claude launcher** so fresh shells pick up your bearer token automatically. On both platforms the launcher is a **shell function** that intercepts the `claude` command — it resolves before binaries on PATH, so it survives Anthropic's `claude update` self-rewrites that would clobber a symlink:
 
-- **Unix / macOS / Linux / Git Bash**: a bracketed `claude() { ... }` function block is appended to your `~/.bashrc`, `~/.zshrc`, and/or `~/.profile` (only files that already exist; if none do, the matching rc for `$SHELL` is seeded). The function reads `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain (when not already in env) via `lib/keychain.sh`, exports it, and runs the real binary via `command claude "$@"`.
-- **Windows PowerShell**: a `function claude { ... }` block is written to `$PROFILE.CurrentUserCurrentHost` (and the sibling host's profile when present). PowerShell resolves functions before applications on the command name `claude`, so the function intercepts the call, reads Windows Credential Manager, and invokes the real `claude.exe`.
+- **Unix / macOS / Linux / Git Bash**: a bracketed `claude() { ... }` function block is appended to your `~/.bashrc`, `~/.zshrc`, and/or `~/.profile` (only files that already exist; if none do, the matching rc for `$SHELL` is seeded). The function reads `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain or DPAPI file (when not already in env) via `lib/keychain.sh`, exports it, and runs the real binary via `command claude "$@"`.
+- **Windows PowerShell**: a `function claude { ... }` block is written to `$PROFILE.CurrentUserCurrentHost` (and the sibling host's profile when present). PowerShell resolves functions before applications on the command name `claude`, so the function intercepts the call, reads Windows Credential Manager or the DPAPI file, and invokes the real `claude.exe`.
 
 This closes a v3.0.0 gap: `settings.json` flips `CLAUDE_CODE_USE_BEDROCK=1`, but Claude Code reads the bearer token only from its own process env. Without the launcher, a fresh shell with the token only in the keychain would hang. With the launcher, the hand-off happens automatically — and because it's a shell function, not a file on disk, Anthropic's own installer (which writes `~/.local/bin/claude` directly) is never fighting us.
 
-**To skip the launcher** (set the token yourself): export `AWS_BEARER_TOKEN_BEDROCK` before running `claude`. The launcher preserves any pre-set value and only injects from the keychain when the env var is unset.
+**To skip the launcher** (set the token yourself): export `AWS_BEARER_TOKEN_BEDROCK` before running `claude`. The launcher preserves any pre-set value and only injects from the keychain or DPAPI file when the env var is unset.
 
 **Editor / IDE note:** tools that invoke `claude.exe` directly (bypassing both interactive shells and the PowerShell profile function) won't get the injection and must set the env var themselves.
 
@@ -109,12 +109,12 @@ Juggernaut v3 supports Windows PowerShell 5.1 and PowerShell 7 side-by-side:
 - The installer scans both PowerShell 5.1 (`Documents\WindowsPowerShell\profile.ps1`) and PowerShell 7 (`Documents\PowerShell\profile.ps1`) paths, plus `$PROFILE.CurrentUserAllHosts` and `$PROFILE.AllUsersAllHosts` from both editions.
 - If your `Documents\` folder is redirected by OneDrive, `$PROFILE.*` resolves correctly under `%OneDrive%\Documents\...` — the installer follows that redirection automatically.
 - Non-admin users: the `AllUsers` profile strip and any other All-Users writes may require elevation. If they do, the installer **warns and skips** those paths (not fails). `CurrentUser` paths, the settings.json removal, and the keychain delete all work without elevation.
-- API keys live in Windows Credential Manager under target name `juggernaut-bedrock` (per-user; no admin rights required).
+- Windows stores the bearer token via Credential Manager for short keys (~≤1280 chars) or, for long-form keys (>1280 chars), a per-user DPAPI-encrypted file at `~/.juggernaut/bearer-token.dpapi.bin`. Both are per-user; neither is synced across machines.
 - First-run script policy friction: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
 ## Configure
 
-After install, pick an auth mode and run `juggernaut apply` explicitly. v3 refuses to write `CLAUDE_CODE_USE_BEDROCK=1` to `~/.claude/settings.json` unless a valid auth source is present (`aws sts get-caller-identity` succeeds, `$AWS_BEARER_TOKEN_BEDROCK` is set, or a `juggernaut-bedrock` keychain entry exists). This prevents the "installer silently routed me through Bedrock with no credentials" class of hang.
+After install, pick an auth mode and run `juggernaut apply` explicitly. v3 refuses to write `CLAUDE_CODE_USE_BEDROCK=1` to `~/.claude/settings.json` unless a valid auth source is present (`aws sts get-caller-identity` succeeds, `$AWS_BEARER_TOKEN_BEDROCK` is set, or a `juggernaut-bedrock` keychain entry or DPAPI file exists). This prevents the "installer silently routed me through Bedrock with no credentials" class of hang.
 
 **IAM / SSO (recommended):**
 
@@ -136,7 +136,7 @@ juggernaut apply --auth=iam
 juggernaut apply --auth=bedrock-api-key
 ```
 
-The key is read with hidden input and stored in the OS keychain (`juggernaut-bedrock` target). It never lands in shell history or process listings.
+The key is read with hidden input and stored in the OS keychain (`juggernaut-bedrock` target) on macOS/Windows for short keys (~≤1280 chars), per-user DPAPI file on Windows for long keys (>1280 chars), or in a profile file on Linux. It never lands in shell history or process listings.
 
 **Bedrock API key (inline — CI/CD only):**
 
@@ -224,7 +224,7 @@ Opusplan
 | `apply` | Write Juggernaut config to `settings.json`. Requires `--auth=iam` or `--auth=bedrock-api-key` on first run. |
 | `show` | Print the current Juggernaut block from both user and project scopes. |
 | `doctor` | Read-only diagnostics — checks credentials, region, models, Mantle, and opusplan drift. |
-| `uninstall` | Remove the Juggernaut block from settings.json (all scopes by default) and delete the OS keychain entry. |
+| `uninstall` | Remove the Juggernaut block from settings.json (all scopes by default) and delete the bearer token storage entry (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux). |
 
 ## Configuration Details
 
@@ -366,7 +366,7 @@ If you manually set `AWS_BEARER_TOKEN_BEDROCK` in your own shell profile and it 
 # Preview what will be removed
 juggernaut uninstall --dry-run
 
-# Remove the Juggernaut block from settings.json (all scopes) and the keychain entry
+# Remove the Juggernaut block from settings.json (all scopes) and the bearer token storage
 juggernaut uninstall
 
 # Limit to one scope
@@ -374,7 +374,7 @@ juggernaut uninstall --scope=user
 juggernaut uninstall --scope=project
 ```
 
-`juggernaut uninstall` removes the `juggernaut` key from settings.json and deletes the `juggernaut-bedrock` keychain entry. It does not touch shell profiles (v3 never writes to them). For a full filesystem-level wipe — including any legacy profile blocks left over from older versions — re-run `install.sh` / `install.ps1`; the installer runs its destructive wipe before every install.
+`juggernaut uninstall` removes the `juggernaut` key from settings.json and deletes the bearer token storage entry (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux). It does not touch shell profiles (v3 never writes to them). For a full filesystem-level wipe — including any legacy profile blocks left over from older versions — re-run `install.sh` / `install.ps1`; the installer runs its destructive wipe before every install.
 
 After uninstalling, Claude Code will prompt you to log in with your Anthropic account.
 
@@ -396,7 +396,7 @@ See `iam-policy.json` for the complete policy.
 | Method | Security | Use Case |
 |--------|----------|----------|
 | IAM/SSO | Most secure | Production — no secrets in commands |
-| API key + keychain | Secure | Key encrypted at rest in OS keychain |
+| API key + keychain/Credential Manager/DPAPI/profile | Varies | Key encrypted at rest in OS keychain/Credential Manager or per-user DPAPI file; Linux profile storage is plaintext |
 | API key (interactive) | Secure | When IAM not available — hidden prompt |
 | API key (inline) | Least secure | CI/CD only — visible in process list |
 

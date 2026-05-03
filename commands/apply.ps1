@@ -48,7 +48,7 @@ Usage: juggernaut.ps1 apply [options]
   -Auth             iam|bedrock-api-key  (required on first run)
   -BedrockKey       Bedrock API key
   -PreserveKey      Reuse existing key from env/keychain
-  -Storage          profile|keychain
+  -Storage          profile|keychain|dpapi (auto switches to dpapi on Windows when key > 1280 chars)
   -Region           AWS region
   -Model / -OpusModel / -SonnetModel / -HaikuModel   Model overrides
   -Effort           low|medium|high|xhigh|max (default: xhigh)
@@ -128,9 +128,12 @@ if (-not $authExplicit -and -not $existingBlock) {
     $detected = ''
     if ($env:AWS_BEARER_TOKEN_BEDROCK) {
         $detected = 'bedrock-api-key'
-    } elseif ((Test-KeychainAvailable) -and (Get-KeychainEntry -ErrorAction SilentlyContinue)) {
-        $detected = 'bedrock-api-key'
-    } elseif (Get-Command 'aws' -ErrorAction SilentlyContinue) {
+    } else {
+        $probe = $null
+        try { $probe = Read-BearerToken } catch { $probe = $null }
+        if ($probe -and $probe.Value) { $detected = 'bedrock-api-key' }
+    }
+    if (-not $detected -and (Get-Command 'aws' -ErrorAction SilentlyContinue)) {
         & aws sts get-caller-identity 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { $detected = 'iam' }
     }
@@ -192,13 +195,16 @@ if ($Auth -eq 'bedrock-api-key') {
         if ($env:AWS_BEARER_TOKEN_BEDROCK) {
             $BedrockKey = $env:AWS_BEARER_TOKEN_BEDROCK
         }
-        if (-not $BedrockKey -and (Test-KeychainAvailable)) {
-            try { $BedrockKey = Get-KeychainEntry }
-            catch { Write-Warning "apply: keychain read failed: $_"; $BedrockKey = $null }
-            if ($null -eq $BedrockKey) { $BedrockKey = '' }
+        if (-not $BedrockKey) {
+            $probe = $null
+            try { $probe = Read-BearerToken }
+            catch { Write-Warning "apply: secure-storage read failed: $_"; $probe = $null }
+            if ($probe -and $probe.Value) { $BedrockKey = $probe.Value } elseif ($probe -and $probe.Error) {
+                Write-Warning "apply: secure-storage read failed: $($probe.Error)"
+            }
         }
         if (-not $BedrockKey) {
-            Write-Error 'apply: -PreserveKey specified but no existing key found in env or keychain'; exit 1
+            Write-Error 'apply: -PreserveKey specified but no existing key found in env, keychain, or DPAPI'; exit 1
         }
     }
     if (-not $BedrockKey) {
@@ -211,22 +217,31 @@ if ($Auth -eq 'bedrock-api-key') {
             if (-not $BedrockKey) { Write-Error 'apply: API key cannot be empty'; exit 1 }
         }
     }
-    if ($Storage -eq 'keychain') {
+    if ($Storage -in 'keychain','dpapi') {
         if ($DryRun) {
-            Write-Host '[dry-run] would store API key in system keychain'
-        } elseif (-not (Set-KeychainEntry -Key $BedrockKey)) {
-            if ($storageExplicit) {
-                Write-Error 'apply: keychain store failed. On Windows, the Credential Manager CredWrite API caps blob size at ~1280 unicode chars; keys larger than that must use IAM auth or an externally-managed AWS_BEARER_TOKEN_BEDROCK env var until Juggernaut adds DPAPI-backed storage.'
-                exit 1
+            Write-Host '[dry-run] would store API key in system keychain or DPAPI file'
+        } else {
+            $mode = if ($Storage -eq 'dpapi') { 'dpapi' } else { 'auto' }
+            if ($mode -eq 'auto' -and (Get-KeychainOS) -eq 'windows' -and $BedrockKey.Length -gt 1280) {
+                Write-Host ("[apply] Bedrock API key is {0} chars (> Credential Manager 1280-char cap); using DPAPI storage." -f $BedrockKey.Length) -ForegroundColor Cyan
             }
-            Write-Host ''
-            Write-Host '[apply] WARNING: keychain store failed - Claude Code will hang without' -ForegroundColor Yellow
-            Write-Host '[apply] a token source. On Windows the most common cause is a long-form'  -ForegroundColor Yellow
-            Write-Host '[apply] Bedrock API key exceeding the ~1280 unicode char CredWrite cap.'  -ForegroundColor Yellow
-            Write-Host '[apply] Workaround: export AWS_BEARER_TOKEN_BEDROCK yourself, or use'     -ForegroundColor Yellow
-            Write-Host '[apply] -Auth iam with AWS SSO/IAM credentials.'                          -ForegroundColor Yellow
-            Write-Host ''
-            $Storage = 'profile'
+            $result = Save-BearerToken -Key $BedrockKey -Mode $mode
+            if ($result.Ok) {
+                $Storage = $result.Storage
+            } else {
+                if ($storageExplicit) {
+                    Write-Error ("apply: secure-storage write failed: {0}" -f $result.Error)
+                    exit 1
+                }
+                Write-Host ''
+                Write-Host '[apply] WARNING: secure storage failed - Claude Code will hang without'  -ForegroundColor Yellow
+                Write-Host '[apply] a token source. Falling back to profile (env-var-only, no persistence).' -ForegroundColor Yellow
+                Write-Host ("[apply] Details: {0}" -f $result.Error)                                   -ForegroundColor Yellow
+                Write-Host '[apply] Workaround: export AWS_BEARER_TOKEN_BEDROCK yourself, or use'     -ForegroundColor Yellow
+                Write-Host '[apply] -Auth iam with AWS SSO/IAM credentials.'                          -ForegroundColor Yellow
+                Write-Host ''
+                $Storage = 'profile'
+            }
         }
     }
 }

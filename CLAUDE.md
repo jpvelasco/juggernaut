@@ -34,21 +34,21 @@ shellcheck juggernaut install.sh commands/*.sh lib/keychain.sh lib/schema.sh lib
 ## Architecture
 
 **Subcommands in `commands/`:**
-- `apply.{sh,ps1}` — validates auth (`aws sts get-caller-identity` or `$AWS_BEARER_TOKEN_BEDROCK` or keychain entry) and writes the Juggernaut block to settings.json
+- `apply.{sh,ps1}` — validates auth (`aws sts get-caller-identity` or `$AWS_BEARER_TOKEN_BEDROCK` or bearer token storage) and writes the Juggernaut block to settings.json
 - `show.{sh,ps1}` — prints current config from settings.json
 - `doctor.{sh,ps1}` — read-only diagnostics (delegates to `lib/doctor.{sh,ps1}`); includes opusplan drift check
-- `uninstall.{sh,ps1}` — removes the Juggernaut block from settings.json and deletes the OS keychain entry
+- `uninstall.{sh,ps1}` — removes the Juggernaut block from settings.json and deletes bearer token storage (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux)
 
 **Library in `lib/`:**
 - `schema.{sh,ps1}` — constructs/validates the Juggernaut JSON block; requires `jq`. `CLAUDE_CODE_USE_BEDROCK=1` is gated behind `J_AUTH_VALIDATED=true`.
 - `config_manager.{sh,ps1}` — atomic read/merge/write of settings.json; backup rotation (`CONFIG_BACKUP_RETAIN=5`); best-effort file locking
-- `keychain.{sh,ps1}` — OS keychain read/write (macOS Keychain, Linux secret-tool, Windows Credential Manager). Service name: `juggernaut-bedrock`.
+- `keychain.{sh,ps1}` — OS keychain read/write (macOS Keychain, Linux secret-tool, Windows Credential Manager for short keys, Windows per-user DPAPI file for long keys). Service name: `juggernaut-bedrock`.
 - `doctor.{sh,ps1}` — scope checks, credential checks, opusplan drift check
 - `profile_paths.{sh,ps1}` — list of shell-profile paths scanned by the installer's wipe phase (v3 code itself does not write to these files)
 
-**Installer:** `install.sh` / `install.ps1` run a destructive wipe phase on every invocation — strip `# BEGIN: Juggernaut` and `# BEGIN: Claude Code Bedrock Configuration` blocks from all profile paths, remove the `juggernaut` key from settings.json, delete the `juggernaut-bedrock` keychain entry — then install fresh files. Does **not** auto-apply. Supports `--dry-run`/`-DryRun` to preview without writing.
+**Installer:** `install.sh` / `install.ps1` run a destructive wipe phase on every invocation — strip `# BEGIN: Juggernaut` and `# BEGIN: Claude Code Bedrock Configuration` blocks from all profile paths, remove the `juggernaut` key from settings.json, delete bearer token storage (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux) — then install fresh files. Does **not** auto-apply. Supports `--dry-run`/`-DryRun` to preview without writing.
 
-**Launcher:** a bracketed `claude()` shell function written by `install.sh`'s `install_launcher_profile_block` into `~/.bashrc`/`~/.zshrc`/`~/.profile` (Unix), and a `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell). Both are bracketed by `# BEGIN: Juggernaut Launcher` / `# END: Juggernaut Launcher` markers for idempotent install/uninstall. The function reads the bearer token from the OS keychain and injects it into `AWS_BEARER_TOKEN_BEDROCK` before calling the real binary (Unix: `command claude "$@"`; Windows: `& $target @PassArgs`). Without this, fresh shells with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json and no env var would hang — Claude Code only reads the token from process env, not the keychain. Shell-function resolution beats PATH, so Anthropic's `claude update` self-rewrite (which replaces `~/.local/bin/claude` directly) doesn't disturb us.
+**Launcher:** a bracketed `claude()` shell function written by `install.sh`'s `install_launcher_profile_block` into `~/.bashrc`/`~/.zshrc`/`~/.profile` (Unix), and a `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell). Both are bracketed by `# BEGIN: Juggernaut Launcher` / `# END: Juggernaut Launcher` markers for idempotent install/uninstall. The function reads the bearer token from the OS keychain or DPAPI file and injects it into `AWS_BEARER_TOKEN_BEDROCK` before calling the real binary (Unix: `command claude "$@"`; Windows: `& $target @PassArgs`). Without this, fresh shells with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json and no env var would hang — Claude Code only reads the token from process env, not the keychain. Shell-function resolution beats PATH, so Anthropic's `claude update` self-rewrite (which replaces `~/.local/bin/claude` directly) doesn't disturb us.
 
 **Tests in `tests/v2/`:** Each `lib/` and `commands/` module has a paired bash test file (`test_*.sh`) and PowerShell Pester file (`*.Tests.ps1`). Run each file individually or see CI for the full sequence.
 
@@ -59,7 +59,7 @@ shellcheck juggernaut install.sh commands/*.sh lib/keychain.sh lib/schema.sh lib
 - **Auth-gated Bedrock flag:** `CLAUDE_CODE_USE_BEDROCK=1` only lands in `settings.json` when apply validates a credential source. Prevents installer-silently-enabled-Bedrock hangs.
 - **Scope:** `--scope=user` (default, `~/.claude/settings.json`) vs `--scope=project` (`./.claude/settings.json`). `doctor` auto-detects the active scope by walking up from CWD.
 - **Auth mode persistence:** The `--auth=iam|bedrock-api-key` choice is stored in the Juggernaut block and auto-detected on re-run.
-- **Keychain storage:** API keys can be stored in OS keychain instead of plaintext. Platform defaults: macOS/Windows → keychain, Linux → profile-env-var-only (no plaintext-to-disk fallback).
+- **Keychain storage:** API keys can be stored in OS keychain for short keys (~≤1280 chars) or in a DPAPI-encrypted file at `~/.juggernaut/bearer-token.dpapi.bin` for long-form keys (>1280 chars). Platform defaults: macOS/Windows → keychain when available, Linux → profile by default, Windows long keys → DPAPI file.
 - **Mantle default:** `J_USE_MANTLE=true` by default in v3. Opt out with `--no-mantle`.
 - **1M context flag:** `--1m-context` appends `[1m]` suffix to model IDs. Claude Code strips it before sending to Bedrock.
 - **JSON loading:** `schema.sh` hard-fails if `jq` is absent. `config_manager.sh` uses jq for all merges.
@@ -76,13 +76,13 @@ All changes need `.sh` and `.ps1` variants. Targets: macOS (zsh/bash/fish), Linu
 
 ## Version Management
 
-Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.1}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
+Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.2}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
 
 ## Gotchas
 
 - **`juggernaut` has no `.sh` extension** — must be included in shellcheck linting explicitly.
 - **README drift:** README hardcodes model names and token values. `bedrock-config.json` is authoritative; update README when defaults change.
-- **Installer is destructive:** Every run of `install.sh`/`install.ps1` wipes profile blocks, settings.json's `juggernaut` key, and the keychain entry before installing. Use `--dry-run`/`-DryRun` to preview.
+- **Installer is destructive:** Every run of `install.sh`/`install.ps1` wipes profile blocks, settings.json's `juggernaut` key, and the bearer token storage before installing. Use `--dry-run`/`-DryRun` to preview.
 
 ## Shellcheck
 

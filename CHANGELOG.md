@@ -2,6 +2,30 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.2] - 2026-05-03
+
+**Patch release.** Fixes Windows long-form Bedrock API key storage via DPAPI and adds bearer token utilities.
+
+### Added
+
+- **DPAPI-backed bearer token storage.** Long-form Bedrock API keys (>1280 chars) now persist to `~/.juggernaut/bearer-token.dpapi.bin` on Windows instead of silently failing in Credential Manager.
+- **PowerShell bearer token functions.** `Save-BearerToken`, `Read-BearerToken`, and `Remove-BearerToken` in `lib/keychain.ps1` for manual key management.
+- **`dpapi_get` shell function.** Bash/zsh reads bearer token from DPAPI file on Git Bash/Cygwin.
+- **`bearer_token_get` shell function.** Bash/zsh tries DPAPI first then keychain.
+- **auth.storage option.** The Juggernaut block now supports `auth.storage` field to specify storage backend (`profile`, `keychain`, or `dpapi`).
+
+### Changed
+
+- **Doctor reporting.** `juggernaut doctor` now reports the bearer token storage backend (DPAPI file vs Credential Manager/system keychain).
+
+### Fixed
+
+- **Windows long-form Bedrock API keys.** On Windows, `apply -Auth bedrock-api-key` now correctly uses the DPAPI file for long-form keys (>~1280 chars) instead of silently failing in Credential Manager. Short keys (~≤1280 chars) still use Credential Manager.
+
+### Notes
+
+- DPAPI storage is per-user only; it does not sync across machines.
+
 ## [3.0.1] - 2026-05-02
 
 **Patch release.** Closes the keychain → Claude Code hand-off gap introduced by v3.0.0's removal of the shell-profile fallback.
@@ -22,10 +46,6 @@ All notable changes to Juggernaut will be documented in this file.
 - The launcher falls through silently on any keychain error so `claude` still launches (users can still pass `AWS_BEARER_TOKEN_BEDROCK` directly or use IAM auth).
 - Unix uninstall only removes a `~/.local/bin/claude` entry if it is a symlink (legacy v3.0.x-dev artifact). A regular file at that path — such as Anthropic's own `claude` binary — is never touched.
 - Editor / IDE integrations that invoke the `claude` binary directly, bypassing interactive shells and the PowerShell profile, will not get the env injection — they must set the token themselves.
-
-### Known limitations
-
-- **Windows long-form Bedrock API keys (>~1280 chars).** Windows Credential Manager's `CredWrite` API caps the credential blob at 2560 bytes (~1280 unicode chars). Long-form Bedrock keys (observed 2000–2400 chars) exceed this, so on Windows `apply -Auth bedrock-api-key` silently falls back to `profile` storage, which in v3 does not persist the key anywhere. Affected users should either use `-Auth iam` with AWS SSO/IAM credentials, or export `AWS_BEARER_TOKEN_BEDROCK` manually in their PowerShell profile. DPAPI-backed storage is planned for the next release to remove this limitation.
 
 ## [3.0.0] - 2026-05-01
 

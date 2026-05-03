@@ -204,3 +204,186 @@ public static extern bool CredDelete(string target, int type, int flags);
         }
     }
 }
+
+# ---------------------------------------------------------------------------
+# DPAPI-backed storage (Windows only). Used when a Bedrock API key exceeds
+# the Credential Manager CredWrite blob cap (~1280 unicode chars / 2560 bytes).
+# The DPAPI ciphertext only decrypts under the same Windows user account.
+# ---------------------------------------------------------------------------
+
+$script:DPAPIEntropyLabel = 'juggernaut-bedrock'
+
+function Get-DPAPIHome {
+    if ($env:JUGGERNAUT_HOME)    { return $env:JUGGERNAUT_HOME }
+    if ($env:USERPROFILE)        { return $env:USERPROFILE }
+    if ($env:HOME)               { return $env:HOME }
+    return [Environment]::GetFolderPath('UserProfile')
+}
+
+function Get-DPAPIEntryPath {
+    Join-Path (Get-DPAPIHome) '.juggernaut\bearer-token.dpapi.bin'
+}
+
+function Test-DPAPIAvailable {
+    return ((Get-KeychainOS) -eq 'windows')
+}
+
+function Initialize-DPAPIAssembly {
+    if (-not ('System.Security.Cryptography.ProtectedData' -as [type])) {
+        # PS 5.1 ships the assembly but doesn't load it by default. PS 7 does.
+        try { [Reflection.Assembly]::LoadWithPartialName('System.Security') | Out-Null } catch {}
+    }
+    return [bool]('System.Security.Cryptography.ProtectedData' -as [type])
+}
+
+function Set-DPAPIEntry {
+    param([Parameter(Mandatory)][string]$Key)
+    if ($env:JUGGERNAUT_TEST_KEYCHAIN_FORCE_FAIL -eq '1') { return $false }
+    if (-not (Test-DPAPIAvailable)) { return $false }
+    if (-not (Initialize-DPAPIAssembly)) {
+        Write-Warning 'Set-DPAPIEntry: System.Security.Cryptography.ProtectedData unavailable'
+        return $false
+    }
+    $path = Get-DPAPIEntryPath
+    $dir  = Split-Path -Parent $path
+    try {
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $plain   = [Text.Encoding]::UTF8.GetBytes($Key)
+        $entropy = [Text.Encoding]::UTF8.GetBytes($script:DPAPIEntropyLabel)
+        $enc = [Security.Cryptography.ProtectedData]::Protect(
+            $plain, $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        [IO.File]::WriteAllBytes($path, $enc)
+        return $true
+    } catch {
+        Write-Warning "Set-DPAPIEntry: protect/write failed: $_"
+        return $false
+    }
+}
+
+function Get-DPAPIEntry {
+    # Returns the stored key as a non-empty string when the file exists AND
+    # Unprotect succeeds. Returns $null when the file does not exist (silent).
+    # Throws when the file exists but Unprotect fails — callers should surface
+    # a loud error rather than silently falling through to another source.
+    if (-not (Test-DPAPIAvailable)) { return $null }
+    $path = Get-DPAPIEntryPath
+    if (-not (Test-Path $path)) { return $null }
+    if (-not (Initialize-DPAPIAssembly)) {
+        throw "Get-DPAPIEntry: System.Security.Cryptography.ProtectedData unavailable"
+    }
+    try {
+        $enc     = [IO.File]::ReadAllBytes($path)
+        $entropy = [Text.Encoding]::UTF8.GetBytes($script:DPAPIEntropyLabel)
+        $plain   = [Security.Cryptography.ProtectedData]::Unprotect(
+            $enc, $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        $val = [Text.Encoding]::UTF8.GetString($plain)
+        if ([string]::IsNullOrEmpty($val)) { return $null }
+        return $val
+    } catch {
+        throw "Get-DPAPIEntry: unprotect failed (file may be corrupt or from a different user): $_"
+    }
+}
+
+function Remove-DPAPIEntry {
+    $path = Get-DPAPIEntryPath
+    if (Test-Path $path) {
+        try { Remove-Item -Path $path -Force -ErrorAction Stop } catch {
+            Write-Warning "Remove-DPAPIEntry: delete failed: $_"
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Top-level bearer-token abstraction. Callers don't need to know whether the
+# value landed in Credential Manager or DPAPI — Save-/Read-/Remove-BearerToken
+# pick the right backend and return a uniform result.
+# ---------------------------------------------------------------------------
+
+$script:BearerTokenCredManMaxChars = 1280
+
+function Save-BearerToken {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [ValidateSet('auto','keychain','dpapi')][string]$Mode = 'auto'
+    )
+    $os = Get-KeychainOS
+    # Non-Windows: CredMan is 'keychain' (macOS Keychain, secret-tool). No DPAPI.
+    if ($os -ne 'windows') {
+        if ($Mode -eq 'dpapi') {
+            return @{ Ok = $false; Storage = 'none'; Error = 'dpapi storage is Windows-only' }
+        }
+        if (Set-KeychainEntry -Key $Key) {
+            return @{ Ok = $true; Storage = 'keychain'; Error = '' }
+        }
+        return @{ Ok = $false; Storage = 'none'; Error = 'keychain store failed' }
+    }
+
+    # Windows: auto decides between CredMan and DPAPI based on key length.
+    $tryCredMan = switch ($Mode) {
+        'auto'     { $Key.Length -le $script:BearerTokenCredManMaxChars }
+        'keychain' { $true }
+        'dpapi'    { $false }
+    }
+    $tryDpapi = switch ($Mode) {
+        'auto'     { $true }
+        'keychain' { $false }
+        'dpapi'    { $true }
+    }
+
+    if ($tryCredMan) {
+        if (Set-KeychainEntry -Key $Key) {
+            # On success keep DPAPI file out of the way so reads are unambiguous.
+            Remove-DPAPIEntry
+            return @{ Ok = $true; Storage = 'keychain'; Error = '' }
+        }
+        if ($Mode -eq 'keychain') {
+            return @{ Ok = $false; Storage = 'none'; Error = 'Credential Manager CredWrite failed (likely blob > 2560 bytes)' }
+        }
+        # auto: fall through to DPAPI
+    }
+
+    if ($tryDpapi) {
+        if (Set-DPAPIEntry -Key $Key) {
+            # Also clear any stale CredMan entry so reads pick the new DPAPI blob.
+            Remove-KeychainEntry
+            return @{ Ok = $true; Storage = 'dpapi'; Error = '' }
+        }
+        return @{ Ok = $false; Storage = 'none'; Error = 'DPAPI protect/write failed' }
+    }
+
+    return @{ Ok = $false; Storage = 'none'; Error = 'no storage backend attempted' }
+}
+
+function Read-BearerToken {
+    # Return shape matches Save-BearerToken: { Value; Storage; Error }.
+    # On Windows: DPAPI file first (no P/Invoke cost), then CredMan.
+    # On Unix: keychain (secret-tool / security) only.
+    $os = Get-KeychainOS
+    if ($os -eq 'windows') {
+        try {
+            $v = Get-DPAPIEntry
+            if (-not [string]::IsNullOrEmpty($v)) {
+                return @{ Value = $v; Storage = 'dpapi'; Error = '' }
+            }
+        } catch {
+            return @{ Value = $null; Storage = 'dpapi'; Error = "$_" }
+        }
+    }
+    try {
+        $v = Get-KeychainEntry
+        if (-not [string]::IsNullOrEmpty($v)) {
+            return @{ Value = $v; Storage = 'keychain'; Error = '' }
+        }
+    } catch {
+        return @{ Value = $null; Storage = 'keychain'; Error = "$_" }
+    }
+    return @{ Value = $null; Storage = 'none'; Error = '' }
+}
+
+function Remove-BearerToken {
+    Remove-KeychainEntry
+    if ((Get-KeychainOS) -eq 'windows') {
+        Remove-DPAPIEntry
+    }
+}

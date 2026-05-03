@@ -35,22 +35,22 @@ The installer is a **destructive wipe-and-reinstall**: it strips any legacy Jugg
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2
 ```
 
 Preview the wipe without writing anything:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2 --dry-run
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1 -DryRun
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2 -DryRun
 ```
 
 ### 4. Configure

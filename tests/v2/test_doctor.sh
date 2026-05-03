@@ -51,8 +51,8 @@ ERR_BLOCK="$(
     schema_new_juggernaut_block
 )"
 OUTPUT="$(doctor_credentials "$ERR_BLOCK" 2>&1)"
-if [[ "$OUTPUT" == *"Keychain: WARN (simulated keychain failure)"* &&
-      "$OUTPUT" == *"Details: no API key found in env or keychain"* ]]; then
+if [[ "$OUTPUT" == *"Keychain/DPAPI: WARN (simulated keychain failure)"* &&
+      "$OUTPUT" == *"Details: no API key found in env, keychain, or DPAPI file"* ]]; then
   pass
 else
   fail "expected visible keychain read failure"

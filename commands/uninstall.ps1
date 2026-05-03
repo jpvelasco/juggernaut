@@ -86,6 +86,13 @@ if (($hasUser -or $hasProject) -and (Test-KeychainAvailable)) {
     if ($kv) { $hasKeychain = $true }
 }
 
+$hasDpapi = $false
+$dpapiPath = ''
+if ((Get-KeychainOS) -eq 'windows') {
+    $dpapiPath = Get-DPAPIEntryPath
+    if (Test-Path $dpapiPath) { $hasDpapi = $true }
+}
+
 function Get-LauncherProfileTargets {
     $targets = @()
     try {
@@ -113,7 +120,7 @@ function Test-ProfileHasLauncherBlock([string]$Path) {
 $launcherProfiles = @(Get-LauncherProfileTargets | Where-Object { Test-ProfileHasLauncherBlock $_ })
 $hasLauncher = $launcherProfiles.Count -gt 0
 
-if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasLauncher)) {
+if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasLauncher)) {
     Write-Output 'Nothing to uninstall.'
     exit 0
 }
@@ -126,6 +133,7 @@ if (-not $Force -and -not $DryRun) {
     if ($hasUser)    { Write-Output "  - Juggernaut block from $userPath" }
     if ($hasProject) { Write-Output "  - Juggernaut block from $projectPath" }
     if ($hasKeychain) { Write-Output "  - Keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
+    if ($hasDpapi)    { Write-Output "  - DPAPI file: $dpapiPath" }
     foreach ($lp in $launcherProfiles) { Write-Output "  - Launcher block from $lp" }
     Write-Output ''
     $answer = Read-Host 'Proceed? [y/N]'
@@ -153,6 +161,10 @@ if ($hasProject) {
 if ($hasKeychain) {
     if ($DryRun) { Write-Output "[dry-run] Would remove keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
     else         { Remove-KeychainEntry; Write-Output "Removed keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
+}
+if ($hasDpapi) {
+    if ($DryRun) { Write-Output "[dry-run] Would remove DPAPI file: $dpapiPath" }
+    else         { Remove-DPAPIEntry; Write-Output "Removed DPAPI file: $dpapiPath" }
 }
 
 function Remove-LauncherProfileBlock([string]$Path) {
