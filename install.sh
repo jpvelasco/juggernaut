@@ -363,7 +363,7 @@ install_launcher_profile_block() {
   # name default) uses ${INSTALL_DIR_LITERAL} / heredoc interpolation.
   local block
   block=$(cat <<LAUNCHER
-$begin
+# BEGIN: Juggernaut Launcher
 # Juggernaut claude launcher - injects AWS_BEARER_TOKEN_BEDROCK from the OS
 # keychain before exec'ing the real claude binary. Silent on success.
 claude() {
@@ -379,7 +379,7 @@ claude() {
   fi
   command claude "\$@"
 }
-$end
+# END: Juggernaut Launcher
 LAUNCHER
 )
 
