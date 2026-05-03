@@ -10,6 +10,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LAUNCHER="$REPO_ROOT/bin/claude"
 
+# macOS bash lives at /bin, not /usr/bin. Compute the current bash's directory
+# so the restricted PATHs below can still resolve the 'bash' command and the
+# shebang interpreter for stub scripts.
+BASH_DIR="$(dirname "${BASH:-$(command -v bash)}")"
+
 PASS=0; FAIL=0
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 pass() { PASS=$((PASS + 1)); }
@@ -125,8 +130,9 @@ EOF
 chmod +x "$EMPTY_DIR/not-claude"
 unset AWS_BEARER_TOKEN_BEDROCK
 unset JUGGERNAUT_CLAUDE_BIN
-# Use /usr/bin on PATH so bash itself can still find dirname/cd/basename.
-OUT="$(PATH="$EMPTY_DIR:/usr/bin" bash "$LAUNCHER" 2>&1)"
+# Keep /usr/bin and the bash dir on PATH so basic tools + bash stay reachable
+# (macOS ships bash in /bin, not /usr/bin).
+OUT="$(PATH="$EMPTY_DIR:$BASH_DIR:/usr/bin" bash "$LAUNCHER" 2>&1)"
 RC=$?
 if [[ "$RC" == "127" ]] && [[ "$OUT" == *"no upstream binary"* ]]; then
   pass
@@ -160,7 +166,7 @@ make_stub_claude "$STUB_DIR4"
 unset AWS_BEARER_TOKEN_BEDROCK
 unset JUGGERNAUT_CLAUDE_BIN
 OUT="$(AWS_BEARER_TOKEN_BEDROCK="x" \
-       PATH="$RECUR_DIR:$STUB_DIR4:/usr/bin" \
+       PATH="$RECUR_DIR:$STUB_DIR4:$BASH_DIR:/usr/bin" \
        bash "$LAUNCHER" --version 2>&1)"
 RC=$?
 if [[ "$RC" == "42" ]] && [[ "$OUT" == *"STUB_ARGS=--version"* ]]; then
