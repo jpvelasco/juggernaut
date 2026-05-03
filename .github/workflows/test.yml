@@ -21,7 +21,7 @@ jobs:
 
       - name: Run shellcheck
         run: |
-          shellcheck juggernaut bin/claude install.sh commands/*.sh \
+          shellcheck juggernaut install.sh commands/*.sh \
             lib/keychain.sh lib/schema.sh lib/config_manager.sh \
             lib/profile_paths.sh lib/doctor.sh \
             tests/v2/test_*.sh

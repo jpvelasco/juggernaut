@@ -330,7 +330,6 @@ echo "Installed to $INSTALL_DIR"
 # Executable bits only matter on non-Windows; chmod on Git Bash silently
 # misbehaves but does not fail. Suppress errors so Windows runs stay clean.
 chmod +x "$INSTALL_DIR/juggernaut" "$INSTALL_DIR"/commands/*.sh "$INSTALL_DIR"/lib/*.sh 2>/dev/null || true
-chmod +x "$INSTALL_DIR/bin/claude" 2>/dev/null || true
 
 BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"
@@ -340,18 +339,102 @@ else
   echo "Warning: could not create $BIN_DIR/juggernaut symlink" >&2
 fi
 
-# Juggernaut claude launcher: injects AWS_BEARER_TOKEN_BEDROCK from the
-# OS keychain before exec'ing the real claude binary.
-if ln -sfn "$INSTALL_DIR/bin/claude" "$BIN_DIR/claude"; then
-  echo "Claude launcher linked at $BIN_DIR/claude"
-else
-  echo "Warning: could not create $BIN_DIR/claude symlink" >&2
-fi
-
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' and 'claude' from any directory." ;;
+  *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' from any directory." ;;
 esac
+
+# ---------------------------------------------------------------------------
+# Claude launcher: bracketed shell function in the user's shell profiles.
+# ---------------------------------------------------------------------------
+# Mirrors the Windows PS profile function approach. The function reads
+# AWS_BEARER_TOKEN_BEDROCK from the OS keychain (via lib/keychain.sh) and
+# exports it before exec'ing the real claude binary via the `command`
+# builtin (which bypasses the function). A shell function takes precedence
+# over binaries on PATH, so this survives `claude update` self-rewrites
+# that would have clobbered a symlink at ~/.local/bin/claude.
+install_launcher_profile_block() {
+  local begin='# BEGIN: Juggernaut Launcher'
+  local end='# END: Juggernaut Launcher'
+  local install_dir="$INSTALL_DIR"
+
+  # The function body is written verbatim into the user's profile. Any
+  # substitution that must happen at install time (INSTALL_DIR, service
+  # name default) uses ${INSTALL_DIR_LITERAL} / heredoc interpolation.
+  local block
+  block=$(cat <<LAUNCHER
+$begin
+# Juggernaut claude launcher - injects AWS_BEARER_TOKEN_BEDROCK from the OS
+# keychain before exec'ing the real claude binary. Silent on success.
+claude() {
+  if [ -z "\${AWS_BEARER_TOKEN_BEDROCK:-}" ]; then
+    if [ -r "$install_dir/lib/keychain.sh" ]; then
+      # shellcheck disable=SC1091
+      _juggernaut_token=\$(. "$install_dir/lib/keychain.sh"; keychain_get 2>/dev/null) || _juggernaut_token=''
+      if [ -n "\$_juggernaut_token" ]; then
+        export AWS_BEARER_TOKEN_BEDROCK="\$_juggernaut_token"
+      fi
+      unset _juggernaut_token
+    fi
+  fi
+  command claude "\$@"
+}
+$end
+LAUNCHER
+)
+
+  local profile_candidates=(
+    "$HOME/.bashrc"
+    "$HOME/.zshrc"
+    "$HOME/.profile"
+  )
+
+  # Only write to profiles that already exist. This avoids creating a
+  # .zshrc for a bash user (and vice versa).
+  local targets=()
+  for candidate in "${profile_candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      targets+=("$candidate")
+    fi
+  done
+
+  # If the user's login shell has no rc file yet, seed the matching one.
+  if [[ ${#targets[@]} -eq 0 ]]; then
+    case "${SHELL:-}" in
+      */zsh)  targets+=("$HOME/.zshrc") ;;
+      */bash) targets+=("$HOME/.bashrc") ;;
+      *)      targets+=("$HOME/.profile") ;;
+    esac
+  fi
+
+  for path in "${targets[@]}"; do
+    # Strip any existing launcher block first (idempotent re-install).
+    if [[ -f "$path" ]]; then
+      local tmp
+      tmp="$(mktemp "${path}.launcherXXXXXX")"
+      awk -v b="$begin" -v e="$end" '
+        BEGIN { skip = 0 }
+        $0 == b { skip = 1; next }
+        $0 == e { skip = 0; next }
+        skip == 0 { print }
+      ' "$path" > "$tmp" && mv "$tmp" "$path"
+    else
+      # Create parent dir (e.g. ~/.config for fish in the future) and touch.
+      mkdir -p "$(dirname "$path")"
+      : > "$path"
+    fi
+
+    # Append fresh block with a leading blank line for separation.
+    {
+      [[ -s "$path" ]] && printf '\n'
+      printf '%s\n' "$block"
+    } >> "$path"
+    echo "Claude launcher function written to $path"
+  done
+}
+# END install_launcher_profile_block
+
+install_launcher_profile_block
 
 echo ""
 echo "Install complete. No configuration has been written."

@@ -29,10 +29,11 @@ Options:
   --force, -f           Skip confirmation prompt
 
 Removes the Juggernaut block from settings.json, the keychain entry, and
-the Claude launcher symlink (~/.local/bin/claude). Shell-profile blocks
-are not touched here; in v3 Juggernaut does not write to shell profiles.
-Run the installer (install.sh) for a full wipe that includes legacy
-profile blocks from earlier versions.
+the Claude launcher function block from shell profiles (~/.bashrc,
+~/.zshrc, ~/.profile). Also removes a legacy ~/.local/bin/claude symlink
+from earlier launcher iterations if present. Does not strip legacy
+v1/v2 profile blocks from earlier versions — run the installer
+(install.sh) for that full-wipe pass.
 EOF
       exit 0 ;;
     *) echo "uninstall: unknown option '$arg'" >&2; exit 1 ;;
@@ -74,14 +75,37 @@ if keychain_available; then
   [[ -n "$_key" ]] && has_keychain=true
 fi
 
-launcher_symlink="$HOME/.local/bin/claude"
+_launcher_profile_candidates() {
+  printf '%s\n' "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"
+}
+
+_profile_has_launcher_block() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  grep -qE '^# BEGIN: Juggernaut Launcher' "$path" 2>/dev/null
+}
+
+launcher_profiles=()
+while IFS= read -r _p; do
+  if _profile_has_launcher_block "$_p"; then
+    launcher_profiles+=("$_p")
+  fi
+done < <(_launcher_profile_candidates)
+
 has_launcher=false
-if [[ -L "$launcher_symlink" || -f "$launcher_symlink" ]]; then
-  has_launcher=true
-fi
+[[ ${#launcher_profiles[@]} -gt 0 ]] && has_launcher=true
+
+# Legacy v3.0.x-dev symlink cleanup: earlier launcher iterations placed a
+# symlink at ~/.local/bin/claude. Newer installs use a shell function, but
+# we still remove the old symlink if we find one (never remove a regular
+# file — that's likely Anthropic's claude binary).
+legacy_symlink="$HOME/.local/bin/claude"
+has_legacy_symlink=false
+[[ -L "$legacy_symlink" ]] && has_legacy_symlink=true
 
 if [[ "$has_user" == "false" && "$has_project" == "false" \
-      && "$has_keychain" == "false" && "$has_launcher" == "false" ]]; then
+      && "$has_keychain" == "false" && "$has_launcher" == "false" \
+      && "$has_legacy_symlink" == "false" ]]; then
   echo "Nothing to uninstall."
   exit 0
 fi
@@ -94,7 +118,10 @@ if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
   [[ "$has_user"    == "true" ]] && printf '  - Juggernaut block from %s\n' "$user_path"
   [[ "$has_project" == "true" ]] && printf '  - Juggernaut block from %s\n' "$project_path"
   [[ "$has_keychain" == "true" ]] && printf '  - Keychain entry: %s/%s\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
-  [[ "$has_launcher" == "true" ]] && printf '  - Claude launcher symlink: %s\n' "$launcher_symlink"
+  for _lp in "${launcher_profiles[@]+"${launcher_profiles[@]}"}"; do
+    printf '  - Launcher block from %s\n' "$_lp"
+  done
+  [[ "$has_legacy_symlink" == "true" ]] && printf '  - Legacy launcher symlink: %s\n' "$legacy_symlink"
   echo ""
   read -r -p "Proceed? [y/N] " _answer
   case "$_answer" in
@@ -135,12 +162,34 @@ if [[ "$has_keychain" == "true" ]]; then
   fi
 fi
 
-if [[ "$has_launcher" == "true" ]]; then
+_remove_launcher_block() {
+  local path="$1"
+  local tmp
+  tmp="$(mktemp "${path}.launcherXXXXXX")"
+  awk '
+    BEGIN { skip = 0 }
+    /^# BEGIN: Juggernaut Launcher/ { skip = 1; next }
+    /^# END: Juggernaut Launcher/   { skip = 0; next }
+    skip == 0 { print }
+  ' "$path" > "$tmp" && mv "$tmp" "$path"
+  printf 'Removed launcher block from %s\n' "$path"
+}
+# END _remove_launcher_block
+
+for _lp in "${launcher_profiles[@]+"${launcher_profiles[@]}"}"; do
   if [[ "$DRY_RUN" == "true" ]]; then
-    printf '[dry-run] Would remove Claude launcher symlink: %s\n' "$launcher_symlink"
+    printf '[dry-run] Would remove launcher block from %s\n' "$_lp"
   else
-    rm -f "$launcher_symlink"
-    printf 'Removed Claude launcher symlink: %s\n' "$launcher_symlink"
+    _remove_launcher_block "$_lp"
+  fi
+done
+
+if [[ "$has_legacy_symlink" == "true" ]]; then
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '[dry-run] Would remove legacy launcher symlink: %s\n' "$legacy_symlink"
+  else
+    rm -f "$legacy_symlink"
+    printf 'Removed legacy launcher symlink: %s\n' "$legacy_symlink"
   fi
 fi
 

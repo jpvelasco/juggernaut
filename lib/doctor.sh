@@ -184,16 +184,25 @@ doctor_opusplan() {
 
 doctor_launcher() {
   local block="$1"
-  local use_bedrock auth_mode env_token launcher_path has_symlink
+  local use_bedrock auth_mode env_token
   use_bedrock="$(jq -r '.env.CLAUDE_CODE_USE_BEDROCK // ""' <<<"$block")"
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
   env_token="${AWS_BEARER_TOKEN_BEDROCK:-}"
-  launcher_path="$HOME/.local/bin/claude"
-  has_symlink=false
-  if [[ -L "$launcher_path" || -f "$launcher_path" ]]; then
-    has_symlink=true
-  fi
+
+  # Detect the launcher by scanning the user's shell profiles for the
+  # marker block. A shell function takes precedence over on-PATH binaries
+  # in interactive shells, so this is the installed state we care about.
+  local -a launcher_profiles=()
+  local _candidate
+  for _candidate in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+    if [[ -f "$_candidate" ]] && \
+       grep -qE '^# BEGIN: Juggernaut Launcher' "$_candidate" 2>/dev/null; then
+      launcher_profiles+=("$_candidate")
+    fi
+  done
+  local has_launcher=false
+  [[ ${#launcher_profiles[@]} -gt 0 ]] && has_launcher=true
 
   # The launcher is only needed for bedrock-api-key auth (injects a bearer
   # token from the OS keychain). IAM auth signs requests with AWS_PROFILE or
@@ -212,21 +221,21 @@ doctor_launcher() {
   if [[ -n "$env_token" ]]; then
     doctor_ok
     doctor_kv "Source" "AWS_BEARER_TOKEN_BEDROCK already in env"
-    if [[ "$has_symlink" == "true" ]]; then
-      doctor_kv "Launcher" "$(doctor_home_path "$launcher_path") (also installed)"
+    if [[ "$has_launcher" == "true" ]]; then
+      doctor_kv "Launcher" "$(doctor_home_path "${launcher_profiles[0]}") (also installed)"
     fi
     return 0
   fi
 
-  if [[ "$has_symlink" == "true" ]]; then
+  if [[ "$has_launcher" == "true" ]]; then
     doctor_ok
-    doctor_kv "Launcher" "$(doctor_home_path "$launcher_path")"
-    doctor_kv "Source" "OS keychain via launcher"
+    doctor_kv "Launcher" "$(doctor_home_path "${launcher_profiles[0]}")"
+    doctor_kv "Source" "OS keychain via launcher function"
     return 0
   fi
 
   doctor_warn
-  doctor_kv "Launcher" "not installed ($launcher_path missing)"
+  doctor_kv "Launcher" "not installed (no shell profile contains the launcher block)"
   doctor_kv "Details" "claude will hang on launch — no bearer token in env and no launcher to inject it"
   doctor_kv "Fix" "re-run the installer (install.sh) or set AWS_BEARER_TOKEN_BEDROCK in the environment"
 }

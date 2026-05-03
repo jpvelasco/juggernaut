@@ -123,8 +123,14 @@ RC=$?
 if [[ "$RC" -eq 0 && -d "$WIPE_HOME/.juggernaut" ]]; then pass
 else fail "install should succeed and clone into \$JUGGERNAUT_DIR (rc=$RC)"; printf '%s\n' "$OUT" >&2; fi
 
-if ! grep -q "BEGIN: Juggernaut" "$WIPE_HOME/.bashrc"; then pass
-else fail "install should strip profile Juggernaut block"; fi
+# The wipe phase strips the legacy v1 `# BEGIN: Juggernaut` block, then
+# the launcher step writes a fresh `# BEGIN: Juggernaut Launcher` block.
+# So we can't just check for absence of "BEGIN: Juggernaut" — instead
+# verify the v1 body (`export FOO=1`) is gone and the launcher block landed.
+if ! grep -q '^export FOO=1' "$WIPE_HOME/.bashrc"; then pass
+else fail "install should strip legacy v1 profile Juggernaut block body"; fi
+if grep -q '^# BEGIN: Juggernaut Launcher' "$WIPE_HOME/.bashrc"; then pass
+else fail "install should write the Juggernaut Launcher block to .bashrc"; fi
 if grep -q "keep this" "$WIPE_HOME/.bashrc" && grep -q "keep that" "$WIPE_HOME/.bashrc"; then pass
 else fail "install should preserve unrelated profile content"; fi
 

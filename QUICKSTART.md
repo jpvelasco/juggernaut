@@ -76,7 +76,7 @@ juggernaut apply --auth=bedrock-api-key
 claude
 ```
 
-Fresh shells automatically pick up the **launcher** installed in step 3 — a bash shim at `~/.local/bin/claude` and a `function claude` block in your PowerShell profile. Both read your bearer token from the OS keychain and inject it into the child process's environment before running the real `claude`. No manual env setup required.
+Fresh shells automatically pick up the **launcher** installed in step 3 — a `claude()` shell function appended to `~/.bashrc`/`~/.zshrc`/`~/.profile` on Unix, or a `function claude` block in your PowerShell profile on Windows. Both read your bearer token from the OS keychain and inject it into the child process's environment before running the real `claude`. No manual env setup required, and the function approach survives Anthropic's `claude update` self-rewrites.
 
 ## Verify Setup
 

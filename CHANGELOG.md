@@ -8,15 +8,16 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Added
 
-- **Claude launcher wrappers.** `bin/claude` (bash shim, symlinked to `~/.local/bin/claude`) and a `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell) now read `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain and inject it into the child process's environment before exec'ing the real `claude` binary. Fixes the class of "fresh shell with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json hangs on `claude`" failures. Installers place both automatically; uninstall strips them.
-- **Doctor launcher check.** `juggernaut doctor` now includes a **Launcher** section that warns when Bedrock is active, no bearer token is in env, and no launcher is installed — naming the fix ("re-run the installer or set `AWS_BEARER_TOKEN_BEDROCK`"). Not-applicable for IAM auth.
-- **Launcher test matrices.** `tests/v2/test_launcher.sh` (8 bash cases: env preservation, keychain hit, keychain miss, keychain error fall-through, missing upstream binary, argv passthrough, recursion guard, executable bit) and `tests/v2/Launcher.Tests.ps1` (21 Pester cases: static source checks, idempotent install/uninstall of the profile block, function precedence, runtime behavior via a stub `claude.cmd`).
+- **Claude launcher wrappers.** A bracketed `claude()` shell function appended to `~/.bashrc`/`~/.zshrc`/`~/.profile` (Unix) and a matching `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell) now read `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain and inject it into the child process's environment before invoking the real `claude` binary. Fixes the class of "fresh shell with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json hangs on `claude`" failures. Installers place both automatically; uninstall strips them. The shell-function approach (not a file-on-disk symlink) survives Anthropic's `claude update` self-rewrites that would clobber `~/.local/bin/claude`.
+- **Doctor launcher check.** `juggernaut doctor` now includes a **Launcher** section that warns when Bedrock is active, no bearer token is in env, and no launcher block is present in any shell profile — naming the fix ("re-run the installer or set `AWS_BEARER_TOKEN_BEDROCK`"). Not-applicable for IAM auth.
+- **Launcher test matrices.** `tests/v2/test_launcher.sh` (bash cases: env preservation, keychain hit, keychain miss, keychain error fall-through, keychain lib absent, argv passthrough, install idempotency, uninstall strip) and `tests/v2/Launcher.Tests.ps1` (Pester cases: static source checks, idempotent install/uninstall of the profile block, function precedence, runtime behavior via a stub `claude.cmd`).
 
 ### Notes
 
 - No `settings.json` schema change. The launcher is purely a runtime hand-off — it never writes to settings or to the keychain, only reads.
 - The launcher falls through silently on any keychain error so `claude` still launches (users can still pass `AWS_BEARER_TOKEN_BEDROCK` directly or use IAM auth).
-- Editor / IDE integrations that invoke `claude.exe` directly, bypassing both `~/.local/bin` and the PowerShell profile, will not get the env injection — they must set the token themselves.
+- Unix uninstall only removes a `~/.local/bin/claude` entry if it is a symlink (legacy v3.0.x-dev artifact). A regular file at that path — such as Anthropic's own `claude` binary — is never touched.
+- Editor / IDE integrations that invoke the `claude` binary directly, bypassing interactive shells and the PowerShell profile, will not get the env injection — they must set the token themselves.
 
 ## [3.0.0] - 2026-05-01
 
