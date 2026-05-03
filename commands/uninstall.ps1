@@ -37,10 +37,11 @@ Options:
   -DryRun              Preview changes without writing files
   -Force               Skip confirmation prompt
 
-Removes the Juggernaut block from settings.json and the keychain entry.
-Shell-profile blocks are not touched here; in v3 Juggernaut does not write
-to shell profiles. Run the installer (install.ps1) for a full wipe that
-includes legacy profile blocks from earlier versions.
+Removes the Juggernaut block from settings.json, the keychain entry, and
+the launcher profile block from `$PROFILE.CurrentUserCurrentHost` (plus
+the sibling host's profile when present). The installer-wipe regex is
+the only place Juggernaut strips legacy profile blocks from earlier
+versions — run `install.ps1` for that.
 '@
     exit 0
 }
@@ -85,7 +86,34 @@ if (($hasUser -or $hasProject) -and (Test-KeychainAvailable)) {
     if ($kv) { $hasKeychain = $true }
 }
 
-if (-not ($hasUser -or $hasProject -or $hasKeychain)) {
+function Get-LauncherProfileTargets {
+    $targets = @()
+    try {
+        if ($PROFILE -and $PROFILE.CurrentUserCurrentHost) {
+            $targets += [string]$PROFILE.CurrentUserCurrentHost
+            $curr = [string]$PROFILE.CurrentUserCurrentHost
+            if ($curr -match '\\WindowsPowerShell\\') {
+                $targets += ($curr -replace '\\WindowsPowerShell\\', '\PowerShell\')
+            } elseif ($curr -match '\\PowerShell\\') {
+                $targets += ($curr -replace '\\PowerShell\\', '\WindowsPowerShell\')
+            }
+        }
+    } catch {}
+    return @($targets | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Test-ProfileHasLauncherBlock([string]$Path) {
+    if (-not (Test-Path $Path)) { return $false }
+    try {
+        $content = Get-Content -Path $Path -Raw -ErrorAction Stop
+    } catch { return $false }
+    return ($content -match '(?m)^# BEGIN: Juggernaut Launcher')
+}
+
+$launcherProfiles = @(Get-LauncherProfileTargets | Where-Object { Test-ProfileHasLauncherBlock $_ })
+$hasLauncher = $launcherProfiles.Count -gt 0
+
+if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasLauncher)) {
     Write-Output 'Nothing to uninstall.'
     exit 0
 }
@@ -98,6 +126,7 @@ if (-not $Force -and -not $DryRun) {
     if ($hasUser)    { Write-Output "  - Juggernaut block from $userPath" }
     if ($hasProject) { Write-Output "  - Juggernaut block from $projectPath" }
     if ($hasKeychain) { Write-Output "  - Keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
+    foreach ($lp in $launcherProfiles) { Write-Output "  - Launcher block from $lp" }
     Write-Output ''
     $answer = Read-Host 'Proceed? [y/N]'
     if ($answer -notmatch '^[Yy]') { Write-Output 'Aborted.'; exit 0 }
@@ -124,6 +153,38 @@ if ($hasProject) {
 if ($hasKeychain) {
     if ($DryRun) { Write-Output "[dry-run] Would remove keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
     else         { Remove-KeychainEntry; Write-Output "Removed keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
+}
+
+function Remove-LauncherProfileBlock([string]$Path) {
+    if (-not (Test-Path $Path)) { return }
+    try {
+        $lines = Get-Content -Path $Path -ErrorAction Stop
+    } catch {
+        Write-Warning "Could not read $Path - $($_.Exception.Message). Skipping (may require elevation)."
+        return
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    $skip = $false
+    foreach ($line in $lines) {
+        if ($line -match '^# BEGIN: Juggernaut Launcher') { $skip = $true; continue }
+        if ($line -match '^# END: Juggernaut Launcher')   { $skip = $false; continue }
+        if (-not $skip) { $out.Add($line) }
+    }
+    # Trim a trailing blank line that the install step added as a separator.
+    while ($out.Count -gt 0 -and $out[$out.Count - 1] -eq '') {
+        $out.RemoveAt($out.Count - 1)
+    }
+    try {
+        Set-Content -Path $Path -Value $out -Encoding utf8 -ErrorAction Stop
+        Write-Output "Removed launcher block from $Path"
+    } catch {
+        Write-Warning "Could not write $Path - $($_.Exception.Message). Skipping (may require elevation)."
+    }
+}
+
+foreach ($lp in $launcherProfiles) {
+    if ($DryRun) { Write-Output "[dry-run] Would remove launcher block from $lp" }
+    else         { Remove-LauncherProfileBlock $lp }
 }
 
 if ($DryRun) {

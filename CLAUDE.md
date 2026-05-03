@@ -48,6 +48,8 @@ shellcheck juggernaut install.sh commands/*.sh lib/keychain.sh lib/schema.sh lib
 
 **Installer:** `install.sh` / `install.ps1` run a destructive wipe phase on every invocation — strip `# BEGIN: Juggernaut` and `# BEGIN: Claude Code Bedrock Configuration` blocks from all profile paths, remove the `juggernaut` key from settings.json, delete the `juggernaut-bedrock` keychain entry — then install fresh files. Does **not** auto-apply. Supports `--dry-run`/`-DryRun` to preview without writing.
 
+**Launcher:** `bin/claude` (bash, symlinked to `~/.local/bin/claude`) and a `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell, bracketed by `# BEGIN: Juggernaut Launcher` markers) read the bearer token from the OS keychain and inject it into `AWS_BEARER_TOKEN_BEDROCK` before exec'ing the real `claude`. Without this, fresh shells with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json and no env var would hang — Claude Code only reads the token from process env, not the keychain.
+
 **Tests in `tests/v2/`:** Each `lib/` and `commands/` module has a paired bash test file (`test_*.sh`) and PowerShell Pester file (`*.Tests.ps1`). Run each file individually or see CI for the full sequence.
 
 ## Key Design Patterns
@@ -74,7 +76,7 @@ All changes need `.sh` and `.ps1` variants. Targets: macOS (zsh/bash/fish), Linu
 
 ## Version Management
 
-Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.0}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
+Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.1}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
 
 ## Gotchas
 

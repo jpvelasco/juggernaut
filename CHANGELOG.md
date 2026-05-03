@@ -2,6 +2,22 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.1] - 2026-05-02
+
+**Patch release.** Closes the keychain → Claude Code hand-off gap introduced by v3.0.0's removal of the shell-profile fallback.
+
+### Added
+
+- **Claude launcher wrappers.** `bin/claude` (bash shim, symlinked to `~/.local/bin/claude`) and a `function claude` block in `$PROFILE.CurrentUserCurrentHost` (PowerShell) now read `AWS_BEARER_TOKEN_BEDROCK` from the OS keychain and inject it into the child process's environment before exec'ing the real `claude` binary. Fixes the class of "fresh shell with `CLAUDE_CODE_USE_BEDROCK=1` in settings.json hangs on `claude`" failures. Installers place both automatically; uninstall strips them.
+- **Doctor launcher check.** `juggernaut doctor` now includes a **Launcher** section that warns when Bedrock is active, no bearer token is in env, and no launcher is installed — naming the fix ("re-run the installer or set `AWS_BEARER_TOKEN_BEDROCK`"). Not-applicable for IAM auth.
+- **Launcher test matrices.** `tests/v2/test_launcher.sh` (8 bash cases: env preservation, keychain hit, keychain miss, keychain error fall-through, missing upstream binary, argv passthrough, recursion guard, executable bit) and `tests/v2/Launcher.Tests.ps1` (21 Pester cases: static source checks, idempotent install/uninstall of the profile block, function precedence, runtime behavior via a stub `claude.cmd`).
+
+### Notes
+
+- No `settings.json` schema change. The launcher is purely a runtime hand-off — it never writes to settings or to the keychain, only reads.
+- The launcher falls through silently on any keychain error so `claude` still launches (users can still pass `AWS_BEARER_TOKEN_BEDROCK` directly or use IAM auth).
+- Editor / IDE integrations that invoke `claude.exe` directly, bypassing both `~/.local/bin` and the PowerShell profile, will not get the env injection — they must set the token themselves.
+
 ## [3.0.0] - 2026-05-01
 
 **Breaking release.** Clean break from v1 and v2's dual-code-path setup. Re-run the installer to upgrade — there is no migration script.

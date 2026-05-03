@@ -35,22 +35,22 @@ The installer is a **destructive wipe-and-reinstall**: it strips any legacy Jugg
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.sh | bash -s -- --version v3.0.0
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1
 ```
 
 Preview the wipe without writing anything:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.sh | bash -s -- --version v3.0.0 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.sh | bash -s -- --version v3.0.1 --dry-run
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.0/install.ps1))) -Version v3.0.0 -DryRun
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1 -DryRun
 ```
 
 ### 4. Configure
@@ -75,6 +75,8 @@ juggernaut apply --auth=bedrock-api-key
 ```bash
 claude
 ```
+
+Fresh shells automatically pick up the **launcher** installed in step 3 — a bash shim at `~/.local/bin/claude` and a `function claude` block in your PowerShell profile. Both read your bearer token from the OS keychain and inject it into the child process's environment before running the real `claude`. No manual env setup required.
 
 ## Verify Setup
 

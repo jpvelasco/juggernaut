@@ -3,12 +3,12 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.0
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.1
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version v3.0.0
+#   bash install.sh --version v3.0.1
 #   bash install.sh --ref fix-branch
 #   bash install.sh --latest --dry-run
 #
@@ -330,6 +330,7 @@ echo "Installed to $INSTALL_DIR"
 # Executable bits only matter on non-Windows; chmod on Git Bash silently
 # misbehaves but does not fail. Suppress errors so Windows runs stay clean.
 chmod +x "$INSTALL_DIR/juggernaut" "$INSTALL_DIR"/commands/*.sh "$INSTALL_DIR"/lib/*.sh 2>/dev/null || true
+chmod +x "$INSTALL_DIR/bin/claude" 2>/dev/null || true
 
 BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"
@@ -339,9 +340,17 @@ else
   echo "Warning: could not create $BIN_DIR/juggernaut symlink" >&2
 fi
 
+# Juggernaut claude launcher: injects AWS_BEARER_TOKEN_BEDROCK from the
+# OS keychain before exec'ing the real claude binary.
+if ln -sfn "$INSTALL_DIR/bin/claude" "$BIN_DIR/claude"; then
+  echo "Claude launcher linked at $BIN_DIR/claude"
+else
+  echo "Warning: could not create $BIN_DIR/claude symlink" >&2
+fi
+
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' from any directory." ;;
+  *) echo "Note: add $BIN_DIR to PATH to run 'juggernaut' and 'claude' from any directory." ;;
 esac
 
 echo ""

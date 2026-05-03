@@ -190,6 +190,74 @@ function Write-DoctorOpusplan {
     }
 }
 
+function Test-LauncherInstalled {
+    # True when the PS launcher block is present in the current-host profile
+    # (or its sibling host's profile). Match the install.ps1 target list.
+    $targets = @()
+    try {
+        if ($PROFILE -and $PROFILE.CurrentUserCurrentHost) {
+            $targets += [string]$PROFILE.CurrentUserCurrentHost
+            $curr = [string]$PROFILE.CurrentUserCurrentHost
+            if ($curr -match '\\WindowsPowerShell\\') {
+                $targets += ($curr -replace '\\WindowsPowerShell\\', '\PowerShell\')
+            } elseif ($curr -match '\\PowerShell\\') {
+                $targets += ($curr -replace '\\PowerShell\\', '\WindowsPowerShell\')
+            }
+        }
+    } catch {}
+    foreach ($p in ($targets | Where-Object { $_ } | Select-Object -Unique)) {
+        if (-not (Test-Path $p)) { continue }
+        try {
+            $content = Get-Content -Path $p -Raw -ErrorAction Stop
+            if ($content -match '(?m)^# BEGIN: Juggernaut Launcher') { return @{ Installed = $true; Path = $p } }
+        } catch {}
+    }
+    return @{ Installed = $false; Path = '' }
+}
+
+function Write-DoctorLauncher {
+    param([Parameter(Mandatory)]$Block)
+    $useBedrock = Get-DoctorNestedProp -Object $Block -Path @('env','CLAUDE_CODE_USE_BEDROCK')
+    $authMode   = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
+    if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
+
+    # The launcher injects AWS_BEARER_TOKEN_BEDROCK from the OS keychain. It is
+    # only relevant when auth.mode is bedrock-api-key; IAM auth never reads the
+    # bearer token.
+    if ($authMode -ne 'bedrock-api-key') {
+        Write-Output 'Status: not applicable (IAM auth does not use a bearer token)'
+        return
+    }
+    if ($useBedrock -ne '1') {
+        Write-Output 'Status: not applicable (CLAUDE_CODE_USE_BEDROCK not set)'
+        return
+    }
+
+    if ($env:AWS_BEARER_TOKEN_BEDROCK) {
+        Write-Output 'Status: OK'
+        Write-Output 'Source: AWS_BEARER_TOKEN_BEDROCK already in env'
+        $launcher = Test-LauncherInstalled
+        if ($launcher.Installed) {
+            Write-Output ('Launcher: {0} (also installed)' -f (Show-DoctorHomePath $launcher.Path))
+        }
+        return
+    }
+
+    $launcher = Test-LauncherInstalled
+    if ($launcher.Installed) {
+        Write-Output 'Status: OK'
+        Write-Output ('Launcher: {0}' -f (Show-DoctorHomePath $launcher.Path))
+        Write-Output 'Source: OS keychain via launcher'
+        return
+    }
+
+    $script:DoctorWarns += 1
+    Write-Output 'Status: WARN'
+    Write-Output 'Launcher: not installed (PS profile has no Juggernaut Launcher block)'
+    Write-Output 'Details: claude will hang on launch - no bearer token in env and no launcher to inject it'
+    Write-Output 'Fix: re-run the installer (install.ps1) or set $env:AWS_BEARER_TOKEN_BEDROCK'
+}
+
 function Write-DoctorSummary {
     Write-Output ''
     Write-Output 'Summary'

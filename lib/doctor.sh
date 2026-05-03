@@ -182,6 +182,55 @@ doctor_opusplan() {
   fi
 }
 
+doctor_launcher() {
+  local block="$1"
+  local use_bedrock auth_mode env_token launcher_path has_symlink
+  use_bedrock="$(jq -r '.env.CLAUDE_CODE_USE_BEDROCK // ""' <<<"$block")"
+  auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
+  [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
+  env_token="${AWS_BEARER_TOKEN_BEDROCK:-}"
+  launcher_path="$HOME/.local/bin/claude"
+  has_symlink=false
+  if [[ -L "$launcher_path" || -f "$launcher_path" ]]; then
+    has_symlink=true
+  fi
+
+  # The launcher is only needed for bedrock-api-key auth (injects a bearer
+  # token from the OS keychain). IAM auth signs requests with AWS_PROFILE or
+  # access keys and never reads AWS_BEARER_TOKEN_BEDROCK.
+  if [[ "$auth_mode" != "bedrock-api-key" ]]; then
+    doctor_kv "Status" "not applicable (IAM auth does not use a bearer token)"
+    return 0
+  fi
+  # Guard against a config where api-key is declared but CLAUDE_CODE_USE_BEDROCK
+  # was not written into env (would indicate a broken apply).
+  if [[ "$use_bedrock" != "1" ]]; then
+    doctor_kv "Status" "not applicable (CLAUDE_CODE_USE_BEDROCK not set)"
+    return 0
+  fi
+
+  if [[ -n "$env_token" ]]; then
+    doctor_ok
+    doctor_kv "Source" "AWS_BEARER_TOKEN_BEDROCK already in env"
+    if [[ "$has_symlink" == "true" ]]; then
+      doctor_kv "Launcher" "$(doctor_home_path "$launcher_path") (also installed)"
+    fi
+    return 0
+  fi
+
+  if [[ "$has_symlink" == "true" ]]; then
+    doctor_ok
+    doctor_kv "Launcher" "$(doctor_home_path "$launcher_path")"
+    doctor_kv "Source" "OS keychain via launcher"
+    return 0
+  fi
+
+  doctor_warn
+  doctor_kv "Launcher" "not installed ($launcher_path missing)"
+  doctor_kv "Details" "claude will hang on launch — no bearer token in env and no launcher to inject it"
+  doctor_kv "Fix" "re-run the installer (install.sh) or set AWS_BEARER_TOKEN_BEDROCK in the environment"
+}
+
 doctor_summary() {
   doctor_section "Summary"
   if (( DOCTOR_FAILS > 0 )); then

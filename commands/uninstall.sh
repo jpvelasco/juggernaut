@@ -28,10 +28,11 @@ Options:
   --dry-run             Preview changes without writing files
   --force, -f           Skip confirmation prompt
 
-Removes the Juggernaut block from settings.json and the keychain entry.
-Shell-profile blocks are not touched here; in v3 Juggernaut does not write
-to shell profiles. Run the installer (install.sh) for a full wipe that
-includes legacy profile blocks from earlier versions.
+Removes the Juggernaut block from settings.json, the keychain entry, and
+the Claude launcher symlink (~/.local/bin/claude). Shell-profile blocks
+are not touched here; in v3 Juggernaut does not write to shell profiles.
+Run the installer (install.sh) for a full wipe that includes legacy
+profile blocks from earlier versions.
 EOF
       exit 0 ;;
     *) echo "uninstall: unknown option '$arg'" >&2; exit 1 ;;
@@ -73,7 +74,14 @@ if keychain_available; then
   [[ -n "$_key" ]] && has_keychain=true
 fi
 
-if [[ "$has_user" == "false" && "$has_project" == "false" && "$has_keychain" == "false" ]]; then
+launcher_symlink="$HOME/.local/bin/claude"
+has_launcher=false
+if [[ -L "$launcher_symlink" || -f "$launcher_symlink" ]]; then
+  has_launcher=true
+fi
+
+if [[ "$has_user" == "false" && "$has_project" == "false" \
+      && "$has_keychain" == "false" && "$has_launcher" == "false" ]]; then
   echo "Nothing to uninstall."
   exit 0
 fi
@@ -86,6 +94,7 @@ if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
   [[ "$has_user"    == "true" ]] && printf '  - Juggernaut block from %s\n' "$user_path"
   [[ "$has_project" == "true" ]] && printf '  - Juggernaut block from %s\n' "$project_path"
   [[ "$has_keychain" == "true" ]] && printf '  - Keychain entry: %s/%s\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
+  [[ "$has_launcher" == "true" ]] && printf '  - Claude launcher symlink: %s\n' "$launcher_symlink"
   echo ""
   read -r -p "Proceed? [y/N] " _answer
   case "$_answer" in
@@ -123,6 +132,15 @@ if [[ "$has_keychain" == "true" ]]; then
   else
     keychain_delete
     printf 'Removed keychain entry: %s/%s\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
+  fi
+fi
+
+if [[ "$has_launcher" == "true" ]]; then
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '[dry-run] Would remove Claude launcher symlink: %s\n' "$launcher_symlink"
+  else
+    rm -f "$launcher_symlink"
+    printf 'Removed Claude launcher symlink: %s\n' "$launcher_symlink"
   fi
 fi
 
