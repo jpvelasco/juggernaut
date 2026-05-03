@@ -425,8 +425,10 @@ LAUNCHER
     fi
 
     # Append fresh block with a leading blank line for separation.
+    local needs_sep=0
+    [[ -s "$path" ]] && needs_sep=1
     {
-      [[ -s "$path" ]] && printf '\n'
+      (( needs_sep )) && printf '\n'
       printf '%s\n' "$block"
     } >> "$path"
     echo "Claude launcher function written to $path"
