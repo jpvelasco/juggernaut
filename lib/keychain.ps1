@@ -71,8 +71,15 @@ public struct CREDENTIAL {
     public string TargetAlias; public string UserName;
 }
 '@
-            Add-Type -Namespace 'Win32' -Name 'CredWriteApi' -MemberDefinition $src -ErrorAction SilentlyContinue
-            [Win32.CredWriteApi]::CredDelete($svc, 1, 0) | Out-Null
+            if (-not ('Win32.CredWriteApi' -as [type])) {
+                try {
+                    Add-Type -Namespace 'Win32' -Name 'CredWriteApi' -MemberDefinition $src -ErrorAction Stop
+                } catch {
+                    Write-Warning "Set-KeychainEntry: Add-Type failed: $_"
+                    return $false
+                }
+            }
+            try { [Win32.CredWriteApi]::CredDelete($svc, 1, 0) | Out-Null } catch {}
 
             $blob = [IntPtr]::Zero
             try {
@@ -85,7 +92,15 @@ public struct CREDENTIAL {
                 $cred.CredentialBlobSize = [Text.Encoding]::Unicode.GetByteCount($Key)
                 $cred.CredentialBlob = $blob
                 $cred.Persist = 2
-                return [Win32.CredWriteApi]::CredWrite([ref]$cred, 0)
+                $ok = [Win32.CredWriteApi]::CredWrite([ref]$cred, 0)
+                if (-not $ok) {
+                    $errCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                    Write-Warning "Set-KeychainEntry: CredWrite returned false (Win32 error $errCode, key length $($Key.Length))"
+                }
+                return $ok
+            } catch {
+                Write-Warning "Set-KeychainEntry: exception during CredWrite: $_"
+                return $false
             } finally {
                 if ($blob -ne [IntPtr]::Zero) {
                     [Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($blob)
