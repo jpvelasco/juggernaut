@@ -2,6 +2,19 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.4] - 2026-05-04
+
+**Patch release.** Fixes Windows installer one-liner triggering Microsoft Defender's AMSI fileless-malware heuristics.
+
+### Fixed
+
+- **Windows installer one-liner no longer trips Microsoft Defender.** The `& ([scriptblock]::Create((irm ...)))` form matched Defender's AMSI fileless-malware heuristics (`Trojan:PowerShell/Powdow`, `Trojan:Script/Wacatac.*!ml`) independent of script content — AMSI double-scans the command string and the constructed scriptblock body. Replaced with a download-then-run one-liner: `irm -OutFile $p`, `Unblock-File $p`, execute the file, then `Remove-Item $p`. Same one-line paste UX; Defender scans the file on disk via its static-analysis path. Follows Microsoft's own pattern for `dotnet-install.ps1`.
+
+### Changed
+
+- `install.ps1` `| iex` guard error message now steers users to the download-then-run form instead of the old `[scriptblock]::Create` form.
+- README.md and QUICKSTART.md Windows one-liners updated to v3.0.4 form. Old tagged releases still have the old `[scriptblock]::Create` text in their checked-in `install.ps1` headers — those tags continue to work but Defender may flag the advertised command for pre-v3.0.4 tags.
+
 ## [3.0.3] - 2026-05-04
 
 **Patch release.** Fixes API key paste truncation on Linux, macOS, and PowerShell when using `juggernaut apply --auth=bedrock-api-key`.
