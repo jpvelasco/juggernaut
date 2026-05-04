@@ -138,6 +138,27 @@ BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
 SETTINGS="$FAKE_HOME/.claude/settings.json"
 if jq -e '.env.ANTHROPIC_MODEL == "opusplan"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "--opusplan should set env.ANTHROPIC_MODEL = 'opusplan'"; fi
 if jq -e '.juggernaut.opusplan == true' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "--opusplan should set juggernaut.opusplan = true"; fi
+if jq -e '.model == "global.anthropic.claude-sonnet-4-6"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "--opusplan should keep top-level .model as a Bedrock model ID"; fi
+rm -rf "$FAKE_HOME"
+
+# ---------------------------------------------------------------------------
+# Poisoned primary model: apply translates model=opusplan into opusplan mode
+# while restoring top-level .model to a Bedrock model ID.
+# ---------------------------------------------------------------------------
+section "poisoned model='opusplan' is preserved as mode, not model ID"
+_clean_env
+FAKE_HOME="$(mktemp -d)"
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  bash "$REPO_ROOT/commands/apply.sh" --auth=iam --region=us-west-2 --skip-preflight >/dev/null 2>&1
+SETTINGS="$FAKE_HOME/.claude/settings.json"
+tmp_json="$SETTINGS.tmp"
+jq '.model = "opusplan" | .juggernaut.model = "opusplan"' "$SETTINGS" > "$tmp_json"
+mv "$tmp_json" "$SETTINGS"
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  bash "$REPO_ROOT/commands/apply.sh" --auth=iam --skip-preflight >/dev/null 2>&1
+if jq -e '.model == "global.anthropic.claude-sonnet-4-6"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "apply should repair top-level .model to a Bedrock model ID"; fi
+if jq -e '.juggernaut.model == "global.anthropic.claude-sonnet-4-6"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "apply should repair juggernaut.model to a Bedrock model ID"; fi
+if jq -e '.juggernaut.opusplan == true and .env.ANTHROPIC_MODEL == "opusplan"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "apply should preserve opusplan as routing mode"; fi
 rm -rf "$FAKE_HOME"
 
 # ---------------------------------------------------------------------------
@@ -183,6 +204,27 @@ if [[ "$RC" -eq 0 ]]; then pass; else fail "piped stdin should exit 0 (got $RC);
 SETTINGS="$FAKE_HOME/.claude/settings.json"
 if jq -e '.juggernaut.auth.mode == "bedrock-api-key"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "settings.json missing bedrock-api-key block after piped key"; fi
 rm -rf "$FAKE_HOME"
+
+# ---------------------------------------------------------------------------
+# Clipboard key input: avoids interactive terminal paste handling.
+# ---------------------------------------------------------------------------
+section "clipboard key input: 110-char key captured and written to settings.json"
+_clean_env
+FAKE_HOME="$(mktemp -d)"
+STUB_DIR="$(mktemp -d)"
+FAKE_KEY="$(printf 'B%.0s' {1..110})"
+cat > "$STUB_DIR/pbpaste" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' '$FAKE_KEY'
+EOF
+chmod +x "$STUB_DIR/pbpaste"
+OUTPUT="$(PATH="$STUB_DIR:$PATH" BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key --storage=profile --bedrock-key-from-clipboard 2>&1)"
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "clipboard key input should exit 0 (got $RC); output: $OUTPUT"; fi
+SETTINGS="$FAKE_HOME/.claude/settings.json"
+if jq -e '.juggernaut.auth.mode == "bedrock-api-key"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "settings.json missing bedrock-api-key block after clipboard key"; fi
+rm -rf "$FAKE_HOME" "$STUB_DIR"
 
 # ---------------------------------------------------------------------------
 # Short key (<40 chars): rejected with truncation error

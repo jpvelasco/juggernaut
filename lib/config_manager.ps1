@@ -132,9 +132,14 @@ function Backup-Settings {
     if (-not (Test-Path $Path)) { return $null }
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
     $backup = "$Path.backup.$stamp"
-    Copy-Item -Path $Path -Destination $backup -Force
-    Invoke-SettingsBackupRotation -Path $Path
-    return $backup
+    try {
+        Copy-Item -Path $Path -Destination $backup -Force -ErrorAction Stop
+        Invoke-SettingsBackupRotation -Path $Path
+        return $backup
+    } catch {
+        Write-Warning "Backup-Settings: could not create backup ${backup}: $_"
+        return $null
+    }
 }
 
 function Invoke-SettingsBackupRotation {
@@ -182,8 +187,8 @@ function Write-SettingsAtomic {
         if (Test-Path $Path) { Backup-Settings -Path $Path | Out-Null }
         $tmp = "$Path.tmp.$PID"
         try {
-            Set-Content -Path $tmp -Value $json -NoNewline -Encoding utf8
-            Move-Item -Path $tmp -Destination $Path -Force
+            Set-Content -Path $tmp -Value $json -NoNewline -Encoding utf8 -ErrorAction Stop
+            Move-Item -Path $tmp -Destination $Path -Force -ErrorAction Stop
         } catch {
             Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
             throw

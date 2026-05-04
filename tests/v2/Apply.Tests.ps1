@@ -81,6 +81,12 @@ Describe 'New-JuggernautBlock — opusplan' {
         $b.env['ANTHROPIC_MODEL'] | Should -Be 'opusplan'
         $b.opusplan               | Should -BeTrue
     }
+
+    It 'does not allow opusplan as the primary model ID' {
+        $b = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Model 'opusplan' `
+            -BedrockConfigPath $script:BedrockConfigPath
+        $b.model | Should -Be 'global.anthropic.claude-sonnet-4-6'
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -215,6 +221,46 @@ Describe 'apply.ps1 — -OpusPlan wiring' {
 
     It 'juggernaut.opusplan = true' { $script:settings.juggernaut.opusplan | Should -BeTrue }
     It 'env.ANTHROPIC_MODEL = opusplan' { $script:settings.env.ANTHROPIC_MODEL | Should -Be 'opusplan' }
+    It 'top-level model remains a Bedrock model ID' {
+        $script:settings.model | Should -Be 'global.anthropic.claude-sonnet-4-6'
+    }
+}
+
+Describe 'apply.ps1 — repairs opusplan poisoned primary model' {
+    BeforeAll {
+        $script:fakeHome = Join-Path ([IO.Path]::GetTempPath()) "juggernaut-apply-poison-$([guid]::NewGuid().Guid)"
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:fakeHome '.claude') | Out-Null
+        $script:oldHome = $env:HOME
+        $script:oldUserProfile = $env:USERPROFILE
+        $env:HOME = $script:fakeHome
+        $env:USERPROFILE = $script:fakeHome
+
+        & (Join-Path $script:repoRoot 'commands\apply.ps1') -Auth 'iam' -Region 'us-west-2' -SkipPreflight 2>&1 | Out-Null
+        $settingsPath = Join-Path $script:fakeHome '.claude\settings.json'
+        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $json.model = 'opusplan'
+        $json.juggernaut.model = 'opusplan'
+        $json | ConvertTo-Json -Depth 30 | Set-Content -Path $settingsPath -Encoding utf8
+
+        & (Join-Path $script:repoRoot 'commands\apply.ps1') -Auth 'iam' -SkipPreflight 2>&1 | Out-Null
+        $script:settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    }
+    AfterAll {
+        $env:HOME = $script:oldHome
+        $env:USERPROFILE = $script:oldUserProfile
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:fakeHome
+    }
+
+    It 'rewrites top-level model to a Bedrock model ID' {
+        $script:settings.model | Should -Be 'global.anthropic.claude-sonnet-4-6'
+    }
+    It 'rewrites juggernaut.model to a Bedrock model ID' {
+        $script:settings.juggernaut.model | Should -Be 'global.anthropic.claude-sonnet-4-6'
+    }
+    It 'preserves opusplan as a mode' {
+        $script:settings.juggernaut.opusplan | Should -BeTrue
+        $script:settings.env.ANTHROPIC_MODEL | Should -Be 'opusplan'
+    }
 }
 
 Describe 'apply.ps1 — help / unknown args' {
@@ -252,6 +298,26 @@ Describe 'apply.ps1 — piped stdin key capture' -Skip:(-not (Get-Command pwsh -
             Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
             & '$($applyScript -replace "'","''")' -Auth bedrock-api-key -Storage profile
         " 2>&1
+        $LASTEXITCODE | Should -Be 0
+        $settingsPath = Join-Path $script:fakeHome '.claude\settings.json'
+        Test-Path $settingsPath | Should -BeTrue
+        $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $s.juggernaut.auth.mode | Should -Be 'bedrock-api-key'
+    }
+
+    It 'clipboard key is captured and written to settings.json' {
+        $fakeKey = 'B' * 110
+        Set-Clipboard -Value $fakeKey
+        $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
+        $out = pwsh -NoProfile -NonInteractive -Command "
+            `$env:HOME = '$($script:fakeHome -replace "'","''")';
+            `$env:USERPROFILE = `$env:HOME;
+            `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            `$env:JUGGERNAUT_KEYCHAIN_SERVICE = 'juggernaut-absent-clipboard-test';
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
+            Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
+            & '$($applyScript -replace "'","''")' -Auth bedrock-api-key -Storage profile -BedrockKeyFromClipboard
+        " 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0
         $settingsPath = Join-Path $script:fakeHome '.claude\settings.json'
         Test-Path $settingsPath | Should -BeTrue

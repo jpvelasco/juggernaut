@@ -39,6 +39,8 @@ function ConvertTo-SchemaAuthMode {
     }
 }
 
+function Get-SchemaDefaultModel { 'global.anthropic.claude-sonnet-4-6' }
+
 function New-JuggernautBlock {
     [CmdletBinding()]
     param(
@@ -66,6 +68,7 @@ function New-JuggernautBlock {
     )
 
     if ([string]::IsNullOrEmpty($Region)) { $Region = Get-SchemaDefaultRegion }
+    if ([string]::IsNullOrEmpty($Model) -or $Model -eq 'opusplan') { $Model = Get-SchemaDefaultModel }
     $AuthMode = ConvertTo-SchemaAuthMode -AuthMode $AuthMode
     if ([string]::IsNullOrEmpty($SubagentModel)) { $SubagentModel = $HaikuModel }
 
@@ -166,6 +169,10 @@ function Test-JuggernautBlock {
 
     $storage = $Block.auth.storage
     if ($storage -notin @('profile','keychain','dpapi')) { $errors.Add("auth.storage must be 'profile', 'keychain', or 'dpapi' (got: '$storage')") }
+
+    if ($Block.model -eq 'opusplan') {
+        $errors.Add("model must be a Bedrock model ID; 'opusplan' is a routing mode for env.ANTHROPIC_MODEL only")
+    }
 
     $effort = $Block.effortLevel
     if ($effort -notin @('low','medium','high','xhigh','max')) { $errors.Add("effortLevel must be one of low|medium|high|xhigh|max (got: '$effort')") }

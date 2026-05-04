@@ -24,16 +24,19 @@ DRY_RUN=false
 J_AUTH_MODE=""          # Populated from existing block or flag; default applied below.
 J_AUTH_EXPLICIT=false
 J_API_KEY=""
+J_API_KEY_FROM_CLIPBOARD=false
 J_PRESERVE_KEY=false
 J_STORAGE=""            # Populated from existing block or platform default.
 J_STORAGE_EXPLICIT=false
 J_REGION=""
 J_MODEL=""
+J_MODEL_EXPLICIT=false
 J_OPUS_MODEL=""
 J_SONNET_MODEL=""
 J_HAIKU_MODEL=""
 J_EFFORT=""
 J_OPUSPLAN=""           # Tri-state: ""=unset, "true", "false"
+J_OPUSPLAN_EXPLICIT=false
 J_1M_CONTEXT=""
 J_USE_MANTLE=true       # v3: Mantle on by default.
 J_MANTLE_URL=""
@@ -52,6 +55,8 @@ Usage: juggernaut apply [options]
 Options:
   --auth=iam|bedrock-api-key  Authentication mode (required on first run)
   --bedrock-key=KEY        Bedrock API key (prompts if omitted)
+  --bedrock-key-from-clipboard
+                           Read Bedrock API key from the system clipboard
                            Pipe it in: echo $KEY | juggernaut apply ...
   --preserve-key           Reuse existing key from env/keychain
   --storage=profile|keychain  API key storage (default: keychain on macOS/Win)
@@ -100,12 +105,52 @@ _apply_acquire_key() {
     printf '> '
   } > /dev/tty 2>/dev/null || return 1
 
-  IFS= read -r value < /dev/tty || return 1
+  if [[ -n "${BASH_VERSION:-}" && -t 0 ]]; then
+    IFS= read -e -r value || return 1
+  else
+    IFS= read -r value < /dev/tty || return 1
+  fi
   printf '\n' > /dev/tty 2>/dev/null
 
   value="${value//$'\e[200~'/}"
   value="${value//$'\e[201~'/}"
+  value="${value//$'\r'/}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
 
+  printf '%s' "$value"
+}
+
+_apply_clipboard_key() {
+  local value=""
+
+  if command -v pbpaste >/dev/null 2>&1; then
+    value="$(pbpaste 2>/dev/null)" || return 1
+  elif command -v wl-paste >/dev/null 2>&1; then
+    value="$(wl-paste --no-newline 2>/dev/null)" || return 1
+  elif command -v xclip >/dev/null 2>&1; then
+    value="$(xclip -selection clipboard -o 2>/dev/null)" || return 1
+  elif command -v xsel >/dev/null 2>&1; then
+    value="$(xsel --clipboard --output 2>/dev/null)" || return 1
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    value="$(powershell.exe -NoProfile -Command 'Get-Clipboard -Raw' 2>/dev/null)" || return 1
+  elif command -v pwsh >/dev/null 2>&1; then
+    value="$(pwsh -NoProfile -Command 'Get-Clipboard -Raw' 2>/dev/null)" || return 1
+  elif command -v powershell >/dev/null 2>&1; then
+    value="$(powershell -NoProfile -Command 'Get-Clipboard -Raw' 2>/dev/null)" || return 1
+  else
+    echo "apply: no supported clipboard reader found (pbpaste, wl-paste, xclip, xsel, or PowerShell)" >&2
+    return 1
+  fi
+
+  value="${value//$'\e[200~'/}"
+  value="${value//$'\e[201~'/}"
+  value="${value//$'\r'/}"
+  while [[ "${value: -1}" == $'\n' || "${value: -1}" == $'\r' ]]; do
+    value="${value%?}"
+  done
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
 }
 
@@ -121,13 +166,14 @@ while [[ $# -gt 0 ]]; do
     --auth)                 shift; [[ $# -gt 0 ]] || { echo "apply: --auth requires a value" >&2; exit 1; }; J_AUTH_MODE="$1"; J_AUTH_EXPLICIT=true ;;
     --bedrock-key=*)        J_API_KEY="${arg#--bedrock-key=}" ;;
     --bedrock-key)          shift; [[ $# -gt 0 ]] || { echo "apply: --bedrock-key requires a value" >&2; exit 1; }; J_API_KEY="$1" ;;
+    --bedrock-key-from-clipboard) J_API_KEY_FROM_CLIPBOARD=true ;;
     --preserve-key)         J_PRESERVE_KEY=true ;;
     --storage=*)            J_STORAGE="${arg#--storage=}"; J_STORAGE_EXPLICIT=true ;;
     --storage)              shift; [[ $# -gt 0 ]] || { echo "apply: --storage requires a value" >&2; exit 1; }; J_STORAGE="$1"; J_STORAGE_EXPLICIT=true ;;
     --region=*)             J_REGION="${arg#--region=}" ;;
     --region)               shift; [[ $# -gt 0 ]] || { echo "apply: --region requires a value" >&2; exit 1; }; J_REGION="$1" ;;
-    --model=*)              J_MODEL="${arg#--model=}" ;;
-    --model)                shift; [[ $# -gt 0 ]] || { echo "apply: --model requires a value" >&2; exit 1; }; J_MODEL="$1" ;;
+    --model=*)              J_MODEL="${arg#--model=}"; J_MODEL_EXPLICIT=true ;;
+    --model)                shift; [[ $# -gt 0 ]] || { echo "apply: --model requires a value" >&2; exit 1; }; J_MODEL="$1"; J_MODEL_EXPLICIT=true ;;
     --opus-model=*)         J_OPUS_MODEL="${arg#--opus-model=}" ;;
     --opus-model)           shift; [[ $# -gt 0 ]] || { echo "apply: --opus-model requires a value" >&2; exit 1; }; J_OPUS_MODEL="$1" ;;
     --sonnet-model=*)       J_SONNET_MODEL="${arg#--sonnet-model=}" ;;
@@ -136,8 +182,8 @@ while [[ $# -gt 0 ]]; do
     --haiku-model)          shift; [[ $# -gt 0 ]] || { echo "apply: --haiku-model requires a value" >&2; exit 1; }; J_HAIKU_MODEL="$1" ;;
     --effort=*)             J_EFFORT="${arg#--effort=}" ;;
     --effort)               shift; [[ $# -gt 0 ]] || { echo "apply: --effort requires a value" >&2; exit 1; }; J_EFFORT="$1" ;;
-    --opusplan)             J_OPUSPLAN=true ;;
-    --no-opusplan)          J_OPUSPLAN=false ;;
+    --opusplan)             J_OPUSPLAN=true; J_OPUSPLAN_EXPLICIT=true ;;
+    --no-opusplan)          J_OPUSPLAN=false; J_OPUSPLAN_EXPLICIT=true ;;
     --1m-context)           J_1M_CONTEXT=true ;;
     --no-1m-context)        J_1M_CONTEXT=false ;;
     --no-mantle)            J_USE_MANTLE=false ;;
@@ -209,6 +255,22 @@ if [[ "$HAS_BLOCK" == "true" ]]; then
   [[ -z "$J_OPUSPLAN" ]]   && J_OPUSPLAN="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.opusplan | tostring')"
   [[ -z "$J_1M_CONTEXT" ]] && J_1M_CONTEXT="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.context.use1MContext | tostring')"
   [[ -z "$J_MANTLE_URL" ]] && J_MANTLE_URL="$(printf '%s' "$EXISTING_BLOCK" | jq -r '.mantle.baseUrl // ""')"
+fi
+
+if [[ "$J_OPUSPLAN_EXPLICIT" != "true" ]]; then
+  _settings_model="$(printf '%s' "$EXISTING_JSON" | jq -r '.model // ""')"
+  _settings_env_model="$(printf '%s' "$EXISTING_JSON" | jq -r '.env.ANTHROPIC_MODEL // ""')"
+  if [[ "$J_MODEL" == "opusplan" || "$_settings_model" == "opusplan" || "$_settings_env_model" == "opusplan" ]]; then
+    J_OPUSPLAN=true
+  fi
+fi
+
+if [[ "$J_MODEL" == "opusplan" ]]; then
+  if [[ "$J_MODEL_EXPLICIT" == "true" ]]; then
+    echo "apply: --model cannot be 'opusplan'; use --opusplan for that routing mode" >&2
+    exit 1
+  fi
+  J_MODEL=""
 fi
 
 # ---------------------------------------------------------------------------
@@ -301,6 +363,15 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
     if [[ -z "$J_API_KEY" ]]; then
       echo "apply: --preserve-key specified but no existing key found in env or keychain" >&2
       exit 1
+    fi
+  fi
+
+  if [[ -z "$J_API_KEY" ]]; then
+    if [[ "$J_API_KEY_FROM_CLIPBOARD" == "true" ]]; then
+      if ! J_API_KEY="$(_apply_clipboard_key)"; then
+        echo "apply: failed to read Bedrock API key from clipboard" >&2
+        exit 1
+      fi
     fi
   fi
 
