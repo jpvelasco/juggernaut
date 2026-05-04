@@ -130,19 +130,22 @@ juggernaut apply --auth=iam
 .\juggernaut.ps1 apply -Auth iam
 ```
 
-**Bedrock API key (interactive — most secure non-IAM):**
+**Bedrock API key — three input methods:**
 
 ```bash
+# Recommended: pipe the key in (paste-safe, nothing in terminal scrollback)
+echo "$BEDROCK_KEY" | juggernaut apply --auth=bedrock-api-key
+
+# Interactive: visible prompt at the terminal (paste-safe on all platforms)
 juggernaut apply --auth=bedrock-api-key
-```
 
-The key is read with hidden input and stored in the OS keychain (`juggernaut-bedrock` target) on macOS/Windows for short keys (~≤1280 chars), per-user DPAPI file on Windows for long keys (>1280 chars), or in a profile file on Linux. It never lands in shell history or process listings.
-
-**Bedrock API key (inline — CI/CD only):**
-
-```bash
+# Inline (CI/CD only): key visible in process list / shell history
 juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
 ```
+
+The key is stored in the OS keychain (`juggernaut-bedrock` target) on macOS/Windows for short keys (~≤1280 chars), per-user DPAPI file on Windows for long keys (>1280 chars), or in a profile file on Linux.
+
+> **Paste truncation note:** On Linux/macOS under tmux, screen, or SSH, pasting into `read -s` prompts can silently truncate the key. The piped form avoids this entirely. Juggernaut rejects keys under 40 characters with an error that steers you to the pipe form.
 
 | Type | Duration | Use Case |
 |------|----------|----------|
@@ -397,15 +400,20 @@ See `iam-policy.json` for the complete policy.
 |--------|----------|----------|
 | IAM/SSO | Most secure | Production — no secrets in commands |
 | API key + keychain/Credential Manager/DPAPI/profile | Varies | Key encrypted at rest in OS keychain/Credential Manager or per-user DPAPI file; Linux profile storage is plaintext |
-| API key (interactive) | Secure | When IAM not available — hidden prompt |
+| API key (pipe) | Secure | `echo $KEY \| juggernaut apply ...` — key never in terminal scrollback |
+| API key (interactive) | Secure | Visible prompt, paste-safe on all platforms |
 | API key (inline) | Least secure | CI/CD only — visible in process list |
 
 ### API Key Authentication
 
-**Interactive mode (`juggernaut apply --auth=bedrock-api-key`)** is secure:
-- Key entered with hidden input (not displayed while typing)
-- Not visible in `ps aux` or process listings
-- Not saved to shell history
+**Pipe mode (`echo $KEY | juggernaut apply --auth=bedrock-api-key`)** is the recommended path:
+- Key never appears in terminal scrollback
+- Works reliably under tmux, screen, SSH, and all terminal emulators
+- Script-friendly
+
+**Interactive mode (`juggernaut apply --auth=bedrock-api-key`)**:
+- Prompts with a visible `>` indicator — paste-safe on all platforms
+- Key appears in terminal scrollback (same as it would in any editor)
 
 **Inline mode (`--bedrock-key=xxx`)** — use only for CI/CD:
 - Command-line arguments are visible to other users via `ps aux`

@@ -46,7 +46,8 @@ juggernaut apply - configure Claude Code for Amazon Bedrock
 Usage: juggernaut.ps1 apply [options]
 
   -Auth             iam|bedrock-api-key  (required on first run)
-  -BedrockKey       Bedrock API key
+  -BedrockKey       Bedrock API key (prompts if omitted)
+                   Pipe it in: $env:KEY | juggernaut apply ...
   -PreserveKey      Reuse existing key from env/keychain
   -Storage          profile|keychain|dpapi (auto switches to dpapi on Windows when key > 1280 chars)
   -Region           AWS region
@@ -210,11 +211,30 @@ if ($Auth -eq 'bedrock-api-key') {
     if (-not $BedrockKey) {
         if ($DryRun) {
             $BedrockKey = 'dry-run-placeholder'
+        } elseif ([Console]::IsInputRedirected) {
+            $BedrockKey = ([Console]::In.ReadToEnd()).Trim()
+            if (-not $BedrockKey) {
+                Write-Error 'apply: API key cannot be empty. Pass -BedrockKey KEY, or pipe it: $env:KEY | juggernaut apply ...'
+                exit 1
+            }
+            if ($BedrockKey.Length -lt 40) {
+                Write-Error ("apply: API key looks truncated ({0} chars). Pipe the key instead: `$env:KEY | juggernaut apply ..." -f $BedrockKey.Length)
+                exit 1
+            }
         } else {
-            $secKey = Read-Host 'Enter your Bedrock API key' -AsSecureString
-            $BedrockKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secKey))
-            if (-not $BedrockKey) { Write-Error 'apply: API key cannot be empty'; exit 1 }
+            Write-Host ''
+            Write-Host 'Paste your Bedrock API key, then press Enter.'
+            Write-Host '(Tip: you can also pipe it in: $env:KEY | juggernaut apply ...)'
+            Write-Host -NoNewline '> '
+            $BedrockKey = (Read-Host).Trim()
+            if (-not $BedrockKey) {
+                Write-Error 'apply: API key cannot be empty. Pass -BedrockKey KEY, or pipe it: $env:KEY | juggernaut apply ...'
+                exit 1
+            }
+            if ($BedrockKey.Length -lt 40) {
+                Write-Error ("apply: API key looks truncated ({0} chars). Pipe the key instead: `$env:KEY | juggernaut apply ..." -f $BedrockKey.Length)
+                exit 1
+            }
         }
     }
     if ($Storage -in 'keychain','dpapi') {

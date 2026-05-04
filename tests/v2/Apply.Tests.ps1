@@ -225,3 +225,52 @@ Describe 'apply.ps1 — help / unknown args' {
         $out | Should -Match '-NoMantle'
     }
 }
+
+# ---------------------------------------------------------------------------
+# Piped stdin key input and short-key truncation check
+# These tests spin up a child pwsh process so that [Console]::IsInputRedirected
+# is true. Skipped if pwsh (PowerShell 7+) is not available.
+# ---------------------------------------------------------------------------
+Describe 'apply.ps1 — piped stdin key capture' -Skip:(-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    BeforeEach {
+        $script:fakeHome = Join-Path ([IO.Path]::GetTempPath()) "juggernaut-apply-pipe-$([guid]::NewGuid().Guid)"
+        New-Item -ItemType Directory -Force -Path $script:fakeHome | Out-Null
+    }
+    AfterEach {
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:fakeHome
+    }
+
+    It '110-char piped key is captured and written to settings.json' {
+        $fakeKey = 'A' * 110
+        $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
+        $null = $fakeKey | pwsh -NoProfile -NonInteractive -Command "
+            `$env:HOME = '$($script:fakeHome -replace "'","''")';
+            `$env:USERPROFILE = `$env:HOME;
+            `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            `$env:JUGGERNAUT_KEYCHAIN_SERVICE = 'juggernaut-absent-pipe-test';
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
+            Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
+            & '$($applyScript -replace "'","''")' -Auth bedrock-api-key -Storage profile
+        " 2>&1
+        $LASTEXITCODE | Should -Be 0
+        $settingsPath = Join-Path $script:fakeHome '.claude\settings.json'
+        Test-Path $settingsPath | Should -BeTrue
+        $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $s.juggernaut.auth.mode | Should -Be 'bedrock-api-key'
+    }
+
+    It 'short key (<40 chars) is rejected with truncation error' {
+        $shortKey = 'tooshort'
+        $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
+        $out = $shortKey | pwsh -NoProfile -NonInteractive -Command "
+            `$env:HOME = '$($script:fakeHome -replace "'","''")';
+            `$env:USERPROFILE = `$env:HOME;
+            `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
+            Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
+            & '$($applyScript -replace "'","''")' -Auth bedrock-api-key
+        " 2>&1 | Out-String
+        $LASTEXITCODE | Should -Not -Be 0
+        $out | Should -Match 'truncated'
+    }
+}

@@ -2,6 +2,23 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.3] - 2026-05-04
+
+**Patch release.** Fixes API key paste truncation on Linux, macOS, and PowerShell when using `juggernaut apply --auth=bedrock-api-key`.
+
+### Fixed
+
+- **API key paste on Linux/macOS/PowerShell.** `juggernaut apply --auth=bedrock-api-key` no longer drops pasted keys under tmux, screen, SSH sessions, or long-key Windows Terminal clipboards. Root cause was `read -s < /dev/tty` (bash) and `Read-Host -AsSecureString` (PowerShell) — both suppress bracketed-paste sequences and have terminal line-buffer caps that silently truncate long keys. Both are replaced by paste-safe implementations.
+
+### Added
+
+- **Piped stdin key input.** The API key can now be passed via stdin pipe: `echo $KEY | juggernaut apply --auth=bedrock-api-key`. This is the recommended path for scripts, CI/CD, and anywhere paste truncation is a concern.
+- **Truncation sanity check.** Keys under 40 characters are rejected with an error that steers toward the pipe form. Bedrock API keys are 100–2400+ chars in practice; anything shorter indicates a truncation failure.
+
+### Changed
+
+- **Interactive key prompt is now visible.** The prompt shows `>` and echoes typed/pasted characters instead of masking them with `*`. The key is not a shoulder-surf secret — it is immediately written to `settings.json` and the system keychain/DPAPI store. Masking provided no meaningful security and was the direct cause of the paste-truncation bug.
+
 ## [3.0.2] - 2026-05-03
 
 **Patch release.** Fixes Windows long-form Bedrock API key storage via DPAPI and adds bearer token utilities.
