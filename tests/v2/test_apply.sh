@@ -170,16 +170,18 @@ section "juggernaut dispatcher rejects unknown subcommand"
 if ! bash "$REPO_ROOT/juggernaut" not-a-subcommand >/dev/null 2>&1; then pass; else fail "juggernaut should reject unknown subcommand"; fi
 
 # ---------------------------------------------------------------------------
-# Piped stdin: 110-char key is accepted (dry-run)
+# Piped stdin: 110-char key is captured and written to settings.json
 # ---------------------------------------------------------------------------
-section "piped stdin: 110-char key accepted in dry-run"
+section "piped stdin: 110-char key captured and written to settings.json"
 _clean_env
 FAKE_HOME="$(mktemp -d)"
 FAKE_KEY="$(printf 'A%.0s' {1..110})"
 OUTPUT="$(printf '%s' "$FAKE_KEY" | BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
-  bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key --dry-run 2>&1)"
+  bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key --storage=profile 2>&1)"
 RC=$?
-if [[ "$RC" -eq 0 ]]; then pass; else fail "piped stdin dry-run should exit 0 (got $RC); output: $OUTPUT"; fi
+if [[ "$RC" -eq 0 ]]; then pass; else fail "piped stdin should exit 0 (got $RC); output: $OUTPUT"; fi
+SETTINGS="$FAKE_HOME/.claude/settings.json"
+if jq -e '.juggernaut.auth.mode == "bedrock-api-key"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "settings.json missing bedrock-api-key block after piped key"; fi
 rm -rf "$FAKE_HOME"
 
 # ---------------------------------------------------------------------------

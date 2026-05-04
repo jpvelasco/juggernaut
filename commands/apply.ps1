@@ -213,20 +213,28 @@ if ($Auth -eq 'bedrock-api-key') {
             $BedrockKey = 'dry-run-placeholder'
         } elseif ([Console]::IsInputRedirected) {
             $BedrockKey = ([Console]::In.ReadToEnd()).Trim()
+            if (-not $BedrockKey) {
+                Write-Error 'apply: API key cannot be empty. Pass -BedrockKey KEY, or pipe it: $env:KEY | juggernaut apply ...'
+                exit 1
+            }
+            if ($BedrockKey.Length -lt 40) {
+                Write-Error ("apply: API key looks truncated ({0} chars). Pipe the key instead: `$env:KEY | juggernaut apply ..." -f $BedrockKey.Length)
+                exit 1
+            }
         } else {
             Write-Host ''
             Write-Host 'Paste your Bedrock API key, then press Enter.'
             Write-Host '(Tip: you can also pipe it in: $env:KEY | juggernaut apply ...)'
             Write-Host -NoNewline '> '
             $BedrockKey = (Read-Host).Trim()
-        }
-        if (-not $BedrockKey) {
-            Write-Error 'apply: API key cannot be empty. Pass -BedrockKey KEY, or pipe it: $env:KEY | juggernaut apply ...'
-            exit 1
-        }
-        if ($BedrockKey.Length -lt 40) {
-            Write-Error ("apply: API key looks truncated ({0} chars). Pipe the key instead: `$env:KEY | juggernaut apply ..." -f $BedrockKey.Length)
-            exit 1
+            if (-not $BedrockKey) {
+                Write-Error 'apply: API key cannot be empty. Pass -BedrockKey KEY, or pipe it: $env:KEY | juggernaut apply ...'
+                exit 1
+            }
+            if ($BedrockKey.Length -lt 40) {
+                Write-Error ("apply: API key looks truncated ({0} chars). Pipe the key instead: `$env:KEY | juggernaut apply ..." -f $BedrockKey.Length)
+                exit 1
+            }
         }
     }
     if ($Storage -in 'keychain','dpapi') {

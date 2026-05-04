@@ -92,7 +92,8 @@ _apply_acquire_key() {
 
   {
     printf '\n'
-    printf 'Paste your Bedrock API key, then press Enter.\n'
+    printf 'Get your Bedrock API key from: AWS Console → Amazon Bedrock → API keys\n'
+    printf 'Paste your key, then press Enter.\n'
     printf '(Tip: you can also pipe it in: echo $KEY | juggernaut apply ...)\n'
     printf '> '
   } > /dev/tty 2>/dev/null || return 1
@@ -305,7 +306,6 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
     if [[ "$DRY_RUN" == "true" ]]; then
       J_API_KEY="dry-run-placeholder"
     else
-      echo "Get your Bedrock API key from: AWS Console → Amazon Bedrock → API keys"
       if ! J_API_KEY="$(_apply_acquire_key)"; then
         echo "apply: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
         echo "       Or pipe the key: echo \$KEY | juggernaut apply --auth=bedrock-api-key" >&2

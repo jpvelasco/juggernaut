@@ -240,21 +240,23 @@ Describe 'apply.ps1 — piped stdin key capture' -Skip:(-not (Get-Command pwsh -
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:fakeHome
     }
 
-    It '110-char piped key is accepted in dry-run' {
+    It '110-char piped key is captured and written to settings.json' {
         $fakeKey = 'A' * 110
         $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
-        $env:JUGGERNAUT_APPLY_FAKE_HOME = $script:fakeHome
-        $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
-        $out = $fakeKey | pwsh -NoProfile -NonInteractive -Command "
+        $null = $fakeKey | pwsh -NoProfile -NonInteractive -Command "
             `$env:HOME = '$($script:fakeHome -replace "'","''")';
             `$env:USERPROFILE = `$env:HOME;
             `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            `$env:JUGGERNAUT_KEYCHAIN_SERVICE = 'juggernaut-absent-pipe-test';
             Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
             Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
-            & '$($applyScript -replace "'","''")'  -Auth bedrock-api-key -DryRun
+            & '$($applyScript -replace "'","''")' -Auth bedrock-api-key -Storage profile
         " 2>&1
         $LASTEXITCODE | Should -Be 0
-        Remove-Item Env:\JUGGERNAUT_APPLY_FAKE_HOME -ErrorAction SilentlyContinue
+        $settingsPath = Join-Path $script:fakeHome '.claude\settings.json'
+        Test-Path $settingsPath | Should -BeTrue
+        $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $s.juggernaut.auth.mode | Should -Be 'bedrock-api-key'
     }
 
     It 'short key (<40 chars) is rejected with truncation error' {
@@ -266,7 +268,7 @@ Describe 'apply.ps1 — piped stdin key capture' -Skip:(-not (Get-Command pwsh -
             `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
             Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
             Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
-            & '$($applyScript -replace "'","''")'  -Auth bedrock-api-key
+            & '$($applyScript -replace "'","''")' -Auth bedrock-api-key
         " 2>&1 | Out-String
         $LASTEXITCODE | Should -Not -Be 0
         $out | Should -Match 'truncated'
