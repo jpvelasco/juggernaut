@@ -52,6 +52,7 @@ Usage: juggernaut apply [options]
 Options:
   --auth=iam|bedrock-api-key  Authentication mode (required on first run)
   --bedrock-key=KEY        Bedrock API key (prompts if omitted)
+                           Pipe it in: echo $KEY | juggernaut apply ...
   --preserve-key           Reuse existing key from env/keychain
   --storage=profile|keychain  API key storage (default: keychain on macOS/Win)
   --region=REGION          AWS region (default: us-west-2)
@@ -74,17 +75,34 @@ Options:
 EOF
 }
 
-_apply_prompt_secret() {
-  local prompt="$1" value
-  if [[ "${JUGGERNAUT_NO_TTY_PROMPTS:-0}" != "1" ]] && printf '%s' "$prompt" > /dev/tty 2>/dev/null; then
-    IFS= read -r -s value < /dev/tty || return 1
-    printf '\n' > /dev/tty
-  elif [[ -t 0 ]]; then
-    IFS= read -r -s -p "$prompt" value || return 1
-    echo
-  else
+_apply_acquire_key() {
+  local value
+
+  if [[ ! -t 0 ]]; then
+    value="$(cat)" || return 1
+    value="${value%$'\n'}"
+    value="${value%$'\r'}"
+    printf '%s' "$value"
+    return 0
+  fi
+
+  if [[ "${JUGGERNAUT_NO_TTY_PROMPTS:-0}" == "1" ]]; then
     return 1
   fi
+
+  {
+    printf '\n'
+    printf 'Paste your Bedrock API key, then press Enter.\n'
+    printf '(Tip: you can also pipe it in: echo $KEY | juggernaut apply ...)\n'
+    printf '> '
+  } > /dev/tty 2>/dev/null || return 1
+
+  IFS= read -r value < /dev/tty || return 1
+  printf '\n' > /dev/tty 2>/dev/null
+
+  value="${value//$'\e[200~'/}"
+  value="${value//$'\e[201~'/}"
+
   printf '%s' "$value"
 }
 
@@ -288,14 +306,23 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
       J_API_KEY="dry-run-placeholder"
     else
       echo "Get your Bedrock API key from: AWS Console → Amazon Bedrock → API keys"
-      if ! J_API_KEY="$(_apply_prompt_secret "Enter your Bedrock API key: ")"; then
+      if ! J_API_KEY="$(_apply_acquire_key)"; then
         echo "apply: --bedrock-key or --preserve-key is required in non-interactive mode" >&2
+        echo "       Or pipe the key: echo \$KEY | juggernaut apply --auth=bedrock-api-key" >&2
         exit 1
       fi
-      J_API_KEY="${J_API_KEY%"${J_API_KEY##*[![:space:]]}"}"
+      J_API_KEY="${J_API_KEY//$'\r'/}"
       J_API_KEY="${J_API_KEY#"${J_API_KEY%%[![:space:]]*}"}"
+      J_API_KEY="${J_API_KEY%"${J_API_KEY##*[![:space:]]}"}"
       if [[ -z "$J_API_KEY" ]]; then
         echo "apply: API key cannot be empty" >&2
+        echo "       Pass --bedrock-key=KEY, or pipe: echo \$KEY | juggernaut apply ..." >&2
+        exit 1
+      fi
+      if [[ "${#J_API_KEY}" -lt 40 ]]; then
+        echo "apply: API key looks truncated (${#J_API_KEY} chars)." >&2
+        echo "       Bedrock API keys are typically 100+ chars. Pipe the key instead:" >&2
+        echo "       echo \$KEY | juggernaut apply --auth=bedrock-api-key" >&2
         exit 1
       fi
     fi

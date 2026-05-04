@@ -225,3 +225,50 @@ Describe 'apply.ps1 — help / unknown args' {
         $out | Should -Match '-NoMantle'
     }
 }
+
+# ---------------------------------------------------------------------------
+# Piped stdin key input and short-key truncation check
+# These tests spin up a child pwsh process so that [Console]::IsInputRedirected
+# is true. Skipped if pwsh (PowerShell 7+) is not available.
+# ---------------------------------------------------------------------------
+Describe 'apply.ps1 — piped stdin key capture' -Skip:(-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    BeforeEach {
+        $script:fakeHome = Join-Path ([IO.Path]::GetTempPath()) "juggernaut-apply-pipe-$([guid]::NewGuid().Guid)"
+        New-Item -ItemType Directory -Force -Path $script:fakeHome | Out-Null
+    }
+    AfterEach {
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:fakeHome
+    }
+
+    It '110-char piped key is accepted in dry-run' {
+        $fakeKey = 'A' * 110
+        $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
+        $env:JUGGERNAUT_APPLY_FAKE_HOME = $script:fakeHome
+        $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+        $out = $fakeKey | pwsh -NoProfile -NonInteractive -Command "
+            `$env:HOME = '$($script:fakeHome -replace "'","''")';
+            `$env:USERPROFILE = `$env:HOME;
+            `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
+            Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
+            & '$($applyScript -replace "'","''")'  -Auth bedrock-api-key -DryRun
+        " 2>&1
+        $LASTEXITCODE | Should -Be 0
+        Remove-Item Env:\JUGGERNAUT_APPLY_FAKE_HOME -ErrorAction SilentlyContinue
+    }
+
+    It 'short key (<40 chars) is rejected with truncation error' {
+        $shortKey = 'tooshort'
+        $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
+        $out = $shortKey | pwsh -NoProfile -NonInteractive -Command "
+            `$env:HOME = '$($script:fakeHome -replace "'","''")';
+            `$env:USERPROFILE = `$env:HOME;
+            `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
+            Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
+            & '$($applyScript -replace "'","''")'  -Auth bedrock-api-key
+        " 2>&1 | Out-String
+        $LASTEXITCODE | Should -Not -Be 0
+        $out | Should -Match 'truncated'
+    }
+}

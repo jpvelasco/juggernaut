@@ -169,6 +169,36 @@ if [[ "$HELP_OUT" != *"shell-fallback"* ]]; then pass; else fail "apply --help s
 section "juggernaut dispatcher rejects unknown subcommand"
 if ! bash "$REPO_ROOT/juggernaut" not-a-subcommand >/dev/null 2>&1; then pass; else fail "juggernaut should reject unknown subcommand"; fi
 
+# ---------------------------------------------------------------------------
+# Piped stdin: 110-char key is accepted (dry-run)
+# ---------------------------------------------------------------------------
+section "piped stdin: 110-char key accepted in dry-run"
+_clean_env
+FAKE_HOME="$(mktemp -d)"
+FAKE_KEY="$(printf 'A%.0s' {1..110})"
+OUTPUT="$(printf '%s' "$FAKE_KEY" | BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key --dry-run 2>&1)"
+RC=$?
+if [[ "$RC" -eq 0 ]]; then pass; else fail "piped stdin dry-run should exit 0 (got $RC); output: $OUTPUT"; fi
+rm -rf "$FAKE_HOME"
+
+# ---------------------------------------------------------------------------
+# Short key (<40 chars): rejected with truncation error
+# ---------------------------------------------------------------------------
+section "short key (<40 chars) is rejected with truncation error"
+_clean_env
+FAKE_HOME="$(mktemp -d)"
+SHORT_KEY="tooshort"
+OUTPUT="$(printf '%s' "$SHORT_KEY" | BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key 2>&1)"
+RC=$?
+if [[ "$RC" -ne 0 && "$OUTPUT" == *"looks truncated"* ]]; then
+  pass
+else
+  fail "short key should exit non-zero with 'looks truncated' message (got RC=$RC); output: $OUTPUT"
+fi
+rm -rf "$FAKE_HOME"
+
 echo
 echo "apply.sh tests: $PASS passed, $FAIL failed"
 exit "$FAIL"
