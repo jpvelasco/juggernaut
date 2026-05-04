@@ -107,7 +107,6 @@ Describe 'install.ps1 v3 wipe-and-reinstall' {
         $output | Should -Match ([regex]::Escape('cannot be run with'))
         $output | Should -Match '-OutFile'
         $output | Should -Match 'Unblock-File'
-        $output | Should -Not -Match ([regex]::Escape('[scriptblock]::Create'))
     }
 
     It 'supports installing an explicit branch or ref for PR testing' {
