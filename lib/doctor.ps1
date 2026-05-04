@@ -68,10 +68,11 @@ function Write-DoctorCredentials {
     $authMode = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
     $storage = Get-DoctorNestedProp -Object $Block -Path @('auth','storage')
     if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
-    $keychainEntry = $null
-    $keychainError = ''
-    if ($authMode -eq 'bedrock-api-key' -and $storage -eq 'keychain' -and (Test-KeychainAvailable)) {
-        try { $keychainEntry = Get-KeychainEntry } catch { $keychainError = "$_"; $keychainEntry = $null }
+    $read = $null
+    $readError = ''
+    if ($authMode -eq 'bedrock-api-key' -and $storage -in 'keychain','dpapi') {
+        try { $read = Read-BearerToken } catch { $readError = "$_"; $read = $null }
+        if (-not $read.Value -and $read.Error) { $readError = $read.Error; $read = $null }
     }
     switch ($authMode) {
         'iam' {
@@ -98,17 +99,21 @@ function Write-DoctorCredentials {
             if ($env:AWS_BEARER_TOKEN_BEDROCK) {
                 Write-Output 'Source: AWS_BEARER_TOKEN_BEDROCK'
                 Write-Output 'Status: OK'
-            } elseif ($keychainEntry) {
-                Write-Output 'Source: system keychain'
+            } elseif ($read -and $read.Value) {
+                $label = if ($read.Storage -eq 'dpapi') { 'DPAPI file' }
+                         elseif ($read.Storage -eq 'keychain') { 'system keychain' }
+                         else { $read.Storage }
+                Write-Output ("Source: {0}" -f $label)
+                Write-Output ("Storage: {0}" -f $read.Storage)
                 Write-Output 'Status: OK'
             } else {
-                if ($keychainError) {
+                if ($readError) {
                     $script:DoctorWarns += 1
-                    Write-Output ('Keychain: WARN ({0})' -f $keychainError)
+                    Write-Output ('Keychain/DPAPI: WARN ({0})' -f $readError)
                 }
                 $script:DoctorFails += 1
                 Write-Output 'Status: FAIL'
-                Write-Output 'Details: no API key found in env or keychain'
+                Write-Output 'Details: no API key found in env, keychain, or DPAPI file'
             }
         }
         default {

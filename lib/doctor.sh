@@ -63,20 +63,43 @@ doctor_scope_block() {
 
 doctor_credentials() {
   local block="$1"
-  local auth_mode storage keychain_value keychain_rc keychain_error
+  local auth_mode storage probe_value probe_rc probe_error probe_source
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   storage="$(jq -r '.auth.storage // ""' <<<"$block")"
   [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
-  keychain_value=""
-  keychain_rc=1
-  keychain_error=""
-  if [[ "$auth_mode" == "bedrock-api-key" && "$storage" == "keychain" ]] && keychain_available 2>/dev/null; then
-    keychain_value="$(keychain_get 2>&1)"
-    keychain_rc=$?
-    if [[ "$keychain_rc" -ne 0 && "$keychain_rc" -ne 1 ]]; then
-      keychain_error="$keychain_value"
-      keychain_value=""
+  probe_value=""
+  probe_rc=1
+  probe_error=""
+  probe_source=""
+  if [[ "$auth_mode" == "bedrock-api-key" ]]; then
+    # Try DPAPI first (Windows long-key case), then keychain. Label the hit.
+    # Capture exit code separately from `|| true` so we can distinguish
+    # "not found" (1) from real errors (2).
+    local dpapi_out dpapi_rc
+    dpapi_out="$({ dpapi_get; printf '\x1e%s' "$?"; } 2>&1)"
+    dpapi_rc="${dpapi_out##*$'\x1e'}"
+    dpapi_out="${dpapi_out%$'\x1e'*}"
+    if [[ "$dpapi_rc" -eq 0 && -n "$dpapi_out" ]]; then
+      probe_value="$dpapi_out"
+      probe_source="DPAPI file"
+      probe_rc=0
+    elif [[ "$dpapi_rc" -eq 2 ]]; then
+      probe_error="$dpapi_out"
     fi
+    if [[ -z "$probe_value" ]] && keychain_available 2>/dev/null; then
+      probe_value="$({ keychain_get; printf '\x1e%s' "$?"; } 2>&1)"
+      probe_rc="${probe_value##*$'\x1e'}"
+      probe_value="${probe_value%$'\x1e'*}"
+      if [[ "$probe_rc" -eq 0 && -n "$probe_value" ]]; then
+        probe_source="system keychain"
+      elif [[ "$probe_rc" -ne 0 && "$probe_rc" -ne 1 ]]; then
+        probe_error="${probe_value%$'\n'}"
+        probe_value=""
+      else
+        probe_value=""
+      fi
+    fi
+    probe_error="${probe_error%$'\n'}"
   fi
   case "$auth_mode" in
     iam)
@@ -101,16 +124,17 @@ doctor_credentials() {
       if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
         doctor_kv "Source" "AWS_BEARER_TOKEN_BEDROCK"
         doctor_ok
-      elif [[ -n "$keychain_value" ]]; then
-        doctor_kv "Source" "system keychain"
+      elif [[ -n "$probe_value" ]]; then
+        doctor_kv "Source" "$probe_source"
+        doctor_kv "Storage" "$storage"
         doctor_ok
       else
-        if [[ -n "$keychain_error" ]]; then
+        if [[ -n "$probe_error" ]]; then
           DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
-          doctor_kv "Keychain" "WARN ($keychain_error)"
+          doctor_kv "Keychain/DPAPI" "WARN ($probe_error)"
         fi
         doctor_fail
-        doctor_kv "Details" "no API key found in env or keychain"
+        doctor_kv "Details" "no API key found in env, keychain, or DPAPI file"
       fi
       ;;
     *)

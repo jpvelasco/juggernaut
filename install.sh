@@ -3,12 +3,12 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.1
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.2
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version v3.0.1
+#   bash install.sh --version v3.0.2
 #   bash install.sh --ref fix-branch
 #   bash install.sh --latest --dry-run
 #
@@ -364,13 +364,13 @@ install_launcher_profile_block() {
   local block
   block=$(cat <<LAUNCHER
 # BEGIN: Juggernaut Launcher
-# Juggernaut claude launcher - injects AWS_BEARER_TOKEN_BEDROCK from the OS
-# keychain before exec'ing the real claude binary. Silent on success.
+# Juggernaut claude launcher - injects AWS_BEARER_TOKEN_BEDROCK from DPAPI or
+# the OS keychain before exec'ing the real claude binary. Silent on success.
 claude() {
   if [ -z "\${AWS_BEARER_TOKEN_BEDROCK:-}" ]; then
     if [ -r "$install_dir/lib/keychain.sh" ]; then
       # shellcheck disable=SC1091
-      _juggernaut_token=\$(. "$install_dir/lib/keychain.sh"; keychain_get 2>/dev/null) || _juggernaut_token=''
+      _juggernaut_token=\$(. "$install_dir/lib/keychain.sh"; bearer_token_get 2>/dev/null) || _juggernaut_token=''
       if [ -n "\$_juggernaut_token" ]; then
         export AWS_BEARER_TOKEN_BEDROCK="\$_juggernaut_token"
       fi

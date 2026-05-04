@@ -3,12 +3,12 @@
 #
 # Usage:
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version v3.0.1
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Version v3.0.2
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Ref fix-branch
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1))) -Latest
 #
 # Or after downloading:
-#   .\install.ps1 -Version v3.0.1
+#   .\install.ps1 -Version v3.0.2
 #   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest -DryRun
 #
@@ -59,7 +59,7 @@ Use the safer scriptblock form instead:
   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1)))
 
 For a pinned release:
-  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.1/install.ps1))) -Version v3.0.1
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2
 '@
     exit 1
 }
@@ -385,6 +385,26 @@ function Install-LauncherProfileBlock {
 function claude {
     [CmdletBinding()]
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$PassArgs)
+
+    if (-not $env:AWS_BEARER_TOKEN_BEDROCK) {
+        # Try DPAPI file first (long-key case). No P/Invoke; just Unprotect a blob.
+        try {
+            $dpapiRoot = if ($env:JUGGERNAUT_HOME) { $env:JUGGERNAUT_HOME } else { $env:USERPROFILE }
+            if ($dpapiRoot) {
+                $dpapiPath = Join-Path $dpapiRoot '.juggernaut\bearer-token.dpapi.bin'
+                if (Test-Path $dpapiPath) {
+                    [Reflection.Assembly]::LoadWithPartialName('System.Security') | Out-Null
+                    $enc = [IO.File]::ReadAllBytes($dpapiPath)
+                    $entropy = [Text.Encoding]::UTF8.GetBytes('juggernaut-bedrock')
+                    $plain = [Security.Cryptography.ProtectedData]::Unprotect(
+                        $enc, $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+                    $env:AWS_BEARER_TOKEN_BEDROCK = [Text.Encoding]::UTF8.GetString($plain)
+                }
+            }
+        } catch {
+            # Silent fall-through to CredRead below.
+        }
+    }
 
     if (-not $env:AWS_BEARER_TOKEN_BEDROCK) {
         try {

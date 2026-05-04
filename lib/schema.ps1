@@ -57,11 +57,11 @@ function New-JuggernautBlock {
         # "bedrock-api-key" so persisted config is explicit about Bedrock auth.
         [ValidateSet('iam','api-key','bedrock-api-key')][string]$AuthMode = 'iam',
         [bool]$AuthValidated = $false,
-        [ValidateSet('profile','keychain')][string]$Storage = 'keychain',
+        [ValidateSet('profile','keychain','dpapi')][string]$Storage = 'keychain',
         [string]$Region = '',
         [ValidateSet('both','settings-only','shell-only')][string]$ShellFallbackMode = 'settings-only',
         [ValidateSet('user','project')][string]$Scope = 'user',
-        [string]$Version = '3.0.1',
+        [string]$Version = '3.0.2',
         [string]$BedrockConfigPath
     )
 
@@ -165,7 +165,7 @@ function Test-JuggernautBlock {
     if ($authMode -notin @('iam','api-key','bedrock-api-key')) { $errors.Add("auth.mode must be 'iam' or 'bedrock-api-key' (got: '$authMode')") }
 
     $storage = $Block.auth.storage
-    if ($storage -notin @('profile','keychain')) { $errors.Add("auth.storage must be 'profile' or 'keychain' (got: '$storage')") }
+    if ($storage -notin @('profile','keychain','dpapi')) { $errors.Add("auth.storage must be 'profile', 'keychain', or 'dpapi' (got: '$storage')") }
 
     $effort = $Block.effortLevel
     if ($effort -notin @('low','medium','high','xhigh','max')) { $errors.Add("effortLevel must be one of low|medium|high|xhigh|max (got: '$effort')") }
