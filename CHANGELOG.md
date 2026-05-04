@@ -2,6 +2,15 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.7] - 2026-05-04
+
+**Patch release.** Suppresses Git's detached-HEAD advisory during pinned release installs.
+
+### Fixed
+
+- **Pinned Linux/macOS installs are quiet again.** `install.sh --version vX.Y.Z` now disables Git's detached-HEAD advice when cloning or checking out a tag, including the dirty-install backup path.
+- **PowerShell pinned installs get the same cleanup.** `install.ps1 -Version vX.Y.Z` now suppresses the same Git advisory on tagged installs.
+
 ## [3.0.6] - 2026-05-04
 
 **Patch release.** Fixes the `opusplan` repair path and hardens Bedrock API key entry across Windows, macOS, and Linux.

@@ -113,6 +113,7 @@ Describe 'install.ps1 v3 wipe-and-reinstall' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('[string]$Ref'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('JUGGERNAUT_REF'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('git clone --branch $Ref'))
+        $script:InstallPs1 | Should -Match ([regex]::Escape('advice.detachedHead=false clone --branch $Version'))
         $script:InstallPs1 | Should -Match ([regex]::Escape('checkout --quiet FETCH_HEAD'))
     }
 

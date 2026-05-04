@@ -3,12 +3,12 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.2
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.7
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version v3.0.2
+#   bash install.sh --version v3.0.7
 #   bash install.sh --ref fix-branch
 #   bash install.sh --latest --dry-run
 #
@@ -252,7 +252,7 @@ clone_install() {
   if [[ -n "$REF" ]]; then
     git clone --branch "$REF" --depth 1 --quiet "$REPO_URL" "$target"
   elif [[ -n "$VERSION" ]]; then
-    git clone --branch "$VERSION" --depth 1 --quiet "$REPO_URL" "$target"
+    git -c advice.detachedHead=false clone --branch "$VERSION" --depth 1 --quiet "$REPO_URL" "$target"
   else
     git clone --quiet "$REPO_URL" "$target"
   fi
@@ -315,7 +315,7 @@ if [[ -d "$INSTALL_DIR" ]]; then
       git -C "$INSTALL_DIR" fetch --quiet origin "$REF"
       git -C "$INSTALL_DIR" checkout --quiet FETCH_HEAD
     elif [[ -n "$VERSION" ]]; then
-      git -C "$INSTALL_DIR" checkout --quiet "$VERSION"
+      git -C "$INSTALL_DIR" -c advice.detachedHead=false checkout --quiet "$VERSION"
     else
       git -C "$INSTALL_DIR" checkout --quiet main
       git -C "$INSTALL_DIR" pull --ff-only --quiet

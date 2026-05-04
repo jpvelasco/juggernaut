@@ -3,12 +3,12 @@
 #
 # Usage (download-then-run — Defender-friendly, no [scriptblock]::Create):
 #   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Latest; Remove-Item $p
-#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.6/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.6; Remove-Item $p
+#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.7/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.7; Remove-Item $p
 #   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/my-branch/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Ref my-branch; Remove-Item $p
-#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.6/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.6 -DryRun; Remove-Item $p
+#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.7/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.7 -DryRun; Remove-Item $p
 #
 # Or after downloading:
-#   .\install.ps1 -Version v3.0.6
+#   .\install.ps1 -Version v3.0.7
 #   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest -DryRun
 #
@@ -62,7 +62,7 @@ instead (one line, paste-safe, Defender-friendly):
   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Latest; Remove-Item $p
 
 For a pinned release, swap `main` for the tag and add -Version:
-  $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.6/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.6; Remove-Item $p
+  $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.7/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.7; Remove-Item $p
 '@
     exit 1
 }
@@ -237,7 +237,7 @@ else              { Write-Host 'Installing Juggernaut (latest)...' }
 function Invoke-CloneInstall {
     param([string]$Target = $InstallDir)
     if ($Ref)         { git clone --branch $Ref      --depth 1 --quiet $RepoUrl $Target }
-    elseif ($Version) { git clone --branch $Version  --depth 1 --quiet $RepoUrl $Target }
+    elseif ($Version) { git -c advice.detachedHead=false clone --branch $Version --depth 1 --quiet $RepoUrl $Target }
     else              { git clone --quiet                                $RepoUrl $Target }
     if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
 }
@@ -293,7 +293,7 @@ if (Test-Path $InstallDir) {
             git -C $InstallDir checkout --quiet FETCH_HEAD
             if ($LASTEXITCODE -ne 0) { throw "git checkout $Ref failed" }
         } elseif ($Version) {
-            git -C $InstallDir checkout --quiet $Version
+            git -C $InstallDir -c advice.detachedHead=false checkout --quiet $Version
             if ($LASTEXITCODE -ne 0) { throw "git checkout $Version failed" }
         } else {
             git -C $InstallDir checkout --quiet main

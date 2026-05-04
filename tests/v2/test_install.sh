@@ -179,12 +179,13 @@ rm -rf "$REF_HOME"
 # Dirty install backup
 # ---------------------------------------------------------------------------
 section "dirty existing install is backed up before clone"
-git clone --branch v9.9.9 -q "$TMP_REMOTE/repo.git" "$TMP_INSTALL_HOME/.juggernaut"
+git -c advice.detachedHead=false clone --branch v9.9.9 -q "$TMP_REMOTE/repo.git" "$TMP_INSTALL_HOME/.juggernaut"
 printf '# local edit\n' >> "$TMP_INSTALL_HOME/.juggernaut/lib/schema.sh"
 if OUT="$(HOME="$TMP_INSTALL_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$TMP_INSTALL_HOME/.juggernaut" \
     bash "$REPO_ROOT/install.sh" --version v9.9.9 2>&1)" &&
    [[ "$OUT" == *"Existing installation has local changes"* ]] &&
    [[ "$OUT" == *"Backup created:"* ]] &&
+   [[ "$OUT" != *"detached HEAD"* ]] &&
    [[ -d "$TMP_INSTALL_HOME/.juggernaut" ]] &&
    [[ -z "$(git -C "$TMP_INSTALL_HOME/.juggernaut" status --short)" ]]; then
   shopt -s nullglob
