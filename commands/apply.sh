@@ -80,8 +80,10 @@ _apply_acquire_key() {
 
   if [[ ! -t 0 ]]; then
     value="$(cat)" || return 1
-    value="${value%$'\n'}"
-    value="${value%$'\r'}"
+    # Strip all trailing CR/LF — handles printf, echo, and here-string sources.
+    while [[ "${value: -1}" == $'\n' || "${value: -1}" == $'\r' ]]; do
+      value="${value%?}"
+    done
     printf '%s' "$value"
     return 0
   fi

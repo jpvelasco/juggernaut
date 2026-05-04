@@ -147,12 +147,6 @@ The key is stored in the OS keychain (`juggernaut-bedrock` target) on macOS/Wind
 
 > **Paste truncation note:** On Linux/macOS under tmux, screen, or SSH, pasting into `read -s` prompts can silently truncate the key. The piped form avoids this entirely. Juggernaut rejects keys under 40 characters with an error that steers you to the pipe form.
 
-**Bedrock API key (inline — CI/CD only):**
-
-```bash
-juggernaut apply --auth=bedrock-api-key --bedrock-key=br-xxxxxxxxxxxx
-```
-
 | Type | Duration | Use Case |
 |------|----------|----------|
 | Short-term | Up to 12 hours | Production (recommended) |
