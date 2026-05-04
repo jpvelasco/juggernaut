@@ -35,22 +35,22 @@ The installer is a **destructive wipe-and-reinstall**: it strips any legacy Jugg
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.sh | bash -s -- --version v3.0.4
 ```
 
 ```powershell
-# Windows PowerShell (5.1 or 7)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2
+# Windows PowerShell (5.1 or 7) — Defender-friendly (see README for AMSI note)
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.4; Remove-Item $p
 ```
 
 Preview the wipe without writing anything:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.sh | bash -s -- --version v3.0.4 --dry-run
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2 -DryRun
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.4 -DryRun; Remove-Item $p
 ```
 
 ### 4. Configure

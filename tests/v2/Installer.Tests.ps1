@@ -94,7 +94,7 @@ Describe 'install.ps1 v3 wipe-and-reinstall' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('Set-ExecutionPolicy RemoteSigned -Scope CurrentUser'))
     }
 
-    It 'rejects pipe-to-iex invocation with safer scriptblock guidance' {
+    It 'rejects pipe-to-iex invocation and recommends download-then-run form' {
         $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)
         if (-not $pwsh) { $pwsh = Get-Command powershell -ErrorAction Stop }
         $installerPath = Join-Path $script:RepoRoot 'install.ps1'
@@ -105,7 +105,9 @@ Describe 'install.ps1 v3 wipe-and-reinstall' {
         $output = & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 1
         $output | Should -Match ([regex]::Escape('cannot be run with'))
-        $output | Should -Match ([regex]::Escape('[scriptblock]::Create'))
+        $output | Should -Match '-OutFile'
+        $output | Should -Match 'Unblock-File'
+        $output | Should -Not -Match ([regex]::Escape('[scriptblock]::Create'))
     }
 
     It 'supports installing an explicit branch or ref for PR testing' {

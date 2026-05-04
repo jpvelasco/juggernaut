@@ -58,30 +58,32 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 **Pin a release tag for reproducible installs.**
 
+> **Windows Defender / AMSI note:** earlier versions advertised `& ([scriptblock]::Create((irm ...)))`. Defender's fileless-malware heuristics flag that pattern regardless of script content. v3.0.4 switches to a download-then-run one-liner — `irm -OutFile`, `Unblock-File`, then execute the file on disk. Same one-line UX; matches Microsoft's own pattern for `dotnet-install.ps1`.
+
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.sh | bash -s -- --version v3.0.4
 ```
 
 ```powershell
-# Windows PowerShell (5.1 or 7)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2
+# Windows PowerShell (5.1 or 7) — Defender-friendly download-then-run
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.4; Remove-Item $p
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.sh | bash -s -- --version v3.0.2 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.sh | bash -s -- --version v3.0.4 --dry-run
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.2/install.ps1))) -Version v3.0.2 -DryRun
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.4/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.4 -DryRun; Remove-Item $p
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.0.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.0.4 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
