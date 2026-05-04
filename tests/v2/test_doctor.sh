@@ -247,7 +247,7 @@ mv "$tmp_json" "$POISON_HOME/.claude/settings.json"
 OUTPUT="$(HOME="$POISON_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
 if [[ "$OUTPUT" == *'Top-level model: WARN'* &&
       "$OUTPUT" == *'"opusplan" is not a Bedrock model ID'* &&
-      "$OUTPUT" == *"Fix"*"juggernaut apply"* ]]; then
+      "$OUTPUT" == *"Fix: run: juggernaut apply"* ]]; then
   pass
 else
   fail "expected top-level .model=opusplan to warn with fix hint"
