@@ -172,6 +172,17 @@ function Write-DoctorMantle {
     }
 }
 
+function Write-DoctorTopLevelModel {
+    param([Parameter(Mandatory)]$Settings)
+    $topModel = Get-DoctorProp -Object $Settings -Name 'model'
+    if ($topModel -eq 'opusplan') {
+        $script:DoctorWarns += 1
+        Write-Output 'Top-level model: WARN ("opusplan" is not a Bedrock model ID)'
+        Write-Output 'Details: Claude Code will send this to Bedrock and hang on retries'
+        Write-Output 'Fix: run: juggernaut apply'
+    }
+}
+
 function Write-DoctorOpusplan {
     param([Parameter(Mandatory)]$Settings, [Parameter(Mandatory)]$Block)
     $opusplanOn = [bool](Get-DoctorNestedProp -Object $Settings -Path @('juggernaut','opusplan'))

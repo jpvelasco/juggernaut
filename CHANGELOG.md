@@ -2,6 +2,18 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.5] - 2026-05-03
+
+**Patch release.** Adds a `juggernaut doctor` check that detects when Claude Code's `/model` UI has poisoned the top-level `.model` field with `"opusplan"`, causing infinite Bedrock retries.
+
+### Added
+
+- **`juggernaut doctor` detects `opusplan` poisoning of top-level `.model`.** Claude Code's `/model` UI can write the literal string `"opusplan"` into the top-level `.model` field of `settings.json`. Claude Code then sends that string to Bedrock as a model ID; Bedrock rejects it and Claude Code retries on a fixed schedule, hanging every session. Doctor now surfaces a `WARN` in the "Region & Models" section when `top-level .model == "opusplan"` and points at `juggernaut apply` as the repair. `opusplan` is a routing mode for `env.ANTHROPIC_MODEL` and belongs only there — never in top-level `.model`.
+
+### Notes
+
+- `juggernaut apply` already repairs the poisoned state idempotently (`config_merge_juggernaut_block` rewrites top-level `.model` from the stored block on every run). No apply-side change was needed; the gap was purely that doctor did not surface the broken state.
+
 ## [3.0.4] - 2026-05-04
 
 **Patch release.** Fixes Windows installer one-liner triggering Microsoft Defender's AMSI fileless-malware heuristics.

@@ -146,6 +146,42 @@ Describe 'doctor.ps1' {
         It 'reports AWS_BEARER_TOKEN_BEDROCK source' { $script:output | Should -Match 'Source: AWS_BEARER_TOKEN_BEDROCK' }
     }
 
+    Context 'top-level .model poisoning' {
+        BeforeAll {
+            $script:tmpHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-doc-poison-" + [Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path (Join-Path $script:tmpHome '.claude') -Force | Out-Null
+            $script:oldHome = $env:HOME; $script:oldProfile = $env:USERPROFILE
+            $script:oldBedrock = $env:BEDROCK_CONFIG_PATH
+            $env:HOME = $script:tmpHome; $env:USERPROFILE = $script:tmpHome
+            $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:AWS_PROFILE = 'juggernaut-pester-iam'
+
+            $block = New-JuggernautBlock -AuthMode 'iam' -AuthValidated $true `
+                -Region 'us-west-2' -Storage 'profile' -UseMantle $false `
+                -Version $script:ExpectedVersion `
+                -BedrockConfigPath $script:BedrockConfigPath
+            $native = Get-NativeKeysFromJuggernautBlock -Block $block
+            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys $native
+            $script:settingsPath = Join-Path $script:tmpHome '.claude\settings.json'
+            Write-SettingsAtomic -Path $script:settingsPath -Content $merged
+
+            # Tamper: overwrite top-level .model with the literal "opusplan".
+            $json = Get-Content $script:settingsPath -Raw | ConvertFrom-Json
+            $json.model = 'opusplan'
+            $json | ConvertTo-Json -Depth 20 | Set-Content -Path $script:settingsPath -Encoding utf8
+
+            $script:output = & (Join-Path $script:repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
+        }
+        AfterAll {
+            $env:HOME = $script:oldHome; $env:USERPROFILE = $script:oldProfile
+            $env:BEDROCK_CONFIG_PATH = $script:oldBedrock
+            Remove-Item -Recurse -Force $script:tmpHome -ErrorAction SilentlyContinue
+        }
+        It 'emits Top-level model WARN'          { $script:output | Should -Match 'Top-level model: WARN' }
+        It 'explains opusplan is not a model ID' { $script:output | Should -Match 'not a Bedrock model ID' }
+        It 'points at juggernaut apply as fix'   { $script:output | Should -Match 'juggernaut apply' }
+    }
+
     Context 'help and unknown flags' {
         It '--help exits cleanly and mentions v3' {
             $out = & (Join-Path $script:repoRoot 'commands\doctor.ps1') --help 2>&1 | Out-String
