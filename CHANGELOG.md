@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.6] - 2026-05-04
+
+**Patch release.** Fixes the `opusplan` repair path and hardens Bedrock API key entry across Windows, macOS, and Linux.
+
+### Fixed
+
+- **`opusplan` is preserved as a routing mode, not persisted as a model ID.** If Claude Code writes `"opusplan"` into a model field, `juggernaut apply` now translates that state into `juggernaut.opusplan = true` and `env.ANTHROPIC_MODEL = "opusplan"` while restoring top-level `.model` and `juggernaut.model` to a real Bedrock model ID. Explicit `--model=opusplan` / `-Model opusplan` is rejected with a clear error.
+- **Long Bedrock API key paste path is hardened.** Bash now uses Readline for the normal interactive paste prompt, and PowerShell uses `[Console]::ReadLine()` instead of `Read-Host`. Optional clipboard input is available when terminal paste is unreliable.
+- **Settings writes are more robust.** Backup creation failures now warn and continue, while PowerShell atomic write failures are treated as real failures instead of reporting false success.
+
 ## [3.0.5] - 2026-05-03
 
 **Patch release.** Adds a `juggernaut doctor` check that detects when Claude Code's `/model` UI has poisoned the top-level `.model` field with `"opusplan"`, causing infinite Bedrock retries.
