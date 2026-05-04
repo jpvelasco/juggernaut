@@ -118,6 +118,7 @@ if ($checkSettings -and (Test-HasJuggernautBlock -Settings $checkSettings)) {
     Write-Output ''
     Write-Output 'Region & Models'
     Write-DoctorRegionModels -Block $checkBlock
+    Write-DoctorTopLevelModel -Settings $checkSettings
 
     # -- Mantle -----------------------------------------------------------------
     Write-Output ''

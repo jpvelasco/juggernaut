@@ -230,6 +230,45 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Top-level .model poisoning (opusplan in wrong place)
+# ---------------------------------------------------------------------------
+section "top-level .model='opusplan' → WARN + fix hint (independent of block.opusplan)"
+POISON_HOME="$(mktemp -d)"
+mkdir -p "$POISON_HOME/.claude"
+POISON_BLOCK="$(J_AUTH_MODE=iam J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=false J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+  J_AUTH_VALIDATED=true \
+  schema_new_juggernaut_block)"
+config_write_atomic "$POISON_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$POISON_BLOCK" "$(schema_derive_native_keys "$POISON_BLOCK")")"
+tmp_json="$POISON_HOME/.claude/settings.json.tmp"
+jq '.model = "opusplan"' "$POISON_HOME/.claude/settings.json" > "$tmp_json"
+mv "$tmp_json" "$POISON_HOME/.claude/settings.json"
+OUTPUT="$(HOME="$POISON_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *'Top-level model: WARN'* &&
+      "$OUTPUT" == *'"opusplan" is not a Bedrock model ID'* &&
+      "$OUTPUT" == *"Fix"*"juggernaut apply"* ]]; then
+  pass
+else
+  fail "expected top-level .model=opusplan to warn with fix hint"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$POISON_HOME"
+
+section "top-level .model healthy (bedrock ID) → no top-level warning"
+CLEAN_HOME="$(mktemp -d)"
+mkdir -p "$CLEAN_HOME/.claude"
+write_scope_settings user "$CLEAN_HOME/.claude/settings.json" us-west-2
+OUTPUT="$(HOME="$CLEAN_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" != *"Top-level model: WARN"* ]]; then
+  pass
+else
+  fail "healthy top-level .model should not trigger the poisoning warning"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$CLEAN_HOME"
+
+# ---------------------------------------------------------------------------
 # --help / --version
 # ---------------------------------------------------------------------------
 section "doctor --help exits 0 and mentions v3"

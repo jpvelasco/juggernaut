@@ -184,6 +184,18 @@ doctor_mantle() {
   fi
 }
 
+doctor_top_level_model() {
+  local settings="$1"
+  local settings_model
+  settings_model="$(jq -r '.model // ""' <<<"$settings")"
+  if [[ "$settings_model" == "opusplan" ]]; then
+    DOCTOR_WARNS=$((DOCTOR_WARNS + 1))
+    doctor_kv "Top-level model" 'WARN ("opusplan" is not a Bedrock model ID)'
+    doctor_kv "Details" "Claude Code will send this to Bedrock and hang on retries"
+    doctor_kv "Fix" "run: juggernaut apply"
+  fi
+}
+
 doctor_opusplan() {
   local settings="$1" block="$2"
   local opusplan_on settings_model env_model

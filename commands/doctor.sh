@@ -121,6 +121,7 @@ if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; 
   # ── Region & Models ──────────────────────────────────────────────────────────
   doctor_section "Region & Models"
   doctor_region_models "$check_block"
+  doctor_top_level_model "$check_settings"
 
   # ── Mantle ───────────────────────────────────────────────────────────────────
   doctor_section "Mantle"
