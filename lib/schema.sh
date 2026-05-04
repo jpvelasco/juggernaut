@@ -19,6 +19,7 @@ schema_require_jq() {
 schema_require_jq || exit 1
 
 schema_default_region() { echo "us-east-1"; }
+schema_default_model() { echo "global.anthropic.claude-sonnet-4-6"; }
 
 schema_supported_regions() {
   jq -r '.regions[]' "${BEDROCK_CONFIG_PATH:-bedrock-config.json}"
@@ -61,6 +62,9 @@ schema_new_juggernaut_block() {
   local use_mantle="${J_USE_MANTLE:-true}"
   local mantle_base_url="${J_MANTLE_BASE_URL:-}"
   local model="${J_MODEL:-global.anthropic.claude-sonnet-4-6}"
+  if [[ -z "$model" || "$model" == "opusplan" ]]; then
+    model="$(schema_default_model)"
+  fi
   local opus_model="${J_OPUS_MODEL:-global.anthropic.claude-opus-4-7}"
   local sonnet_model="${J_SONNET_MODEL:-global.anthropic.claude-sonnet-4-6}"
   local haiku_model="${J_HAIKU_MODEL:-global.anthropic.claude-haiku-4-5-20251001-v1:0}"
@@ -196,6 +200,12 @@ schema_validate() {
     profile|keychain|dpapi) ;;
     *) errors+="  - auth.storage must be 'profile', 'keychain', or 'dpapi' (got: '$storage')"$'\n' ;;
   esac
+
+  local model
+  model="$(echo "$block" | jq -r '.model // ""')"
+  if [[ "$model" == "opusplan" ]]; then
+    errors+="  - model must be a Bedrock model ID; 'opusplan' is a routing mode for env.ANTHROPIC_MODEL only"$'\n'
+  fi
 
   # Enum: effortLevel
   local effort

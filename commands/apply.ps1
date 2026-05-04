@@ -4,6 +4,7 @@
 param(
     [string]$Auth          = '',
     [string]$BedrockKey    = '',
+    [switch]$BedrockKeyFromClipboard,
     [switch]$PreserveKey,
     [string]$Storage       = '',
     [string]$Region        = '',
@@ -47,6 +48,8 @@ Usage: juggernaut.ps1 apply [options]
 
   -Auth             iam|bedrock-api-key  (required on first run)
   -BedrockKey       Bedrock API key (prompts if omitted)
+  -BedrockKeyFromClipboard
+                   Read Bedrock API key from the system clipboard
                    Pipe it in: $env:KEY | juggernaut apply ...
   -PreserveKey      Reuse existing key from env/keychain
   -Storage          profile|keychain|dpapi (auto switches to dpapi on Windows when key > 1280 chars)
@@ -67,6 +70,7 @@ Usage: juggernaut.ps1 apply [options]
 
 $authExplicit = $PSBoundParameters.ContainsKey('Auth')
 $storageExplicit = $PSBoundParameters.ContainsKey('Storage')
+$noOpusPlanExplicit = $PSBoundParameters.ContainsKey('NoOpusPlan')
 if ($Auth -eq 'api-key') { $Auth = 'bedrock-api-key' }
 $HomeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
 
@@ -117,6 +121,26 @@ if ($existingBlock) {
         if ($existingBlock.context.use1MContext) { $Use1MContext = $true } else { $No1MContext = $true }
     }
     if (-not $MantleUrl -and $existingBlock.mantle.baseUrl) { $MantleUrl = $existingBlock.mantle.baseUrl }
+}
+
+$existingTopModel = if ($existingSettings.Contains('model')) { $existingSettings['model'] } else { '' }
+$existingEnvModel = if ($existingSettings.Contains('env') -and $existingSettings['env'] -and $existingSettings['env'].Contains('ANTHROPIC_MODEL')) {
+    $existingSettings['env']['ANTHROPIC_MODEL']
+} else {
+    ''
+}
+$poisonedOpusPlanMode = ($Model -eq 'opusplan' -or $existingTopModel -eq 'opusplan' -or $existingEnvModel -eq 'opusplan')
+if ($poisonedOpusPlanMode -and -not $OpusPlan -and -not $noOpusPlanExplicit) {
+    $OpusPlan = $true
+    $NoOpusPlan = $false
+}
+
+if ($Model -eq 'opusplan') {
+    if ($PSBoundParameters.ContainsKey('Model')) {
+        Write-Error "apply: -Model cannot be 'opusplan'; use -OpusPlan for that routing mode"
+        exit 1
+    }
+    $Model = ''
 }
 
 # ---------------------------------------------------------------------------
@@ -191,6 +215,7 @@ if (-not $SkipPreflight -and $Auth -eq 'iam') {
 # ---------------------------------------------------------------------------
 # Step 5: Resolve API key.
 # ---------------------------------------------------------------------------
+$preservedStorage = ''
 if ($Auth -eq 'bedrock-api-key') {
     if ($PreserveKey) {
         if ($env:AWS_BEARER_TOKEN_BEDROCK) {
@@ -200,12 +225,26 @@ if ($Auth -eq 'bedrock-api-key') {
             $probe = $null
             try { $probe = Read-BearerToken }
             catch { Write-Warning "apply: secure-storage read failed: $_"; $probe = $null }
-            if ($probe -and $probe.Value) { $BedrockKey = $probe.Value } elseif ($probe -and $probe.Error) {
+            if ($probe -and $probe.Value) {
+                $BedrockKey = $probe.Value
+                $preservedStorage = $probe.Storage
+                if ($preservedStorage -in 'keychain','dpapi') { $Storage = $preservedStorage }
+            } elseif ($probe -and $probe.Error) {
                 Write-Warning "apply: secure-storage read failed: $($probe.Error)"
             }
         }
         if (-not $BedrockKey) {
             Write-Error 'apply: -PreserveKey specified but no existing key found in env, keychain, or DPAPI'; exit 1
+        }
+    }
+    if (-not $BedrockKey) {
+        if ($BedrockKeyFromClipboard) {
+            try {
+                $BedrockKey = (Get-Clipboard -Raw -ErrorAction Stop).Trim()
+            } catch {
+                Write-Error "apply: failed to read Bedrock API key from clipboard: $_"
+                exit 1
+            }
         }
     }
     if (-not $BedrockKey) {
@@ -226,7 +265,7 @@ if ($Auth -eq 'bedrock-api-key') {
             Write-Host 'Paste your Bedrock API key, then press Enter.'
             Write-Host '(Tip: you can also pipe it in: $env:KEY | juggernaut apply ...)'
             Write-Host -NoNewline '> '
-            $BedrockKey = (Read-Host).Trim()
+            $BedrockKey = ([Console]::ReadLine()).Trim()
             if (-not $BedrockKey) {
                 Write-Error 'apply: API key cannot be empty. Pass -BedrockKey KEY, or pipe it: $env:KEY | juggernaut apply ...'
                 exit 1
@@ -240,6 +279,8 @@ if ($Auth -eq 'bedrock-api-key') {
     if ($Storage -in 'keychain','dpapi') {
         if ($DryRun) {
             Write-Host '[dry-run] would store API key in system keychain or DPAPI file'
+        } elseif ($PreserveKey -and $preservedStorage -in 'keychain','dpapi') {
+            $Storage = $preservedStorage
         } else {
             $mode = if ($Storage -eq 'dpapi') { 'dpapi' } else { 'auto' }
             if ($mode -eq 'auto' -and (Get-KeychainOS) -eq 'windows' -and $BedrockKey.Length -gt 1280) {

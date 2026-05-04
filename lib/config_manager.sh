@@ -194,8 +194,7 @@ _config_write_atomic_locked() {
 
   if [[ -f "$path" ]]; then
     if ! config_backup "$path" >/dev/null; then
-      echo "_config_write_atomic_locked: backup failed for $path" >&2
-      return 1
+      echo "_config_write_atomic_locked: warning: backup failed for $path; continuing" >&2
     fi
   fi
 
