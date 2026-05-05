@@ -99,6 +99,19 @@ doctor_credentials() {
         probe_value=""
       fi
     fi
+    if [[ -z "$probe_value" ]]; then
+      probe_value="$({ profile_token_get; printf '\x1e%s' "$?"; } 2>&1)"
+      probe_rc="${probe_value##*$'\x1e'}"
+      probe_value="${probe_value%$'\x1e'*}"
+      if [[ "$probe_rc" -eq 0 && -n "$probe_value" ]]; then
+        probe_source="profile token file"
+      elif [[ "$probe_rc" -ne 0 && "$probe_rc" -ne 1 ]]; then
+        probe_error="${probe_value%$'\n'}"
+        probe_value=""
+      else
+        probe_value=""
+      fi
+    fi
     probe_error="${probe_error%$'\n'}"
   fi
   case "$auth_mode" in
@@ -134,7 +147,7 @@ doctor_credentials() {
           doctor_kv "Keychain/DPAPI" "WARN ($probe_error)"
         fi
         doctor_fail
-        doctor_kv "Details" "no API key found in env, keychain, or DPAPI file"
+        doctor_kv "Details" "no API key found in env, keychain, DPAPI file, or profile token file"
       fi
       ;;
     *)

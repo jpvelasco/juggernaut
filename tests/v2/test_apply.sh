@@ -198,11 +198,15 @@ _clean_env
 FAKE_HOME="$(mktemp -d)"
 FAKE_KEY="$(printf 'A%.0s' {1..110})"
 OUTPUT="$(printf '%s' "$FAKE_KEY" | BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  XDG_CONFIG_HOME="$FAKE_HOME/.config" \
   bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key --storage=profile 2>&1)"
 RC=$?
 if [[ "$RC" -eq 0 ]]; then pass; else fail "piped stdin should exit 0 (got $RC); output: $OUTPUT"; fi
 SETTINGS="$FAKE_HOME/.claude/settings.json"
 if jq -e '.juggernaut.auth.mode == "bedrock-api-key"' "$SETTINGS" >/dev/null 2>&1; then pass; else fail "settings.json missing bedrock-api-key block after piped key"; fi
+TOKEN_FILE="$FAKE_HOME/.config/juggernaut/bearer-token"
+if [[ "$(cat "$TOKEN_FILE" 2>/dev/null)" == "$FAKE_KEY" ]]; then pass
+else fail "profile storage should write the piped key to $TOKEN_FILE"; fi
 rm -rf "$FAKE_HOME"
 
 # ---------------------------------------------------------------------------
@@ -219,6 +223,7 @@ printf '%s\n' '$FAKE_KEY'
 EOF
 chmod +x "$STUB_DIR/pbpaste"
 OUTPUT="$(PATH="$STUB_DIR:$PATH" BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  XDG_CONFIG_HOME="$FAKE_HOME/.config" \
   bash "$REPO_ROOT/commands/apply.sh" --auth=bedrock-api-key --storage=profile --bedrock-key-from-clipboard 2>&1)"
 RC=$?
 if [[ "$RC" -eq 0 ]]; then pass; else fail "clipboard key input should exit 0 (got $RC); output: $OUTPUT"; fi

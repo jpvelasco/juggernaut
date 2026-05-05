@@ -186,6 +186,46 @@ dpapi_path() {
   printf '%s/.juggernaut/bearer-token.dpapi.bin' "$root"
 }
 
+profile_token_path() {
+  if [[ -n "${JUGGERNAUT_PROFILE_TOKEN_PATH:-}" ]]; then
+    printf '%s' "$JUGGERNAUT_PROFILE_TOKEN_PATH"
+    return 0
+  fi
+  local config_root="${XDG_CONFIG_HOME:-$HOME/.config}"
+  printf '%s/juggernaut/bearer-token' "$config_root"
+}
+
+profile_token_store() {
+  local key="$1" file dir tmp
+  file="$(profile_token_path)"
+  dir="$(dirname "$file")"
+  mkdir -p "$dir"
+  chmod 700 "$dir" 2>/dev/null || true
+  tmp="$(mktemp "${file}.tmp.XXXXXX")"
+  printf '%s' "$key" > "$tmp"
+  chmod 600 "$tmp" 2>/dev/null || true
+  mv "$tmp" "$file"
+}
+
+profile_token_get() {
+  local file value
+  file="$(profile_token_path)"
+  [[ -f "$file" ]] || return 1
+  if ! value="$(cat "$file" 2>/dev/null)"; then
+    echo "profile_token_get: failed to read $file" >&2
+    return 2
+  fi
+  [[ -n "$value" ]] || return 1
+  printf '%s' "$value"
+}
+
+profile_token_delete() {
+  local file
+  file="$(profile_token_path)"
+  [[ -f "$file" ]] && rm -f -- "$file"
+  return 0
+}
+
 # dpapi_get - read the DPAPI-encrypted bearer token on Windows shells.
 # Used by the Juggernaut launcher for keys larger than CredMan's ~1280-char cap.
 # Exit codes:
@@ -239,7 +279,7 @@ dpapi_delete() {
 }
 
 # bearer_token_get - launcher-facing read. Tries DPAPI first (Windows long-key
-# case), then falls through to keychain_get. Same exit codes as keychain_get.
+# case), then keychain, then profile token storage.
 bearer_token_get() {
   local v rc
   v="$(dpapi_get 2>/dev/null)"
@@ -248,11 +288,18 @@ bearer_token_get() {
     printf '%s' "$v"
     return 0
   fi
-  keychain_get
+  v="$(keychain_get 2>/dev/null)"
+  rc=$?
+  if [[ "$rc" -eq 0 && -n "$v" ]]; then
+    printf '%s' "$v"
+    return 0
+  fi
+  profile_token_get
 }
 
-# bearer_token_delete - remove both storage backends (launcher/uninstall).
+# bearer_token_delete - remove all storage backends (launcher/uninstall).
 bearer_token_delete() {
   keychain_delete
   dpapi_delete
+  profile_token_delete
 }

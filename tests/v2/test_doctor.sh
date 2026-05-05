@@ -52,7 +52,7 @@ ERR_BLOCK="$(
 )"
 OUTPUT="$(doctor_credentials "$ERR_BLOCK" 2>&1)"
 if [[ "$OUTPUT" == *"Keychain/DPAPI: WARN (simulated keychain failure)"* &&
-      "$OUTPUT" == *"Details: no API key found in env, keychain, or DPAPI file"* ]]; then
+      "$OUTPUT" == *"Details: no API key found in env, keychain, DPAPI file, or profile token file"* ]]; then
   pass
 else
   fail "expected visible keychain read failure"
@@ -157,6 +157,30 @@ if [[ "$OUTPUT" == *"Auth: Bedrock API key"* &&
   pass
 else
   fail "expected bearer-token credentials output"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$API_HOME"
+
+# ---------------------------------------------------------------------------
+# Bedrock API-key auth: Linux profile token storage detected
+# ---------------------------------------------------------------------------
+section "bedrock API-key auth reports profile token source"
+API_HOME="$(mktemp -d)"
+mkdir -p "$API_HOME/.claude" "$API_HOME/.config/juggernaut"
+API_BLOCK="$(J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+  J_AUTH_VALIDATED=true \
+  schema_new_juggernaut_block)"
+config_write_atomic "$API_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$API_BLOCK" "$(schema_derive_native_keys "$API_BLOCK")")"
+printf 'br-profile-token' > "$API_HOME/.config/juggernaut/bearer-token"
+OUTPUT="$(HOME="$API_HOME" XDG_CONFIG_HOME="$API_HOME/.config" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"Auth: Bedrock API key"* &&
+      "$OUTPUT" == *"Source: profile token file"* &&
+      "$OUTPUT" == *"Status: OK"* ]]; then
+  pass
+else
+  fail "expected profile-token credentials output"
   printf '%s\n' "$OUTPUT" >&2
 fi
 rm -rf "$API_HOME"
