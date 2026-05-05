@@ -340,3 +340,48 @@ Describe 'apply.ps1 — piped stdin key capture' -Skip:(-not (Get-Command pwsh -
         $out | Should -Match 'truncated'
     }
 }
+
+Describe 'apply.ps1 — profile token storage persistence' -Skip:(-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    BeforeEach {
+        $script:fakeHome = Join-Path ([IO.Path]::GetTempPath()) "juggernaut-apply-pf-$([guid]::NewGuid().Guid)"
+        New-Item -ItemType Directory -Force -Path $script:fakeHome | Out-Null
+    }
+    AfterEach {
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $script:fakeHome
+    }
+
+    It '-Storage profile persists the key to the profile token file' {
+        $fakeKey = 'C' * 110
+        $applyScript = Join-Path $script:repoRoot 'commands\apply.ps1'
+        $null = $fakeKey | pwsh -NoProfile -NonInteractive -Command "
+            `$env:HOME = '$($script:fakeHome -replace "'","''")';
+            `$env:USERPROFILE = `$env:HOME;
+            `$env:BEDROCK_CONFIG_PATH = '$($script:BedrockConfigPath -replace "'","''")';
+            `$env:JUGGERNAUT_KEYCHAIN_SERVICE = 'juggernaut-absent-profile-test';
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue;
+            Remove-Item Env:\AWS_PROFILE -ErrorAction SilentlyContinue;
+            & '$($applyScript -replace "'","''")' -Auth bedrock-api-key -Storage profile
+        " 2>&1
+        $LASTEXITCODE | Should -Be 0
+        $settingsPath = Join-Path $script:fakeHome '.claude\settings.json'
+        Test-Path $settingsPath | Should -BeTrue
+        $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $s.juggernaut.auth.mode | Should -Be 'bedrock-api-key'
+        $s.juggernaut.auth.storage | Should -Be 'profile'
+        # Verify the token was written to the profile token file
+        $profileDir = Join-Path $script:fakeHome '.config\juggernaut'
+        $profileFile = Join-Path $profileDir 'bearer-token'
+        if (Test-Path $profileFile) {
+            $stored = Get-Content $profileFile -Raw
+            $stored | Should -Be $fakeKey
+        } else {
+            # On Windows profile path is ~\.config\juggernaut\bearer-token
+            # which is under $env:HOME\.config
+            $altProfileDir = Join-Path $script:fakeHome '.config\juggernaut'
+            $altProfileFile = Join-Path $altProfileDir 'bearer-token'
+            Test-Path $altProfileFile | Should -BeTrue
+            $stored = Get-Content $altProfileFile -Raw
+            $stored | Should -Be $fakeKey
+        }
+    }
+}

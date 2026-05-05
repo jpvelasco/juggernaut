@@ -189,4 +189,57 @@ Describe 'doctor.ps1' {
             $out | Should -Not -Match 'JUGGERNAUT_USE_V2'
         }
     }
+
+    Context 'bedrock-api-key with profile token storage detected by doctor' {
+        BeforeAll {
+            $script:tmpHome2 = Join-Path ([IO.Path]::GetTempPath()) ("jug-doc-prof-" + [Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path (Join-Path $script:tmpHome2 '.claude') -Force | Out-Null
+            $script:oldHome2 = $env:HOME; $script:oldProfile2 = $env:USERPROFILE
+            $script:oldBedrock2 = $env:BEDROCK_CONFIG_PATH
+            $script:oldBearer2 = $env:AWS_BEARER_TOKEN_BEDROCK
+            $script:oldKeychainService2 = $env:JUGGERNAUT_KEYCHAIN_SERVICE
+            $script:oldProfileTokenPath = $env:JUGGERNAUT_PROFILE_TOKEN_PATH
+
+            $env:HOME = $script:tmpHome2; $env:USERPROFILE = $script:tmpHome2
+            $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:JUGGERNAUT_KEYCHAIN_SERVICE = "juggernaut-absent-docprof-$([Guid]::NewGuid().ToString('N'))"
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
+
+            # Write profile token directly
+            $profFile = Join-Path $script:tmpHome2 '.config\juggernaut\bearer-token'
+            New-Item -ItemType Directory -Path (Split-Path -Parent $profFile) -Force | Out-Null
+            'sk-brk-doctor-profile-test' | Set-Content -Path $profFile -Encoding utf8 -NoNewline
+            $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $profFile
+
+            $block = New-JuggernautBlock -AuthMode 'bedrock-api-key' -AuthValidated $true `
+                -Region 'us-west-2' -Storage 'profile' -UseMantle $true `
+                -Version $script:ExpectedVersion `
+                -BedrockConfigPath $script:BedrockConfigPath
+            $native = Get-NativeKeysFromJuggernautBlock -Block $block
+            $merged = Merge-JuggernautBlock -Existing ([ordered]@{}) -NewBlock $block -NativeKeys $native
+            Write-SettingsAtomic -Path (Join-Path $script:tmpHome2 '.claude\settings.json') -Content $merged
+
+            $script:profOutput = & (Join-Path $script:repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
+        }
+        AfterAll {
+            $env:HOME = $script:oldHome2; $env:USERPROFILE = $script:oldProfile2
+            $env:BEDROCK_CONFIG_PATH = $script:oldBedrock2
+            $env:AWS_BEARER_TOKEN_BEDROCK = $script:oldBearer2
+            if ($null -eq $script:oldKeychainService2) {
+                Remove-Item Env:\JUGGERNAUT_KEYCHAIN_SERVICE -ErrorAction SilentlyContinue
+            } else {
+                $env:JUGGERNAUT_KEYCHAIN_SERVICE = $script:oldKeychainService2
+            }
+            if ($null -eq $script:oldProfileTokenPath) {
+                Remove-Item Env:\JUGGERNAUT_PROFILE_TOKEN_PATH -ErrorAction SilentlyContinue
+            } else {
+                $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $script:oldProfileTokenPath
+            }
+            Remove-Item -Recurse -Force $script:tmpHome2 -ErrorAction SilentlyContinue
+        }
+
+        It 'reports Bedrock API key auth' { $script:profOutput | Should -Match 'Auth: Bedrock API key' }
+        It 'reports profile token file as source' { $script:profOutput | Should -Match 'profile token file' }
+        It 'reports Storage: profile' { $script:profOutput | Should -Match 'Storage: profile' }
+    }
 }

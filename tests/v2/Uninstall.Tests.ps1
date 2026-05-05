@@ -170,4 +170,58 @@ Describe 'uninstall.ps1 (v3)' {
         $out | Should -Match '-DryRun'
         $out | Should -Not -Match 'LegacyV1'
     }
+
+    It 'removes profile token file when present' {
+        $d = New-TestDirs
+        try {
+            Write-TestSettings (Join-Path $d.Home '.claude\settings.json')
+            # Create a profile token file
+            $profDir = Join-Path $d.Home '.config\juggernaut'
+            $profFile = Join-Path $profDir 'bearer-token'
+            New-Item -ItemType Directory -Path $profDir -Force | Out-Null
+            'sk-brk-uninstall-prof' | Set-Content -Path $profFile -Encoding utf8 -NoNewline
+            Test-Path $profFile | Should -BeTrue
+
+            # Override the profile token path
+            $oldProfileTokenPath = $env:JUGGERNAUT_PROFILE_TOKEN_PATH
+            $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $profFile
+            try {
+                $r = Invoke-Uninstall $d @{ Force = $true }
+                $r.Output | Should -Match 'profile token file'
+                Test-Path $profFile | Should -BeFalse
+            } finally {
+                if ($null -eq $oldProfileTokenPath) {
+                    Remove-Item Env:\JUGGERNAUT_PROFILE_TOKEN_PATH -ErrorAction SilentlyContinue
+                } else {
+                    $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $oldProfileTokenPath
+                }
+            }
+        } finally { Remove-TestDirs $d }
+    }
+
+    It 'dry-run with profile token shows it but leaves file intact' {
+        $d = New-TestDirs
+        try {
+            Write-TestSettings (Join-Path $d.Home '.claude\settings.json')
+            $profDir = Join-Path $d.Home '.config\juggernaut'
+            $profFile = Join-Path $profDir 'bearer-token'
+            New-Item -ItemType Directory -Path $profDir -Force | Out-Null
+            'sk-brk-dry-prof' | Set-Content -Path $profFile -Encoding utf8 -NoNewline
+
+            $oldProfileTokenPath = $env:JUGGERNAUT_PROFILE_TOKEN_PATH
+            $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $profFile
+            try {
+                $r = Invoke-Uninstall $d @{ DryRun = $true }
+                $r.Output | Should -Match '\[dry-run\]'
+                $r.Output | Should -Match 'profile token file'
+                Test-Path $profFile | Should -BeTrue
+            } finally {
+                if ($null -eq $oldProfileTokenPath) {
+                    Remove-Item Env:\JUGGERNAUT_PROFILE_TOKEN_PATH -ErrorAction SilentlyContinue
+                } else {
+                    $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $oldProfileTokenPath
+                }
+            }
+        } finally { Remove-TestDirs $d }
+    }
 }
