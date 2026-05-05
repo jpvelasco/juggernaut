@@ -3,12 +3,12 @@
 #
 # Usage (download-then-run — Defender-friendly, no [scriptblock]::Create):
 #   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Latest; Remove-Item $p
-#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.7/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.7; Remove-Item $p
+#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.8/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.8; Remove-Item $p
 #   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/my-branch/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Ref my-branch; Remove-Item $p
-#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.7/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.7 -DryRun; Remove-Item $p
+#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.8/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.8 -DryRun; Remove-Item $p
 #
 # Or after downloading:
-#   .\install.ps1 -Version v3.0.7
+#   .\install.ps1 -Version v3.0.8
 #   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest -DryRun
 #
@@ -62,7 +62,7 @@ instead (one line, paste-safe, Defender-friendly):
   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Latest; Remove-Item $p
 
 For a pinned release, swap `main` for the tag and add -Version:
-  $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.7/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.7; Remove-Item $p
+  $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.0.8/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.0.8; Remove-Item $p
 '@
     exit 1
 }

@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.0.8] - 2026-05-04
+
+**Patch release.** Fixes Linux Bedrock API-key profile storage.
+
+### Fixed
+
+- **Linux `apply --auth=bedrock-api-key` now persists profile-storage keys.** The Bash apply path writes profile-storage keys to a per-user token file and the launcher/doctor paths read that same file.
+- **`juggernaut doctor` now recognizes Linux profile token storage.** Bedrock API-key configs no longer report a missing key immediately after a successful Linux apply.
+- **Installer and uninstall cleanup include the profile token file.** Wipe/reinstall and uninstall remove stale Linux profile-storage tokens.
+
 ## [3.0.7] - 2026-05-04
 
 **Patch release.** Suppresses Git's detached-HEAD advisory during pinned release installs.

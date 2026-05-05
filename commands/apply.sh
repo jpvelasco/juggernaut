@@ -351,17 +351,17 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
     if [[ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ]]; then
       J_API_KEY="$AWS_BEARER_TOKEN_BEDROCK"
     fi
-    if [[ -z "$J_API_KEY" ]] && keychain_available 2>/dev/null; then
-      _kc_val="$(keychain_get 2>&1)"
+    if [[ -z "$J_API_KEY" ]]; then
+      _kc_val="$(bearer_token_get 2>&1)"
       _kc_rc=$?
       case "$_kc_rc" in
         0) J_API_KEY="$_kc_val" ;;
         1) : ;;
-        *) echo "apply: warning — keychain read failed: $_kc_val" >&2 ;;
+        *) echo "apply: warning — secure storage read failed: $_kc_val" >&2 ;;
       esac
     fi
     if [[ -z "$J_API_KEY" ]]; then
-      echo "apply: --preserve-key specified but no existing key found in env or keychain" >&2
+      echo "apply: --preserve-key specified but no existing key found in env, keychain, DPAPI, or profile storage" >&2
       exit 1
     fi
   fi
@@ -411,6 +411,13 @@ if [[ "$J_AUTH_MODE" == "bedrock-api-key" ]]; then
       fi
       echo "apply: warning — failed to store API key in keychain; falling back to profile storage" >&2
       J_STORAGE="profile"
+    fi
+  fi
+  if [[ "$J_STORAGE" == "profile" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "[dry-run] would store API key in profile token file"
+    else
+      profile_token_store "$J_API_KEY"
     fi
   fi
 fi

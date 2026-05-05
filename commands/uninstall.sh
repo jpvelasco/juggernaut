@@ -84,6 +84,10 @@ case "$(keychain_detect_os)" in
     ;;
 esac
 
+has_profile_token=false
+profile_token_file="$(profile_token_path)"
+[[ -f "$profile_token_file" ]] && has_profile_token=true
+
 _launcher_profile_candidates() {
   printf '%s\n' "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"
 }
@@ -114,6 +118,7 @@ has_legacy_symlink=false
 
 if [[ "$has_user" == "false" && "$has_project" == "false" \
       && "$has_keychain" == "false" && "$has_dpapi" == "false" \
+      && "$has_profile_token" == "false" \
       && "$has_launcher" == "false" && "$has_legacy_symlink" == "false" ]]; then
   echo "Nothing to uninstall."
   exit 0
@@ -128,6 +133,7 @@ if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
   [[ "$has_project" == "true" ]] && printf '  - Juggernaut block from %s\n' "$project_path"
   [[ "$has_keychain" == "true" ]] && printf '  - Keychain entry: %s/%s\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
   [[ "$has_dpapi" == "true" ]]    && printf '  - DPAPI file: %s\n' "$dpapi_file"
+  [[ "$has_profile_token" == "true" ]] && printf '  - Profile token file: %s\n' "$profile_token_file"
   for _lp in "${launcher_profiles[@]+"${launcher_profiles[@]}"}"; do
     printf '  - Launcher block from %s\n' "$_lp"
   done
@@ -178,6 +184,15 @@ if [[ "$has_dpapi" == "true" ]]; then
   else
     dpapi_delete
     printf 'Removed DPAPI file: %s\n' "$dpapi_file"
+  fi
+fi
+
+if [[ "$has_profile_token" == "true" ]]; then
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '[dry-run] Would remove profile token file: %s\n' "$profile_token_file"
+  else
+    profile_token_delete
+    printf 'Removed profile token file: %s\n' "$profile_token_file"
   fi
 fi
 

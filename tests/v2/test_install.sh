@@ -115,9 +115,11 @@ rm -rf "$DRY_HOME"
 section "full install wipes profile block and settings.json juggernaut key, does not auto-apply"
 WIPE_HOME="$(mktemp -d)"
 mkdir -p "$WIPE_HOME/.claude"
+mkdir -p "$WIPE_HOME/.config/juggernaut"
 printf '{"juggernaut":{"meta":{"managedBy":"juggernaut"}},"permissions":{"allow":["Bash"]}}\n' > "$WIPE_HOME/.claude/settings.json"
 printf '# keep this\n# BEGIN: Juggernaut\nexport FOO=1\n# END: Juggernaut\n# keep that\n' > "$WIPE_HOME/.bashrc"
-OUT="$(HOME="$WIPE_HOME" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$WIPE_HOME/.juggernaut" \
+printf 'br-profile-token' > "$WIPE_HOME/.config/juggernaut/bearer-token"
+OUT="$(HOME="$WIPE_HOME" XDG_CONFIG_HOME="$WIPE_HOME/.config" JUGGERNAUT_REPO_URL="$TMP_REMOTE/repo.git" JUGGERNAUT_DIR="$WIPE_HOME/.juggernaut" \
   bash "$REPO_ROOT/install.sh" --version v9.9.9 2>&1)"
 RC=$?
 if [[ "$RC" -eq 0 && -d "$WIPE_HOME/.juggernaut" ]]; then pass
@@ -150,6 +152,8 @@ fi
 # Post-install message tells user to run apply explicitly.
 if [[ "$OUT" == *"juggernaut apply --auth=iam"* && "$OUT" == *"No configuration has been written"* ]]; then pass
 else fail "install should tell user to run apply explicitly"; fi
+if [[ ! -f "$WIPE_HOME/.config/juggernaut/bearer-token" ]]; then pass
+else fail "install wipe should remove profile token file"; fi
 
 rm -rf "$WIPE_HOME"
 

@@ -18,6 +18,7 @@ TMP_WORK="$(mktemp -d)"
 mkdir -p "$TMP_HOME/.claude" "$TMP_WORK/.claude"
 
 export HOME="$TMP_HOME"
+export XDG_CONFIG_HOME="$TMP_HOME/.config"
 export BEDROCK_CONFIG_PATH="$REPO_ROOT/bedrock-config.json"
 export SHELL="/bin/bash"
 export JUGGERNAUT_NO_TTY_PROMPTS=1
@@ -136,6 +137,16 @@ section "idempotent: second call is a no-op"
 output="$(run_uninstall --force 2>&1)"; rc=$?
 if [[ $rc -eq 0 && "$output" == *"Nothing to uninstall"* ]]; then pass
 else fail "second uninstall not idempotent (rc=$rc): $output"; fi
+
+# ---------------------------------------------------------------------------
+# Profile token file is removed
+# ---------------------------------------------------------------------------
+section "removes profile token file"
+mkdir -p "$TMP_HOME/.config/juggernaut"
+printf 'br-profile-token' > "$TMP_HOME/.config/juggernaut/bearer-token"
+output="$(run_uninstall --force 2>&1)"; rc=$?
+if [[ $rc -eq 0 && "$output" == *"Removed profile token file"* && ! -f "$TMP_HOME/.config/juggernaut/bearer-token" ]]; then pass
+else fail "profile token file should be removed (rc=$rc): $output"; fi
 
 # ---------------------------------------------------------------------------
 # Invalid scope rejected

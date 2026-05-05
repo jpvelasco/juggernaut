@@ -3,12 +3,12 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.7
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.0.8
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version v3.0.7
+#   bash install.sh --version v3.0.8
 #   bash install.sh --ref fix-branch
 #   bash install.sh --latest --dry-run
 #
@@ -106,6 +106,7 @@ fi
 # ---------------------------------------------------------------------------
 SETTINGS_PATH="$HOME/.claude/settings.json"
 KEYCHAIN_SERVICE_NAME="juggernaut-bedrock"
+PROFILE_TOKEN_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/juggernaut/bearer-token"
 
 # Shell profile candidates (must stay in sync with lib/profile_paths.sh)
 PROFILE_CANDIDATES=(
@@ -164,6 +165,9 @@ settings_has_juggernaut && STRIP_SETTINGS=1
 STRIP_KEYCHAIN=0
 keychain_has_entry && STRIP_KEYCHAIN=1
 
+STRIP_PROFILE_TOKEN=0
+[[ -f "$PROFILE_TOKEN_PATH" ]] && STRIP_PROFILE_TOKEN=1
+
 echo "Juggernaut installer - wipe-and-reinstall"
 echo ""
 echo "Pre-wipe summary:"
@@ -183,6 +187,11 @@ if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
   echo "  - remove OS-keychain entry '$KEYCHAIN_SERVICE_NAME'"
 else
   echo "  - keychain: no '$KEYCHAIN_SERVICE_NAME' entry found"
+fi
+if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
+  echo "  - remove profile token file $PROFILE_TOKEN_PATH"
+else
+  echo "  - profile token: no token file found"
 fi
 echo ""
 
@@ -234,6 +243,11 @@ if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
       cmdkey.exe /delete:"$KEYCHAIN_SERVICE_NAME" >/dev/null 2>&1 || true ;;
   esac
   echo "Removed keychain entry: $KEYCHAIN_SERVICE_NAME"
+fi
+
+if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
+  rm -f -- "$PROFILE_TOKEN_PATH"
+  echo "Removed profile token file: $PROFILE_TOKEN_PATH"
 fi
 
 # ---------------------------------------------------------------------------
