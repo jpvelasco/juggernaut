@@ -206,6 +206,67 @@ public static extern bool CredDelete(string target, int type, int flags);
 }
 
 # ---------------------------------------------------------------------------
+# Profile token storage — cross-platform plaintext file at
+# XDG_CONFIG_HOME/juggernaut/bearer-token (or ~/.config/juggernaut/bearer-token).
+# Mirrors Bash's profile_token_path / profile_token_store / profile_token_get /
+# profile_token_delete. Test override via JUGGERNAUT_PROFILE_TOKEN_PATH.
+# ---------------------------------------------------------------------------
+
+function Get-ProfileTokenPath {
+    if ($env:JUGGERNAUT_PROFILE_TOKEN_PATH) { return $env:JUGGERNAUT_PROFILE_TOKEN_PATH }
+    $configRoot = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME }
+                 elseif ($env:HOME)         { Join-Path $env:HOME '.config' }
+                 elseif ($env:USERPROFILE)  { Join-Path $env:USERPROFILE '.config' }
+                 else                       { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.config' }
+    return Join-Path (Join-Path $configRoot 'juggernaut') 'bearer-token'
+}
+
+function Set-ProfileTokenEntry {
+    param([Parameter(Mandatory)][string]$Key)
+    $path = Get-ProfileTokenPath
+    $dir  = Split-Path -Parent $path
+    try {
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $tmp = Join-Path $dir (".bearer-token.tmp.{0}" -f [Guid]::NewGuid().ToString('N'))
+        try {
+            [IO.File]::WriteAllText($tmp, $Key, [Text.UTF8Encoding]::new($false))
+            $chmod = Get-Command chmod -ErrorAction SilentlyContinue
+            if ($chmod) { & $chmod.Source 600 -- $tmp 2>$null }
+            Move-Item -Path $tmp -Destination $path -Force
+        } catch {
+            if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+            Write-Warning "Set-ProfileTokenEntry: write failed: $_"
+            return $false
+        }
+        return $true
+    } catch {
+        Write-Warning "Set-ProfileTokenEntry: mkdir failed: $_"
+        return $false
+    }
+}
+
+function Get-ProfileTokenEntry {
+    $path = Get-ProfileTokenPath
+    if (-not (Test-Path $path)) { return $null }
+    try {
+        $val = [IO.File]::ReadAllText($path).Trim()
+        if ([string]::IsNullOrEmpty($val)) { return $null }
+        return $val
+    } catch {
+        throw "Get-ProfileTokenEntry: failed to read $path : $_"
+    }
+}
+
+function Remove-ProfileTokenEntry {
+    $path = Get-ProfileTokenPath
+    if (Test-Path $path) {
+        try { Remove-Item -Path $path -Force -ErrorAction Stop } catch {
+            Write-Warning "Remove-ProfileTokenEntry: delete failed: $_"
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # DPAPI-backed storage (Windows only). Used when a Bedrock API key exceeds
 # the Credential Manager CredWrite blob cap (~1280 unicode chars / 2560 bytes).
 # The DPAPI ciphertext only decrypts under the same Windows user account.
@@ -305,9 +366,16 @@ function Save-BearerToken {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Key,
-        [ValidateSet('auto','keychain','dpapi')][string]$Mode = 'auto'
+        [ValidateSet('auto','keychain','dpapi','profile')][string]$Mode = 'auto'
     )
     $os = Get-KeychainOS
+    # profile: always write to profile token file regardless of platform.
+    if ($Mode -eq 'profile') {
+        if (Set-ProfileTokenEntry -Key $Key) {
+            return @{ Ok = $true; Storage = 'profile'; Error = '' }
+        }
+        return @{ Ok = $false; Storage = 'none'; Error = 'profile token write failed' }
+    }
     # Non-Windows: CredMan is 'keychain' (macOS Keychain, secret-tool). No DPAPI.
     if ($os -ne 'windows') {
         if ($Mode -eq 'dpapi') {
@@ -357,8 +425,8 @@ function Save-BearerToken {
 
 function Read-BearerToken {
     # Return shape matches Save-BearerToken: { Value; Storage; Error }.
-    # On Windows: DPAPI file first (no P/Invoke cost), then CredMan.
-    # On Unix: keychain (secret-tool / security) only.
+    # On Windows: DPAPI file first (no P/Invoke cost), then CredMan, then profile.
+    # On Unix: keychain (secret-tool / security), then profile.
     $os = Get-KeychainOS
     if ($os -eq 'windows') {
         try {
@@ -378,6 +446,14 @@ function Read-BearerToken {
     } catch {
         return @{ Value = $null; Storage = 'keychain'; Error = "$_" }
     }
+    try {
+        $v = Get-ProfileTokenEntry
+        if (-not [string]::IsNullOrEmpty($v)) {
+            return @{ Value = $v; Storage = 'profile'; Error = '' }
+        }
+    } catch {
+        return @{ Value = $null; Storage = 'profile'; Error = "$_" }
+    }
     return @{ Value = $null; Storage = 'none'; Error = '' }
 }
 
@@ -386,4 +462,5 @@ function Remove-BearerToken {
     if ((Get-KeychainOS) -eq 'windows') {
         Remove-DPAPIEntry
     }
+    Remove-ProfileTokenEntry
 }

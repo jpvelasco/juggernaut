@@ -93,6 +93,10 @@ if ((Get-KeychainOS) -eq 'windows') {
     if (Test-Path $dpapiPath) { $hasDpapi = $true }
 }
 
+$hasProfileToken = $false
+$profileTokenPath = Get-ProfileTokenPath
+if (Test-Path $profileTokenPath) { $hasProfileToken = $true }
+
 function Get-LauncherProfileTargets {
     $targets = @()
     try {
@@ -120,7 +124,7 @@ function Test-ProfileHasLauncherBlock([string]$Path) {
 $launcherProfiles = @(Get-LauncherProfileTargets | Where-Object { Test-ProfileHasLauncherBlock $_ })
 $hasLauncher = $launcherProfiles.Count -gt 0
 
-if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasLauncher)) {
+if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasProfileToken -or $hasLauncher)) {
     Write-Output 'Nothing to uninstall.'
     exit 0
 }
@@ -130,10 +134,11 @@ if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasLaunch
 # ---------------------------------------------------------------------------
 if (-not $Force -and -not $DryRun) {
     Write-Output 'The following will be removed:'
-    if ($hasUser)    { Write-Output "  - Juggernaut block from $userPath" }
-    if ($hasProject) { Write-Output "  - Juggernaut block from $projectPath" }
-    if ($hasKeychain) { Write-Output "  - Keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
-    if ($hasDpapi)    { Write-Output "  - DPAPI file: $dpapiPath" }
+    if ($hasUser)        { Write-Output "  - Juggernaut block from $userPath" }
+    if ($hasProject)     { Write-Output "  - Juggernaut block from $projectPath" }
+    if ($hasKeychain)    { Write-Output "  - Keychain entry: $($script:KeychainService)/$($script:KeychainAccount)" }
+    if ($hasDpapi)       { Write-Output "  - DPAPI file: $dpapiPath" }
+    if ($hasProfileToken) { Write-Output "  - Profile token file: $profileTokenPath" }
     foreach ($lp in $launcherProfiles) { Write-Output "  - Launcher block from $lp" }
     Write-Output ''
     $answer = Read-Host 'Proceed? [y/N]'
@@ -165,6 +170,10 @@ if ($hasKeychain) {
 if ($hasDpapi) {
     if ($DryRun) { Write-Output "[dry-run] Would remove DPAPI file: $dpapiPath" }
     else         { Remove-DPAPIEntry; Write-Output "Removed DPAPI file: $dpapiPath" }
+}
+if ($hasProfileToken) {
+    if ($DryRun) { Write-Output "[dry-run] Would remove profile token file: $profileTokenPath" }
+    else         { Remove-ProfileTokenEntry; Write-Output "Removed profile token file: $profileTokenPath" }
 }
 
 function Remove-LauncherProfileBlock([string]$Path) {

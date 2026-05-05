@@ -70,7 +70,7 @@ function Write-DoctorCredentials {
     if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
     $read = $null
     $readError = ''
-    if ($authMode -eq 'bedrock-api-key' -and $storage -in 'keychain','dpapi') {
+    if ($authMode -eq 'bedrock-api-key') {
         try { $read = Read-BearerToken } catch { $readError = "$_"; $read = $null }
         if (-not $read.Value -and $read.Error) { $readError = $read.Error; $read = $null }
     }
@@ -100,8 +100,9 @@ function Write-DoctorCredentials {
                 Write-Output 'Source: AWS_BEARER_TOKEN_BEDROCK'
                 Write-Output 'Status: OK'
             } elseif ($read -and $read.Value) {
-                $label = if ($read.Storage -eq 'dpapi') { 'DPAPI file' }
+                $label = if ($read.Storage -eq 'dpapi')  { 'DPAPI file' }
                          elseif ($read.Storage -eq 'keychain') { 'system keychain' }
+                         elseif ($read.Storage -eq 'profile') { 'profile token file' }
                          else { $read.Storage }
                 Write-Output ("Source: {0}" -f $label)
                 Write-Output ("Storage: {0}" -f $read.Storage)
@@ -113,7 +114,7 @@ function Write-DoctorCredentials {
                 }
                 $script:DoctorFails += 1
                 Write-Output 'Status: FAIL'
-                Write-Output 'Details: no API key found in env, keychain, or DPAPI file'
+                Write-Output 'Details: no API key found in env, keychain, DPAPI file, or profile token file'
             }
         }
         default {

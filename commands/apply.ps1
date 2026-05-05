@@ -228,13 +228,13 @@ if ($Auth -eq 'bedrock-api-key') {
             if ($probe -and $probe.Value) {
                 $BedrockKey = $probe.Value
                 $preservedStorage = $probe.Storage
-                if ($preservedStorage -in 'keychain','dpapi') { $Storage = $preservedStorage }
+                if ($preservedStorage -in 'keychain','dpapi','profile') { $Storage = $preservedStorage }
             } elseif ($probe -and $probe.Error) {
                 Write-Warning "apply: secure-storage read failed: $($probe.Error)"
             }
         }
         if (-not $BedrockKey) {
-            Write-Error 'apply: -PreserveKey specified but no existing key found in env, keychain, or DPAPI'; exit 1
+            Write-Error 'apply: -PreserveKey specified but no existing key found in env, keychain, DPAPI, or profile storage'; exit 1
         }
     }
     if (-not $BedrockKey) {
@@ -296,13 +296,27 @@ if ($Auth -eq 'bedrock-api-key') {
                 }
                 Write-Host ''
                 Write-Host '[apply] WARNING: secure storage failed - Claude Code will hang without'  -ForegroundColor Yellow
-                Write-Host '[apply] a token source. Falling back to profile (env-var-only, no persistence).' -ForegroundColor Yellow
+                Write-Host '[apply] a token source. Falling back to profile token storage.'          -ForegroundColor Yellow
                 Write-Host ("[apply] Details: {0}" -f $result.Error)                                   -ForegroundColor Yellow
                 Write-Host '[apply] Workaround: export AWS_BEARER_TOKEN_BEDROCK yourself, or use'     -ForegroundColor Yellow
                 Write-Host '[apply] -Auth iam with AWS SSO/IAM credentials.'                          -ForegroundColor Yellow
                 Write-Host ''
                 $Storage = 'profile'
             }
+        }
+    }
+    if ($Storage -eq 'profile') {
+        if ($PreserveKey -and $preservedStorage -eq 'profile') {
+            # Key already in profile file from a previous run.
+        } elseif ($DryRun) {
+            Write-Host '[dry-run] would store API key in profile token file'
+        } else {
+            $result = Save-BearerToken -Key $BedrockKey -Mode 'profile'
+            if (-not $result.Ok) {
+                Write-Error ("apply: profile token write failed: {0}" -f $result.Error)
+                exit 1
+            }
+            $Storage = 'profile'
         }
     }
 }
