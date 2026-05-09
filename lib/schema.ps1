@@ -63,7 +63,7 @@ function New-JuggernautBlock {
         [string]$Region = '',
         [ValidateSet('both','settings-only','shell-only')][string]$ShellFallbackMode = 'settings-only',
         [ValidateSet('user','project')][string]$Scope = 'user',
-        [string]$Version = '3.0.8',
+        [string]$Version = '3.1.0',
         [string]$BedrockConfigPath
     )
 

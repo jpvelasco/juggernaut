@@ -2,6 +2,26 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.1.0] - 2026-05-09
+
+**Feature release.** Adds first-class full uninstall support.
+
+### New Features
+
+- **Full uninstall support.** Added `juggernaut uninstall --full` (and `-Full` on PowerShell) to completely remove Juggernaut, including the command launcher/shims (`~/.local/bin/juggernaut`, `juggernaut.cmd`, `juggernaut.ps1`) and install directory (`~/.juggernaut` or custom `JUGGERNAUT_DIR`).
+- **Non-interactive full removal.** Added `--yes` / `-Yes` for confirmed, non-interactive full removal.
+- **Full-removal previews.** Added `--full --dry-run` to preview exactly what will be deleted before removing files.
+
+### Documentation
+
+- **Uninstall docs refreshed.** Reworked the README uninstall section with clearer guidance and platform-specific full removal instructions for macOS, Linux/WSL/Git Bash, and Windows PowerShell.
+- **Shell cleanup covered.** Added fish shell cleanup steps and guidance for already-loaded `claude`/`juggernaut` shell state.
+- **Risk and behavior clarified.** Added a permanent deletion warning and clarified the difference between configuration cleanup and full removal.
+
+### Other
+
+- **Installer full-wipe path documented.** Re-running the installer remains the easiest full-wipe path for most users because it performs a destructive wipe before reinstalling.
+
 ## [3.0.8] - 2026-05-04
 
 **Patch release.** Fixes Linux Bedrock API-key profile storage.
