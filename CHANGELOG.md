@@ -2,6 +2,18 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.1.1] - 2026-05-09
+
+**Patch release.** Fixes stale `doctor` remediation text after the v3 auth gate.
+
+### Fixed
+
+- **`juggernaut doctor` now prints explicit auth commands on failure.** Fresh installs no longer tell users to run bare `juggernaut apply`, which now intentionally rejects missing credentials on first run. The PowerShell and Bash doctor summaries now point at `juggernaut apply -Auth iam` and `juggernaut apply -Auth bedrock-api-key` / `--auth=...` instead.
+
+### Verification
+
+- **Doctor regression coverage added.** PowerShell and Bash tests now cover the fresh-install no-config case that surfaced the stale remediation.
+
 ## [3.1.0] - 2026-05-09
 
 **Feature release.** Adds first-class full uninstall support.
