@@ -75,17 +75,16 @@ doctor_credentials() {
     # Probe in configured-storage-first order so the label reflects the source
     # the launcher will actually use. For profile storage, try the profile token
     # first before falling through to DPAPI/keychain.
-    local dpapi_out dpapi_rc probe_order
+    local dpapi_out dpapi_rc
+    local -a probe_order
     if [[ "$storage" == "profile" ]]; then
-      probe_order="profile dpapi keychain"
-    elif [[ "$storage" == "dpapi" ]]; then
-      probe_order="dpapi keychain profile"
+      probe_order=(profile dpapi keychain)
     else
-      probe_order="dpapi keychain profile"
+      probe_order=(dpapi keychain profile)
     fi
 
     local _step
-    for _step in $probe_order; do
+    for _step in "${probe_order[@]}"; do
       [[ -n "$probe_value" ]] && break
       case "$_step" in
         dpapi)

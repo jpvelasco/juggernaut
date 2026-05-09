@@ -344,14 +344,15 @@ LSRC_BLOCK="$(J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_ST
   schema_new_juggernaut_block)"
 config_write_atomic "$LSRC_HOME/.claude/settings.json" \
   "$(config_merge_juggernaut_block '{}' "$LSRC_BLOCK" "$(schema_derive_native_keys "$LSRC_BLOCK")")"
+# Install the launcher marker so doctor_launcher enters the installed-launcher path.
 echo '# BEGIN: Juggernaut Launcher' >> "$LSRC_HOME/.bashrc"
 echo '# END: Juggernaut Launcher'   >> "$LSRC_HOME/.bashrc"
-OUTPUT="$(AWS_BEARER_TOKEN_BEDROCK=fake HOME="$LSRC_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
-if [[ "$OUTPUT" == *"system keychain via launcher function"* ]] || \
-   [[ "$OUTPUT" == *"AWS_BEARER_TOKEN_BEDROCK already in env"* ]]; then
+# Run without AWS_BEARER_TOKEN_BEDROCK so the launcher path (not env-token path) fires.
+OUTPUT="$(HOME="$LSRC_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"system keychain via launcher function"* ]]; then
   pass
 else
-  fail "expected 'system keychain via launcher function' or env-token source"
+  fail "expected 'system keychain via launcher function' in launcher source label"
   printf '%s\n' "$OUTPUT" >&2
 fi
 rm -rf "$LSRC_HOME"
