@@ -84,6 +84,44 @@ Describe 'uninstall.ps1 (v3)' {
         } finally { Remove-TestDirs $d }
     }
 
+    It '-Full dry-run shows command shims and install tree without removing them' {
+        $d = New-TestDirs
+        try {
+            $shimDir = Join-Path $d.Home '.local\bin'
+            New-Item -ItemType Directory -Path $shimDir -Force | Out-Null
+            $shim = Join-Path $shimDir 'juggernaut.cmd'
+            'echo juggernaut' | Set-Content -Path $shim -Encoding ascii
+            $installDir = Join-Path $d.Home '.juggernaut'
+            New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+
+            $r = Invoke-Uninstall $d @{ Full = $true; DryRun = $true }
+            $r.Output | Should -Match '\[dry-run\] Would remove Juggernaut command shim'
+            $r.Output | Should -Match '\[dry-run\] Would remove Juggernaut install directory'
+            $r.Output | Should -Match 'No files were changed'
+            Test-Path $shim | Should -BeTrue
+            Test-Path $installDir | Should -BeTrue
+        } finally { Remove-TestDirs $d }
+    }
+
+    It '-Full -Yes removes command shims and install tree' {
+        $d = New-TestDirs
+        try {
+            $shimDir = Join-Path $d.Home '.local\bin'
+            New-Item -ItemType Directory -Path $shimDir -Force | Out-Null
+            $shim = Join-Path $shimDir 'juggernaut.cmd'
+            'echo juggernaut' | Set-Content -Path $shim -Encoding ascii
+            $installDir = Join-Path $d.Home '.juggernaut'
+            New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+
+            $r = Invoke-Uninstall $d @{ Full = $true; Yes = $true }
+            $r.Output | Should -Match 'Removed Juggernaut command shim'
+            $r.Output | Should -Match 'Removed Juggernaut install directory'
+            $r.Output | Should -Match 'Full uninstall complete'
+            Test-Path $shim | Should -BeFalse
+            Test-Path $installDir | Should -BeFalse
+        } finally { Remove-TestDirs $d }
+    }
+
     It 'removes juggernaut block and preserves unrelated keys' {
         $d = New-TestDirs
         try {
@@ -168,6 +206,8 @@ Describe 'uninstall.ps1 (v3)' {
         $out = & $script:UninstallScript -Help 2>&1 | Out-String
         $out | Should -Match '-Scope'
         $out | Should -Match '-DryRun'
+        $out | Should -Match '-Full'
+        $out | Should -Match '-Yes'
         $out | Should -Not -Match 'LegacyV1'
     }
 

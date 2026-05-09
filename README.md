@@ -367,11 +367,14 @@ If you manually set `AWS_BEARER_TOKEN_BEDROCK` in your own shell profile and it 
 
 ## Uninstall
 
+### Remove Juggernaut configuration
+
 ```bash
 # Preview what will be removed
 juggernaut uninstall --dry-run
 
-# Remove the Juggernaut block from settings.json (all scopes) and the bearer token storage
+# Remove the Juggernaut block from settings.json, bearer token storage,
+# and the Claude launcher shell/profile block
 juggernaut uninstall
 
 # Limit to one scope
@@ -379,7 +382,71 @@ juggernaut uninstall --scope=user
 juggernaut uninstall --scope=project
 ```
 
-`juggernaut uninstall` removes the `juggernaut` key from settings.json and deletes the bearer token storage entry (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux). It does not touch shell profiles (v3 never writes to them). For a full filesystem-level wipe — including any legacy profile blocks left over from older versions — re-run `install.sh` / `install.ps1`; the installer runs its destructive wipe before every install.
+"juggernaut uninstall" removes the "juggernaut" key from settings.json, deletes the bearer token storage entry (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux), removes the Juggernaut "claude" launcher block from shell profiles, and removes the legacy "~/.local/bin/claude" symlink if present. It intentionally leaves the "juggernaut" command launcher and install directory in place so you can reconfigure later.
+
+### Fully remove Juggernaut
+
+> Warning: This will permanently delete your Juggernaut installation, all stored tokens, and configuration. This action cannot be undone.
+
+For most users, re-running the installer is still the easiest full-wipe path: the installer performs a destructive wipe before reinstalling. Use "juggernaut uninstall --full" only when you want Juggernaut removed from the machine instead of reinstalled.
+
+macOS:
+
+```bash
+juggernaut uninstall --full --dry-run
+juggernaut uninstall --full --yes
+
+# Clear the current shell's command cache. Start a new terminal if "claude"
+# or "juggernaut" was already loaded in this shell.
+hash -r 2>/dev/null || true
+unset -f claude 2>/dev/null || true
+unfunction claude 2>/dev/null || true
+functions -e claude 2>/dev/null || true
+
+# Optional sanity checks: these should print nothing for Juggernaut.
+command -v juggernaut || true
+type claude
+```
+
+Linux, WSL, and Git Bash:
+
+```bash
+juggernaut uninstall --full --dry-run
+juggernaut uninstall --full --yes
+
+# Clear the current shell's command cache. Start a new terminal if "claude"
+# or "juggernaut" was already loaded in this shell.
+hash -r 2>/dev/null || true
+unset -f claude 2>/dev/null || true
+unfunction claude 2>/dev/null || true
+functions -e claude 2>/dev/null || true
+
+# Optional sanity checks: these should print nothing for Juggernaut.
+command -v juggernaut || true
+type claude
+```
+
+Windows PowerShell:
+
+```powershell
+juggernaut uninstall --full --dry-run
+juggernaut uninstall --full --yes
+
+# Start a new PowerShell session if "claude" or "juggernaut" was already loaded.
+
+# Optional sanity checks: these should not point at Juggernaut.
+Get-Command juggernaut -ErrorAction SilentlyContinue
+Get-Command claude -All
+```
+
+If "Get-Command claude -All" still shows a PowerShell "Function" named "claude",
+open a new PowerShell session. If it still appears after that, remove the
+"# BEGIN: Juggernaut Launcher" block from your PowerShell profile and restart
+PowerShell.
+
+If you installed with "JUGGERNAUT_DIR", full uninstall removes that custom install directory instead of "$HOME/.juggernaut" / "$HOME\.juggernaut".
+
+The installer does not modify your PATH. If you manually added "~/.local/bin" (or equivalent) only for Juggernaut, remove that entry from your shell profile after deletion.
 
 After uninstalling, Claude Code will prompt you to log in with your Anthropic account.
 
