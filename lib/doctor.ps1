@@ -71,7 +71,7 @@ function Write-DoctorCredentials {
     $read = $null
     $readError = ''
     if ($authMode -eq 'bedrock-api-key') {
-        try { $read = Read-BearerToken } catch { $readError = "$_"; $read = $null }
+        try { $read = Read-BearerToken -PreferredStorage $storage } catch { $readError = "$_"; $read = $null }
         if (-not $read.Value -and $read.Error) { $readError = $read.Error; $read = $null }
     }
     switch ($authMode) {
@@ -264,9 +264,9 @@ function Write-DoctorLauncher {
     $launcher = Test-LauncherInstalled
     if ($launcher.Installed) {
         $sourceLabel = switch ($storage) {
-            'dpapi'   { 'DPAPI file via launcher' }
-            'profile' { 'profile token file via launcher' }
-            default   { 'system keychain via launcher' }
+            'dpapi'   { 'DPAPI file via launcher function' }
+            'profile' { 'profile token file via launcher function' }
+            default   { 'system keychain via launcher function' }
         }
         Write-Output 'Status: OK'
         Write-Output ('Launcher: {0}' -f (Show-DoctorHomePath $launcher.Path))
