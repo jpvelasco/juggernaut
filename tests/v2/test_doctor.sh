@@ -140,6 +140,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Fresh install guidance must use explicit auth mode.
+# ---------------------------------------------------------------------------
+section "fresh install without config recommends explicit auth mode"
+NO_CONFIG_HOME="$(mktemp -d)"
+mkdir -p "$NO_CONFIG_HOME/.claude"
+printf '{}\n' > "$NO_CONFIG_HOME/.claude/settings.json"
+OUTPUT="$(HOME="$NO_CONFIG_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" != *"Run 'juggernaut apply'"* &&
+      "$OUTPUT" == *"juggernaut apply --auth=iam"* &&
+      "$OUTPUT" == *"juggernaut apply --auth=bedrock-api-key"* ]]; then
+  pass
+else
+  fail "expected doctor to recommend explicit apply auth modes"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$NO_CONFIG_HOME"
+
+# ---------------------------------------------------------------------------
 # Bedrock API-key auth: bearer-token source detected
 # ---------------------------------------------------------------------------
 section "bedrock API-key auth reports bearer-token source"

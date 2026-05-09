@@ -182,6 +182,29 @@ Describe 'doctor.ps1' {
         It 'points at juggernaut apply as fix'   { $script:output | Should -Match 'juggernaut apply' }
     }
 
+    Context 'fresh install with no Juggernaut config' {
+        BeforeAll {
+            $script:tmpNoConfigHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-doc-empty-" + [Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path (Join-Path $script:tmpNoConfigHome '.claude') -Force | Out-Null
+            $script:oldNoConfigHome = $env:HOME
+            $script:oldNoConfigProfile = $env:USERPROFILE
+            $env:HOME = $script:tmpNoConfigHome
+            $env:USERPROFILE = $script:tmpNoConfigHome
+
+            '{}' | Set-Content -Path (Join-Path $script:tmpNoConfigHome '.claude\settings.json') -Encoding utf8
+            $script:noConfigOutput = & (Join-Path $script:repoRoot 'commands\doctor.ps1') 2>&1 | Out-String
+        }
+        AfterAll {
+            $env:HOME = $script:oldNoConfigHome
+            $env:USERPROFILE = $script:oldNoConfigProfile
+            Remove-Item -Recurse -Force $script:tmpNoConfigHome -ErrorAction SilentlyContinue
+        }
+
+        It 'does not recommend bare apply' { $script:noConfigOutput | Should -Not -Match "Run 'juggernaut apply'" }
+        It 'recommends explicit IAM auth' { $script:noConfigOutput | Should -Match 'juggernaut apply -Auth iam' }
+        It 'recommends explicit Bedrock API key auth' { $script:noConfigOutput | Should -Match 'juggernaut apply -Auth bedrock-api-key' }
+    }
+
     Context 'help and unknown flags' {
         It '--help exits cleanly and mentions v3' {
             $out = & (Join-Path $script:repoRoot 'commands\doctor.ps1') --help 2>&1 | Out-String

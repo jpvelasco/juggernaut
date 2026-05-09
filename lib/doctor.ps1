@@ -281,7 +281,9 @@ function Write-DoctorSummary {
     if ($script:DoctorFails -gt 0) {
         Write-Output 'Status: FAIL'
         Write-Output ('{0} failure(s), {1} warning(s)' -f $script:DoctorFails, $script:DoctorWarns)
-        Write-Output "Run 'juggernaut apply' to fix configuration issues."
+        Write-Output 'Run one of these to configure Juggernaut:'
+        Write-Output '  juggernaut apply -Auth iam'
+        Write-Output '  juggernaut apply -Auth bedrock-api-key'
         return
     }
     if ($script:DoctorWarns -gt 0) {

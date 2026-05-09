@@ -294,7 +294,9 @@ doctor_summary() {
   if (( DOCTOR_FAILS > 0 )); then
     printf 'Status: FAIL\n'
     printf '%d failure(s), %d warning(s)\n' "$DOCTOR_FAILS" "$DOCTOR_WARNS"
-    echo "Run 'juggernaut apply' to fix configuration issues."
+    echo "Run one of these to configure Juggernaut:"
+    echo "  juggernaut apply --auth=iam"
+    echo "  juggernaut apply --auth=bedrock-api-key"
     return 1
   fi
   if (( DOCTOR_WARNS > 0 )); then
