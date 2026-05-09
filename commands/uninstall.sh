@@ -9,31 +9,45 @@ export BEDROCK_CONFIG_PATH
 
 DRY_RUN=false
 FORCE=false
+FULL=false
+YES=false
 REQUESTED_SCOPE=""
 
 for arg in "$@"; do
   case "$arg" in
     --dry-run)    DRY_RUN=true ;;
     --force|-f)   FORCE=true ;;
+    --full)       FULL=true ;;
+    --yes|-y)     YES=true; FORCE=true ;;
     --scope=*)    REQUESTED_SCOPE="${arg#--scope=}" ;;
     --version|-v) cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"; exit 0 ;;
     --help|-h)
       cat <<'EOF'
 juggernaut uninstall - remove Juggernaut configuration
 
-Usage: juggernaut uninstall [--scope=user|project] [--dry-run] [--force]
+Usage:
+  juggernaut uninstall [--scope=user|project] [--dry-run] [--force]
+  juggernaut uninstall --full [--dry-run] [--yes]
 
 Options:
   --scope=user|project  Limit removal to one scope (default: all scopes with a block)
   --dry-run             Preview changes without writing files
   --force, -f           Skip confirmation prompt
+  --full                Also remove the Juggernaut command launcher and install tree
+  --yes, -y             Confirm full removal without prompting
 
 Removes the Juggernaut block from settings.json, the keychain entry, and
 the Claude launcher function block from shell profiles (~/.bashrc,
 ~/.zshrc, ~/.profile). Also removes a legacy ~/.local/bin/claude symlink
 from earlier launcher iterations if present. Does not strip legacy
-v1/v2 profile blocks from earlier versions — run the installer
+v1/v2 profile blocks from earlier versions - run the installer
 (install.sh) for that full-wipe pass.
+
+Examples:
+  juggernaut uninstall --dry-run
+  juggernaut uninstall --force
+  juggernaut uninstall --full --dry-run
+  juggernaut uninstall --full --yes
 EOF
       exit 0 ;;
     *) echo "uninstall: unknown option '$arg'" >&2; exit 1 ;;
@@ -116,18 +130,33 @@ legacy_symlink="$HOME/.local/bin/claude"
 has_legacy_symlink=false
 [[ -L "$legacy_symlink" ]] && has_legacy_symlink=true
 
+full_launcher="$HOME/.local/bin/juggernaut"
+full_install_dir="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
+has_full_launcher=false
+has_full_install_dir=false
+if [[ "$FULL" == "true" ]]; then
+  [[ -e "$full_launcher" || -L "$full_launcher" ]] && has_full_launcher=true
+  [[ -e "$full_install_dir" ]] && has_full_install_dir=true
+fi
+
 if [[ "$has_user" == "false" && "$has_project" == "false" \
       && "$has_keychain" == "false" && "$has_dpapi" == "false" \
       && "$has_profile_token" == "false" \
-      && "$has_launcher" == "false" && "$has_legacy_symlink" == "false" ]]; then
+      && "$has_launcher" == "false" && "$has_legacy_symlink" == "false" \
+      && "$has_full_launcher" == "false" && "$has_full_install_dir" == "false" ]]; then
   echo "Nothing to uninstall."
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Confirmation (skipped for --force and --dry-run)
+# Confirmation (skipped for --force/--yes and --dry-run; --full requires --yes)
 # ---------------------------------------------------------------------------
-if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
+if [[ "$DRY_RUN" != "true" && ( "$FORCE" != "true" || ( "$FULL" == "true" && "$YES" != "true" ) ) ]]; then
+  if [[ "$FULL" == "true" ]]; then
+    echo "Warning: full uninstall permanently deletes your Juggernaut installation, stored tokens, and configuration."
+    echo "This action cannot be undone."
+    echo ""
+  fi
   echo "The following will be removed:"
   [[ "$has_user"    == "true" ]] && printf '  - Juggernaut block from %s\n' "$user_path"
   [[ "$has_project" == "true" ]] && printf '  - Juggernaut block from %s\n' "$project_path"
@@ -138,6 +167,8 @@ if [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
     printf '  - Launcher block from %s\n' "$_lp"
   done
   [[ "$has_legacy_symlink" == "true" ]] && printf '  - Legacy launcher symlink: %s\n' "$legacy_symlink"
+  [[ "$has_full_launcher" == "true" ]] && printf '  - Juggernaut command launcher: %s\n' "$full_launcher"
+  [[ "$has_full_install_dir" == "true" ]] && printf '  - Juggernaut install directory: %s\n' "$full_install_dir"
   echo ""
   read -r -p "Proceed? [y/N] " _answer
   case "$_answer" in
@@ -227,9 +258,33 @@ if [[ "$has_legacy_symlink" == "true" ]]; then
   fi
 fi
 
+if [[ "$FULL" == "true" ]]; then
+  if [[ "$has_full_launcher" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      printf '[dry-run] Would remove Juggernaut command launcher: %s\n' "$full_launcher"
+    else
+      rm -f -- "$full_launcher"
+      printf 'Removed Juggernaut command launcher: %s\n' "$full_launcher"
+    fi
+  fi
+
+  if [[ "$has_full_install_dir" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      printf '[dry-run] Would remove Juggernaut install directory: %s\n' "$full_install_dir"
+    elif [[ -n "$full_install_dir" && "$full_install_dir" != "/" ]]; then
+      rm -rf -- "$full_install_dir"
+      printf 'Removed Juggernaut install directory: %s\n' "$full_install_dir"
+    fi
+  fi
+fi
+
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "No files were changed."
 else
   echo ""
-  echo "Uninstall complete."
+  if [[ "$FULL" == "true" ]]; then
+    echo "Full uninstall complete."
+  else
+    echo "Uninstall complete."
+  fi
 fi

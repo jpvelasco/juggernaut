@@ -5,6 +5,8 @@ param(
     [string]$Scope = '',
     [switch]$DryRun,
     [Alias('f')][switch]$Force,
+    [switch]$Full,
+    [Alias('y')][switch]$Yes,
     [switch]$Help,
     [switch]$Version,
     [Parameter(ValueFromRemainingArguments=$true)][string[]]$RemainingArgs
@@ -18,6 +20,8 @@ foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
         '^--dry-run$'              { $DryRun = $true }
         '^--force$|^-f$'           { $Force = $true }
+        '^--full$'                 { $Full = $true }
+        '^--yes$|^-y$'             { $Yes = $true; $Force = $true }
         '^--scope=(user|project)$' { $Scope = $Matches[1] }
         '^--scope='                { Write-Error "uninstall: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')"; exit 1 }
         '^--help$|^-h$'            { $Help = $true }
@@ -30,18 +34,28 @@ if ($Help) {
     @'
 juggernaut uninstall - remove Juggernaut configuration
 
-Usage: juggernaut.ps1 uninstall [-Scope user|project] [-DryRun] [-Force]
+Usage:
+  juggernaut.ps1 uninstall [-Scope user|project] [-DryRun] [-Force]
+  juggernaut.ps1 uninstall -Full [-DryRun] [-Yes]
 
 Options:
   -Scope user|project  Limit removal to one scope (default: all scopes with a block)
   -DryRun              Preview changes without writing files
   -Force               Skip confirmation prompt
+  -Full                Also remove the Juggernaut command shims and install tree
+  -Yes                 Confirm full removal without prompting
 
 Removes the Juggernaut block from settings.json, the keychain entry, and
 the launcher profile block from `$PROFILE.CurrentUserCurrentHost` (plus
 the sibling host's profile when present). The installer-wipe regex is
 the only place Juggernaut strips legacy profile blocks from earlier
-versions — run `install.ps1` for that.
+versions - run `install.ps1` for that.
+
+Examples:
+  juggernaut uninstall --dry-run
+  juggernaut uninstall --force
+  juggernaut uninstall --full --dry-run
+  juggernaut uninstall --full --yes
 '@
     exit 0
 }
@@ -124,7 +138,21 @@ function Test-ProfileHasLauncherBlock([string]$Path) {
 $launcherProfiles = @(Get-LauncherProfileTargets | Where-Object { Test-ProfileHasLauncherBlock $_ })
 $hasLauncher = $launcherProfiles.Count -gt 0
 
-if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasProfileToken -or $hasLauncher)) {
+$fullInstallDir = if ($env:JUGGERNAUT_DIR) { $env:JUGGERNAUT_DIR } else { Join-Path $HOME '.juggernaut' }
+$fullShimDir = Join-Path $HOME '.local\bin'
+$fullShimPaths = @(
+    (Join-Path $fullShimDir 'juggernaut.cmd'),
+    (Join-Path $fullShimDir 'juggernaut.ps1'),
+    (Join-Path $fullShimDir 'juggernaut-install-dir.txt')
+)
+$fullExistingShimPaths = @()
+$hasFullInstallDir = $false
+if ($Full) {
+    $fullExistingShimPaths = @($fullShimPaths | Where-Object { Test-Path $_ })
+    $hasFullInstallDir = Test-Path $fullInstallDir
+}
+
+if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasProfileToken -or $hasLauncher -or $fullExistingShimPaths.Count -gt 0 -or $hasFullInstallDir)) {
     Write-Output 'Nothing to uninstall.'
     exit 0
 }
@@ -132,7 +160,12 @@ if (-not ($hasUser -or $hasProject -or $hasKeychain -or $hasDpapi -or $hasProfil
 # ---------------------------------------------------------------------------
 # Confirmation
 # ---------------------------------------------------------------------------
-if (-not $Force -and -not $DryRun) {
+if (-not $DryRun -and ((-not $Force) -or ($Full -and -not $Yes))) {
+    if ($Full) {
+        Write-Output 'Warning: full uninstall permanently deletes your Juggernaut installation, stored tokens, and configuration.'
+        Write-Output 'This action cannot be undone.'
+        Write-Output ''
+    }
     Write-Output 'The following will be removed:'
     if ($hasUser)        { Write-Output "  - Juggernaut block from $userPath" }
     if ($hasProject)     { Write-Output "  - Juggernaut block from $projectPath" }
@@ -140,6 +173,8 @@ if (-not $Force -and -not $DryRun) {
     if ($hasDpapi)       { Write-Output "  - DPAPI file: $dpapiPath" }
     if ($hasProfileToken) { Write-Output "  - Profile token file: $profileTokenPath" }
     foreach ($lp in $launcherProfiles) { Write-Output "  - Launcher block from $lp" }
+    foreach ($shim in $fullExistingShimPaths) { Write-Output "  - Juggernaut command shim: $shim" }
+    if ($hasFullInstallDir) { Write-Output "  - Juggernaut install directory: $fullInstallDir" }
     Write-Output ''
     $answer = Read-Host 'Proceed? [y/N]'
     if ($answer -notmatch '^[Yy]') { Write-Output 'Aborted.'; exit 0 }
@@ -208,9 +243,33 @@ foreach ($lp in $launcherProfiles) {
     else         { Remove-LauncherProfileBlock $lp }
 }
 
+if ($Full) {
+    foreach ($shim in $fullExistingShimPaths) {
+        if ($DryRun) {
+            Write-Output "[dry-run] Would remove Juggernaut command shim: $shim"
+        } else {
+            Remove-Item -LiteralPath $shim -Force -ErrorAction SilentlyContinue
+            Write-Output "Removed Juggernaut command shim: $shim"
+        }
+    }
+
+    if ($hasFullInstallDir) {
+        if ($DryRun) {
+            Write-Output "[dry-run] Would remove Juggernaut install directory: $fullInstallDir"
+        } else {
+            Remove-Item -LiteralPath $fullInstallDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Output "Removed Juggernaut install directory: $fullInstallDir"
+        }
+    }
+}
+
 if ($DryRun) {
     Write-Output 'No files were changed.'
 } else {
     Write-Output ''
-    Write-Output 'Uninstall complete.'
+    if ($Full) {
+        Write-Output 'Full uninstall complete.'
+    } else {
+        Write-Output 'Uninstall complete.'
+    }
 }

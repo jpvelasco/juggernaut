@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tests/v2/test_uninstall.sh — v3 tests for commands/uninstall.sh.
-# Covers: scope removal (user, project, both), --dry-run, --force, keychain.
-# v3: uninstall does NOT touch shell profiles — those are cleaned by install.sh's wipe.
+# Covers: scope removal (user, project, both), --dry-run, --force, --full, keychain.
+# v3: uninstall removes the Juggernaut launcher block but leaves legacy v1/v2 profile blocks.
 
 set -uo pipefail
 
@@ -68,6 +68,34 @@ if [[ $rc -eq 0 && "$output" == *"[dry-run]"* && "$output" == *"settings.json"* 
 else fail "unexpected dry-run output (rc=$rc): $output"; fi
 if config_has_juggernaut_block "$(cat "$TMP_HOME/.claude/settings.json")"; then pass
 else fail "dry-run must not modify settings.json"; fi
+
+# ---------------------------------------------------------------------------
+# --full dry-run shows command launcher and install tree removal
+# ---------------------------------------------------------------------------
+section "--full dry-run shows command launcher and install tree removal"
+mkdir -p "$TMP_HOME/.local/bin" "$TMP_HOME/.juggernaut"
+printf '#!/usr/bin/env bash\n' > "$TMP_HOME/.local/bin/juggernaut"
+output="$(run_uninstall --full --dry-run 2>&1)"; rc=$?
+if [[ $rc -eq 0 \
+      && "$output" == *"[dry-run] Would remove Juggernaut command launcher"* \
+      && "$output" == *"[dry-run] Would remove Juggernaut install directory"* \
+      && "$output" == *"No files were changed"* ]]; then pass
+else fail "unexpected --full dry-run output (rc=$rc): $output"; fi
+if [[ -f "$TMP_HOME/.local/bin/juggernaut" && -d "$TMP_HOME/.juggernaut" ]]; then pass
+else fail "--full dry-run must not remove launcher or install tree"; fi
+
+# ---------------------------------------------------------------------------
+# --full --yes removes command launcher and install tree
+# ---------------------------------------------------------------------------
+section "--full --yes removes command launcher and install tree"
+output="$(run_uninstall --full --yes 2>&1)"; rc=$?
+if [[ $rc -eq 0 \
+      && "$output" == *"Removed Juggernaut command launcher"* \
+      && "$output" == *"Removed Juggernaut install directory"* \
+      && "$output" == *"Full uninstall complete"* ]]; then pass
+else fail "unexpected --full --yes output (rc=$rc): $output"; fi
+if [[ ! -e "$TMP_HOME/.local/bin/juggernaut" && ! -d "$TMP_HOME/.juggernaut" ]]; then pass
+else fail "--full --yes should remove launcher and install tree"; fi
 
 # ---------------------------------------------------------------------------
 # Real uninstall removes block, preserves unrelated keys
@@ -162,8 +190,8 @@ else fail "expected error for invalid scope (rc=$rc): $output"; fi
 section "uninstall --help exits 0 and omits legacy flags"
 help_out="$(run_uninstall --help 2>&1)"; rc=$?
 if [[ $rc -eq 0 ]]; then pass; else fail "uninstall --help should exit 0 (got $rc)"; fi
-if [[ "$help_out" == *"--scope"* && "$help_out" == *"--dry-run"* ]]; then pass
-else fail "uninstall --help should mention --scope and --dry-run"; fi
+if [[ "$help_out" == *"--scope"* && "$help_out" == *"--dry-run"* && "$help_out" == *"--full"* && "$help_out" == *"--yes"* ]]; then pass
+else fail "uninstall --help should mention --scope, --dry-run, --full, and --yes"; fi
 if [[ "$help_out" != *"--legacy-v1"* ]]; then pass
 else fail "uninstall --help should NOT mention --legacy-v1"; fi
 
