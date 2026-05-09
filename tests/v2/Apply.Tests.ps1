@@ -82,6 +82,12 @@ Describe 'New-JuggernautBlock — opusplan' {
         $b.opusplan               | Should -BeTrue
     }
 
+    It 'OpusPlan=false omits ANTHROPIC_MODEL from env' {
+        $b = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -OpusPlan $false `
+            -BedrockConfigPath $script:BedrockConfigPath
+        $b.env.Contains('ANTHROPIC_MODEL') | Should -Be $false
+    }
+
     It 'does not allow opusplan as the primary model ID' {
         $b = New-JuggernautBlock -AuthMode 'iam' -Region 'us-west-2' -Model 'opusplan' `
             -BedrockConfigPath $script:BedrockConfigPath

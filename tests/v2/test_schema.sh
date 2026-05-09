@@ -52,6 +52,7 @@ export J_OPUSPLAN=true
 block4="$(schema_new_juggernaut_block)"
 unset J_OPUSPLAN
 assert_eq "$(echo "$block4" | jq -r '.env.ANTHROPIC_MODEL')" "opusplan" "opusplan=true should set ANTHROPIC_MODEL=opusplan"
+assert_eq "$(echo "$block" | jq '.env | has("ANTHROPIC_MODEL")')" "false" "opusplan=false should not write ANTHROPIC_MODEL"
 
 section "Region override preserves us-west-2"
 export J_REGION=us-west-2
