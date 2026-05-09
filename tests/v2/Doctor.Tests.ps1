@@ -269,9 +269,6 @@ Describe 'doctor.ps1' {
     Context 'Write-DoctorLauncher source label reflects auth.storage' {
         BeforeAll {
             . (Join-Path $script:repoRoot 'lib\doctor.ps1')
-            # Override Test-LauncherInstalled to simulate a launcher being present
-            # without needing to touch real shell profiles.
-            function script:Test-LauncherInstalled { return @{ Installed = $true; Path = 'C:\fake\profile.ps1' } }
             $script:oldBearerLabel = $env:AWS_BEARER_TOKEN_BEDROCK
             Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
         }
@@ -279,6 +276,11 @@ Describe 'doctor.ps1' {
             if ($null -ne $script:oldBearerLabel) {
                 $env:AWS_BEARER_TOKEN_BEDROCK = $script:oldBearerLabel
             }
+        }
+        # Pester Mock intercepts Test-LauncherInstalled within this Context so
+        # Write-DoctorLauncher sees a launcher installed at a fake path.
+        BeforeEach {
+            Mock Test-LauncherInstalled { return @{ Installed = $true; Path = 'C:\fake\profile.ps1' } }
         }
 
         It 'labels profile storage as profile token file via launcher' {
