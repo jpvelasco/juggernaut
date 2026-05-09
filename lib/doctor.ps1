@@ -237,6 +237,7 @@ function Write-DoctorLauncher {
     $useBedrock = Get-DoctorNestedProp -Object $Block -Path @('env','CLAUDE_CODE_USE_BEDROCK')
     $authMode   = Get-DoctorNestedProp -Object $Block -Path @('auth','mode')
     if ($authMode -eq 'api-key') { $authMode = 'bedrock-api-key' }
+    $storage    = Get-DoctorNestedProp -Object $Block -Path @('auth','storage')
 
     # The launcher injects AWS_BEARER_TOKEN_BEDROCK from the OS keychain. It is
     # only relevant when auth.mode is bedrock-api-key; IAM auth never reads the
@@ -262,9 +263,14 @@ function Write-DoctorLauncher {
 
     $launcher = Test-LauncherInstalled
     if ($launcher.Installed) {
+        $sourceLabel = switch ($storage) {
+            'dpapi'   { 'DPAPI file via launcher' }
+            'profile' { 'profile token file via launcher' }
+            default   { 'system keychain via launcher' }
+        }
         Write-Output 'Status: OK'
         Write-Output ('Launcher: {0}' -f (Show-DoctorHomePath $launcher.Path))
-        Write-Output 'Source: OS keychain via launcher'
+        Write-Output ('Source: {0}' -f $sourceLabel)
         return
     }
 

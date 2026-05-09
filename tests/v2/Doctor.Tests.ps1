@@ -265,4 +265,47 @@ Describe 'doctor.ps1' {
         It 'reports profile token file as source' { $script:profOutput | Should -Match 'profile token file' }
         It 'reports Storage: profile' { $script:profOutput | Should -Match 'Storage: profile' }
     }
+
+    Context 'Write-DoctorLauncher source label reflects auth.storage' {
+        BeforeAll {
+            . (Join-Path $script:repoRoot 'lib\doctor.ps1')
+            # Override Test-LauncherInstalled to simulate a launcher being present
+            # without needing to touch real shell profiles.
+            function script:Test-LauncherInstalled { return @{ Installed = $true; Path = 'C:\fake\profile.ps1' } }
+            $script:oldBearerLabel = $env:AWS_BEARER_TOKEN_BEDROCK
+            Remove-Item Env:\AWS_BEARER_TOKEN_BEDROCK -ErrorAction SilentlyContinue
+        }
+        AfterAll {
+            if ($null -ne $script:oldBearerLabel) {
+                $env:AWS_BEARER_TOKEN_BEDROCK = $script:oldBearerLabel
+            }
+        }
+
+        It 'labels profile storage as profile token file via launcher' {
+            $block = New-JuggernautBlock -AuthMode 'bedrock-api-key' -AuthValidated $true `
+                -Region 'us-west-2' -Storage 'profile' -UseMantle $false `
+                -Version $script:ExpectedVersion `
+                -BedrockConfigPath $script:BedrockConfigPath
+            $out = Write-DoctorLauncher -Block $block | Out-String
+            $out | Should -Match 'profile token file via launcher'
+        }
+
+        It 'labels keychain storage as system keychain via launcher' {
+            $block = New-JuggernautBlock -AuthMode 'bedrock-api-key' -AuthValidated $true `
+                -Region 'us-west-2' -Storage 'keychain' -UseMantle $false `
+                -Version $script:ExpectedVersion `
+                -BedrockConfigPath $script:BedrockConfigPath
+            $out = Write-DoctorLauncher -Block $block | Out-String
+            $out | Should -Match 'system keychain via launcher'
+        }
+
+        It 'labels dpapi storage as DPAPI file via launcher' {
+            $block = New-JuggernautBlock -AuthMode 'bedrock-api-key' -AuthValidated $true `
+                -Region 'us-west-2' -Storage 'dpapi' -UseMantle $false `
+                -Version $script:ExpectedVersion `
+                -BedrockConfigPath $script:BedrockConfigPath
+            $out = Write-DoctorLauncher -Block $block | Out-String
+            $out | Should -Match 'DPAPI file via launcher'
+        }
+    }
 }
