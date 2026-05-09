@@ -87,7 +87,7 @@ function New-JuggernautBlock {
         }
     }
     $env['AWS_REGION']                     = $Region
-    if ($OpusPlan) { $env['ANTHROPIC_MODEL'] = 'opusplan' } else { $env.Remove('ANTHROPIC_MODEL') | Out-Null }
+    if ($OpusPlan) { $env['ANTHROPIC_MODEL'] = 'opusplan' }
     $env['ANTHROPIC_DEFAULT_OPUS_MODEL']   = $OpusModel
     $env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = $SonnetModel
     $env['ANTHROPIC_DEFAULT_HAIKU_MODEL']  = $HaikuModel
