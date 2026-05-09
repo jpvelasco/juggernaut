@@ -71,10 +71,22 @@ exit /b 42
     function Invoke-LauncherWith([string]$ProfilePath, [string]$Command, [hashtable]$EnvOverrides = @{}) {
         $pwsh = Get-Command pwsh.exe -ErrorAction SilentlyContinue
         if (-not $pwsh) { $pwsh = Get-Command powershell.exe -ErrorAction Stop }
+        $effectiveEnv = @{
+            AWS_BEARER_TOKEN_BEDROCK      = $null
+            HOME                          = $script:IsolatedHome
+            USERPROFILE                   = $script:IsolatedHome
+            XDG_CONFIG_HOME               = (Join-Path $script:IsolatedHome '.config')
+            JUGGERNAUT_HOME               = $script:IsolatedHome
+            JUGGERNAUT_PROFILE_TOKEN_PATH = (Join-Path (Join-Path $script:IsolatedHome '.config\juggernaut') 'bearer-token')
+            JUGGERNAUT_KEYCHAIN_SERVICE   = $script:IsolatedService
+        }
+        foreach ($k in $EnvOverrides.Keys) {
+            $effectiveEnv[$k] = $EnvOverrides[$k]
+        }
         # Build env assignments as a prelude.
         $envPrelude = ''
-        foreach ($k in $EnvOverrides.Keys) {
-            $v = $EnvOverrides[$k]
+        foreach ($k in $effectiveEnv.Keys) {
+            $v = $effectiveEnv[$k]
             if ($null -eq $v) {
                 $envPrelude += "Remove-Item Env:\$k -ErrorAction SilentlyContinue; "
             } else {
@@ -187,12 +199,15 @@ Describe 'function claude runtime behavior' {
         Install-BlockToPath $script:TestProfile
         $script:StubDir = Join-Path ([IO.Path]::GetTempPath()) ("jug-stub-" + [Guid]::NewGuid().ToString('N'))
         $script:StubBin = New-StubClaudeCmd $script:StubDir
+        $script:IsolatedHome = Join-Path ([IO.Path]::GetTempPath()) ("jug-launcher-home-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:IsolatedHome -Force | Out-Null
         # Isolate the keychain service name so the stub never hits a real entry.
         $script:IsolatedService = "juggernaut-absent-pester-$([Guid]::NewGuid().ToString('N'))"
     }
     AfterAll {
         Remove-Item -Path (Split-Path -Parent $script:TestProfile) -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -Path $script:StubDir -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $script:IsolatedHome -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     It 'function precedence: Get-Command claude resolves to a function after dot-sourcing the profile' {

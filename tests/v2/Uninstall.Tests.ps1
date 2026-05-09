@@ -36,19 +36,34 @@ BeforeAll {
         $oldHome    = $env:HOME
         $oldProfile = $env:USERPROFILE
         $oldBedrock = $env:BEDROCK_CONFIG_PATH
+        $oldXdg     = $env:XDG_CONFIG_HOME
+        $oldJugHome = $env:JUGGERNAUT_HOME
+        $oldProfTok = $env:JUGGERNAUT_PROFILE_TOKEN_PATH
+        $oldPsProfile = $PROFILE
         $oldLoc     = (Get-Location).Path
         try {
             $env:HOME = $d.Home; $env:USERPROFILE = $d.Home
             $env:BEDROCK_CONFIG_PATH = $script:BedrockConfigPath
+            $env:XDG_CONFIG_HOME = Join-Path $d.Home '.config'
+            $env:JUGGERNAUT_HOME = $d.Home
+            $env:JUGGERNAUT_PROFILE_TOKEN_PATH = Join-Path (Join-Path $d.Home '.config\juggernaut') 'bearer-token'
             Set-Variable -Name HOME -Value $d.Home -Scope Global -Force
+            $profilePath = Join-Path $d.Home 'Documents\PowerShell\Microsoft.PowerShell_profile.ps1'
+            Set-Variable -Name PROFILE -Value ([pscustomobject]@{
+                CurrentUserCurrentHost = $profilePath
+            }) -Scope Global -Force
             Set-Location $d.Work
             $output = & $script:UninstallScript @params 2>&1 | Out-String
             return @{ Output = $output; ExitCode = $LASTEXITCODE }
         } finally {
             Set-Location $oldLoc
             Set-Variable -Name HOME -Value $oldHome -Scope Global -Force
+            Set-Variable -Name PROFILE -Value $oldPsProfile -Scope Global -Force
             $env:HOME = $oldHome; $env:USERPROFILE = $oldProfile
             $env:BEDROCK_CONFIG_PATH = $oldBedrock
+            if ($null -eq $oldXdg) { Remove-Item Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue } else { $env:XDG_CONFIG_HOME = $oldXdg }
+            if ($null -eq $oldJugHome) { Remove-Item Env:\JUGGERNAUT_HOME -ErrorAction SilentlyContinue } else { $env:JUGGERNAUT_HOME = $oldJugHome }
+            if ($null -eq $oldProfTok) { Remove-Item Env:\JUGGERNAUT_PROFILE_TOKEN_PATH -ErrorAction SilentlyContinue } else { $env:JUGGERNAUT_PROFILE_TOKEN_PATH = $oldProfTok }
         }
     }
 
