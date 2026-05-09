@@ -31,7 +31,7 @@ aws sts get-caller-identity
 
 ### 3. Install Juggernaut
 
-The installer is a **destructive wipe-and-reinstall**: it strips any legacy Juggernaut shell-profile blocks, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the `juggernaut-bedrock` OS-keychain entry before placing fresh files. The installer does **not** auto-apply.
+The installer is a **destructive wipe-and-reinstall**: it strips any legacy Juggernaut shell-profile blocks, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes Juggernaut bearer token storage before placing fresh files. The installer does **not** auto-apply.
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
@@ -59,7 +59,7 @@ $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.1.0/install.ps1'; 
 # IAM / SSO (recommended)
 juggernaut apply --auth=iam
 
-# Bedrock API key (interactive — key stored in OS keychain)
+# Bedrock API key (interactive — key stored in keychain/Credential Manager/DPAPI/profile storage)
 juggernaut apply --auth=bedrock-api-key
 ```
 
@@ -69,14 +69,14 @@ juggernaut apply --auth=bedrock-api-key
 .\juggernaut.ps1 apply -Auth bedrock-api-key
 ```
 
-`juggernaut apply` refuses to write `CLAUDE_CODE_USE_BEDROCK=1` to `settings.json` unless a valid auth source is present (`aws sts get-caller-identity` succeeds, `AWS_BEARER_TOKEN_BEDROCK` is set, or the `juggernaut-bedrock` keychain entry exists).
+`juggernaut apply` refuses to write `CLAUDE_CODE_USE_BEDROCK=1` to `settings.json` unless a valid auth source is present (`aws sts get-caller-identity` succeeds, `AWS_BEARER_TOKEN_BEDROCK` is set, or Juggernaut bearer token storage exists).
 
 ### 5. Launch
 ```bash
 claude
 ```
 
-Fresh shells automatically pick up the **launcher** installed in step 3 — a `claude()` shell function appended to `~/.bashrc`/`~/.zshrc`/`~/.profile` on Unix, or a `function claude` block in your PowerShell profile on Windows. Both read your bearer token from the OS keychain and inject it into the child process's environment before running the real `claude`. No manual env setup required, and the function approach survives Anthropic's `claude update` self-rewrites.
+Fresh shells automatically pick up the **launcher** installed in step 3 — a `claude()` shell function appended to `~/.bashrc`/`~/.zshrc`/`~/.profile` on Unix, or a `function claude` block in your PowerShell profile on Windows. The launcher reads your bearer token from Juggernaut bearer token storage (macOS keychain, Windows Credential Manager/DPAPI, or Linux profile token file) and injects it into the child process's environment before running the real `claude`. No manual env setup required, and the function approach survives Anthropic's `claude update` self-rewrites.
 
 ## Verify Setup
 
