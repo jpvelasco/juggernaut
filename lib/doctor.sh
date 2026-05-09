@@ -72,46 +72,64 @@ doctor_credentials() {
   probe_error=""
   probe_source=""
   if [[ "$auth_mode" == "bedrock-api-key" ]]; then
-    # Try DPAPI first (Windows long-key case), then keychain. Label the hit.
-    # Capture exit code separately from `|| true` so we can distinguish
-    # "not found" (1) from real errors (2).
+    # Probe in configured-storage-first order so the label reflects the source
+    # the launcher will actually use. For profile storage, try the profile token
+    # first before falling through to DPAPI/keychain.
     local dpapi_out dpapi_rc
-    dpapi_out="$({ dpapi_get; printf '\x1e%s' "$?"; } 2>&1)"
-    dpapi_rc="${dpapi_out##*$'\x1e'}"
-    dpapi_out="${dpapi_out%$'\x1e'*}"
-    if [[ "$dpapi_rc" -eq 0 && -n "$dpapi_out" ]]; then
-      probe_value="$dpapi_out"
-      probe_source="DPAPI file"
-      probe_rc=0
-    elif [[ "$dpapi_rc" -eq 2 ]]; then
-      probe_error="$dpapi_out"
+    local -a probe_order
+    if [[ "$storage" == "profile" ]]; then
+      probe_order=(profile dpapi keychain)
+    else
+      probe_order=(dpapi keychain profile)
     fi
-    if [[ -z "$probe_value" ]] && keychain_available 2>/dev/null; then
-      probe_value="$({ keychain_get; printf '\x1e%s' "$?"; } 2>&1)"
-      probe_rc="${probe_value##*$'\x1e'}"
-      probe_value="${probe_value%$'\x1e'*}"
-      if [[ "$probe_rc" -eq 0 && -n "$probe_value" ]]; then
-        probe_source="system keychain"
-      elif [[ "$probe_rc" -ne 0 && "$probe_rc" -ne 1 ]]; then
-        probe_error="${probe_value%$'\n'}"
-        probe_value=""
-      else
-        probe_value=""
-      fi
-    fi
-    if [[ -z "$probe_value" ]]; then
-      probe_value="$({ profile_token_get; printf '\x1e%s' "$?"; } 2>&1)"
-      probe_rc="${probe_value##*$'\x1e'}"
-      probe_value="${probe_value%$'\x1e'*}"
-      if [[ "$probe_rc" -eq 0 && -n "$probe_value" ]]; then
-        probe_source="profile token file"
-      elif [[ "$probe_rc" -ne 0 && "$probe_rc" -ne 1 ]]; then
-        probe_error="${probe_value%$'\n'}"
-        probe_value=""
-      else
-        probe_value=""
-      fi
-    fi
+
+    local _step
+    for _step in "${probe_order[@]}"; do
+      [[ -n "$probe_value" ]] && break
+      case "$_step" in
+        dpapi)
+          dpapi_out="$({ dpapi_get; printf '\x1e%s' "$?"; } 2>&1)"
+          dpapi_rc="${dpapi_out##*$'\x1e'}"
+          dpapi_out="${dpapi_out%$'\x1e'*}"
+          if [[ "$dpapi_rc" -eq 0 && -n "$dpapi_out" ]]; then
+            probe_value="$dpapi_out"
+            probe_source="DPAPI file"
+            probe_rc=0
+          elif [[ "$dpapi_rc" -eq 2 ]]; then
+            probe_error="$dpapi_out"
+          fi
+          ;;
+        keychain)
+          if keychain_available 2>/dev/null; then
+            probe_value="$({ keychain_get; printf '\x1e%s' "$?"; } 2>&1)"
+            probe_rc="${probe_value##*$'\x1e'}"
+            probe_value="${probe_value%$'\x1e'*}"
+            if [[ "$probe_rc" -eq 0 && -n "$probe_value" ]]; then
+              probe_source="system keychain"
+            elif [[ "$probe_rc" -ne 0 && "$probe_rc" -ne 1 ]]; then
+              probe_error="${probe_value%$'\n'}"
+              probe_value=""
+            else
+              probe_value=""
+            fi
+          fi
+          ;;
+        profile)
+          probe_value="$({ profile_token_get; printf '\x1e%s' "$?"; } 2>&1)"
+          probe_rc="${probe_value##*$'\x1e'}"
+          probe_value="${probe_value%$'\x1e'*}"
+          if [[ "$probe_rc" -eq 0 && -n "$probe_value" ]]; then
+            probe_source="profile token file"
+          elif [[ "$probe_rc" -ne 0 && "$probe_rc" -ne 1 ]]; then
+            probe_error="${probe_value%$'\n'}"
+            probe_value=""
+          else
+            probe_value=""
+          fi
+          ;;
+      esac
+    done
+
     probe_error="${probe_error%$'\n'}"
   fi
   case "$auth_mode" in
@@ -233,10 +251,11 @@ doctor_opusplan() {
 
 doctor_launcher() {
   local block="$1"
-  local use_bedrock auth_mode env_token
+  local use_bedrock auth_mode env_token storage
   use_bedrock="$(jq -r '.env.CLAUDE_CODE_USE_BEDROCK // ""' <<<"$block")"
   auth_mode="$(jq -r '.auth.mode // ""' <<<"$block")"
   [[ "$auth_mode" == "api-key" ]] && auth_mode="bedrock-api-key"
+  storage="$(jq -r '.auth.storage // ""' <<<"$block")"
   env_token="${AWS_BEARER_TOKEN_BEDROCK:-}"
 
   # Detect the launcher by scanning the user's shell profiles for the
@@ -277,9 +296,15 @@ doctor_launcher() {
   fi
 
   if [[ "$has_launcher" == "true" ]]; then
+    local source_label
+    case "$storage" in
+      dpapi)    source_label="DPAPI file via launcher function" ;;
+      profile)  source_label="profile token file via launcher function" ;;
+      *)        source_label="system keychain via launcher function" ;;
+    esac
     doctor_ok
     doctor_kv "Launcher" "$(doctor_home_path "${launcher_profiles[0]}")"
-    doctor_kv "Source" "OS keychain via launcher function"
+    doctor_kv "Source" "$source_label"
     return 0
   fi
 

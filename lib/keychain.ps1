@@ -425,34 +425,47 @@ function Save-BearerToken {
 
 function Read-BearerToken {
     # Return shape matches Save-BearerToken: { Value; Storage; Error }.
-    # On Windows: DPAPI file first (no P/Invoke cost), then CredMan, then profile.
-    # On Unix: keychain (secret-tool / security), then profile.
+    # Probes in configured-storage-first order so the returned Storage label
+    # matches what the launcher will actually inject. Callers that don't know
+    # the configured storage can omit $PreferredStorage and get the default order.
+    param([string]$PreferredStorage = '')
     $os = Get-KeychainOS
-    if ($os -eq 'windows') {
-        try {
-            $v = Get-DPAPIEntry
-            if (-not [string]::IsNullOrEmpty($v)) {
-                return @{ Value = $v; Storage = 'dpapi'; Error = '' }
+
+    # Build probe order: configured storage first, remaining storages after.
+    $all = if ($os -eq 'windows') { @('dpapi','keychain','profile') } else { @('keychain','profile') }
+    if ($PreferredStorage -and $all -contains $PreferredStorage) {
+        $order = @($PreferredStorage) + ($all | Where-Object { $_ -ne $PreferredStorage })
+    } else {
+        $order = $all
+    }
+
+    foreach ($step in $order) {
+        switch ($step) {
+            'dpapi' {
+                try {
+                    $v = Get-DPAPIEntry
+                    if (-not [string]::IsNullOrEmpty($v)) { return @{ Value = $v; Storage = 'dpapi'; Error = '' } }
+                } catch {
+                    return @{ Value = $null; Storage = 'dpapi'; Error = "$_" }
+                }
             }
-        } catch {
-            return @{ Value = $null; Storage = 'dpapi'; Error = "$_" }
+            'keychain' {
+                try {
+                    $v = Get-KeychainEntry
+                    if (-not [string]::IsNullOrEmpty($v)) { return @{ Value = $v; Storage = 'keychain'; Error = '' } }
+                } catch {
+                    return @{ Value = $null; Storage = 'keychain'; Error = "$_" }
+                }
+            }
+            'profile' {
+                try {
+                    $v = Get-ProfileTokenEntry
+                    if (-not [string]::IsNullOrEmpty($v)) { return @{ Value = $v; Storage = 'profile'; Error = '' } }
+                } catch {
+                    return @{ Value = $null; Storage = 'profile'; Error = "$_" }
+                }
+            }
         }
-    }
-    try {
-        $v = Get-KeychainEntry
-        if (-not [string]::IsNullOrEmpty($v)) {
-            return @{ Value = $v; Storage = 'keychain'; Error = '' }
-        }
-    } catch {
-        return @{ Value = $null; Storage = 'keychain'; Error = "$_" }
-    }
-    try {
-        $v = Get-ProfileTokenEntry
-        if (-not [string]::IsNullOrEmpty($v)) {
-            return @{ Value = $v; Storage = 'profile'; Error = '' }
-        }
-    } catch {
-        return @{ Value = $null; Storage = 'profile'; Error = "$_" }
     }
     return @{ Value = $null; Storage = 'none'; Error = '' }
 }

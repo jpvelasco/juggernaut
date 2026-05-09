@@ -311,6 +311,53 @@ fi
 rm -rf "$CLEAN_HOME"
 
 # ---------------------------------------------------------------------------
+# Launcher source label reflects configured storage
+# ---------------------------------------------------------------------------
+section "launcher source label: profile storage → 'profile token file via launcher function'"
+LSRC_HOME="$(mktemp -d)"
+mkdir -p "$LSRC_HOME/.claude" "$LSRC_HOME/.config/juggernaut"
+LSRC_BLOCK="$(J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=profile \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+  J_AUTH_VALIDATED=true \
+  schema_new_juggernaut_block)"
+config_write_atomic "$LSRC_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$LSRC_BLOCK" "$(schema_derive_native_keys "$LSRC_BLOCK")")"
+# Write a fake bearer token and a fake launcher block to the profile
+printf 'fake-token' > "$LSRC_HOME/.config/juggernaut/bearer-token"
+echo '# BEGIN: Juggernaut Launcher' >> "$LSRC_HOME/.bashrc"
+echo '# END: Juggernaut Launcher'   >> "$LSRC_HOME/.bashrc"
+OUTPUT="$(HOME="$LSRC_HOME" XDG_CONFIG_HOME="$LSRC_HOME/.config" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"profile token file via launcher function"* ]]; then
+  pass
+else
+  fail "expected 'profile token file via launcher function' in launcher source label"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$LSRC_HOME"
+
+section "launcher source label: keychain storage → 'system keychain via launcher function'"
+LSRC_HOME="$(mktemp -d)"
+mkdir -p "$LSRC_HOME/.claude"
+LSRC_BLOCK="$(J_AUTH_MODE=bedrock-api-key J_REGION=us-west-2 J_EFFORT=xhigh J_STORAGE=keychain \
+  J_USE_MANTLE=true J_OPUSPLAN=false J_SCOPE=user J_VERSION="$EXPECTED_VERSION" \
+  J_AUTH_VALIDATED=true \
+  schema_new_juggernaut_block)"
+config_write_atomic "$LSRC_HOME/.claude/settings.json" \
+  "$(config_merge_juggernaut_block '{}' "$LSRC_BLOCK" "$(schema_derive_native_keys "$LSRC_BLOCK")")"
+# Install the launcher marker so doctor_launcher enters the installed-launcher path.
+echo '# BEGIN: Juggernaut Launcher' >> "$LSRC_HOME/.bashrc"
+echo '# END: Juggernaut Launcher'   >> "$LSRC_HOME/.bashrc"
+# Run without AWS_BEARER_TOKEN_BEDROCK so the launcher path (not env-token path) fires.
+OUTPUT="$(HOME="$LSRC_HOME" bash "$REPO_ROOT/commands/doctor.sh" 2>&1)"
+if [[ "$OUTPUT" == *"system keychain via launcher function"* ]]; then
+  pass
+else
+  fail "expected 'system keychain via launcher function' in launcher source label"
+  printf '%s\n' "$OUTPUT" >&2
+fi
+rm -rf "$LSRC_HOME"
+
+# ---------------------------------------------------------------------------
 # --help / --version
 # ---------------------------------------------------------------------------
 section "doctor --help exits 0 and mentions v3"

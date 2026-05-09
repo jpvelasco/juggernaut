@@ -20,6 +20,7 @@ bash ./tests/v2/test_show.sh
 bash ./tests/v2/test_doctor.sh
 bash ./tests/v2/test_uninstall.sh
 bash ./tests/v2/test_install.sh
+bash ./tests/v2/test_launcher.sh
 
 # Run all PowerShell tests (Pester 5 required)
 pwsh -Command "Invoke-Pester ./tests/v2 -CI"
@@ -45,6 +46,7 @@ shellcheck juggernaut install.sh commands/*.sh lib/keychain.sh lib/schema.sh lib
 - `keychain.{sh,ps1}` — OS keychain read/write (macOS Keychain, Linux secret-tool, Windows Credential Manager for short keys, Windows per-user DPAPI file for long keys). Service name: `juggernaut-bedrock`.
 - `doctor.{sh,ps1}` — scope checks, credential checks, opusplan drift check
 - `profile_paths.{sh,ps1}` — list of shell-profile paths scanned by the installer's wipe phase (v3 code itself does not write to these files)
+- `arg_parsing.ps1` — shared argument-parsing helper for PowerShell subcommands (bash uses inline getopts)
 
 **Installer:** `install.sh` / `install.ps1` run a destructive wipe phase on every invocation — strip `# BEGIN: Juggernaut` and `# BEGIN: Claude Code Bedrock Configuration` blocks from all profile paths, remove the `juggernaut` key from settings.json, delete bearer token storage (OS keychain on macOS/Windows for short keys, per-user DPAPI file on Windows for long keys >1280 chars, profile file on Linux) — then install fresh files. Does **not** auto-apply. Supports `--dry-run`/`-DryRun` to preview without writing.
 
@@ -76,7 +78,7 @@ All changes need `.sh` and `.ps1` variants. Targets: macOS (zsh/bash/fish), Linu
 
 ## Version Management
 
-Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-3.0.2}` fallback in `lib/schema.sh` / `lib/schema.ps1`.
+Version must stay in sync across `VERSION`, `bedrock-config.json` (`.version`), and the `${J_VERSION:-...}` fallback in `lib/schema.sh` / `lib/schema.ps1`. When bumping, update all three.
 
 ## Gotchas
 
