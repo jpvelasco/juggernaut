@@ -60,6 +60,10 @@ Describe 'New-JuggernautBlock — opusplan' {
         $b = New-JuggernautBlock -OpusPlan:$true -BedrockConfigPath $script:BedrockConfigPath
         $b.env['ANTHROPIC_MODEL'] | Should -Be 'opusplan'
     }
+    It 'opusplan=false omits ANTHROPIC_MODEL from env' {
+        $b = New-JuggernautBlock -OpusPlan:$false -BedrockConfigPath $script:BedrockConfigPath
+        $b.env.Contains('ANTHROPIC_MODEL') | Should -Be $false
+    }
 }
 
 Describe 'New-JuggernautBlock — region override' {

@@ -128,6 +128,23 @@ cd "$REPO_ROOT" || exit 1
 rm -rf "$PROJ_DIR"
 
 # ---------------------------------------------------------------------------
+# Default apply (no --opusplan): ANTHROPIC_MODEL must NOT be written
+# ---------------------------------------------------------------------------
+section "default apply without --opusplan omits ANTHROPIC_MODEL"
+_clean_env
+FAKE_HOME="$(mktemp -d)"
+BEDROCK_CONFIG_PATH="$BEDROCK_CONFIG_PATH" HOME="$FAKE_HOME" \
+  bash "$REPO_ROOT/commands/apply.sh" --auth=iam --skip-preflight >/dev/null 2>&1
+SETTINGS="$FAKE_HOME/.claude/settings.json"
+if jq -e '.env | has("ANTHROPIC_MODEL") | not' "$SETTINGS" >/dev/null 2>&1; then
+  pass
+else
+  fail "default apply should not write ANTHROPIC_MODEL to env"
+  jq '.env' "$SETTINGS" >&2
+fi
+rm -rf "$FAKE_HOME"
+
+# ---------------------------------------------------------------------------
 # Opusplan: --opusplan sets ANTHROPIC_MODEL to 'opusplan' in env
 # ---------------------------------------------------------------------------
 section "--opusplan sets ANTHROPIC_MODEL to 'opusplan'"

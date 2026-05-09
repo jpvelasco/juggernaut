@@ -93,7 +93,6 @@ schema_new_juggernaut_block() {
     --argjson bedrock_auth "$bedrock_auth_env" \
     --argjson auth_validated "$auth_validated" \
     --arg region "$region" \
-    --arg model "$model" \
     --arg opus "$opus_model" \
     --arg sonnet "$sonnet_model" \
     --arg haiku "$haiku_model" \
@@ -106,7 +105,7 @@ schema_new_juggernaut_block() {
     $base
     + (if $auth_validated then $bedrock_auth else {} end)
     + { AWS_REGION: $region }
-    + { ANTHROPIC_MODEL: (if $opusplan then "opusplan" else $model end) }
+    + (if $opusplan then { ANTHROPIC_MODEL: "opusplan" } else {} end)
     + { ANTHROPIC_DEFAULT_OPUS_MODEL: $opus,
         ANTHROPIC_DEFAULT_SONNET_MODEL: $sonnet,
         ANTHROPIC_DEFAULT_HAIKU_MODEL: $haiku,
