@@ -49,6 +49,7 @@ Subcommands:
   show        Print current Juggernaut configuration
   doctor      Verify configuration and credentials
   uninstall   Remove Juggernaut configuration
+  version     Print the installed Juggernaut version
 
 Run 'juggernaut.ps1 apply --help' for apply-specific options.
 '@
@@ -83,7 +84,7 @@ switch ($Subcommand) {
         $uninstallScript = Join-Path $PSScriptRoot_ 'commands\uninstall.ps1'
         Invoke-JuggernautPowerShellScript -Path $uninstallScript -Arguments $subcommandArgs
     }
-    { $_ -in '--version','-v' } {
+    { $_ -in 'version','--version','-v' } {
         $vf = Join-Path $PSScriptRoot_ 'VERSION'
         if (Test-Path $vf) { Get-Content $vf -Raw } else { 'unknown' }
         exit 0

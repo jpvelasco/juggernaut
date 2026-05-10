@@ -208,6 +208,23 @@ section "juggernaut dispatcher rejects unknown subcommand"
 if ! bash "$REPO_ROOT/juggernaut" not-a-subcommand >/dev/null 2>&1; then pass; else fail "juggernaut should reject unknown subcommand"; fi
 
 # ---------------------------------------------------------------------------
+# version subcommand
+# ---------------------------------------------------------------------------
+section "juggernaut version subcommand prints semver and exits 0"
+_EXPECTED_VER="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
+_VER_OUT="$(bash "$REPO_ROOT/juggernaut" version 2>&1)"
+_VER_RC=$?
+if [[ "$_VER_RC" -eq 0 ]]; then pass; else fail "juggernaut version should exit 0 (got $_VER_RC)"; fi
+if [[ "$(printf '%s' "$_VER_OUT" | tr -d '[:space:]')" == "$_EXPECTED_VER" ]]; then pass
+else fail "juggernaut version output '$_VER_OUT' should match VERSION file '$_EXPECTED_VER'"; fi
+
+section "--version flag still works (backward compat)"
+_VER_OUT="$(bash "$REPO_ROOT/juggernaut" --version 2>&1)"
+_VER_RC=$?
+if [[ "$_VER_RC" -eq 0 && "$(printf '%s' "$_VER_OUT" | tr -d '[:space:]')" == "$_EXPECTED_VER" ]]; then pass
+else fail "juggernaut --version should exit 0 and print version (got RC=$_VER_RC out='$_VER_OUT')"; fi
+
+# ---------------------------------------------------------------------------
 # Unknown option → non-zero with message
 # ---------------------------------------------------------------------------
 section "unknown option exits non-zero with usage hint"
