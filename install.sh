@@ -372,11 +372,8 @@ install_launcher_profile_block() {
   local end='# END: Juggernaut Launcher'
   local install_dir="$INSTALL_DIR"
 
-  # The function body is written verbatim into the user's profile. Any
-  # substitution that must happen at install time (INSTALL_DIR, service
-  # name default) uses ${INSTALL_DIR_LITERAL} / heredoc interpolation.
-  local block
-  block=$(cat <<LAUNCHER
+  local bash_block
+  bash_block=$(cat <<LAUNCHER
 # BEGIN: Juggernaut Launcher
 # Juggernaut claude launcher - injects AWS_BEARER_TOKEN_BEDROCK from DPAPI or
 # the OS keychain before exec'ing the real claude binary. Silent on success.
@@ -397,14 +394,35 @@ claude() {
 LAUNCHER
 )
 
+  # Fish cannot source bash functions; shell out to bash to call keychain.sh.
+  local fish_block
+  fish_block=$(cat <<FISHLAUNCHER
+# BEGIN: Juggernaut Launcher
+function claude
+    if test -z "\$AWS_BEARER_TOKEN_BEDROCK"
+        if test -r "$install_dir/lib/keychain.sh"
+            set -l _juggernaut_token (bash -c '. "$install_dir/lib/keychain.sh"; bearer_token_get' 2>/dev/null)
+            if test -n "\$_juggernaut_token"
+                set -x AWS_BEARER_TOKEN_BEDROCK \$_juggernaut_token
+            end
+        end
+    end
+    command claude \$argv
+end
+# END: Juggernaut Launcher
+FISHLAUNCHER
+)
+
   local profile_candidates=(
     "$HOME/.bashrc"
     "$HOME/.zshrc"
+    "$HOME/.config/fish/config.fish"
     "$HOME/.profile"
   )
 
   # Only write to profiles that already exist. This avoids creating a
-  # .zshrc for a bash user (and vice versa).
+  # .zshrc for a bash user (and vice versa). Fish config is created if
+  # fish is installed (detected by command presence).
   local targets=()
   for candidate in "${profile_candidates[@]}"; do
     if [[ -f "$candidate" ]]; then
@@ -412,16 +430,29 @@ LAUNCHER
     fi
   done
 
+  # Fish: create config.fish if fish is installed but no config file yet.
+  local fish_config="$HOME/.config/fish/config.fish"
+  if [[ ! -f "$fish_config" ]] && command -v fish >/dev/null 2>&1; then
+    targets+=("$fish_config")
+  fi
+
   # If the user's login shell has no rc file yet, seed the matching one.
   if [[ ${#targets[@]} -eq 0 ]]; then
     case "${SHELL:-}" in
       */zsh)  targets+=("$HOME/.zshrc") ;;
       */bash) targets+=("$HOME/.bashrc") ;;
+      */fish) targets+=("$fish_config") ;;
       *)      targets+=("$HOME/.profile") ;;
     esac
   fi
 
   for path in "${targets[@]}"; do
+    # Determine whether this is a fish config file.
+    local block="$bash_block"
+    if [[ "$path" == *.fish ]]; then
+      block="$fish_block"
+    fi
+
     # Strip any existing launcher block first (idempotent re-install).
     if [[ -f "$path" ]]; then
       local tmp
@@ -433,7 +464,6 @@ LAUNCHER
         skip == 0 { print }
       ' "$path" > "$tmp" && mv "$tmp" "$path"
     else
-      # Create parent dir (e.g. ~/.config for fish in the future) and touch.
       mkdir -p "$(dirname "$path")"
       : > "$path"
     fi
