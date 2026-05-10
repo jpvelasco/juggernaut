@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # juggernaut — v3 subcommand dispatcher.
 # Usage: juggernaut <subcommand> [options]
-# Subcommands: apply, show, doctor, uninstall
+# Subcommands: apply, show, doctor, uninstall, version
 
 set -euo pipefail
 
@@ -33,6 +33,7 @@ Subcommands:
   show        Print current Juggernaut configuration
   doctor      Verify configuration and credentials
   uninstall   Remove Juggernaut configuration
+  version     Print the installed Juggernaut version
 
 Options (apply):
   --auth=iam|bedrock-api-key  Authentication mode (required on first run)
@@ -78,7 +79,7 @@ case "$SUBCMD" in
   uninstall)
     exec "$SCRIPT_DIR/commands/uninstall.sh" "$@"
     ;;
-  --version|-v)
+  version|--version|-v)
     cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo "unknown"
     exit 0
     ;;

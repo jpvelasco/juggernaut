@@ -2,6 +2,20 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.1.3] - 2026-05-09
+
+**Patch release.** Adds `juggernaut version` subcommand and adds CI enforcement that schema fallback version strings stay in sync with `VERSION`.
+
+### Added
+
+- **`juggernaut version` subcommand.** `juggernaut version` (and `juggernaut.ps1 version`) now print the installed version and exit 0. The existing `--version` / `-v` flags continue to work; `version` is the new canonical subcommand form, consistent with other CLI tools.
+- **CI version-sync check covers `lib/schema.sh` and `lib/schema.ps1`.** The `Verify version sync` step in `.github/workflows/test.yml` now also asserts that the `${J_VERSION:-X.Y.Z}` fallback in `lib/schema.sh` and the `[string]$Version = 'X.Y.Z'` default in `lib/schema.ps1` both match `VERSION`. This catches the class of bug where a version bump updates `VERSION` and `bedrock-config.json` but forgets the schema fallbacks, causing Pester's `meta.version` assertions to fail.
+- **Schema fallback strings updated to 3.1.3.**
+
+### Testing
+
+- `test_apply.sh`: new "juggernaut version subcommand prints semver and exits 0" and "--version flag still works (backward compat)" sections.
+
 ## [3.1.2] - 2026-05-09
 
 **Patch release.** Hardens unknown-option handling so typos and unrecognised flags fail fast.

@@ -40,6 +40,24 @@ jobs:
           fi
           echo "Version sync OK: $FILE_VERSION"
 
+          # Verify schema.sh fallback version matches VERSION.
+          SCHEMA_SH_VERSION=$(grep -oE 'J_VERSION:-[0-9]+\.[0-9]+\.[0-9]+' lib/schema.sh | head -1 | cut -d- -f2)
+          if [[ "$FILE_VERSION" != "$SCHEMA_SH_VERSION" ]]; then
+            echo "ERROR: VERSION ($FILE_VERSION) != lib/schema.sh fallback ($SCHEMA_SH_VERSION)"
+            echo "  Update the '\${J_VERSION:-X.Y.Z}' default in lib/schema.sh to match VERSION."
+            exit 1
+          fi
+          echo "schema.sh fallback OK: $SCHEMA_SH_VERSION"
+
+          # Verify schema.ps1 fallback version matches VERSION.
+          SCHEMA_PS1_VERSION=$(grep -oE "\\\$Version = '[0-9]+\.[0-9]+\.[0-9]+'" lib/schema.ps1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if [[ "$FILE_VERSION" != "$SCHEMA_PS1_VERSION" ]]; then
+            echo "ERROR: VERSION ($FILE_VERSION) != lib/schema.ps1 fallback ($SCHEMA_PS1_VERSION)"
+            echo "  Update the [string]\$Version = 'X.Y.Z' default in lib/schema.ps1 to match VERSION."
+            exit 1
+          fi
+          echo "schema.ps1 fallback OK: $SCHEMA_PS1_VERSION"
+
   test-unix:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
