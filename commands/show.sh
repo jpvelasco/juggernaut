@@ -24,6 +24,9 @@ EOF
       exit 0
       ;;
     *)
+      echo "show: unknown option '$arg'" >&2
+      echo "Run 'juggernaut show --help' for usage." >&2
+      exit 1
       ;;
   esac
 done

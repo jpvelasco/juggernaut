@@ -16,11 +16,12 @@ $env:BEDROCK_CONFIG_PATH = if ($env:BEDROCK_CONFIG_PATH) { $env:BEDROCK_CONFIG_P
 foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
         '^--scope=(user|project)$' { $Scope = $Matches[1]; break }
-        '^--scope=' { throw "doctor: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')" }
+        '^--scope=' { Write-Error "doctor: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')"; exit 1 }
         '^--help$' { $Help = $true; break }
         '^-h$' { $Help = $true; break }
         '^--version$' { $Version = $true; break }
         '^-v$' { $Version = $true; break }
+        default { Write-Error "doctor: unknown option '$arg'`nRun 'juggernaut.ps1 doctor --help' for usage."; exit 1 }
     }
 }
 

@@ -2,6 +2,21 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.1.2] - 2026-05-09
+
+**Patch release.** Hardens unknown-option handling so typos and unrecognised flags fail fast.
+
+### Fixed
+
+- **`juggernaut apply` now exits non-zero on unknown options.** Previously, unrecognised flags were silently ignored with an `(ignored)` warning, allowing typos to go unnoticed. The command now exits 1 and prints the unknown flag name and a usage hint.
+- **`juggernaut doctor` and `juggernaut show` now exit non-zero on unknown options.** Both commands had a silent `*)` fallthrough in their option-parsing loops. They now exit 1 with a message consistent with the rest of the codebase.
+- **`juggernaut.ps1 doctor` and `juggernaut.ps1 show` now exit non-zero on unknown options.** The PowerShell `RemainingArgs` loops had no default case (or a silent `default {}`). Both now write an error and exit 1.
+- **`.gitignore` covers `pester-results.xml`.** The CI Pester job writes `pester-results.xml`; only `testResults.xml` was previously excluded. Both are now ignored.
+
+### Testing
+
+- `test_apply.sh`, `test_show.sh`, `test_doctor.sh`: new section each verifying that an unrecognised flag exits non-zero and names the offending option.
+
 ## [3.1.1] - 2026-05-09
 
 **Patch release.** Fixes stale `doctor` remediation text after the v3 auth gate.

@@ -63,5 +63,6 @@ secrets.*
 # Codacy local artifacts
 .codacy/
 
-# Pester result artifact
+# Pester result artifacts
 testResults.xml
+pester-results.xml
