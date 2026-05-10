@@ -8,13 +8,13 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Added
 
-- **Fish shell launcher support.** `install.sh` now writes a `function claude` block (using proper fish syntax) to `~/.config/fish/config.fish` when that file exists or fish is installed. The fish block shells out to bash to call `lib/keychain.sh` (fish cannot source bash functions), injecting `AWS_BEARER_TOKEN_BEDROCK` before exec'ing the real `claude` binary via `command claude $argv`.
+- **Fish shell launcher support.** `install.sh` now writes a `function claude` block (using proper fish syntax) to `~/.config/fish/config.fish` when that file exists or fish is installed. The fish block shells out to bash to call `lib/keychain.sh` (fish cannot source bash functions), injecting `AWS_BEARER_TOKEN_BEDROCK` before exec'ing the real `claude` binary via `command claude` with `$argv`.
 - **Idempotent fish install.** Re-running `install.sh` strips any existing `# BEGIN: Juggernaut Launcher` / `# END: Juggernaut Launcher` block from `config.fish` before writing, same as bash/zsh profiles.
 - **`uninstall.sh` removes fish launcher block.** `~/.config/fish/config.fish` is now included in `_launcher_profile_candidates` so `juggernaut uninstall` cleans up fish profile blocks too.
 
 ### Testing
 
-- `test_launcher.sh`: new sections verifying the fish block uses fish syntax (`function claude`, `command claude $argv`, not `claude()` / `"$@"`), that idempotent re-install produces exactly one block, and that `uninstall.sh` correctly strips it.
+- `test_launcher.sh`: new sections verifying the fish block uses fish syntax (`function claude` / `command claude $argv` rather than `claude()` / `"$@"`), that idempotent re-install produces exactly one block, and that `uninstall.sh` correctly strips it.
 
 ## [3.1.3] - 2026-05-09
 
