@@ -358,6 +358,18 @@ fi
 rm -rf "$LSRC_HOME"
 
 # ---------------------------------------------------------------------------
+# Unknown option → non-zero with message
+# ---------------------------------------------------------------------------
+section "unknown option exits non-zero with usage hint"
+OUTPUT="$(bash "$REPO_ROOT/commands/doctor.sh" --not-a-real-flag 2>&1)"
+RC=$?
+if [[ "$RC" -ne 0 && "$OUTPUT" == *"unknown option"* && "$OUTPUT" == *"--not-a-real-flag"* ]]; then
+  pass
+else
+  fail "doctor unknown option should exit non-zero and mention the flag (got RC=$RC); output: $OUTPUT"
+fi
+
+# ---------------------------------------------------------------------------
 # --help / --version
 # ---------------------------------------------------------------------------
 section "doctor --help exits 0 and mentions v3"

@@ -115,6 +115,18 @@ if [[ "$help_out" == *"--scope"* ]]; then pass; else fail "show --help should me
 if [[ "$help_out" != *"--legacy-v1"* && "$help_out" != *"shell-fallback"* ]]; then pass
 else fail "show --help should NOT mention legacy flags"; fi
 
+# ---------------------------------------------------------------------------
+# Unknown option → non-zero with message
+# ---------------------------------------------------------------------------
+section "unknown option exits non-zero with usage hint"
+OUTPUT="$(bash "$REPO_ROOT/commands/show.sh" --not-a-real-flag 2>&1)"
+RC=$?
+if [[ "$RC" -ne 0 && "$OUTPUT" == *"unknown option"* && "$OUTPUT" == *"--not-a-real-flag"* ]]; then
+  pass
+else
+  fail "show unknown option should exit non-zero and mention the flag (got RC=$RC); output: $OUTPUT"
+fi
+
 echo
 echo "show.sh tests: $PASS passed, $FAIL failed"
 exit "$FAIL"

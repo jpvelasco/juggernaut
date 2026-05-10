@@ -196,7 +196,9 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       _apply_help; exit 0 ;;
     *)
-      echo "apply: unknown option '$arg' (ignored)" >&2 ;;
+      echo "apply: unknown option '$arg'" >&2
+      echo "Run 'juggernaut apply --help' for usage." >&2
+      exit 1 ;;
   esac
   shift
 done

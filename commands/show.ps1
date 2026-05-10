@@ -13,12 +13,12 @@ $ErrorActionPreference = 'Stop'
 foreach ($arg in $RemainingArgs) {
     switch -Regex ($arg) {
         '^--scope=(user|project)$' { $Scope = $Matches[1]; break }
-        '^--scope=' { throw "show: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')" }
+        '^--scope=' { Write-Error "show: --scope must be 'user' or 'project' (got: '$($arg.Substring(8))')"; exit 1 }
         '^--help$' { $Help = $true; break }
         '^-h$' { $Help = $true; break }
         '^--version$' { $Version = $true; break }
         '^-v$' { $Version = $true; break }
-        default { }
+        default { Write-Error "show: unknown option '$arg'`nRun 'juggernaut.ps1 show --help' for usage."; exit 1 }
     }
 }
 

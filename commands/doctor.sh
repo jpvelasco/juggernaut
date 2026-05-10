@@ -27,6 +27,9 @@ EOF
       exit 0
       ;;
     *)
+      echo "doctor: unknown option '$arg'" >&2
+      echo "Run 'juggernaut doctor --help' for usage." >&2
+      exit 1
       ;;
   esac
 done

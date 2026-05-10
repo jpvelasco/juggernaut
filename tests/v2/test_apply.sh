@@ -208,6 +208,18 @@ section "juggernaut dispatcher rejects unknown subcommand"
 if ! bash "$REPO_ROOT/juggernaut" not-a-subcommand >/dev/null 2>&1; then pass; else fail "juggernaut should reject unknown subcommand"; fi
 
 # ---------------------------------------------------------------------------
+# Unknown option → non-zero with message
+# ---------------------------------------------------------------------------
+section "unknown option exits non-zero with usage hint"
+OUTPUT="$(bash "$REPO_ROOT/commands/apply.sh" --not-a-real-flag 2>&1)"
+RC=$?
+if [[ "$RC" -ne 0 && "$OUTPUT" == *"unknown option"* && "$OUTPUT" == *"--not-a-real-flag"* ]]; then
+  pass
+else
+  fail "apply unknown option should exit non-zero and mention the flag (got RC=$RC); output: $OUTPUT"
+fi
+
+# ---------------------------------------------------------------------------
 # Piped stdin: 110-char key is captured and written to settings.json
 # ---------------------------------------------------------------------------
 section "piped stdin: 110-char key captured and written to settings.json"
