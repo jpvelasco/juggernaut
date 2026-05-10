@@ -249,6 +249,103 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "fish config gets fish-syntax launcher block"
+FISH_HOME="$TMP/home-fish"
+mkdir -p "$FISH_HOME/.config/fish"
+touch "$FISH_HOME/.config/fish/config.fish"
+
+FISH_INSTALL_DIR="$TMP/install-fish"
+make_stub_install "$FISH_INSTALL_DIR" hit
+
+INSTALL_FN_FISH="$TMP/install_fn_fish.sh"
+awk '
+  /^install_launcher_profile_block\(\)/ { capture = 1 }
+  capture { print }
+  capture && /^# END install_launcher_profile_block$/ { exit }
+' "$INSTALL_SH" > "$INSTALL_FN_FISH"
+
+(
+  HOME="$FISH_HOME"
+  INSTALL_DIR="$FISH_INSTALL_DIR"
+  # shellcheck disable=SC1090
+  . "$INSTALL_FN_FISH"
+  install_launcher_profile_block >/dev/null
+)
+
+FISH_CFG="$FISH_HOME/.config/fish/config.fish"
+if grep -q '^# BEGIN: Juggernaut Launcher' "$FISH_CFG"; then
+  pass
+else
+  fail "fish config.fish should contain launcher block"
+fi
+
+# Fish syntax: must use `function claude` not `claude()`
+if grep -q '^function claude$' "$FISH_CFG"; then
+  pass
+else
+  fail "fish launcher must use 'function claude' syntax (not bash 'claude()')"
+fi
+
+# Fish syntax: must use `command claude \$argv` not `command claude "\$@"`
+if grep -q 'command claude \$argv' "$FISH_CFG"; then
+  pass
+else
+  fail "fish launcher must use 'command claude \$argv' (not bash '\$@')"
+fi
+
+# Fish syntax: must not contain bash function syntax
+if ! grep -q 'claude()' "$FISH_CFG"; then
+  pass
+else
+  fail "fish launcher must not contain bash function syntax 'claude()'"
+fi
+
+# Idempotency: running install again should produce exactly one launcher block
+(
+  HOME="$FISH_HOME"
+  INSTALL_DIR="$FISH_INSTALL_DIR"
+  # shellcheck disable=SC1090
+  . "$INSTALL_FN_FISH"
+  install_launcher_profile_block >/dev/null
+)
+
+fish_begin_count="$(grep -c '^# BEGIN: Juggernaut Launcher' "$FISH_CFG" 2>/dev/null || echo 0)"
+fish_end_count="$(grep -c '^# END: Juggernaut Launcher' "$FISH_CFG" 2>/dev/null || echo 0)"
+if [[ "$fish_begin_count" == "1" && "$fish_end_count" == "1" ]]; then
+  pass
+else
+  fail "fish idempotency: begin=$fish_begin_count end=$fish_end_count"
+fi
+
+# ---------------------------------------------------------------------------
+section "uninstall strips fish launcher block"
+# Verify uninstall.sh's _launcher_profile_candidates includes fish config.
+UNINSTALL_SH="$REPO_ROOT/commands/uninstall.sh"
+if grep -q '\.config/fish/config\.fish' "$UNINSTALL_SH"; then
+  pass
+else
+  fail "uninstall.sh _launcher_profile_candidates should include ~/.config/fish/config.fish"
+fi
+
+# Actually strip the block from the fish config we just wrote.
+STRIP_FN_FISH="$TMP/strip_fn_fish.sh"
+awk '
+  /^_remove_launcher_block\(\)/ { capture = 1 }
+  capture { print }
+  capture && /^# END _remove_launcher_block$/ { exit }
+' "$UNINSTALL_SH" > "$STRIP_FN_FISH"
+(
+  # shellcheck disable=SC1090
+  . "$STRIP_FN_FISH"
+  _remove_launcher_block "$FISH_CFG" >/dev/null
+)
+if ! grep -qE '^# (BEGIN|END): Juggernaut Launcher' "$FISH_CFG"; then
+  pass
+else
+  fail "strip: fish launcher markers still present after uninstall"
+fi
+
+# ---------------------------------------------------------------------------
 section "uninstall strips launcher block"
 UNINSTALL_SH="$REPO_ROOT/commands/uninstall.sh"
 if [[ ! -f "$UNINSTALL_SH" ]]; then

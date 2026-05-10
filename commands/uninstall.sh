@@ -38,7 +38,8 @@ Options:
 
 Removes the Juggernaut block from settings.json, the keychain entry, and
 the Claude launcher function block from shell profiles (~/.bashrc,
-~/.zshrc, ~/.profile). Also removes a legacy ~/.local/bin/claude symlink
+~/.zshrc, ~/.config/fish/config.fish, ~/.profile). Also removes a legacy
+~/.local/bin/claude symlink
 from earlier launcher iterations if present. Does not strip legacy
 v1/v2 profile blocks from earlier versions - run the installer
 (install.sh) for that full-wipe pass.
@@ -103,7 +104,7 @@ profile_token_file="$(profile_token_path)"
 [[ -f "$profile_token_file" ]] && has_profile_token=true
 
 _launcher_profile_candidates() {
-  printf '%s\n' "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"
+  printf '%s\n' "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" "$HOME/.profile"
 }
 
 _profile_has_launcher_block() {
