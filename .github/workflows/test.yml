@@ -91,17 +91,28 @@ jobs:
           echo "Bash: $(which bash)"
           bash --version | head -1
 
+      - name: Create test-results directory
+        run: mkdir -p test-results
+
       - name: Run bash tests
         run: |
-          bash ./tests/v2/test_schema.sh
-          bash ./tests/v2/test_config_manager.sh
-          bash ./tests/v2/test_keychain.sh
-          bash ./tests/v2/test_apply.sh
-          bash ./tests/v2/test_show.sh
-          bash ./tests/v2/test_doctor.sh
-          bash ./tests/v2/test_uninstall.sh
-          bash ./tests/v2/test_install.sh
-          bash ./tests/v2/test_launcher.sh
+          bash ./tests/v2/test_schema.sh        2>&1 | tee test-results/test_schema.txt
+          bash ./tests/v2/test_config_manager.sh 2>&1 | tee test-results/test_config_manager.txt
+          bash ./tests/v2/test_keychain.sh       2>&1 | tee test-results/test_keychain.txt
+          bash ./tests/v2/test_apply.sh          2>&1 | tee test-results/test_apply.txt
+          bash ./tests/v2/test_show.sh           2>&1 | tee test-results/test_show.txt
+          bash ./tests/v2/test_doctor.sh         2>&1 | tee test-results/test_doctor.txt
+          bash ./tests/v2/test_uninstall.sh      2>&1 | tee test-results/test_uninstall.txt
+          bash ./tests/v2/test_install.sh        2>&1 | tee test-results/test_install.txt
+          bash ./tests/v2/test_launcher.sh       2>&1 | tee test-results/test_launcher.txt
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6f75727b4e67b40e017e7b96de37 # v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: test-results/
+          retention-days: 14
 
       - name: Test actual keychain store/retrieve (macOS)
         if: runner.os == 'macOS'
@@ -230,6 +241,14 @@ jobs:
           $config.TestResult.OutputPath = './pester-results.xml'
           Invoke-Pester -Configuration $config
 
+      - name: Upload Pester results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6f75727b4e67b40e017e7b96de37 # v4
+        with:
+          name: pester-results
+          path: pester-results.xml
+          retention-days: 14
+
   test-windows-gitbash:
     name: Test on Windows (Git Bash)
     runs-on: windows-latest
@@ -246,18 +265,22 @@ jobs:
           echo "Shell: $SHELL"
           echo "Bash version: $BASH_VERSION"
 
+      - name: Create test-results directory
+        shell: bash
+        run: mkdir -p test-results
+
       - name: Run bash tests
         shell: bash
         run: |
-          bash ./tests/v2/test_schema.sh
-          bash ./tests/v2/test_config_manager.sh
-          bash ./tests/v2/test_keychain.sh
-          bash ./tests/v2/test_apply.sh
-          bash ./tests/v2/test_show.sh
-          bash ./tests/v2/test_doctor.sh
-          bash ./tests/v2/test_uninstall.sh
-          bash ./tests/v2/test_install.sh
-          bash ./tests/v2/test_launcher.sh
+          bash ./tests/v2/test_schema.sh        2>&1 | tee test-results/test_schema.txt
+          bash ./tests/v2/test_config_manager.sh 2>&1 | tee test-results/test_config_manager.txt
+          bash ./tests/v2/test_keychain.sh       2>&1 | tee test-results/test_keychain.txt
+          bash ./tests/v2/test_apply.sh          2>&1 | tee test-results/test_apply.txt
+          bash ./tests/v2/test_show.sh           2>&1 | tee test-results/test_show.txt
+          bash ./tests/v2/test_doctor.sh         2>&1 | tee test-results/test_doctor.txt
+          bash ./tests/v2/test_uninstall.sh      2>&1 | tee test-results/test_uninstall.txt
+          bash ./tests/v2/test_install.sh        2>&1 | tee test-results/test_install.txt
+          bash ./tests/v2/test_launcher.sh       2>&1 | tee test-results/test_launcher.txt
 
       - name: Test actual Credential Manager (Git Bash)
         shell: bash
@@ -280,3 +303,35 @@ jobs:
       - name: Test installer dry-run
         shell: bash
         run: bash ./install.sh --dry-run
+
+      - name: Test installer full install (Git Bash)
+        shell: bash
+        run: |
+          tmp_remote="$(mktemp -d)"
+          tmp_src="$(mktemp -d)"
+          tmp_home="$(mktemp -d)"
+          trap 'rm -rf "$tmp_remote" "$tmp_src" "$tmp_home"' EXIT
+          git clone -q "$GITHUB_WORKSPACE" "$tmp_src"
+          git -C "$tmp_src" checkout -q -b ci-gitbash-installer
+          git -C "$tmp_src" config user.email test@example.invalid
+          git -C "$tmp_src" config user.name "Juggernaut CI"
+          printf 'ci-gitbash-installer\n' > "$tmp_src/VERSION"
+          git -C "$tmp_src" add VERSION
+          git -C "$tmp_src" commit -q -m "ci gitbash installer ref"
+          git clone --bare -q "$tmp_src" "$tmp_remote/repo.git"
+          HOME="$tmp_home" JUGGERNAUT_REPO_URL="$tmp_remote/repo.git" \
+            bash ./install.sh --ref ci-gitbash-installer
+          test "$(tr -d '\r\n ' < "$tmp_home/.juggernaut/VERSION")" = "ci-gitbash-installer"
+          # v3: no auto-apply
+          if [[ -f "$tmp_home/.claude/settings.json" ]]; then
+            jq -e '.juggernaut // empty' "$tmp_home/.claude/settings.json" >/dev/null && \
+              { echo "FAIL: installer auto-applied juggernaut block"; exit 1; } || true
+          fi
+
+      - name: Upload test results (Git Bash)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6f75727b4e67b40e017e7b96de37 # v4
+        with:
+          name: test-results-windows-gitbash
+          path: test-results/
+          retention-days: 14

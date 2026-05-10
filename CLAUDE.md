@@ -11,7 +11,24 @@ Entry points: `juggernaut` (bash) / `juggernaut.ps1` (PowerShell) → `commands/
 ## Commands
 
 ```bash
-# Run all bash tests (order matches CI)
+# Run all bash tests via Makefile (preferred)
+make test
+
+# Run individual test suites
+make test-apply
+make test-launcher
+# ... (make help lists all targets)
+
+# Lint all shell scripts
+make lint
+
+# Preview install without writing files
+make install-dry-run
+
+# Check active installation
+make doctor
+
+# Run all bash tests directly (order matches CI)
 bash ./tests/v2/test_schema.sh
 bash ./tests/v2/test_config_manager.sh
 bash ./tests/v2/test_keychain.sh
