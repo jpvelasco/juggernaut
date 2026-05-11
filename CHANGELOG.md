@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.2.1] - 2026-05-11
+
+**Patch release.** Documentation update for Claude Opus 4.7 tokenizer behavior.
+
+### Documentation
+
+- **Opus 4.7 tokenizer note.** README now calls out that Opus 4.7 uses an updated tokenizer that may consume approximately 1–1.35× more tokens than Opus 4.6 for equivalent tasks — relevant when estimating Bedrock costs when switching from an older Opus model.
+
 ## [3.2.0] - 2026-05-10
 
 **Feature release.** Completes the v3 toolchain with a Makefile, Fish shell launcher, stricter CLI handling, version subcommand, improved CI, and deeper test coverage.
@@ -470,6 +478,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
 [3.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.4
