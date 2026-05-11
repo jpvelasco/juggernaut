@@ -211,6 +211,11 @@ Describe 'doctor.ps1' {
             $out | Should -Match 'Juggernaut v3'
             $out | Should -Not -Match 'JUGGERNAUT_USE_V2'
         }
+        It 'unknown flag fails with message naming the flag' {
+            $err = { & (Join-Path $script:repoRoot 'commands\doctor.ps1') --not-a-real-flag } |
+                Should -Throw '*unknown option*' -PassThru
+            $err.Exception.Message | Should -Match 'not-a-real-flag'
+        }
     }
 
     Context 'bedrock-api-key with profile token storage detected by doctor' {

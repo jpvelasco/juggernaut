@@ -151,5 +151,10 @@ Describe 'show.ps1 (v3)' {
             $out | Should -Not -Match 'JUGGERNAUT_USE_V2'
             $out | Should -Not -Match 'Shell Fallback'
         }
+        It 'unknown flag fails with message naming the flag' {
+            $err = { & (Join-Path $script:repoRoot 'commands\show.ps1') --not-a-real-flag } |
+                Should -Throw '*unknown option*' -PassThru
+            $err.Exception.Message | Should -Match 'not-a-real-flag'
+        }
     }
 }

@@ -62,28 +62,28 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.1.1/install.sh | bash -s -- --version v3.1.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.sh | bash -s -- --version v3.2.0
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7) — Defender-friendly download-then-run
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.1.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.1.1; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.0; Remove-Item $p
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.1.1/install.sh | bash -s -- --version v3.1.1 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.sh | bash -s -- --version v3.2.0 --dry-run
 ```
 
 ```powershell
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.1.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.1.1 -DryRun; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.0 -DryRun; Remove-Item $p
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.1.1 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.2.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
