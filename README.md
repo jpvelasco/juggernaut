@@ -62,28 +62,28 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.sh | bash -s -- --version v3.2.0
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.sh | bash -s -- --version v3.2.1
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7) — Defender-friendly download-then-run
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.0; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1; Remove-Item $p
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.sh | bash -s -- --version v3.2.0 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.sh | bash -s -- --version v3.2.1 --dry-run
 ```
 
 ```powershell
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.0/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.0 -DryRun; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1 -DryRun; Remove-Item $p
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.2.0 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.2.1 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
@@ -251,6 +251,8 @@ Juggernaut writes **only** to `~/.claude/settings.json` (user scope) or `./.clau
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | **Opus** | Claude Opus 4.7 | `global.anthropic.claude-opus-4-7` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+
+> **Opus 4.7 tokenizer note:** Opus 4.7 uses an updated tokenizer that may consume approximately 1–1.35× more tokens than Opus 4.6 for equivalent tasks. Factor this in when estimating Bedrock costs if you're switching from an older Opus model.
 
 ### Model Capabilities
 
