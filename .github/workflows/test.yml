@@ -108,7 +108,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6f75727b4e67b40e017e7b96de37 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: test-results-${{ matrix.os }}
           path: test-results/
@@ -243,7 +243,7 @@ jobs:
 
       - name: Upload Pester results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6f75727b4e67b40e017e7b96de37 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pester-results
           path: pester-results.xml
@@ -330,7 +330,7 @@ jobs:
 
       - name: Upload test results (Git Bash)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6f75727b4e67b40e017e7b96de37 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: test-results-windows-gitbash
           path: test-results/
