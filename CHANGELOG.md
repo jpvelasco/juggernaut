@@ -2,6 +2,33 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.2.0] - 2026-05-10
+
+**Feature release.** Completes the v3 toolchain with a Makefile, Fish shell launcher, stricter CLI handling, version subcommand, improved CI, and deeper test coverage.
+
+### New Features
+
+- **Makefile** for local development (`make test`, `make lint`, `make install-dry-run`, `make doctor`, per-suite targets, and `make help`).
+- **Fish shell launcher support** — `install.sh` now writes a proper Fish `function claude` block to `~/.config/fish/config.fish` when Fish is installed. Fully idempotent; `juggernaut uninstall` cleans it up.
+- **`juggernaut version` subcommand** (Bash + PowerShell). `--version` / `-v` flags remain supported for backward compatibility.
+
+### Fixed
+
+- Unknown options now exit with code 1 (in `apply`, `doctor`, and `show` for both Bash and PowerShell), showing the bad flag and a usage hint.
+- `doctor` now correctly reports bearer-token storage source (no longer incorrectly says "system keychain" for profile storage).
+- `ANTHROPIC_MODEL` is only written when `--opusplan` is enabled. Re-applying with `--no-opusplan` removes it.
+
+### Changed (CI & Tooling)
+
+- Git Bash CI job now runs full end-to-end `install.sh` scenario.
+- Version sync check now validates `lib/schema.sh` and `lib/schema.ps1` fallbacks.
+- All test jobs upload artifacts (retained 14 days).
+
+### Verification
+
+- Expanded Pester coverage for unknown options, version subcommand, etc.
+- Full Bash test suite + `make ci`.
+
 ## [3.1.5] - 2026-05-10
 
 **Patch release.** Adds a `Makefile` for local development convenience and expands CI with a Git Bash full-install scenario and test artifact upload.
@@ -443,6 +470,21 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
+[3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[3.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.4
+[3.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.3
+[3.1.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.2
+[3.1.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.1
+[3.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.0
+[3.0.8]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.8
+[3.0.7]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.7
+[3.0.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.6
+[3.0.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.5
+[3.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.4
+[3.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.3
+[3.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.2
+[3.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.1
 [3.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.0.0
 [2.3.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.4
 [2.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.3.3
@@ -457,5 +499,6 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [2.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.2.0
 [2.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.3
 [2.1.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.2
+[2.1.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.1
 [2.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.1.0
 [2.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v2.0.0

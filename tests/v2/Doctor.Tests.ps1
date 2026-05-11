@@ -211,6 +211,12 @@ Describe 'doctor.ps1' {
             $out | Should -Match 'Juggernaut v3'
             $out | Should -Not -Match 'JUGGERNAUT_USE_V2'
         }
+        It 'unknown flag exits non-zero and names the flag' {
+            $out = & (Join-Path $script:repoRoot 'commands\doctor.ps1') --not-a-real-flag 2>&1 | Out-String
+            $LASTEXITCODE | Should -Not -Be 0
+            $out | Should -Match 'unknown option'
+            $out | Should -Match 'not-a-real-flag'
+        }
     }
 
     Context 'bedrock-api-key with profile token storage detected by doctor' {

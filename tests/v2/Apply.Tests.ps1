@@ -269,12 +269,26 @@ Describe 'apply.ps1 — repairs opusplan poisoned primary model' {
     }
 }
 
+Describe 'juggernaut.ps1 version subcommand' {
+    It 'prints semver string and exits 0' {
+        $dispatcher = Join-Path $script:repoRoot 'juggernaut.ps1'
+        $out = & $dispatcher version 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0
+        $out.Trim() | Should -Match '^\d+\.\d+\.\d+'
+        $out.Trim() | Should -Be $script:ExpectedVersion
+    }
+}
+
 Describe 'apply.ps1 — help / unknown args' {
     It '-Help exits 0 and mentions -Auth and -NoMantle' {
         $out = & (Join-Path $script:repoRoot 'commands\apply.ps1') -Help 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0
         $out | Should -Match '-Auth'
         $out | Should -Match '-NoMantle'
+    }
+    It 'unknown parameter causes non-zero exit' {
+        & (Join-Path $script:repoRoot 'commands\apply.ps1') -NotARealFlag 2>$null
+        $LASTEXITCODE | Should -Not -Be 0
     }
 }
 
