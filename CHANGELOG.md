@@ -2,6 +2,21 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.1.5] - 2026-05-10
+
+**Patch release.** Adds a `Makefile` for local development convenience and expands CI with a Git Bash full-install scenario and test artifact upload.
+
+### Added
+
+- **`Makefile`.** Common development targets: `make test` (all bash suites), `make lint` (shellcheck), `make install-dry-run` (preview install without writing), `make doctor` (check active installation), plus per-suite targets (`make test-apply`, `make test-launcher`, etc.) and a `make help` summary.
+- **CI: Git Bash full-install scenario.** The `test-windows-gitbash` job now runs a full `install.sh` end-to-end install (in addition to the existing dry-run), cloning from a local fixture repo, verifying the installed VERSION, and asserting no auto-apply occurred.
+- **CI: test artifact upload.** All three test jobs upload their output for easier post-mortem on failures:
+  - `test-unix` (ubuntu + macos): uploads `test-results/*.txt` (one file per bash test suite) as `test-results-<os>`.
+  - `test-windows-gitbash`: uploads `test-results/*.txt` as `test-results-windows-gitbash`.
+  - `test-windows-powershell`: uploads `pester-results.xml` as `pester-results`.
+  Artifacts are retained for 14 days.
+- **`.gitignore` covers `test-results/`.** The CI `tee` output directory is now excluded from version control.
+
 ## [3.1.4] - 2026-05-10
 
 **Patch release.** Adds fish shell support to the Claude launcher installer.
