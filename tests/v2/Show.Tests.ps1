@@ -152,7 +152,7 @@ Describe 'show.ps1 (v3)' {
             $out | Should -Not -Match 'Shell Fallback'
         }
         It 'unknown flag exits non-zero and names the flag' {
-            $out = & (Join-Path $script:repoRoot 'commands\show.ps1') --not-a-real-flag 2>&1 | Out-String
+            $out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $script:repoRoot 'commands\show.ps1') --not-a-real-flag 2>&1 | Out-String }
             $LASTEXITCODE | Should -Not -Be 0
             $out | Should -Match 'unknown option'
             $out | Should -Match 'not-a-real-flag'
