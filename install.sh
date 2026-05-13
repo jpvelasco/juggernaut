@@ -187,35 +187,8 @@ keychain_has_entry && STRIP_KEYCHAIN=1
 STRIP_PROFILE_TOKEN=0
 [[ -f "$PROFILE_TOKEN_PATH" ]] && STRIP_PROFILE_TOKEN=1
 
-echo "Juggernaut installer - wipe-and-reinstall"
-echo ""
-echo "Pre-wipe summary:"
-if [[ ${#TO_STRIP_PROFILES[@]} -gt 0 ]]; then
-  for p in "${TO_STRIP_PROFILES[@]}"; do
-    echo "  - strip Juggernaut/v1 block from $p"
-  done
-else
-  echo "  - shell profiles: no Juggernaut/v1 blocks found"
-fi
-if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
-  echo "  - remove 'juggernaut' key from $SETTINGS_PATH"
-else
-  echo "  - settings.json: no 'juggernaut' key found"
-fi
-if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
-  echo "  - remove OS-keychain entry '$KEYCHAIN_SERVICE_NAME'"
-else
-  echo "  - keychain: no '$KEYCHAIN_SERVICE_NAME' entry found"
-fi
-if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
-  echo "  - remove profile token file $PROFILE_TOKEN_PATH"
-else
-  echo "  - profile token: no token file found"
-fi
-echo ""
-
 # ---------------------------------------------------------------------------
-# Version Gate Policy
+# Version Gate Policy — evaluated before the banner so the banner is accurate
 # ---------------------------------------------------------------------------
 # Returns 0 (true) if $1 >= $2 as semver (major.minor.patch[-suffix]).
 version_compare() {
@@ -241,7 +214,10 @@ detect_installed_version() {
     local v
     v="$(< "$vfile")"
     v="${v//[[:space:]]/}"
-    printf '%s' "$v"
+    # Only treat as a valid version if it looks like semver (digits and dots).
+    if [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
+      printf '%s' "$v"
+    fi
   fi
 }
 
@@ -261,14 +237,43 @@ else
   WIPE_REASON="installed version $INSTALLED_VERSION < $MIN_SUPPORTED_VERSION"
 fi
 
+echo "Juggernaut installer"
+echo ""
 echo "Upgrade policy:"
-echo "  Installed version : ${INSTALLED_VERSION:-(none)}"
+echo "  Installed version   : ${INSTALLED_VERSION:-(none)}"
 echo "  Min for light update: $MIN_SUPPORTED_VERSION"
-echo "  Mode              : $UPDATE_MODE ($WIPE_REASON)"
+echo "  Mode                : $UPDATE_MODE ($WIPE_REASON)"
 if [[ "$UPDATE_MODE" == "light-update" ]]; then
-  echo "  Preserved         : credentials (keychain/profile token), ~/.claude/settings.json"
+  echo "  Preserved           : credentials (keychain/profile token), ~/.claude/settings.json"
 fi
 echo ""
+
+if [[ "$UPDATE_MODE" == "full-wipe" ]]; then
+  echo "Pre-wipe summary:"
+  if [[ ${#TO_STRIP_PROFILES[@]} -gt 0 ]]; then
+    for p in "${TO_STRIP_PROFILES[@]}"; do
+      echo "  - strip Juggernaut/v1 block from $p"
+    done
+  else
+    echo "  - shell profiles: no Juggernaut/v1 blocks found"
+  fi
+  if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
+    echo "  - remove 'juggernaut' key from $SETTINGS_PATH"
+  else
+    echo "  - settings.json: no 'juggernaut' key found"
+  fi
+  if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
+    echo "  - remove OS-keychain entry '$KEYCHAIN_SERVICE_NAME'"
+  else
+    echo "  - keychain: no '$KEYCHAIN_SERVICE_NAME' entry found"
+  fi
+  if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
+    echo "  - remove profile token file $PROFILE_TOKEN_PATH"
+  else
+    echo "  - profile token: no token file found"
+  fi
+  echo ""
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "--dry-run: no changes written. Exiting."

@@ -104,9 +104,13 @@ $MinSupportedVersion = '3.2.0'
 
 function Compare-SemVer {
     param([string]$Left, [string]$Right)
-    $lv = [version]($Left  -split '-')[0]
-    $rv = [version]($Right -split '-')[0]
-    return $lv -ge $rv
+    try {
+        $lv = [version]($Left  -split '-')[0]
+        $rv = [version]($Right -split '-')[0]
+        return $lv -ge $rv
+    } catch {
+        return $false
+    }
 }
 
 function Get-InstalledVersion {
@@ -177,20 +181,6 @@ $toStripProfiles = @(Get-ProfileCandidates | Where-Object { Test-ProfileHasJugge
 $stripSettings   = Test-SettingsHasJuggernautKey
 $stripKeychain   = Test-WindowsKeychainHasEntry
 
-Write-Host 'Juggernaut installer'
-Write-Host ''
-Write-Host 'Pre-wipe summary:'
-if ($toStripProfiles.Count -gt 0) {
-    foreach ($p in $toStripProfiles) { Write-Host "  - strip Juggernaut/v1 block from $p" }
-} else {
-    Write-Host '  - shell profiles: no Juggernaut/v1 blocks found'
-}
-if ($stripSettings) { Write-Host "  - remove 'juggernaut' key from $SettingsPath" }
-else                { Write-Host "  - settings.json: no 'juggernaut' key found" }
-if ($stripKeychain) { Write-Host "  - remove Credential Manager entry '$KeychainServiceName'" }
-else                { Write-Host "  - keychain: no '$KeychainServiceName' entry found" }
-Write-Host ''
-
 $InstalledVersion = Get-InstalledVersion
 
 if ($ForceWipe) {
@@ -207,6 +197,8 @@ if ($ForceWipe) {
     $WipeReason = "installed version $InstalledVersion < $MinSupportedVersion"
 }
 
+Write-Host 'Juggernaut installer'
+Write-Host ''
 Write-Host 'Upgrade policy:'
 $displayVersion = if ($InstalledVersion) { $InstalledVersion } else { '(none)' }
 Write-Host "  Installed version   : $displayVersion"
@@ -216,6 +208,20 @@ if ($UpdateMode -eq 'light-update') {
     Write-Host "  Preserved           : credentials (Credential Manager/DPAPI), ~/.claude/settings.json"
 }
 Write-Host ''
+
+if ($UpdateMode -eq 'full-wipe') {
+    Write-Host 'Pre-wipe summary:'
+    if ($toStripProfiles.Count -gt 0) {
+        foreach ($p in $toStripProfiles) { Write-Host "  - strip Juggernaut/v1 block from $p" }
+    } else {
+        Write-Host '  - shell profiles: no Juggernaut/v1 blocks found'
+    }
+    if ($stripSettings) { Write-Host "  - remove 'juggernaut' key from $SettingsPath" }
+    else                { Write-Host "  - settings.json: no 'juggernaut' key found" }
+    if ($stripKeychain) { Write-Host "  - remove Credential Manager entry '$KeychainServiceName'" }
+    else                { Write-Host "  - keychain: no '$KeychainServiceName' entry found" }
+    Write-Host ''
+}
 
 if ($DryRun) {
     Write-Host '-DryRun: no changes written. Exiting.'
