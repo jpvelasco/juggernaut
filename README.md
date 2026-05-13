@@ -97,9 +97,9 @@ The installer applies a **Version Gate Policy** on every run:
 
 | Scenario | Mode | What happens |
 |---|---|---|
-| No prior install | Full wipe | All profile blocks stripped, credentials deleted, fresh clone |
+| No prior install | Full wipe | Profile blocks stripped, credentials deleted, fresh clone |
 | Installed version `< 3.2.0` | Full wipe | Same as above |
-| Installed version `>= 3.2.0` | Light update | Only code + Claude launcher refreshed; credentials and `~/.claude/settings.json` untouched |
+| Installed version `>= 3.2.0` | Light update | Code + Claude launcher refreshed; credentials and `~/.claude/settings.json` untouched |
 
 The currently installed version is read from `$INSTALL_DIR/VERSION` (`~/.juggernaut/VERSION` by default). The minimum version for a light update is `3.2.0` (`MIN_SUPPORTED_VERSION`).
 

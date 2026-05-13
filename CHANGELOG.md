@@ -4,7 +4,7 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [3.2.2] - 2026-05-11
 
-**Feature release.** Installer now performs a non-destructive light update when upgrading from v3.2.0 or later, preserving credentials and `~/.claude/settings.json`.
+**Enhancement release.** Installer now performs a non-destructive light update when upgrading from v3.2.0 or later, preserving credentials and `~/.claude/settings.json`.
 
 ### New Features
 
