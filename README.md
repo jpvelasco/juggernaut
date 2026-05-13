@@ -52,7 +52,7 @@ Configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API, 
 
 ## Install
 
-Juggernaut v3 ships as a **destructive wipe-and-reinstall**: the installer strips any legacy Juggernaut/Claude-Code-Bedrock blocks from your shell profiles, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the bearer token storage (OS keychain on macOS/Windows for short keys, per-user DPAPI file at `~/.juggernaut/bearer-token.dpapi.bin` on Windows for long keys >1280 chars, profile file on Linux) **before** placing fresh files. Re-running the installer is the only supported upgrade path — there are no migration scripts, no deprecation windows, no `--yes` flag.
+Juggernaut's installer picks **light update** (code + launcher only, credentials preserved) or **full wipe** (everything cleaned), depending on the installed version. Upgrades from `v3.2.0` or later perform a light update and preserve your credentials and `~/.claude/settings.json`; a full wipe strips any legacy Juggernaut/Claude-Code-Bedrock blocks from your shell profiles, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes the bearer token storage (OS keychain on macOS/Windows for short keys, per-user DPAPI file at `~/.juggernaut/bearer-token.dpapi.bin` on Windows for long keys >1280 chars, profile file on Linux) **before** placing fresh files.
 
 The installer does **not** auto-apply. You run `juggernaut apply` explicitly after install with a chosen auth mode.
 
@@ -62,34 +62,56 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.sh | bash -s -- --version v3.2.1
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.sh | bash -s -- --version v3.2.2
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7) — Defender-friendly download-then-run
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2; Remove-Item $p
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.sh | bash -s -- --version v3.2.1 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.sh | bash -s -- --version v3.2.2 --dry-run
 ```
 
 ```powershell
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1 -DryRun; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2 -DryRun; Remove-Item $p
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.2.1 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.2.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
 The installer installs to `$HOME/.juggernaut` by default (override with `JUGGERNAUT_DIR`) and places a launcher at `$HOME/.local/bin/juggernaut`. Add that directory to your `PATH` to invoke `juggernaut` from anywhere.
 
 Both scripts normalize the version automatically — `3.0.2` and `v3.0.2` both work.
+
+### Upgrade Behavior
+
+The installer applies a **Version Gate Policy** on every run:
+
+| Scenario | Mode | What happens |
+|---|---|---|
+| No prior install | Full wipe | Profile blocks stripped, credentials deleted, fresh clone |
+| Installed version `< 3.2.0` | Full wipe | Same as above |
+| Installed version `>= 3.2.0` | Light update | Code + Claude launcher refreshed; credentials and `~/.claude/settings.json` untouched |
+
+The currently installed version is read from `$INSTALL_DIR/VERSION` (`~/.juggernaut/VERSION` by default). The minimum version for a light update is `3.2.0` (`MIN_SUPPORTED_VERSION`).
+
+To force the full wipe on an eligible version:
+
+```bash
+bash install.sh --version v3.2.2 --force-wipe
+```
+
+```powershell
+& $p -Version v3.2.2 -ForceWipe
+```
 
 ### Launcher wrappers
 
@@ -307,14 +329,14 @@ Juggernaut writes **only** to `~/.claude/settings.json` (user scope) or `./.clau
 - **Single config source**: `bedrock-config.json` — consumed by both Bash and PowerShell.
 - **Auth-gated writes**: `CLAUDE_CODE_USE_BEDROCK=1` only lands when auth is verified.
 - **Atomic writes**: `config_manager` handles backup rotation (5 backups retained), file locking, and mode preservation.
-- **Destructive installer**: wipe-and-reinstall on every run; there is no in-place upgrade.
+- **Version Gate installer**: upgrades from `>= 3.2.0` are non-destructive (light update); fresh installs and pre-gate versions get the full wipe. `--force-wipe`/`-ForceWipe` overrides the gate.
 
 ## Files
 
 - `juggernaut` / `juggernaut.ps1` — CLI entry point
 - `commands/` — subcommand implementations (`apply`, `show`, `doctor`, `uninstall`)
 - `lib/` — shared libraries (`schema`, `config_manager`, `keychain`, `doctor`, `profile_paths`)
-- `install.sh` / `install.ps1` — wipe-and-reinstall installers
+- `install.sh` / `install.ps1` — installers with Version Gate Policy (light update or full wipe)
 - `bedrock-config.json` — single source of truth for env vars, regions, and defaults
 - `tests/v2/` — bash and Pester test suites
 

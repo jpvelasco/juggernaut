@@ -1,33 +1,40 @@
 #!/usr/bin/env bash
-# install.sh - Juggernaut v3 installer (wipe-and-reinstall)
+# install.sh - Juggernaut v3 installer
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.2.1
+#   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --version v3.2.2
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --ref fix-branch
 #   curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.sh | bash -s -- --latest
 #
 # Or after downloading:
-#   bash install.sh --version v3.2.1
+#   bash install.sh --version v3.2.2
 #   bash install.sh --ref fix-branch
 #   bash install.sh --latest --dry-run
 #
-# Destructive behavior (v3):
+# Upgrade behavior (Version Gate Policy):
+#   Installs upgrading from >= MIN_SUPPORTED_VERSION perform a light update:
+#   only code and the Claude launcher block are updated; credentials and
+#   ~/.claude/settings.json are left untouched.
+#   Installs from older versions or fresh installs use the full wipe:
 #   - Strips Juggernaut and legacy "Claude Code Bedrock Configuration" BEGIN/END
 #     blocks from every known shell profile on this machine.
 #   - Removes the "juggernaut" key from ~/.claude/settings.json (backup rotation
 #     via config_manager preserves the 5 most recent copies).
 #   - Removes the "juggernaut-bedrock" OS-keychain entry.
-#   - Does NOT auto-apply. Run 'juggernaut apply --auth=iam' or
-#     'juggernaut apply --auth=bedrock-api-key' explicitly after install.
+#   Use --force-wipe to force the full wipe regardless of installed version.
+#   Does NOT auto-apply. Run 'juggernaut apply --auth=iam' or
+#   'juggernaut apply --auth=bedrock-api-key' explicitly after install.
 
 set -e
 
 REPO_URL="${JUGGERNAUT_REPO_URL:-https://github.com/jpvelasco/juggernaut.git}"
 INSTALL_DIR="${JUGGERNAUT_DIR:-$HOME/.juggernaut}"
+MIN_SUPPORTED_VERSION="3.2.0"
 VERSION=""
 REF="${JUGGERNAUT_REF:-}"
 DRY_RUN=0
+FORCE_WIPE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,19 +75,31 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=1
       shift
       ;;
+    --force-wipe)
+      FORCE_WIPE=1
+      shift
+      ;;
     --help|-h)
       cat <<'EOF'
 Juggernaut v3 installer
 
 Usage:
-  install.sh [--version <tag>] [--ref <branch|sha>] [--latest] [--dry-run]
+  install.sh [--version <tag>] [--ref <branch|sha>] [--latest] [--dry-run] [--force-wipe]
 
 Installs Juggernaut to ~/.juggernaut (override with JUGGERNAUT_DIR).
-Before installing, strips legacy Juggernaut/Claude-Code-Bedrock blocks from
-shell profiles, removes the 'juggernaut' key from ~/.claude/settings.json,
-and deletes the 'juggernaut-bedrock' keychain entry.
 
---dry-run prints what would be wiped and exits without writing anything.
+Upgrade policy (Version Gate):
+  If an existing install is detected at MIN_SUPPORTED_VERSION (3.2.0) or later,
+  only code and the Claude launcher are updated; credentials and
+  ~/.claude/settings.json are preserved (light update).
+  Fresh installs and upgrades from older versions perform the full wipe:
+  strips legacy Juggernaut/Claude-Code-Bedrock blocks from shell profiles,
+  removes the 'juggernaut' key from ~/.claude/settings.json, and deletes
+  the 'juggernaut-bedrock' keychain entry.
+
+--dry-run   prints what would be done and exits without writing anything.
+--force-wipe forces the full wipe even when the installed version is eligible
+             for a light update.
 EOF
       exit 0
       ;;
@@ -168,32 +187,93 @@ keychain_has_entry && STRIP_KEYCHAIN=1
 STRIP_PROFILE_TOKEN=0
 [[ -f "$PROFILE_TOKEN_PATH" ]] && STRIP_PROFILE_TOKEN=1
 
-echo "Juggernaut installer - wipe-and-reinstall"
-echo ""
-echo "Pre-wipe summary:"
-if [[ ${#TO_STRIP_PROFILES[@]} -gt 0 ]]; then
-  for p in "${TO_STRIP_PROFILES[@]}"; do
-    echo "  - strip Juggernaut/v1 block from $p"
+# ---------------------------------------------------------------------------
+# Version Gate Policy — evaluated before the banner so the banner is accurate
+# ---------------------------------------------------------------------------
+# Returns 0 (true) if $1 >= $2 as semver (major.minor.patch[-suffix]).
+version_compare() {
+  local a b
+  a="${1%%-*}"
+  b="${2%%-*}"
+  local -a va vb
+  IFS='.' read -r -a va <<< "$a"
+  IFS='.' read -r -a vb <<< "$b"
+  local i
+  for i in 0 1 2; do
+    local na="${va[$i]:-0}"
+    local nb="${vb[$i]:-0}"
+    if (( na > nb )); then return 0; fi
+    if (( na < nb )); then return 1; fi
   done
+  return 0
+}
+
+detect_installed_version() {
+  local vfile="$INSTALL_DIR/VERSION"
+  if [[ -f "$vfile" && -r "$vfile" ]]; then
+    local v
+    v="$(< "$vfile")"
+    v="${v//[[:space:]]/}"
+    # Only treat as a valid version if it looks like semver (digits and dots).
+    if [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
+      printf '%s' "$v"
+    fi
+  fi
+}
+
+INSTALLED_VERSION="$(detect_installed_version)"
+
+if [[ "$FORCE_WIPE" -eq 1 ]]; then
+  UPDATE_MODE="full-wipe"
+  WIPE_REASON="--force-wipe requested"
+elif [[ -z "$INSTALLED_VERSION" ]]; then
+  UPDATE_MODE="full-wipe"
+  WIPE_REASON="no previous installation detected"
+elif version_compare "$INSTALLED_VERSION" "$MIN_SUPPORTED_VERSION"; then
+  UPDATE_MODE="light-update"
+  WIPE_REASON="installed version $INSTALLED_VERSION >= $MIN_SUPPORTED_VERSION"
 else
-  echo "  - shell profiles: no Juggernaut/v1 blocks found"
+  UPDATE_MODE="full-wipe"
+  WIPE_REASON="installed version $INSTALLED_VERSION < $MIN_SUPPORTED_VERSION"
 fi
-if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
-  echo "  - remove 'juggernaut' key from $SETTINGS_PATH"
-else
-  echo "  - settings.json: no 'juggernaut' key found"
-fi
-if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
-  echo "  - remove OS-keychain entry '$KEYCHAIN_SERVICE_NAME'"
-else
-  echo "  - keychain: no '$KEYCHAIN_SERVICE_NAME' entry found"
-fi
-if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
-  echo "  - remove profile token file $PROFILE_TOKEN_PATH"
-else
-  echo "  - profile token: no token file found"
+
+echo "Juggernaut installer"
+echo ""
+echo "Upgrade policy:"
+echo "  Installed version   : ${INSTALLED_VERSION:-(none)}"
+echo "  Min for light update: $MIN_SUPPORTED_VERSION"
+echo "  Mode                : $UPDATE_MODE ($WIPE_REASON)"
+if [[ "$UPDATE_MODE" == "light-update" ]]; then
+  echo "  Preserved           : credentials (keychain/profile token), ~/.claude/settings.json"
 fi
 echo ""
+
+if [[ "$UPDATE_MODE" == "full-wipe" ]]; then
+  echo "Pre-wipe summary:"
+  if [[ ${#TO_STRIP_PROFILES[@]} -gt 0 ]]; then
+    for p in "${TO_STRIP_PROFILES[@]}"; do
+      echo "  - strip Juggernaut/v1 block from $p"
+    done
+  else
+    echo "  - shell profiles: no Juggernaut/v1 blocks found"
+  fi
+  if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
+    echo "  - remove 'juggernaut' key from $SETTINGS_PATH"
+  else
+    echo "  - settings.json: no 'juggernaut' key found"
+  fi
+  if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
+    echo "  - remove OS-keychain entry '$KEYCHAIN_SERVICE_NAME'"
+  else
+    echo "  - keychain: no '$KEYCHAIN_SERVICE_NAME' entry found"
+  fi
+  if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
+    echo "  - remove profile token file $PROFILE_TOKEN_PATH"
+  else
+    echo "  - profile token: no token file found"
+  fi
+  echo ""
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "--dry-run: no changes written. Exiting."
@@ -217,37 +297,39 @@ strip_profile_block() {
   mv "$tmp" "$path"
 }
 
-for p in "${TO_STRIP_PROFILES[@]}"; do
-  strip_profile_block "$p"
-  echo "Stripped Juggernaut block from $p"
-done
+if [[ "$UPDATE_MODE" == "full-wipe" ]]; then
+  for p in "${TO_STRIP_PROFILES[@]}"; do
+    strip_profile_block "$p"
+    echo "Stripped Juggernaut block from $p"
+  done
 
-if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
-  if command -v jq >/dev/null 2>&1; then
-    tmp="$(mktemp "${SETTINGS_PATH}.wipeXXXXXX")"
-    jq 'del(.juggernaut)' "$SETTINGS_PATH" > "$tmp" && mv "$tmp" "$SETTINGS_PATH"
-    echo "Removed 'juggernaut' key from $SETTINGS_PATH"
-  else
-    echo "Warning: jq not found; leaving 'juggernaut' key in $SETTINGS_PATH" >&2
-    echo "  Install jq and re-run 'install.sh' to complete the wipe." >&2
+  if [[ "$STRIP_SETTINGS" -eq 1 ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      tmp="$(mktemp "${SETTINGS_PATH}.wipeXXXXXX")"
+      jq 'del(.juggernaut)' "$SETTINGS_PATH" > "$tmp" && mv "$tmp" "$SETTINGS_PATH"
+      echo "Removed 'juggernaut' key from $SETTINGS_PATH"
+    else
+      echo "Warning: jq not found; leaving 'juggernaut' key in $SETTINGS_PATH" >&2
+      echo "  Install jq and re-run 'install.sh' to complete the wipe." >&2
+    fi
   fi
-fi
 
-if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
-  case "$OSTYPE" in
-    darwin*)
-      security delete-generic-password -s "$KEYCHAIN_SERVICE_NAME" -a api-key >/dev/null 2>&1 || true ;;
-    linux*)
-      secret-tool clear service "$KEYCHAIN_SERVICE_NAME" account api-key >/dev/null 2>&1 || true ;;
-    msys*|mingw*|cygwin*)
-      cmdkey.exe /delete:"$KEYCHAIN_SERVICE_NAME" >/dev/null 2>&1 || true ;;
-  esac
-  echo "Removed keychain entry: $KEYCHAIN_SERVICE_NAME"
-fi
+  if [[ "$STRIP_KEYCHAIN" -eq 1 ]]; then
+    case "$OSTYPE" in
+      darwin*)
+        security delete-generic-password -s "$KEYCHAIN_SERVICE_NAME" -a api-key >/dev/null 2>&1 || true ;;
+      linux*)
+        secret-tool clear service "$KEYCHAIN_SERVICE_NAME" account api-key >/dev/null 2>&1 || true ;;
+      msys*|mingw*|cygwin*)
+        cmdkey.exe /delete:"$KEYCHAIN_SERVICE_NAME" >/dev/null 2>&1 || true ;;
+    esac
+    echo "Removed keychain entry: $KEYCHAIN_SERVICE_NAME"
+  fi
 
-if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
-  rm -f -- "$PROFILE_TOKEN_PATH"
-  echo "Removed profile token file: $PROFILE_TOKEN_PATH"
+  if [[ "$STRIP_PROFILE_TOKEN" -eq 1 ]]; then
+    rm -f -- "$PROFILE_TOKEN_PATH"
+    echo "Removed profile token file: $PROFILE_TOKEN_PATH"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -483,9 +565,14 @@ FISHLAUNCHER
 install_launcher_profile_block
 
 echo ""
-echo "Install complete. No configuration has been written."
-echo "Configure Juggernaut explicitly with one of:"
-echo "  juggernaut apply --auth=iam"
-echo "  juggernaut apply --auth=bedrock-api-key"
-echo ""
-echo "Verify with: juggernaut doctor"
+if [[ "$UPDATE_MODE" == "light-update" ]]; then
+  echo "Update complete. Credentials and settings preserved."
+  echo "No re-apply needed. Verify with: juggernaut doctor"
+else
+  echo "Install complete. No configuration has been written."
+  echo "Configure Juggernaut explicitly with one of:"
+  echo "  juggernaut apply --auth=iam"
+  echo "  juggernaut apply --auth=bedrock-api-key"
+  echo ""
+  echo "Verify with: juggernaut doctor"
+fi

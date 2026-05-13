@@ -7,16 +7,27 @@ BeforeAll {
     $script:InstallPs1 = Get-Content (Join-Path $script:RepoRoot 'install.ps1') -Raw
 }
 
-Describe 'install.sh v3 wipe-and-reinstall' {
-    It 'announces wipe-and-reinstall behavior and pre-wipe summary' {
+Describe 'install.sh version gate policy' {
+    It 'announces upgrade policy and pre-wipe summary' {
         foreach ($needle in @(
-            'wipe-and-reinstall',
+            'Version Gate',
             'Pre-wipe summary',
             'BEGIN: Juggernaut',
             'BEGIN: Claude Code Bedrock Configuration',
             'juggernaut-bedrock',
             '--dry-run',
             'juggernaut apply --auth=iam'
+        )) {
+            $script:InstallSh | Should -Match ([regex]::Escape($needle))
+        }
+    }
+
+    It 'declares MIN_SUPPORTED_VERSION and version-gate helpers' {
+        foreach ($needle in @(
+            'MIN_SUPPORTED_VERSION="3.2.0"',
+            'version_compare',
+            'detect_installed_version',
+            '--force-wipe'
         )) {
             $script:InstallSh | Should -Match ([regex]::Escape($needle))
         }
@@ -58,14 +69,25 @@ Describe 'install.sh v3 wipe-and-reinstall' {
     }
 }
 
-Describe 'install.ps1 v3 wipe-and-reinstall' {
-    It 'announces wipe-and-reinstall behavior and pre-wipe summary' {
+Describe 'install.ps1 version gate policy' {
+    It 'announces upgrade policy and pre-wipe summary' {
         foreach ($needle in @(
             'Pre-wipe summary',
             'BEGIN: Juggernaut',
             'BEGIN: Claude Code Bedrock Configuration',
             'juggernaut-bedrock',
             '-DryRun'
+        )) {
+            $script:InstallPs1 | Should -Match ([regex]::Escape($needle))
+        }
+    }
+
+    It 'declares MinSupportedVersion and version-gate helpers' {
+        foreach ($needle in @(
+            "MinSupportedVersion = '3.2.0'",
+            'Compare-SemVer',
+            'Get-InstalledVersion',
+            '-ForceWipe'
         )) {
             $script:InstallPs1 | Should -Match ([regex]::Escape($needle))
         }
@@ -129,13 +151,14 @@ Describe 'install.ps1 v3 wipe-and-reinstall' {
         $script:InstallPs1 | Should -Match ([regex]::Escape('juggernaut apply -Auth bedrock-api-key'))
     }
 
-    It '-Help exits cleanly and mentions v3 flags' {
+    It '-Help exits cleanly and mentions v3 flags including -ForceWipe' {
         $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)
         if (-not $pwsh) { $pwsh = Get-Command powershell -ErrorAction Stop }
         $installerPath = Join-Path $script:RepoRoot 'install.ps1'
         $output = & $pwsh.Source -NoProfile -ExecutionPolicy Bypass -File $installerPath -Help 2>&1 | Out-String
         $output | Should -Match ([regex]::Escape('-DryRun'))
         $output | Should -Match ([regex]::Escape('-Ref'))
+        $output | Should -Match ([regex]::Escape('-ForceWipe'))
         $output | Should -Not -Match ([regex]::Escape('-LegacyV1'))
         $output | Should -Not -Match ([regex]::Escape('-Configure'))
     }
