@@ -42,6 +42,7 @@ pwsh -Command "Invoke-Pester ./tests/v2 -CI"
 - `show.{sh,ps1}` — prints current config from settings.json
 - `doctor.{sh,ps1}` — read-only diagnostics (delegates to `lib/doctor.{sh,ps1}`); includes opusplan drift check
 - `uninstall.{sh,ps1}` — removes the Juggernaut block from settings.json and deletes bearer token storage
+- `version.{sh,ps1}` — prints the installed Juggernaut version (delegates to the `J_VERSION` value from `lib/schema.{sh,ps1}`)
 
 **Library in `lib/`:**
 - `schema.{sh,ps1}` — constructs/validates the Juggernaut JSON block; requires `jq`. `CLAUDE_CODE_USE_BEDROCK=1` is gated behind `J_AUTH_VALIDATED=true`.
@@ -70,6 +71,7 @@ All variants use `# BEGIN: Juggernaut Launcher` / `# END: Juggernaut Launcher` m
 - **Scope:** `--scope=user` (default, `~/.claude/settings.json`) vs `--scope=project` (`./.claude/settings.json`). `doctor` auto-detects by walking up from CWD.
 - **Keychain storage:** API keys stored in OS keychain for short keys (≤1280 chars) or DPAPI-encrypted file at `~/.juggernaut/bearer-token.dpapi.bin` for long keys. Platform defaults: macOS/Windows → keychain, Linux → profile file, Windows long keys → DPAPI.
 - **Mantle default:** `J_USE_MANTLE=true` by default. Opt out with `--no-mantle`.
+- **ANTHROPIC_MODEL is opusplan-gated:** `schema.sh/ps1` only writes `ANTHROPIC_MODEL` when `--opusplan` is active. Re-applying with `--no-opusplan` removes it from settings.json.
 - **JSON loading:** `schema.sh` hard-fails if `jq` is absent. `config_manager.sh` uses jq for all merges.
 
 ## Cross-Platform Requirements

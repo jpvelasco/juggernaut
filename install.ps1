@@ -1,31 +1,37 @@
 #Requires -Version 5.1
-# install.ps1 - Juggernaut v3 installer (wipe-and-reinstall)
+# install.ps1 - Juggernaut v3 installer
 #
 # Usage (download-then-run — Defender-friendly, no [scriptblock]::Create):
 #   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Latest; Remove-Item $p
-#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1; Remove-Item $p
+#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2; Remove-Item $p
 #   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/my-branch/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Ref my-branch; Remove-Item $p
-#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1 -DryRun; Remove-Item $p
+#   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2 -DryRun; Remove-Item $p
 #
 # Or after downloading:
-#   .\install.ps1 -Version v3.2.1
+#   .\install.ps1 -Version v3.2.2
 #   .\install.ps1 -Ref fix-branch
 #   .\install.ps1 -Latest -DryRun
 #
-# Destructive behavior (v3):
+# Upgrade behavior (Version Gate Policy):
+#   Installs upgrading from >= MinSupportedVersion perform a light update:
+#   only code and the Claude launcher block are updated; credentials and
+#   ~/.claude/settings.json are left untouched.
+#   Installs from older versions or fresh installs use the full wipe:
 #   - Strips Juggernaut and legacy "Claude Code Bedrock Configuration" BEGIN/END
 #     blocks from every known shell profile (including both PS 5.1 and PS 7
 #     CurrentUser/AllUsers AllHosts profiles).
 #   - Removes the 'juggernaut' key from ~/.claude/settings.json.
 #   - Removes the 'juggernaut-bedrock' Windows Credential Manager entry.
-#   - Does NOT auto-apply. Run 'juggernaut apply -Auth iam' or
-#     'juggernaut apply -Auth bedrock-api-key' explicitly after install.
+#   Use -ForceWipe to force the full wipe regardless of installed version.
+#   Does NOT auto-apply. Run 'juggernaut apply -Auth iam' or
+#   'juggernaut apply -Auth bedrock-api-key' explicitly after install.
 
 param(
     [string]$Version = '',
     [string]$Ref = '',
     [switch]$Latest,
     [switch]$DryRun,
+    [switch]$ForceWipe,
     [switch]$Help
 )
 
@@ -36,14 +42,22 @@ if ($Help) {
 Juggernaut v3 installer
 
 Usage:
-  install.ps1 [-Version <tag>] [-Ref <branch|sha>] [-Latest] [-DryRun]
+  install.ps1 [-Version <tag>] [-Ref <branch|sha>] [-Latest] [-DryRun] [-ForceWipe]
 
 Installs Juggernaut to $HOME\.juggernaut (override with $env:JUGGERNAUT_DIR).
-Before installing, strips legacy Juggernaut/Claude-Code-Bedrock blocks from
-shell profiles, removes the 'juggernaut' key from ~/.claude/settings.json,
-and deletes the 'juggernaut-bedrock' Credential Manager entry.
 
--DryRun prints what would be wiped and exits without writing anything.
+Upgrade policy (Version Gate):
+  If an existing install is detected at MinSupportedVersion (3.2.0) or later,
+  only code and the Claude launcher are updated; credentials and
+  ~/.claude/settings.json are preserved (light update).
+  Fresh installs and upgrades from older versions perform the full wipe:
+  strips legacy Juggernaut/Claude-Code-Bedrock blocks from shell profiles,
+  removes the 'juggernaut' key from ~/.claude/settings.json, and deletes
+  the 'juggernaut-bedrock' Credential Manager entry.
+
+-DryRun     prints what would be done and exits without writing anything.
+-ForceWipe  forces the full wipe even when the installed version is eligible
+            for a light update.
 '@
     return
 }
@@ -62,7 +76,7 @@ instead (one line, paste-safe, Defender-friendly):
   $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/main/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Latest; Remove-Item $p
 
 For a pinned release, swap `main` for the tag and add -Version:
-  $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1; Remove-Item $p
+  $u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2; Remove-Item $p
 '@
     exit 1
 }
@@ -84,8 +98,24 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 # ---------------------------------------------------------------------------
 # Pre-wipe discovery
 # ---------------------------------------------------------------------------
-$SettingsPath = Join-Path $HOME '.claude\settings.json'
+$SettingsPath        = Join-Path $HOME '.claude\settings.json'
 $KeychainServiceName = 'juggernaut-bedrock'
+$MinSupportedVersion = '3.2.0'
+
+function Compare-SemVer {
+    param([string]$Left, [string]$Right)
+    $lv = [version]($Left  -split '-')[0]
+    $rv = [version]($Right -split '-')[0]
+    return $lv -ge $rv
+}
+
+function Get-InstalledVersion {
+    $vfile = Join-Path $InstallDir 'VERSION'
+    if (Test-Path $vfile) {
+        return (Get-Content $vfile -Raw -Encoding utf8).Trim()
+    }
+    return ''
+}
 
 function Get-ProfileCandidates {
     $home2 = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
@@ -147,7 +177,7 @@ $toStripProfiles = @(Get-ProfileCandidates | Where-Object { Test-ProfileHasJugge
 $stripSettings   = Test-SettingsHasJuggernautKey
 $stripKeychain   = Test-WindowsKeychainHasEntry
 
-Write-Host 'Juggernaut installer - wipe-and-reinstall'
+Write-Host 'Juggernaut installer'
 Write-Host ''
 Write-Host 'Pre-wipe summary:'
 if ($toStripProfiles.Count -gt 0) {
@@ -159,6 +189,32 @@ if ($stripSettings) { Write-Host "  - remove 'juggernaut' key from $SettingsPath
 else                { Write-Host "  - settings.json: no 'juggernaut' key found" }
 if ($stripKeychain) { Write-Host "  - remove Credential Manager entry '$KeychainServiceName'" }
 else                { Write-Host "  - keychain: no '$KeychainServiceName' entry found" }
+Write-Host ''
+
+$InstalledVersion = Get-InstalledVersion
+
+if ($ForceWipe) {
+    $UpdateMode = 'full-wipe'
+    $WipeReason = '-ForceWipe requested'
+} elseif ([string]::IsNullOrEmpty($InstalledVersion)) {
+    $UpdateMode = 'full-wipe'
+    $WipeReason = 'no previous installation detected'
+} elseif (Compare-SemVer $InstalledVersion $MinSupportedVersion) {
+    $UpdateMode = 'light-update'
+    $WipeReason = "installed version $InstalledVersion >= $MinSupportedVersion"
+} else {
+    $UpdateMode = 'full-wipe'
+    $WipeReason = "installed version $InstalledVersion < $MinSupportedVersion"
+}
+
+Write-Host 'Upgrade policy:'
+$displayVersion = if ($InstalledVersion) { $InstalledVersion } else { '(none)' }
+Write-Host "  Installed version   : $displayVersion"
+Write-Host "  Min for light update: $MinSupportedVersion"
+Write-Host "  Mode                : $UpdateMode ($WipeReason)"
+if ($UpdateMode -eq 'light-update') {
+    Write-Host "  Preserved           : credentials (Credential Manager/DPAPI), ~/.claude/settings.json"
+}
 Write-Host ''
 
 if ($DryRun) {
@@ -197,33 +253,35 @@ function Remove-ProfileBlocks {
     }
 }
 
-foreach ($p in $toStripProfiles) { Remove-ProfileBlocks $p }
+if ($UpdateMode -eq 'full-wipe') {
+    foreach ($p in $toStripProfiles) { Remove-ProfileBlocks $p }
 
-if ($stripSettings) {
-    try {
-        $raw = Get-Content -Path $SettingsPath -Raw -Encoding utf8
-        $obj = $raw | ConvertFrom-Json
-        if ($obj.PSObject.Properties['juggernaut']) {
-            $obj.PSObject.Properties.Remove('juggernaut')
+    if ($stripSettings) {
+        try {
+            $raw = Get-Content -Path $SettingsPath -Raw -Encoding utf8
+            $obj = $raw | ConvertFrom-Json
+            if ($obj.PSObject.Properties['juggernaut']) {
+                $obj.PSObject.Properties.Remove('juggernaut')
+            }
+            ($obj | ConvertTo-Json -Depth 64) | Set-Content -Path $SettingsPath -Encoding utf8
+            Write-Host "Removed 'juggernaut' key from $SettingsPath"
+        } catch {
+            Write-Warning "Could not update $SettingsPath - $($_.Exception.Message)"
         }
-        ($obj | ConvertTo-Json -Depth 64) | Set-Content -Path $SettingsPath -Encoding utf8
-        Write-Host "Removed 'juggernaut' key from $SettingsPath"
-    } catch {
-        Write-Warning "Could not update $SettingsPath - $($_.Exception.Message)"
     }
-}
 
-if ($stripKeychain) {
-    try {
-        $src = @'
+    if ($stripKeychain) {
+        try {
+            $src = @'
 [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
 public static extern bool CredDelete(string target, int type, int flags);
 '@
-        Add-Type -Namespace 'Win32Installer' -Name 'CredDel' -MemberDefinition $src -ErrorAction SilentlyContinue
-        [Win32Installer.CredDel]::CredDelete($KeychainServiceName, 1, 0) | Out-Null
-        Write-Host "Removed keychain entry: $KeychainServiceName"
-    } catch {
-        Write-Warning "Could not remove keychain entry: $($_.Exception.Message)"
+            Add-Type -Namespace 'Win32Installer' -Name 'CredDel' -MemberDefinition $src -ErrorAction SilentlyContinue
+            [Win32Installer.CredDel]::CredDelete($KeychainServiceName, 1, 0) | Out-Null
+            Write-Host "Removed keychain entry: $KeychainServiceName"
+        } catch {
+            Write-Warning "Could not remove keychain entry: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -504,9 +562,14 @@ public struct CREDENTIAL {
 Install-LauncherProfileBlock
 
 Write-Host ''
-Write-Host 'Install complete. No configuration has been written.'
-Write-Host 'Configure Juggernaut explicitly with one of:'
-Write-Host '  juggernaut apply -Auth iam'
-Write-Host '  juggernaut apply -Auth bedrock-api-key'
-Write-Host ''
-Write-Host 'Verify with: juggernaut doctor'
+if ($UpdateMode -eq 'light-update') {
+    Write-Host 'Update complete. Credentials and settings preserved.'
+    Write-Host 'No re-apply needed. Verify with: juggernaut doctor'
+} else {
+    Write-Host 'Install complete. No configuration has been written.'
+    Write-Host 'Configure Juggernaut explicitly with one of:'
+    Write-Host '  juggernaut apply -Auth iam'
+    Write-Host '  juggernaut apply -Auth bedrock-api-key'
+    Write-Host ''
+    Write-Host 'Verify with: juggernaut doctor'
+}

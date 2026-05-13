@@ -2,6 +2,26 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.2.2] - 2026-05-11
+
+**Feature release.** Installer now performs a non-destructive light update when upgrading from v3.2.0 or later, preserving credentials and `~/.claude/settings.json`.
+
+### New Features
+
+- **Version Gate Policy.** `install.sh` / `install.ps1` detect the currently installed version (from `$INSTALL_DIR/VERSION`) before acting. Upgrades from `>= MIN_SUPPORTED_VERSION` (`3.2.0`) skip the profile-block strip, `settings.json` `juggernaut` key removal, keychain entry deletion, and profile-token deletion. Fresh installs and upgrades from older versions keep the full destructive wipe.
+- **`--force-wipe` / `-ForceWipe`.** Escape hatch to force the legacy full-wipe behavior on any eligible version — useful for recovery or debugging.
+- **Pre-wipe summary expanded.** Installer now prints the detected installed version, the minimum version for a light update, the chosen mode, and the reason.
+- **Post-install message respects mode.** Light-update runs print "Credentials and settings preserved; no re-apply needed." Full-wipe runs keep the existing "Configure Juggernaut explicitly with..." prompt.
+
+### Documentation
+
+- **README**: new `### Upgrade Behavior` subsection under `## Install` with a mode-selection matrix and `--force-wipe` examples. Key Design Decisions bullet updated from "Destructive installer" to "Version Gate installer".
+
+### Verification
+
+- `tests/v2/test_install.sh` — new runtime scenarios: light-update from v3.2.0 fixture (credentials + settings preserved, launcher refreshed), `--force-wipe` on eligible version (full wipe happens), fresh install (full wipe, "no previous installation" reason). Updated existing full-wipe test to simulate a pre-gate v3.1.0 install.
+- `tests/v2/Installer.Tests.ps1` — new static assertions for `MIN_SUPPORTED_VERSION`, `-ForceWipe`, `Compare-SemVer`, `Get-InstalledVersion` in both installers.
+
 ## [3.2.1] - 2026-05-11
 
 **Patch release.** Documentation update for Claude Opus 4.7 tokenizer behavior.
