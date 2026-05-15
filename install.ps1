@@ -466,6 +466,7 @@ function claude {
                     $plain = [Security.Cryptography.ProtectedData]::Unprotect(
                         $enc, $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)
                     $env:AWS_BEARER_TOKEN_BEDROCK = [Text.Encoding]::UTF8.GetString($plain)
+                    $env:CLAUDE_CODE_USE_BEDROCK = '1'
                 }
             }
         } catch {
@@ -499,12 +500,17 @@ public struct CREDENTIAL {
                 $c = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [Type][Juggernaut.Launcher.Cred+CREDENTIAL])
                 if ($c.CredentialBlobSize -gt 0) {
                     $env:AWS_BEARER_TOKEN_BEDROCK = [Runtime.InteropServices.Marshal]::PtrToStringUni($c.CredentialBlob, $c.CredentialBlobSize / 2)
+                    $env:CLAUDE_CODE_USE_BEDROCK = '1'
                 }
                 [Juggernaut.Launcher.Cred]::CredFree($ptr)
             }
         } catch {
             # Silent fall-through: launcher must never block claude from launching.
         }
+    }
+
+    if (-not $env:AWS_BEARER_TOKEN_BEDROCK) {
+        $env:CLAUDE_CODE_USE_BEDROCK = '1'
     }
 
     $target = $env:JUGGERNAUT_CLAUDE_BIN

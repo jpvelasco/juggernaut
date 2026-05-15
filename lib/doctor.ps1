@@ -281,6 +281,44 @@ function Write-DoctorLauncher {
     Write-Output 'Fix: re-run the installer (install.ps1) or set $env:AWS_BEARER_TOKEN_BEDROCK'
 }
 
+function Write-DoctorSettingsDrift {
+    param(
+        [Parameter(Mandatory)][string]$Scope,
+        [Parameter(Mandatory)]$Settings,
+        [Parameter(Mandatory)][string]$Path
+    )
+    # When the juggernaut block is missing from settings.json but credentials
+    # exist in keychain/storage, likely a claude update wiped the config.
+    if (Test-HasJuggernautBlock -Settings $Settings) { return }
+
+    $hasJuggernautKey = $false
+    if ($Settings -is [hashtable] -or $Settings -is [System.Collections.Specialized.OrderedDictionary]) {
+        $hasJuggernautKey = $Settings.Contains('juggernaut')
+    } elseif ($Settings.PSObject.Properties.Name -contains 'juggernaut') {
+        $hasJuggernautKey = $true
+    }
+
+    $hasCreds = $false
+    if (Test-KeychainAvailable) {
+        try {
+            $probe = Read-BearerToken
+            if ($probe -and $probe.Value) { $hasCreds = $true }
+        } catch {}
+    }
+
+    if (-not $hasJuggernautKey -and -not $hasCreds) { return }
+
+    $script:DoctorWarns += 1
+    if ($hasJuggernautKey) {
+        Write-Output 'Drift: (juggernaut key present but corrupted)'
+    } else {
+        Write-Output 'Drift: (juggernaut key missing from settings.json)'
+    }
+    Write-Output ('Credentials: {0}' -f (if ($hasCreds) { 'found in keychain/storage' } else { 'not found' }))
+    Write-Output ('Fix: run: juggernaut apply -Scope {0}' -f $Scope)
+    Write-Output 'Status: WARN'
+}
+
 function Write-DoctorSummary {
     Write-Output ''
     Write-Output 'Summary'
