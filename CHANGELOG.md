@@ -2,6 +2,15 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [3.2.3] - 2026-05-15
+
+**Patch release.** Launcher resilience fix.
+
+### Fixed
+
+- **Launcher now exports `CLAUDE_CODE_USE_BEDROCK=1`** (bash/zsh/fish/PowerShell). Bedrock routing survives `claude update` wiping `settings.json`.
+- **Doctor drift detection.** Reports when the juggernaut block is missing from `settings.json` but credentials still exist, with a re-apply hint.
+
 ## [3.2.2] - 2026-05-11
 
 **Enhancement release.** Installer now performs a non-destructive light update when upgrading from v3.2.0 or later, preserving credentials and `~/.claude/settings.json`.
@@ -498,6 +507,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[3.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.3
+[3.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.2
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5

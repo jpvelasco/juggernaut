@@ -62,28 +62,28 @@ The installer does **not** auto-apply. You run `juggernaut apply` explicitly aft
 
 ```bash
 # Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.sh | bash -s -- --version v3.2.2
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash -s -- --version v3.2.3
 ```
 
 ```powershell
 # Windows PowerShell (5.1 or 7) — Defender-friendly download-then-run
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.3; Remove-Item $p
 ```
 
 **Preview what the wipe will remove (no writes):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.sh | bash -s -- --version v3.2.2 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash -s -- --version v3.2.3 --dry-run
 ```
 
 ```powershell
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.2/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.2 -DryRun; Remove-Item $p
+$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.3 -DryRun; Remove-Item $p
 ```
 
 **Manual clone:**
 
 ```bash
-git clone --branch v3.2.2 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
+git clone --branch v3.2.3 --depth 1 https://github.com/jpvelasco/juggernaut.git && cd juggernaut
 ./juggernaut apply --auth=iam
 ```
 
@@ -106,11 +106,11 @@ The currently installed version is read from `$INSTALL_DIR/VERSION` (`~/.juggern
 To force the full wipe on an eligible version:
 
 ```bash
-bash install.sh --version v3.2.2 --force-wipe
+bash install.sh --version v3.2.3 --force-wipe
 ```
 
 ```powershell
-& $p -Version v3.2.2 -ForceWipe
+& $p -Version v3.2.3 -ForceWipe
 ```
 
 ### Launcher wrappers
