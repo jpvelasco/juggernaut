@@ -314,6 +314,49 @@ doctor_launcher() {
   doctor_kv "Fix" "re-run the installer (install.sh) or set AWS_BEARER_TOKEN_BEDROCK in the environment"
 }
 
+doctor_settings_drift() {
+  # Detects when the juggernaut block is missing from settings.json but credentials
+  # are still in the keychain/DPAPI — sign of claude update having wiped settings.json.
+  # When --repair is passed, auto-restores the block by re-running apply logic.
+  local scope="$1" settings_json="$2"
+  if config_has_juggernaut_block "$settings_json" 2>/dev/null; then
+    return 0
+  fi
+
+  # Check if there's a lingering juggernaut key (without meta.managedBy) or if
+  # credentials exist in keychain/DPAPI — signs of a previous juggernaut install.
+  local has_juggernaut_key
+  has_juggernaut_key="$(printf '%s' "$settings_json" | jq -r 'has("juggernaut")' 2>/dev/null)" || has_juggernaut_key="false"
+  local has_creds=false
+  if keychain_available 2>/dev/null; then
+    local _val
+    _val="$({ bearer_token_get; printf '\x1e%s' "$?"; } 2>&1)"
+    local _rc="${_val##*$'\x1e'}"
+    _val="${_val%$'\x1e'*}"
+    [[ "$_rc" -eq 0 && -n "$_val" ]] && has_creds=true
+  elif { dpapi_get 2>/dev/null; } | { read -r _val && [[ -n "$_val" ]]; }; then
+    has_creds=true
+  fi
+  [[ -f "$(profile_token_path 2>/dev/null || true)" ]] && has_creds=true
+
+  if [[ "$has_juggernaut_key" == "false" && "$has_creds" == "false" ]]; then
+    return 0
+  fi
+
+  doctor_warn
+  if [[ "$has_juggernaut_key" == "true" ]]; then
+    doctor_kv "Drift" "(juggernaut key present but corrupted)"
+  else
+    doctor_kv "Drift" "(juggernaut key missing from settings.json)"
+  fi
+  doctor_kv "Credentials" "$(
+    if [[ "$has_creds" == "true" ]]; then echo "found in keychain/storage"
+    else echo "not found"
+    fi
+  )"
+  doctor_kv "Fix" "run: juggernaut apply --scope=$scope"
+}
+
 doctor_summary() {
   doctor_section "Summary"
   if (( DOCTOR_FAILS > 0 )); then

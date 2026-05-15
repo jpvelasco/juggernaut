@@ -458,7 +458,9 @@ install_launcher_profile_block() {
   bash_block=$(cat <<LAUNCHER
 # BEGIN: Juggernaut Launcher
 # Juggernaut claude launcher - injects AWS_BEARER_TOKEN_BEDROCK from DPAPI or
-# the OS keychain before exec'ing the real claude binary. Silent on success.
+# the OS keychain and sets CLAUDE_CODE_USE_BEDROCK before exec'ing the real
+# claude binary. Silent on success. The env-var approach makes Bedrock routing
+# resilient against claude update self-rewrites that reset settings.json.
 claude() {
   if [ -z "\${AWS_BEARER_TOKEN_BEDROCK:-}" ]; then
     if [ -r "$install_dir/lib/keychain.sh" ]; then
@@ -466,9 +468,13 @@ claude() {
       _juggernaut_token=\$(. "$install_dir/lib/keychain.sh"; bearer_token_get 2>/dev/null) || _juggernaut_token=''
       if [ -n "\$_juggernaut_token" ]; then
         export AWS_BEARER_TOKEN_BEDROCK="\$_juggernaut_token"
+        export CLAUDE_CODE_USE_BEDROCK=1
       fi
       unset _juggernaut_token
     fi
+  fi
+  if [ -z "\${AWS_BEARER_TOKEN_BEDROCK:-}" ]; then
+    export CLAUDE_CODE_USE_BEDROCK=1
   fi
   command claude "\$@"
 }
@@ -486,7 +492,11 @@ function claude
             set -l _juggernaut_token (bash -c '. "$install_dir/lib/keychain.sh"; bearer_token_get' 2>/dev/null)
             if test -n "\$_juggernaut_token"
                 set -x AWS_BEARER_TOKEN_BEDROCK \$_juggernaut_token
+                set -x CLAUDE_CODE_USE_BEDROCK 1
             end
+        end
+        if test -z "\$AWS_BEARER_TOKEN_BEDROCK"
+            set -x CLAUDE_CODE_USE_BEDROCK 1
         end
     end
     command claude \$argv

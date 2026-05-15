@@ -137,6 +137,10 @@ if [[ -n "$check_settings" ]] && config_has_juggernaut_block "$check_settings"; 
   # ── Launcher ─────────────────────────────────────────────────────────────────
   doctor_section "Launcher"
   doctor_launcher "$check_block"
+elif [[ -n "$check_settings" ]]; then
+  # Settings.json exists but has no valid juggernaut block — check for drift.
+  doctor_section "Settings Drift"
+  doctor_settings_drift "$check_scope" "$check_settings"
 fi
 
 doctor_summary

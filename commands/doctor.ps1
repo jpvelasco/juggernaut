@@ -135,6 +135,14 @@ if ($checkSettings -and (Test-HasJuggernautBlock -Settings $checkSettings)) {
     Write-Output ''
     Write-Output 'Launcher'
     Write-DoctorLauncher -Block $checkBlock
+} elseif ($checkSettings) {
+    # Settings.json exists but has no valid juggernaut block — check for drift.
+    $driftPath = if ($checkScope -eq 'user') { $userPath } elseif ($checkScope -eq 'project') { $projectPath } else { '' }
+    if ($driftPath) {
+        Write-Output ''
+        Write-Output 'Settings Drift'
+        Write-DoctorSettingsDrift -Scope $checkScope -Settings $checkSettings -Path $driftPath
+    }
 }
 
 Write-DoctorSummary
