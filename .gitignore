@@ -35,7 +35,7 @@ Desktop.ini
 # Personal AWS credentials (should never be committed)
 .aws/
 credentials
-config
+/config
 
 # Secrets and sensitive files
 .env
