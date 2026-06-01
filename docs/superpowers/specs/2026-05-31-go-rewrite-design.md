@@ -76,18 +76,23 @@ Atomic read/merge/write of `settings.json`. Uses `encoding/json` + `os.Rename` f
 Thin wrapper around `github.com/zalando/go-keyring`. Service name: `juggernaut-bedrock`. The entire platform-detection tree from `lib/keychain.sh` collapses to ~5 lines. Windows long-key (>1280 char) DPAPI edge case handled via `golang.org/x/sys/windows` — same file location (`~/.juggernaut/bearer-token.dpapi.bin`), now written in Go.
 
 ### `internal/launcher`
-Creates the `claude` wrapper using the busybox pattern — no embedded binary required:
+Creates a transparent `claude` shim — no binary copying, no shell profile modification.
 
-- **Unix:** `~/.local/bin/claude` is a symlink to the `juggernaut` binary itself
-- **Windows:** `%USERPROFILE%\.local\bin\claude.exe` is a copy of the `juggernaut` binary (Windows does not support symlinks without admin rights)
+- **Unix (macOS / Linux):** symlink `~/.local/bin/claude` → juggernaut binary (busybox pattern). When invoked as `claude` (detected via `os.Args[0]`), juggernaut executes launcher behavior instead of the normal CLI.
+- **Windows:** writes a 2-line `%USERPROFILE%\.local\bin\claude.cmd` batch shim:
+  ```batch
+  @echo off
+  juggernaut --launcher %*
+  ```
+  The `--launcher` flag tells juggernaut to run in wrapper mode. No binary copying, no admin rights required.
 
-When invoked as `claude` (detected via `os.Args[0]`), the juggernaut binary executes wrapper behavior:
-1. Reads bearer token via go-keyring
-2. Sets `AWS_BEARER_TOKEN_BEDROCK` in process env
-3. Sets `CLAUDE_CODE_USE_BEDROCK=1`
-4. Execs the real `claude` binary (resolved by walking PATH, skipping itself)
+Launcher behavior (both platforms):
+1. Read bearer token via go-keyring
+2. Set `AWS_BEARER_TOKEN_BEDROCK` in process env
+3. Set `CLAUDE_CODE_USE_BEDROCK=1`
+4. Exec the real `claude` binary (resolved by walking PATH, skipping the shim)
 
-One binary, zero embed complexity. Works in non-interactive shells, SSH sessions, scripts — anywhere. No shell profile modification required.
+Works in non-interactive shells, SSH sessions, and scripts. No shell profile modification required.
 
 ### `internal/migrate`
 Detects and executes v3 → v4 migration. Idempotent — safe to run multiple times. Steps:
