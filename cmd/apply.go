@@ -75,7 +75,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := runMigrationIfNeeded(home, bCfg); err != nil {
+	if err := runMigrationIfNeeded(home); err != nil {
 		return err
 	}
 
@@ -218,7 +218,7 @@ func resolveCredential(authMode string) (string, error) {
 	return token, nil
 }
 
-func runMigrationIfNeeded(home string, bCfg *bedrock.Config) error {
+func runMigrationIfNeeded(home string) error {
 	state, err := migrate.Detect(home)
 	if err != nil || !state.HasV3Block || state.AlreadyV4 {
 		return err
