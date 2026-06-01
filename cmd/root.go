@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jpvelasco/juggernaut/internal/launcher"
 	"github.com/spf13/cobra"
 )
 
@@ -50,7 +51,14 @@ func isLauncherMode() bool {
 }
 
 func runLauncher() {
-	// Stub — wired up in Task 7 when internal/launcher is implemented.
-	fmt.Fprintln(os.Stderr, "launcher mode not yet implemented")
-	os.Exit(1)
+	var args []string
+	for _, a := range os.Args[1:] {
+		if a != "--launcher" {
+			args = append(args, a)
+		}
+	}
+	if err := launcher.RunAsLauncher(args); err != nil {
+		fmt.Fprintln(os.Stderr, "juggernaut launcher:", err)
+		os.Exit(1)
+	}
 }
