@@ -69,3 +69,4 @@ pester-results.xml
 
 # CI test output artifacts (written by tee in test jobs)
 test-results/
+bin/
