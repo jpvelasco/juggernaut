@@ -28,7 +28,7 @@ func Detect(homeDir string) (*State, error) {
 
 	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
-		return &State{}, nil
+		return nil, fmt.Errorf("settings.json is corrupted: %w", err)
 	}
 
 	jRaw, ok := settings["juggernaut"]
@@ -92,20 +92,26 @@ func meetsMinVersion(version, min string) bool {
 }
 
 func compareSemver(a, b string) int {
-	partsA := strings.SplitN(a, ".", 3)
-	partsB := strings.SplitN(b, ".", 3)
+	pa := parseVersionParts(a)
+	pb := parseVersionParts(b)
 	for i := 0; i < 3; i++ {
-		var pa, pb int
-		fmt.Sscanf(partsA[i], "%d", &pa)
-		fmt.Sscanf(partsB[i], "%d", &pb)
-		if pa != pb {
-			if pa > pb {
+		if pa[i] != pb[i] {
+			if pa[i] > pb[i] {
 				return 1
 			}
 			return -1
 		}
 	}
 	return 0
+}
+
+func parseVersionParts(version string) [3]int {
+	parts := strings.SplitN(version, ".", 3)
+	var result [3]int
+	for i := 0; i < 3 && i < len(parts); i++ {
+		fmt.Sscanf(parts[i], "%d", &result[i])
+	}
+	return result
 }
 
 func stripMarkerBlock(path, beginMarker, endMarker string) (bool, error) {

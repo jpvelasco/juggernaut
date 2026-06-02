@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,5 +49,121 @@ func TestApply_DryRun_BedrockAPIKey(t *testing.T) {
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
 		t.Error("dry-run should not create settings.json")
+	}
+}
+
+func TestApply_WritesSettings_IAM(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--effort=xhigh",
+		"--scope=user",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("settings.json not created: %v", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v", err)
+	}
+
+	block, ok := settings["juggernaut"].(map[string]any)
+	if !ok {
+		t.Fatal("juggernaut block not present in settings.json")
+	}
+	meta, ok := block["meta"].(map[string]any)
+	if !ok {
+		t.Fatal("juggernaut.meta not present")
+	}
+	if meta["schemaVersion"] != float64(2) {
+		t.Errorf("expected schemaVersion=2, got %v", meta["schemaVersion"])
+	}
+	if meta["managedBy"] != "juggernaut" {
+		t.Errorf("expected managedBy=juggernaut, got %v", meta["managedBy"])
+	}
+	if settings["env"] == nil {
+		t.Error("top-level env key should be present")
+	}
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		t.Fatal("env is not a map")
+	}
+	if env["CLAUDE_CODE_USE_BEDROCK"] != "1" {
+		t.Error("expected CLAUDE_CODE_USE_BEDROCK=1 in top-level env")
+	}
+}
+
+func TestApply_ModelFlag_OverridesAll(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	const customModel = "custom.model.id"
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--model=" + customModel,
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	var settings map[string]any
+	json.Unmarshal(data, &settings)
+
+	block := settings["juggernaut"].(map[string]any)
+	overrides := block["modelOverrides"].(map[string]any)
+	if overrides["opus"] != customModel {
+		t.Errorf("expected opus=%s, got %v", customModel, overrides["opus"])
+	}
+	if overrides["sonnet"] != customModel {
+		t.Errorf("expected sonnet=%s, got %v", customModel, overrides["sonnet"])
+	}
+	if overrides["haiku"] != customModel {
+		t.Errorf("expected haiku=%s, got %v", customModel, overrides["haiku"])
+	}
+}
+
+func TestUninstall_RemovesBlock(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// First apply to create settings.json
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	// Then uninstall
+	if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {
+		t.Fatalf("uninstall error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("settings.json should still exist: %v", err)
+	}
+	var settings map[string]any
+	json.Unmarshal(data, &settings)
+	if _, ok := settings["juggernaut"]; ok {
+		t.Error("juggernaut block should be removed after uninstall")
+	}
+	if _, ok := settings["env"]; ok {
+		t.Error("env key should be removed after uninstall")
 	}
 }

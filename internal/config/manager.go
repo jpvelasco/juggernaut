@@ -47,8 +47,11 @@ func (m *Manager) Write(data map[string]any) error {
 	lockPath := m.path + ".lock"
 	fl := flock.New(lockPath)
 	locked, err := fl.TryLock()
-	if err != nil || !locked {
-		return fmt.Errorf("could not acquire settings.json lock: %w", err)
+	if err != nil {
+		return fmt.Errorf("acquiring settings.json lock: %w", err)
+	}
+	if !locked {
+		return fmt.Errorf("settings.json is locked by another process; if this persists, remove %s and retry", lockPath)
 	}
 	defer fl.Unlock()
 
@@ -68,7 +71,9 @@ func (m *Manager) Write(data map[string]any) error {
 		return fmt.Errorf("writing temp settings file: %w", err)
 	}
 	if err := os.Rename(tmp, m.path); err != nil {
-		os.Remove(tmp)
+		if rmErr := os.Remove(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("committing settings.json: %w (cleanup of temp file also failed: %v)", err, rmErr)
+		}
 		return fmt.Errorf("committing settings.json: %w", err)
 	}
 	return nil
@@ -136,7 +141,9 @@ func pruneBackups(base string, keep int) error {
 	}
 	sort.Strings(matches)
 	for len(matches) > keep {
-		os.Remove(matches[0])
+		if err := os.Remove(matches[0]); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing old backup %s: %w", matches[0], err)
+		}
 		matches = matches[1:]
 	}
 	return nil

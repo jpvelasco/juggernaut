@@ -66,7 +66,10 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	if doctorFlags.jsonOut {
-		out, _ := r.JSON()
+		out, err := r.JSON()
+		if err != nil {
+			return fmt.Errorf("formatting doctor report as JSON: %w", err)
+		}
 		fmt.Println(string(out))
 	} else {
 		fmt.Print(r.String())

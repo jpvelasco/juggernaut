@@ -89,15 +89,24 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	opusModel := applyFlags.opusModel
+	sonnetModel := applyFlags.sonnetModel
+	haikuModel := applyFlags.haikuModel
+	if applyFlags.model != "" {
+		opusModel = applyFlags.model
+		sonnetModel = applyFlags.model
+		haikuModel = applyFlags.model
+	}
+
 	opts := schema.Options{
 		AuthMode:      authMode,
 		Region:        region,
 		Effort:        applyFlags.effort,
 		Scope:         applyFlags.scope,
 		Version:       Version,
-		OpusModel:     applyFlags.opusModel,
-		SonnetModel:   applyFlags.sonnetModel,
-		HaikuModel:    applyFlags.haikuModel,
+		OpusModel:     opusModel,
+		SonnetModel:   sonnetModel,
+		HaikuModel:    haikuModel,
 		Opusplan:      opusplan,
 		Use1M:         !applyFlags.no1m,
 		UseMantle:     !applyFlags.noMantle,
@@ -159,7 +168,11 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	}
 
 	mgr := config.NewManager(settingsPath(home, applyFlags.scope))
-	has, _ := mgr.HasJuggernautBlock()
+	has, herr := mgr.HasJuggernautBlock()
+	if herr != nil {
+		err = fmt.Errorf("checking existing configuration: %w", herr)
+		return
+	}
 	if has {
 		authMode = bCfg.Defaults.AuthMode
 		return

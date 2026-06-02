@@ -119,6 +119,97 @@ func TestStripLauncherBlocks(t *testing.T) {
 	}
 }
 
+func TestDetect_CorruptedJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".claude", "settings.json")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte("{not valid json"), 0o644)
+
+	_, err := migrate.Detect(dir)
+	if err == nil {
+		t.Error("expected error for corrupted settings.json")
+	}
+}
+
+func TestDetect_V322_TooOld(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{
+				"managedBy":     "juggernaut",
+				"schemaVersion": 1,
+				"version":       "3.2.2",
+			},
+		},
+	})
+	state, err := migrate.Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect() error: %v", err)
+	}
+	if !state.TooOld {
+		t.Error("expected TooOld=true for v3.2.2 (minimum is v3.2.3)")
+	}
+}
+
+func TestDetect_V323_NotTooOld(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{
+				"managedBy":     "juggernaut",
+				"schemaVersion": 1,
+				"version":       "3.2.3",
+			},
+		},
+	})
+	state, err := migrate.Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect() error: %v", err)
+	}
+	if state.TooOld {
+		t.Error("expected TooOld=false for v3.2.3 (exact minimum)")
+	}
+}
+
+func TestVersionBoundaries(t *testing.T) {
+	// Test the exact boundary: 3.2.2 is too old, 3.2.3 is the minimum.
+	tests := []struct {
+		version    string
+		shouldPass bool
+	}{
+		{"3.2.3", true},
+		{"3.2.2", false},
+		{"3.2.4", true},
+		{"3.3.0", true},
+		{"4.0.0", true},
+		{"3.1.9", false},
+		{"2.9.9", false},
+	}
+	for _, tt := range tests {
+		dir := t.TempDir()
+		writeSettings(t, dir, map[string]any{
+			"juggernaut": map[string]any{
+				"meta": map[string]any{
+					"managedBy":     "juggernaut",
+					"schemaVersion": 1,
+					"version":       tt.version,
+				},
+			},
+		})
+		state, err := migrate.Detect(dir)
+		if err != nil {
+			t.Fatalf("v%s: Detect() error: %v", tt.version, err)
+		}
+		tooOld := state.TooOld
+		if tt.shouldPass && tooOld {
+			t.Errorf("v%s should NOT be too old, but was flagged as too old", tt.version)
+		}
+		if !tt.shouldPass && !tooOld {
+			t.Errorf("v%s SHOULD be too old, but was not flagged", tt.version)
+		}
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
 }

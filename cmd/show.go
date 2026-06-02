@@ -43,7 +43,10 @@ func runShow(cmd *cobra.Command, args []string) error {
 	}
 
 	if showFlags.jsonOut {
-		out, _ := json.MarshalIndent(results, "", "  ")
+		out, err := json.MarshalIndent(results, "", "  ")
+		if err != nil {
+			return fmt.Errorf("serializing configuration: %w", err)
+		}
 		fmt.Println(string(out))
 		return nil
 	}
@@ -54,7 +57,10 @@ func runShow(cmd *cobra.Command, args []string) error {
 			fmt.Println("  (not configured)")
 			continue
 		}
-		out, _ := json.MarshalIndent(block, "", "  ")
+		out, err := json.MarshalIndent(block, "", "  ")
+		if err != nil {
+			return fmt.Errorf("serializing %s configuration: %w", scope, err)
+		}
 		fmt.Println(string(out))
 	}
 	return nil

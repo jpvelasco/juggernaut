@@ -40,7 +40,9 @@ func Install(binDir string) error {
 	}
 
 	shimPath := filepath.Join(binDir, "claude")
-	os.Remove(shimPath)
+	if err := removeIfExists(shimPath); err != nil {
+		return fmt.Errorf("removing existing claude shim: %w", err)
+	}
 	return os.Symlink(self, shimPath)
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/internal/launcher"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // Version is set at build time via -ldflags. Dev builds use the fallback.
@@ -31,9 +32,21 @@ func Execute() {
 }
 
 // ExecuteArgs is used in tests to run commands programmatically.
+// It resets all flag values to defaults before each invocation to prevent state leakage.
 func ExecuteArgs(args []string) error {
+	resetFlags()
 	rootCmd.SetArgs(args)
 	return rootCmd.Execute()
+}
+
+// resetFlags resets all subcommand flags to their defaults between test runs.
+func resetFlags() {
+	for _, sub := range rootCmd.Commands() {
+		sub.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Value.Set(f.DefValue)
+			f.Changed = false
+		})
+	}
 }
 
 func isLauncherMode() bool {

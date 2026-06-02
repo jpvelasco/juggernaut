@@ -41,7 +41,13 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	if !uninstallFlags.force && !uninstallFlags.dryRun {
 		fmt.Print("Remove Juggernaut configuration? [y/N] ")
 		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return fmt.Errorf("reading confirmation: %w", err)
+			}
+			fmt.Println("Aborted.")
+			return nil
+		}
 		if !strings.EqualFold(strings.TrimSpace(scanner.Text()), "y") {
 			fmt.Println("Aborted.")
 			return nil
@@ -55,7 +61,11 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 
 	for _, scope := range scopes {
 		mgr := config.NewManager(settingsPath(home, scope))
-		has, _ := mgr.HasJuggernautBlock()
+		has, err := mgr.HasJuggernautBlock()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not check %s scope: %v\n", scope, err)
+			continue
+		}
 		if !has {
 			continue
 		}
@@ -83,8 +93,11 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		if uninstallFlags.dryRun {
 			fmt.Printf("Would remove claude shim from %s\n", binDir)
 		} else {
-			_ = launcher.Uninstall(binDir)
-			fmt.Println("  ✓ Removed claude shim")
+			if err := launcher.Uninstall(binDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not remove claude shim: %v\n", err)
+			} else {
+				fmt.Println("  ✓ Removed claude shim")
+			}
 			stripped := migrate.StripLauncherBlocks(home)
 			for _, p := range stripped {
 				fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
