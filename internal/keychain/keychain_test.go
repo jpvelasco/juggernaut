@@ -29,7 +29,7 @@ func skipIfUnavailable(t *testing.T, s *keychain.Store) {
 
 func TestStoreAndGet(t *testing.T) {
 	s := testStore()
-	defer s.Delete()
+	defer func() { _ = s.Delete() }()
 	skipIfUnavailable(t, s)
 
 	if err := s.Set("test-token-value"); err != nil {
