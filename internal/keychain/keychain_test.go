@@ -15,12 +15,23 @@ func testStore() *keychain.Store {
 	return keychain.NewStore(svc)
 }
 
+// skipIfUnavailable skips the test if the keychain backend is not available.
+// On headless Linux CI (no Secret Service daemon), all keychain ops fail.
+func skipIfUnavailable(t *testing.T, s *keychain.Store) {
+	t.Helper()
+	if err := s.Set("probe"); err != nil {
+		t.Skipf("keychain backend unavailable: %v", err)
+	}
+	_ = s.Delete()
+}
+
 func TestStoreAndGet(t *testing.T) {
 	s := testStore()
 	defer s.Delete()
+	skipIfUnavailable(t, s)
 
 	if err := s.Set("test-token-value"); err != nil {
-		t.Skipf("keychain unavailable: %v", err)
+		t.Fatalf("Set() error: %v", err)
 	}
 
 	got, err := s.Get()
@@ -34,6 +45,7 @@ func TestStoreAndGet(t *testing.T) {
 
 func TestGetMissing(t *testing.T) {
 	s := testStore()
+	skipIfUnavailable(t, s)
 	s.Delete()
 
 	got, err := s.Get()
@@ -47,6 +59,7 @@ func TestGetMissing(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	s := testStore()
+	skipIfUnavailable(t, s)
 	_ = s.Set("to-delete")
 
 	if err := s.Delete(); err != nil {
