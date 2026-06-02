@@ -67,7 +67,10 @@ func IsInstalled(binDir string) bool {
 func RunAsLauncher(args []string) error {
 	token, err := keychain.Default().Get()
 	if err != nil {
-		return fmt.Errorf("reading keychain: %w", err)
+		// Keychain unavailable (e.g. headless Linux without Secret Service).
+		// For IAM auth this is fine — no bearer token is needed.
+		// We proceed and let Claude Code fail if it actually needs a credential.
+		token = ""
 	}
 	if token != "" {
 		os.Setenv("AWS_BEARER_TOKEN_BEDROCK", token)

@@ -6,6 +6,15 @@ import (
 	"os"
 )
 
+// LoadBytes parses a Config from raw JSON bytes (e.g. from an embedded file).
+func LoadBytes(data []byte) (*Config, error) {
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parsing bedrock-config.json: %w", err)
+	}
+	return &cfg, nil
+}
+
 type Config struct {
 	Version                string            `json:"version"`
 	Models                 ModelSet          `json:"models"`

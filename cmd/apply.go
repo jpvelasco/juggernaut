@@ -70,12 +70,12 @@ func init() {
 func runApply(cmd *cobra.Command, args []string) error {
 	home := homeDir()
 
-	bCfg, err := bedrock.Load(bedrockConfigPath())
+	bCfg, err := loadBedrockConfig()
 	if err != nil {
 		return err
 	}
 
-	if err := runMigrationIfNeeded(home); err != nil {
+	if err := runMigrationIfNeeded(home, applyFlags.dryRun); err != nil {
 		return err
 	}
 
@@ -174,6 +174,17 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 		return
 	}
 	if has {
+		// Preserve existing auth mode from the block rather than reverting to the global default.
+		if existing, rerr := mgr.Read(); rerr == nil {
+			if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
+				if auth, ok := jBlock["auth"].(map[string]any); ok {
+					if mode, ok := auth["mode"].(string); ok && mode != "" {
+						authMode = mode
+						return
+					}
+				}
+			}
+		}
 		authMode = bCfg.Defaults.AuthMode
 		return
 	}
@@ -231,7 +242,7 @@ func resolveCredential(authMode string) (string, error) {
 	return token, nil
 }
 
-func runMigrationIfNeeded(home string) error {
+func runMigrationIfNeeded(home string, dryRun bool) error {
 	state, err := migrate.Detect(home)
 	if err != nil || !state.HasV3Block || state.AlreadyV4 {
 		return err
@@ -245,6 +256,14 @@ func runMigrationIfNeeded(home string) error {
 	}
 
 	fmt.Printf("Existing Juggernaut configuration detected (v%s, %s auth).\n", state.V3Version, state.AuthMode)
+
+	if dryRun {
+		fmt.Println("Dry run — migration preview only, no changes made.")
+		fmt.Println("  Would: transfer bearer token to go-keyring")
+		fmt.Println("  Would: remove legacy shell launcher blocks from shell profiles")
+		return nil
+	}
+
 	fmt.Println("Migrating to Juggernaut v4...")
 
 	if state.AuthMode == "bedrock-api-key" {

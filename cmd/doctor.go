@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/jpvelasco/juggernaut/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/internal/config"
 	"github.com/jpvelasco/juggernaut/internal/doctor"
 	"github.com/jpvelasco/juggernaut/internal/keychain"
@@ -32,7 +31,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	home := homeDir()
 	r := doctor.NewReport()
 
-	bCfg, err := bedrock.Load(bedrockConfigPath())
+	bCfg, err := loadBedrockConfig()
 	if err != nil {
 		r.Check("bedrock-config.json", doctor.Fail, err.Error())
 	} else {

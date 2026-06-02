@@ -5,34 +5,55 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/jpvelasco/juggernaut/internal/bedrock"
 )
+
+// embeddedConfigBytes holds bedrock-config.json bytes injected at startup from main.go.
+var embeddedConfigBytes []byte
+
+// SetEmbeddedConfig is called by main() to inject the embedded bedrock-config.json bytes.
+func SetEmbeddedConfig(data []byte) {
+	embeddedConfigBytes = data
+}
+
+// loadBedrockConfig loads bedrock config, preferring the embedded bytes.
+// Falls back to filesystem for tests and development builds.
+func loadBedrockConfig() (*bedrock.Config, error) {
+	if len(embeddedConfigBytes) > 0 {
+		return bedrock.LoadBytes(embeddedConfigBytes)
+	}
+	// Fallback for tests and dev builds that don't set embeddedConfigBytes.
+	path := findBedrockConfigFile()
+	return bedrock.Load(path)
+}
+
+func findBedrockConfigFile() string {
+	self, _ := os.Executable()
+	if self != "" {
+		if candidate := filepath.Join(filepath.Dir(self), "bedrock-config.json"); fileExists(candidate) {
+			return candidate
+		}
+	}
+	if fileExists("bedrock-config.json") {
+		return "bedrock-config.json"
+	}
+	if fileExists("../bedrock-config.json") {
+		return "../bedrock-config.json"
+	}
+	return "bedrock-config.json"
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 func homeDir() string {
 	if h := os.Getenv("HOME"); h != "" {
 		return h
 	}
 	return os.Getenv("USERPROFILE")
-}
-
-func bedrockConfigPath() string {
-	// Try executable directory first
-	self, _ := os.Executable()
-	if self != "" {
-		candidate := filepath.Join(filepath.Dir(self), "bedrock-config.json")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	// Try current working directory
-	if _, err := os.Stat("bedrock-config.json"); err == nil {
-		return "bedrock-config.json"
-	}
-	// Try one level up (for tests running in cmd directory)
-	if _, err := os.Stat("../bedrock-config.json"); err == nil {
-		return "../bedrock-config.json"
-	}
-	// Fall back to relative path
-	return "bedrock-config.json"
 }
 
 func settingsPath(homeDir, scope string) string {
