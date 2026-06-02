@@ -120,9 +120,14 @@ func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 		t.Fatalf("apply error: %v", err)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("reading settings.json: %v", err)
+	}
 	var settings map[string]any
-	json.Unmarshal(data, &settings)
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
 
 	block := settings["juggernaut"].(map[string]any)
 	overrides := block["modelOverrides"].(map[string]any)
@@ -159,7 +164,9 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 		t.Fatalf("settings.json should still exist: %v", err)
 	}
 	var settings map[string]any
-	json.Unmarshal(data, &settings)
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
 	if _, ok := settings["juggernaut"]; ok {
 		t.Error("juggernaut block should be removed after uninstall")
 	}

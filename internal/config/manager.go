@@ -53,7 +53,7 @@ func (m *Manager) Write(data map[string]any) error {
 	if !locked {
 		return fmt.Errorf("settings.json is locked by another process; if this persists, remove %s and retry", lockPath)
 	}
-	defer fl.Unlock()
+	defer func() { _ = fl.Unlock() }()
 
 	if _, err := os.Stat(m.path); err == nil {
 		if err := m.rotateBackup(); err != nil {

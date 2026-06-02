@@ -43,7 +43,7 @@ func ExecuteArgs(args []string) error {
 func resetFlags() {
 	for _, sub := range rootCmd.Commands() {
 		sub.Flags().VisitAll(func(f *pflag.Flag) {
-			f.Value.Set(f.DefValue)
+			_ = f.Value.Set(f.DefValue)
 			f.Changed = false
 		})
 	}

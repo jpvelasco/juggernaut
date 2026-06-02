@@ -22,7 +22,9 @@ func skipIfUnavailable(t *testing.T, s *keychain.Store) {
 	if err := s.Set("probe"); err != nil {
 		t.Skipf("keychain backend unavailable: %v", err)
 	}
-	_ = s.Delete()
+	if err := s.Delete(); err != nil {
+		t.Skipf("keychain backend unavailable: %v", err)
+	}
 }
 
 func TestStoreAndGet(t *testing.T) {
@@ -46,7 +48,7 @@ func TestStoreAndGet(t *testing.T) {
 func TestGetMissing(t *testing.T) {
 	s := testStore()
 	skipIfUnavailable(t, s)
-	s.Delete()
+	_ = s.Delete()
 
 	got, err := s.Get()
 	if err != nil {
