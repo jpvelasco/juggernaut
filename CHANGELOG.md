@@ -2,6 +2,31 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.0.0] — unreleased
+
+### Changed
+- Full rewrite from bash/PowerShell to Go — single cross-platform binary, no shell dependencies
+- Launcher is now a symlink (Unix) or `.cmd` shim (Windows) — no shell profile modification required
+- Keychain handled via go-keyring — no platform-specific shell commands or jq required
+- `jq` is no longer a dependency
+
+### Added
+- `juggernaut migrate` — explicit v3→v4 migration command with `--dry-run` support
+- Automatic migration detection on first run of any command when v3 config is found
+- Interactive first-run prompts via `charmbracelet/huh` when `apply` is run without flags
+- `--json` flag on `show`, `doctor`, and `version` for machine-readable output
+- npm distribution: `npm install -g juggernaut-bedrock`
+- GoReleaser: pre-built binaries for linux/darwin/windows × amd64/arm64
+
+### Removed
+- Bash and PowerShell source scripts (preserved on `legacy/v3` branch, pinned at v3.2.3)
+
+### Migration
+Upgrade from v3.2.3: install the v4 binary, then run `juggernaut migrate` or simply `juggernaut apply`.
+Pre-v3.2.3 installations must upgrade to v3.2.3 first before migrating to v4.
+
+---
+
 ## [3.2.3] - 2026-05-15
 
 **Patch release.** Launcher resilience fix.
