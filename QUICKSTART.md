@@ -4,20 +4,15 @@
 
 ### 1. Prerequisites Check
 ```bash
-# Check AWS CLI is installed
-aws --version
-
-# Check Claude Code is installed (install with: npm install -g @anthropic-ai/claude-code)
+# Check Claude Code is installed
 claude --version
 
-# Check Bash version (must be 4.0+) — macOS users: brew install bash
-bash --version
+# Check AWS CLI is installed (for IAM/SSO auth)
+aws --version
 ```
 
-### 2. AWS Setup
+### 2. AWS Setup (IAM/SSO only — skip for Bedrock API key)
 ```bash
-# Configure AWS credentials (choose one method)
-
 # Method A: AWS Configure
 aws configure
 
@@ -25,118 +20,88 @@ aws configure
 aws sso login --profile=<your-profile>
 export AWS_PROFILE=<your-profile>
 
-# Verify credentials work
+# Verify
 aws sts get-caller-identity
 ```
 
 ### 3. Install Juggernaut
 
-The installer is a **destructive wipe-and-reinstall**: it strips any legacy Juggernaut shell-profile blocks, removes the `juggernaut` key from `~/.claude/settings.json`, and deletes Juggernaut bearer token storage before placing fresh files. The installer does **not** auto-apply.
-
+**npm (recommended — works on every machine that has Claude Code):**
 ```bash
-# Unix / macOS / Linux / Git Bash / WSL
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.sh | bash -s -- --version v3.2.1
+npm install -g juggernaut-bedrock
 ```
 
-```powershell
-# Windows PowerShell (5.1 or 7) — Defender-friendly (see README for AMSI note)
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1; Remove-Item $p
-```
-
-Preview the wipe without writing anything:
-
+**curl one-liner (Unix / macOS / Linux / Git Bash / WSL):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.sh | bash -s -- --version v3.2.1 --dry-run
+curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/install.sh | bash
 ```
 
+**PowerShell (Windows):**
 ```powershell
-$u='https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.1/install.ps1'; $p="$env:TEMP\juggernaut-install.ps1"; irm $u -OutFile $p; Unblock-File $p; & $p -Version v3.2.1 -DryRun; Remove-Item $p
+irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/install.ps1 | iex
 ```
 
 ### 4. Configure
-
 ```bash
-# IAM / SSO (recommended)
+# IAM / SSO (recommended for organizations)
 juggernaut apply --auth=iam
 
-# Bedrock API key (interactive — key stored in keychain/Credential Manager/DPAPI/profile storage)
+# Bedrock API key (key stored securely in OS keychain)
 juggernaut apply --auth=bedrock-api-key
 ```
 
-```powershell
-# Windows
-.\juggernaut.ps1 apply -Auth iam
-.\juggernaut.ps1 apply -Auth bedrock-api-key
-```
+Run without flags for an interactive first-run prompt.
 
-`juggernaut apply` refuses to write `CLAUDE_CODE_USE_BEDROCK=1` to `settings.json` unless a valid auth source is present (`aws sts get-caller-identity` succeeds, `AWS_BEARER_TOKEN_BEDROCK` is set, or Juggernaut bearer token storage exists).
+`juggernaut apply` will not write `CLAUDE_CODE_USE_BEDROCK=1` unless a valid credential source is confirmed.
 
 ### 5. Launch
 ```bash
 claude
 ```
 
-Fresh shells automatically pick up the **launcher** installed in step 3 — a `claude()` shell function appended to `~/.bashrc`/`~/.zshrc`/`~/.profile` on Unix, or a `function claude` block in your PowerShell profile on Windows. The launcher reads your bearer token from Juggernaut bearer token storage (macOS keychain, Windows Credential Manager/DPAPI, or Linux profile token file) and injects it into the child process's environment before running the real `claude`. No manual env setup required, and the function approach survives Anthropic's `claude update` self-rewrites.
+The `claude` shim installed by Juggernaut reads your bearer token from the OS keychain and injects it before launching Claude Code. No manual environment setup required.
 
 ## Verify Setup
 
 ```bash
 juggernaut doctor
-
-aws bedrock list-foundation-models --region us-west-2 --by-provider anthropic
 ```
 
-## Configuration Applied
+## What Gets Configured
 
-Your setup includes:
-- Bedrock integration enabled (gated behind explicit auth validation)
-- Claude Sonnet 4.6 as primary model (Global CRIS)
-- Claude Haiku 4.5 as fast/background model (Global CRIS)
+- Bedrock routing enabled (auth-gated)
+- Claude Sonnet 4.6 as primary model (Global CRIS inference profile)
+- Claude Haiku 4.5 as fast/background model
 - All three model tiers visible in `/model` selector
-- Optimized token limits for Bedrock (32768 output, 65536 thinking)
-- Persistent configuration in `~/.claude/settings.json` (no shell profile writes in v3)
+- Optimized token limits (32768 output, 65536 thinking)
 - Mantle routing enabled by default
+- Configuration in `~/.claude/settings.json` only — no shell profile writes
 
-## Fast / Background Model Note
-
-Juggernaut defaults background tasks and subagents to **Haiku 4.5** (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). For higher-quality background work, override the Haiku/subagent model with:
-
-```bash
-juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6
-```
-
-Official Anthropic docs: https://code.claude.com/docs/en/model-config
-
-## 1M Context Windows
-
-Enable 1M token context for Sonnet (Opus uses native 1M by default):
+## Common Options
 
 ```bash
-juggernaut apply --auth=iam --1m-context
-```
-
-Standard context is the default.
-
-## OpusPlan
-
-Opus in `/plan` mode, Sonnet during execution:
-
-```bash
+# OpusPlan — Opus in /plan mode, Sonnet during execution
 juggernaut apply --auth=iam --opusplan
-```
 
-`juggernaut doctor` includes an opusplan drift check that catches external overrides of `ANTHROPIC_MODEL`.
+# Override the subagent/background model
+juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6
+
+# Preview without writing
+juggernaut apply --auth=iam --dry-run
+
+# Show current config
+juggernaut show
+
+# Migrate from v3 (shell-based) to v4 (Go)
+juggernaut migrate
+```
 
 ## Troubleshooting
 
-### Common 400/403 Errors
-- **400 on latest Claude Code**: Already handled — Juggernaut sets `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`
-- **403 Access Denied**: Complete the Anthropic model access form in the Bedrock console
-- **Model not found**: Ensure you're using global inference profiles (Juggernaut does this by default)
+**403 Access Denied** — Complete the Anthropic model access request in the AWS Bedrock console.
 
-### `juggernaut apply` exits with "auth validation required"
-Pass `--auth=iam` (or `-Auth iam` on PowerShell) or `--auth=bedrock-api-key` explicitly. v3 will not silently enable Bedrock without a validated credential source.
+**Model not found** — Use global inference profile IDs (Juggernaut does this by default).
 
-## Need Help?
+**Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon or use `--storage=profile`.
 
-See [README.md](README.md) for detailed documentation and troubleshooting.
+See [README.md](README.md) for full documentation.
