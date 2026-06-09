@@ -73,9 +73,9 @@ func RunAsLauncher(args []string) error {
 		token = ""
 	}
 	if token != "" {
-		os.Setenv("AWS_BEARER_TOKEN_BEDROCK", token)
+		_ = os.Setenv("AWS_BEARER_TOKEN_BEDROCK", token)
 	}
-	os.Setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+	_ = os.Setenv("CLAUDE_CODE_USE_BEDROCK", "1")
 
 	claudePath, err := findRealClaude()
 	if err != nil {
