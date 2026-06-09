@@ -43,7 +43,7 @@ func (m *Manager) Read() (map[string]any, error) {
 }
 
 func (m *Manager) Write(data map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(m.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
 		return fmt.Errorf("creating settings directory: %w", err)
 	}
 
@@ -70,7 +70,7 @@ func (m *Manager) Write(data map[string]any) error {
 	}
 
 	tmp := m.path + ".tmp"
-	if err := os.WriteFile(tmp, encoded, 0o644); err != nil {
+	if err := os.WriteFile(tmp, encoded, 0o600); err != nil {
 		return fmt.Errorf("writing temp settings file: %w", err)
 	}
 	if err := os.Rename(tmp, m.path); err != nil {
@@ -160,5 +160,5 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o644)
+	return os.WriteFile(dst, data, 0o600)
 }

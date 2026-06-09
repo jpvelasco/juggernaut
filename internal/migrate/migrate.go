@@ -21,7 +21,7 @@ type State struct {
 // Detect inspects homeDir for a v3 Juggernaut block.
 func Detect(homeDir string) (*State, error) {
 	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(settingsPath) //nolint:gosec // path is constructed from homeDir, not user input
 	if os.IsNotExist(err) {
 		return &State{}, nil
 	}
@@ -153,5 +153,5 @@ func stripMarkerBlock(path, beginMarker, endMarker string) (bool, error) {
 	if !found {
 		return false, nil
 	}
-	return true, os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
+	return true, os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o600)
 }
