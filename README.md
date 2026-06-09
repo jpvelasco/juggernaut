@@ -1,3 +1,8 @@
+> **⚠️ Legacy Release — This is the last shell-based version (v3.2.3).**
+> Active development has moved to the Go-based v4+.
+> **Upgrade:** `npm install -g juggernaut-bedrock` or see the [main branch](https://github.com/jpvelasco/juggernaut) for install options.
+> This branch receives no further updates.
+
 <p align="center">
   <img src="docs/logo.png" alt="Juggernaut" width="200">
 </p>
