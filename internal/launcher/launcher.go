@@ -28,13 +28,13 @@ func DefaultBinDir() string {
 
 // Install creates the claude shim in binDir (symlink on Unix, .cmd on Windows).
 func Install(binDir string) error {
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		return fmt.Errorf("creating bin dir: %w", err)
 	}
 
 	if runtime.GOOS == "windows" {
 		shimPath := filepath.Join(binDir, "claude.cmd")
-		return os.WriteFile(shimPath, []byte(cmdShim), 0o644)
+		return os.WriteFile(shimPath, []byte(cmdShim), 0o600)
 	}
 
 	self, err := os.Executable()
@@ -88,7 +88,7 @@ func RunAsLauncher(args []string) error {
 		return err
 	}
 
-	cmd := exec.Command(claudePath, args...)
+	cmd := exec.Command(claudePath, args...) //nolint:gosec // claudePath is resolved from PATH, not user input
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
