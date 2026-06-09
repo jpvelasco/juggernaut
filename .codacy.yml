@@ -2,3 +2,9 @@
 exclude_paths:
   - ".remember/**"
   - ".codacy/**"
+
+engines:
+  opengrep:
+    exclude_paths:
+      - ".remember/**"
+      - ".codacy/**"

@@ -88,7 +88,7 @@ func RunAsLauncher(args []string) error {
 		return err
 	}
 
-	cmd := exec.Command(claudePath, args...) //nolint:gosec // claudePath is resolved from PATH, not user input
+	cmd := exec.Command(claudePath, args...) //nolint:gosec
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -25,7 +25,8 @@ function httpsGet(url) {
     https
       .get(url, { headers: { "User-Agent": "juggernaut-npm-installer/1.0" } }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
-          return httpsGet(res.headers.location).then(resolve).catch(reject);
+          httpsGet(res.headers.location).then(resolve).catch(reject);
+          return;
         }
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
@@ -43,7 +44,8 @@ function downloadFile(url, dest) {
       https
         .get(fetchUrl, { headers: { "User-Agent": "juggernaut-npm-installer/1.0" } }, (res) => {
           if (res.statusCode === 301 || res.statusCode === 302) {
-            return fetch(res.headers.location);
+            fetch(res.headers.location);
+            return;
           }
           res.pipe(file);
           file.on("finish", () => file.close(resolve));

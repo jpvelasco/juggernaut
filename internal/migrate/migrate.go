@@ -21,7 +21,7 @@ type State struct {
 // Detect inspects homeDir for a v3 Juggernaut block.
 func Detect(homeDir string) (*State, error) {
 	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
-	data, err := os.ReadFile(settingsPath) //nolint:gosec // path is constructed from homeDir, not user input
+	data, err := os.ReadFile(settingsPath) //nolint:gosec
 	if os.IsNotExist(err) {
 		return &State{}, nil
 	}
