@@ -12,7 +12,7 @@ var versionJSONFlag bool
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print Juggernaut version",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		if versionJSONFlag {
 			out, _ := json.Marshal(map[string]string{"version": Version})
 			fmt.Println(string(out))

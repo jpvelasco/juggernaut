@@ -23,7 +23,7 @@ func init() {
 	rootCmd.AddCommand(migrateCmd)
 }
 
-func runMigrate(cmd *cobra.Command, args []string) error {
+func runMigrate(_ *cobra.Command, _ []string) error {
 	home := homeDir()
 
 	state, err := migrate.Detect(home)

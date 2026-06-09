@@ -1,3 +1,4 @@
+// Package config handles atomic read/merge/write of settings.json with backup rotation.
 package config
 
 import (
@@ -13,10 +14,12 @@ import (
 
 const backupRetain = 5
 
+// Manager handles atomic read/merge/write of a settings.json file.
 type Manager struct {
 	path string
 }
 
+// NewManager creates a Manager for the settings.json at the given path.
 func NewManager(path string) *Manager {
 	return &Manager{path: path}
 }
@@ -79,6 +82,7 @@ func (m *Manager) Write(data map[string]any) error {
 	return nil
 }
 
+// MergeJuggernautBlock merges the juggernaut block and native keys into existing settings.
 func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[string]string, model string) error {
 	existing, err := m.Read()
 	if err != nil {
@@ -96,6 +100,7 @@ func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[strin
 	return m.Write(existing)
 }
 
+// RemoveJuggernautBlock strips Juggernaut-managed keys from settings.json.
 func (m *Manager) RemoveJuggernautBlock() error {
 	existing, err := m.Read()
 	if err != nil {
@@ -108,6 +113,7 @@ func (m *Manager) RemoveJuggernautBlock() error {
 	return m.Write(existing)
 }
 
+// HasJuggernautBlock returns true if settings.json contains a managed Juggernaut block.
 func (m *Manager) HasJuggernautBlock() (bool, error) {
 	data, err := m.Read()
 	if err != nil {

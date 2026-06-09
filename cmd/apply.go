@@ -1,3 +1,4 @@
+// Package cmd implements the juggernaut CLI commands.
 package cmd
 
 import (
@@ -67,7 +68,7 @@ func init() {
 	rootCmd.AddCommand(applyCmd)
 }
 
-func runApply(cmd *cobra.Command, args []string) error {
+func runApply(_ *cobra.Command, _ []string) error {
 	home := homeDir()
 
 	bCfg, err := loadBedrockConfig()

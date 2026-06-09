@@ -1,2 +1,4 @@
 ---
-exclude_paths: []
+exclude_paths:
+  - ".remember/**"
+  - ".codacy/**"

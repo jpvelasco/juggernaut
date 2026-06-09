@@ -27,7 +27,7 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 }
 
-func runDoctor(cmd *cobra.Command, args []string) error {
+func runDoctor(_ *cobra.Command, _ []string) error {
 	home := homeDir()
 	r := doctor.NewReport()
 
