@@ -21,6 +21,7 @@ var rootCmd = &cobra.Command{
 	Long:  `Juggernaut installs and configures Claude Code to route through Amazon Bedrock instead of Anthropic's direct API.`,
 }
 
+// Execute is the main entry point for the CLI.
 func Execute() {
 	if isLauncherMode() {
 		runLauncher()

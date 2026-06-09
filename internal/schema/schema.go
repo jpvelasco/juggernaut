@@ -1,3 +1,4 @@
+// Package schema builds and validates the Juggernaut block written to settings.json.
 package schema
 
 import (
@@ -8,8 +9,10 @@ import (
 	"github.com/jpvelasco/juggernaut/internal/bedrock"
 )
 
+// SchemaVersion is the current version of the Juggernaut settings.json block.
 const SchemaVersion = 2
 
+// Options holds all user-supplied apply parameters.
 type Options struct {
 	AuthMode      string
 	Region        string
@@ -27,6 +30,7 @@ type Options struct {
 	AuthValidated bool
 }
 
+// Block is the .juggernaut block written to settings.json.
 type Block struct {
 	Auth   Auth              `json:"auth"`
 	Models ModelOverrides    `json:"modelOverrides"`
@@ -34,12 +38,14 @@ type Block struct {
 	Meta   Meta              `json:"meta"`
 }
 
+// Auth holds the authentication configuration within the Juggernaut block.
 type Auth struct {
 	Mode    string `json:"mode"`
 	Region  string `json:"region"`
 	Storage string `json:"storage,omitempty"`
 }
 
+// ModelOverrides holds the Bedrock model IDs for each tier.
 type ModelOverrides struct {
 	Opus     string `json:"opus"`
 	Sonnet   string `json:"sonnet"`
@@ -47,6 +53,7 @@ type ModelOverrides struct {
 	Subagent string `json:"subagent"`
 }
 
+// Meta holds Juggernaut metadata stored in the block.
 type Meta struct {
 	SchemaVersion int    `json:"schemaVersion"`
 	Version       string `json:"version"`
@@ -60,6 +67,7 @@ type Meta struct {
 	Effort        string `json:"effort"`
 }
 
+// NativeKeys are the top-level settings.json keys Claude Code reads directly.
 type NativeKeys struct {
 	Model          string            `json:"model,omitempty"`
 	ModelOverrides map[string]string `json:"modelOverrides,omitempty"`
@@ -70,6 +78,7 @@ var validEfforts = map[string]bool{
 	"low": true, "medium": true, "high": true, "xhigh": true, "max": true,
 }
 
+// Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
 		return nil, fmt.Errorf("unsupported region %q — run `juggernaut doctor` for supported regions", opts.Region)
@@ -148,6 +157,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}, nil
 }
 
+// NativeKeys derives the top-level settings.json keys from the block.
 func (b *Block) NativeKeys() NativeKeys {
 	model := ""
 	if b.Meta.Opusplan {

@@ -1,3 +1,4 @@
+// Juggernaut configures Claude Code to use Amazon Bedrock.
 package main
 
 import (

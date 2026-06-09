@@ -35,7 +35,7 @@ func init() {
 	rootCmd.AddCommand(uninstallCmd)
 }
 
-func runUninstall(cmd *cobra.Command, args []string) error {
+func runUninstall(_ *cobra.Command, _ []string) error {
 	home := homeDir()
 
 	if !uninstallFlags.force && !uninstallFlags.dryRun {

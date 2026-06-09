@@ -1,3 +1,4 @@
+// Package migrate handles detection and execution of v3-to-v4 migration.
 package migrate
 
 import (
@@ -8,14 +9,16 @@ import (
 	"strings"
 )
 
+// State describes what was found during migration detection.
 type State struct {
 	HasV3Block bool
 	V3Version  string
 	AuthMode   string
-	TooOld     bool
-	AlreadyV4  bool
+	TooOld     bool  // version < 3.2.3 — must upgrade v3 first
+	AlreadyV4  bool  // schemaVersion == 2 — migration already complete
 }
 
+// Detect inspects homeDir for a v3 Juggernaut block.
 func Detect(homeDir string) (*State, error) {
 	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
 	data, err := os.ReadFile(settingsPath)
@@ -69,6 +72,7 @@ func Detect(homeDir string) (*State, error) {
 	return state, nil
 }
 
+// StripLauncherBlocks removes legacy shell launcher blocks from shell profiles in homeDir.
 func StripLauncherBlocks(homeDir string) []string {
 	profiles := []string{
 		filepath.Join(homeDir, ".bashrc"),
@@ -108,7 +112,10 @@ func compareSemver(a, b string) int {
 func parseVersionParts(version string) [3]int {
 	parts := strings.SplitN(version, ".", 3)
 	var result [3]int
-	for i := range min(3, len(parts)) {
+	for i := range 3 {
+		if i >= len(parts) {
+			break
+		}
 		_, _ = fmt.Sscanf(parts[i], "%d", &result[i])
 	}
 	return result

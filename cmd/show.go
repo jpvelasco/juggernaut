@@ -25,7 +25,7 @@ func init() {
 	rootCmd.AddCommand(showCmd)
 }
 
-func runShow(cmd *cobra.Command, args []string) error {
+func runShow(_ *cobra.Command, _ []string) error {
 	home := homeDir()
 	scopes := []string{"user", "project"}
 	if showFlags.scope != "" {

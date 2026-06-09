@@ -1,3 +1,4 @@
+// Package launcher installs and operates the claude credential-injecting shim.
 package launcher
 
 import (
@@ -13,6 +14,7 @@ import (
 
 const cmdShim = "@echo off\njuggernaut --launcher %*\n"
 
+// DefaultBinDir returns the platform-appropriate bin directory for the claude shim.
 func DefaultBinDir() string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(os.Getenv("USERPROFILE"), ".local", "bin")
@@ -24,6 +26,7 @@ func DefaultBinDir() string {
 	return filepath.Join(home, ".local", "bin")
 }
 
+// Install creates the claude shim in binDir (symlink on Unix, .cmd on Windows).
 func Install(binDir string) error {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return fmt.Errorf("creating bin dir: %w", err)
@@ -46,6 +49,7 @@ func Install(binDir string) error {
 	return os.Symlink(self, shimPath)
 }
 
+// Uninstall removes the claude shim from binDir.
 func Uninstall(binDir string) error {
 	if runtime.GOOS == "windows" {
 		return removeIfExists(filepath.Join(binDir, "claude.cmd"))
@@ -53,6 +57,7 @@ func Uninstall(binDir string) error {
 	return removeIfExists(filepath.Join(binDir, "claude"))
 }
 
+// IsInstalled returns true if the claude shim exists in binDir.
 func IsInstalled(binDir string) bool {
 	var path string
 	if runtime.GOOS == "windows" {
@@ -64,6 +69,7 @@ func IsInstalled(binDir string) bool {
 	return err == nil
 }
 
+// RunAsLauncher injects credentials and execs the real claude binary.
 func RunAsLauncher(args []string) error {
 	token, err := keychain.Default().Get()
 	if err != nil {
