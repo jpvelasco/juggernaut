@@ -40,20 +40,22 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	mgr := config.NewManager(settingsPath(home, "user"))
 	has, err := mgr.HasJuggernautBlock()
-	if err != nil {
+	switch {
+	case err != nil:
 		r.Check("settings.json", doctor.Fail, err.Error())
-	} else if !has {
+	case !has:
 		r.Check("settings.json", doctor.Fail, "juggernaut block not found — run `juggernaut apply`")
-	} else {
+	default:
 		r.Check("settings.json", doctor.OK, "juggernaut block present")
 	}
 
 	token, err := keychain.Default().Get()
-	if err != nil {
+	switch {
+	case err != nil:
 		r.Check("keychain", doctor.Warn, "error reading: "+err.Error())
-	} else if token == "" {
+	case token == "":
 		r.Check("keychain", doctor.OK, "no bearer token (IAM auth)")
-	} else {
+	default:
 		r.Check("keychain", doctor.OK, "bearer token found")
 	}
 
