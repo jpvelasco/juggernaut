@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jpvelasco/juggernaut/internal/launcher"
@@ -55,12 +56,7 @@ func isLauncherMode() bool {
 	if base == "claude" {
 		return true
 	}
-	for _, arg := range os.Args[1:] {
-		if arg == "--launcher" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(os.Args[1:], "--launcher")
 }
 
 func runLauncher() {

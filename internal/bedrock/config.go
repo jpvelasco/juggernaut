@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 )
 
 // LoadBytes parses a Config from raw JSON bytes (e.g. from an embedded file).
@@ -51,10 +52,5 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) IsSupportedRegion(region string) bool {
-	for _, r := range c.Regions {
-		if r == region {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Regions, region)
 }

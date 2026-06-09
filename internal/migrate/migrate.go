@@ -94,7 +94,7 @@ func meetsMinVersion(version, min string) bool {
 func compareSemver(a, b string) int {
 	pa := parseVersionParts(a)
 	pb := parseVersionParts(b)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if pa[i] != pb[i] {
 			if pa[i] > pb[i] {
 				return 1
@@ -108,7 +108,7 @@ func compareSemver(a, b string) int {
 func parseVersionParts(version string) [3]int {
 	parts := strings.SplitN(version, ".", 3)
 	var result [3]int
-	for i := 0; i < 3 && i < len(parts); i++ {
+	for i := range min(3, len(parts)) {
 		_, _ = fmt.Sscanf(parts[i], "%d", &result[i])
 	}
 	return result

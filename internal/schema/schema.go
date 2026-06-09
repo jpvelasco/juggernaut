@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/jpvelasco/juggernaut/internal/bedrock"
@@ -91,14 +92,10 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 
 	env := make(map[string]string, len(cfg.Environment))
-	for k, v := range cfg.Environment {
-		env[k] = v
-	}
+	maps.Copy(env, cfg.Environment)
 
 	if opts.AuthValidated {
-		for k, v := range cfg.EnvironmentBedrockAuth {
-			env[k] = v
-		}
+		maps.Copy(env, cfg.EnvironmentBedrockAuth)
 	}
 
 	env["AWS_REGION"] = opts.Region
