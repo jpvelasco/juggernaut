@@ -12,14 +12,14 @@ import (
 func writeSettings(t *testing.T, dir string, data map[string]any) {
 	t.Helper()
 	path := filepath.Join(dir, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	b, err := json.Marshal(data)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
+	if err := os.WriteFile(path, b, 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 }
@@ -107,7 +107,7 @@ func TestStripLauncherBlocks(t *testing.T) {
 
 	bashrc := filepath.Join(dir, ".bashrc")
 	content := "export PATH=$PATH:~/.local/bin\n# BEGIN: Juggernaut Launcher\nfunction claude() { echo old; }\n# END: Juggernaut Launcher\nexport FOO=bar\n"
-	if err := os.WriteFile(bashrc, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(bashrc, []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -131,10 +131,10 @@ func TestStripLauncherBlocks(t *testing.T) {
 func TestDetect_CorruptedJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(path, []byte("{not valid json"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

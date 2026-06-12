@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 // State describes what was found during migration detection.
@@ -20,8 +22,11 @@ type State struct {
 
 // Detect inspects homeDir for a v3 Juggernaut block.
 func Detect(homeDir string) (*State, error) {
-	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
-	data, err := os.ReadFile(settingsPath) //nolint:gosec
+	settingsPath, err := safepath.JoinUnder(homeDir, ".claude", "settings.json")
+	if err != nil {
+		return nil, fmt.Errorf("invalid settings path: %w", err)
+	}
+	data, err := safepath.ReadFile(homeDir, settingsPath)
 	if os.IsNotExist(err) {
 		return &State{}, nil
 	}
@@ -122,7 +127,8 @@ func parseVersionParts(version string) [3]int {
 }
 
 func stripMarkerBlock(path, beginMarker, endMarker string) (bool, error) {
-	data, err := os.ReadFile(path)
+	baseDir := filepath.Dir(path)
+	data, err := safepath.ReadFile(baseDir, path)
 	if os.IsNotExist(err) {
 		return false, nil
 	}
@@ -153,5 +159,5 @@ func stripMarkerBlock(path, beginMarker, endMarker string) (bool, error) {
 	if !found {
 		return false, nil
 	}
-	return true, os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o600)
+	return true, safepath.WriteFile(baseDir, path, []byte(strings.Join(out, "\n")))
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 const backupRetain = 5
@@ -43,7 +44,7 @@ func (m *Manager) Read() (map[string]any, error) {
 }
 
 func (m *Manager) Write(data map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(m.path)); err != nil {
 		return fmt.Errorf("creating settings directory: %w", err)
 	}
 
