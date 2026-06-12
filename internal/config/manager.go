@@ -18,15 +18,17 @@ const backupRetain = 5
 // Manager handles atomic read/merge/write of a settings.json file.
 type Manager struct {
 	path string
+	base string
 }
 
 // NewManager creates a Manager for the settings.json at the given path.
 func NewManager(path string) *Manager {
-	return &Manager{path: path}
+	clean := filepath.Clean(path)
+	return &Manager{path: clean, base: filepath.Dir(clean)}
 }
 
 func (m *Manager) Read() (map[string]any, error) {
-	data, err := os.ReadFile(m.path)
+	data, err := safepath.ReadFile(m.base, m.path)
 	if os.IsNotExist(err) {
 		return map[string]any{}, nil
 	}
@@ -157,9 +159,11 @@ func pruneBackups(base string, keep int) error {
 }
 
 func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
+	base := filepath.Dir(filepath.Clean(src))
+	data, err := safepath.ReadFile(base, src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0o600)
+	dstBase := filepath.Dir(filepath.Clean(dst))
+	return safepath.WriteFile(dstBase, dst, data)
 }

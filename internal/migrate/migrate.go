@@ -79,16 +79,20 @@ func Detect(homeDir string) (*State, error) {
 
 // StripLauncherBlocks removes legacy shell launcher blocks from shell profiles in homeDir.
 func StripLauncherBlocks(homeDir string) []string {
-	profiles := []string{
-		filepath.Join(homeDir, ".bashrc"),
-		filepath.Join(homeDir, ".bash_profile"),
-		filepath.Join(homeDir, ".zshrc"),
-		filepath.Join(homeDir, ".profile"),
-		filepath.Join(homeDir, ".config", "fish", "config.fish"),
+	relProfiles := [][]string{
+		{".bashrc"},
+		{".bash_profile"},
+		{".zshrc"},
+		{".profile"},
+		{".config", "fish", "config.fish"},
 	}
 
 	var stripped []string
-	for _, p := range profiles {
+	for _, rel := range relProfiles {
+		p, err := safepath.JoinUnder(homeDir, rel...)
+		if err != nil {
+			continue
+		}
 		if ok, err := stripMarkerBlock(p, "# BEGIN: Juggernaut Launcher", "# END: Juggernaut Launcher"); err == nil && ok {
 			stripped = append(stripped, p)
 		}

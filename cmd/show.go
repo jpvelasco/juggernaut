@@ -34,7 +34,11 @@ func runShow(_ *cobra.Command, _ []string) error {
 
 	results := map[string]any{}
 	for _, scope := range scopes {
-		mgr := config.NewManager(settingsPath(home, scope))
+		path, perr := settingsPath(home, scope)
+		if perr != nil {
+			continue
+		}
+		mgr := config.NewManager(path)
 		data, err := mgr.Read()
 		if err != nil {
 			continue

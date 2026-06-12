@@ -17,14 +17,18 @@ const cmdShim = "@echo off\njuggernaut --launcher %*\n"
 
 // DefaultBinDir returns the platform-appropriate bin directory for the claude shim.
 func DefaultBinDir() string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("USERPROFILE"), ".local", "bin")
-	}
 	home := os.Getenv("HOME")
+	if home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	}
-	return filepath.Join(home, ".local", "bin")
+	path, err := safepath.JoinUnder(home, ".local", "bin")
+	if err != nil {
+		return filepath.Join(home, ".local", "bin")
+	}
+	return path
 }
 
 // Install creates the claude shim in binDir (symlink on Unix, .cmd on Windows).

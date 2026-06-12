@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/internal/authmode"
 )
 
 func TestApply_DryRun_IAM(t *testing.T) {
@@ -36,14 +38,14 @@ func TestApply_DryRun_BedrockAPIKey(t *testing.T) {
 
 	err := ExecuteArgs([]string{
 		"apply",
-		"--auth=bedrock-api-key",
+		"--auth=" + authmode.BedrockAPIKey,
 		"--bedrock-key=test-key-value",
 		"--region=us-west-2",
 		"--dry-run",
 		"--skip-preflight",
 	})
 	if err != nil {
-		t.Fatalf("apply --dry-run bedrock-api-key error: %v", err)
+		t.Fatalf("apply --dry-run %s error: %v", authmode.BedrockAPIKey, err)
 	}
 
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
