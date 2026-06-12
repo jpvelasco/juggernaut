@@ -3,11 +3,16 @@
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
+const { Readable } = require("stream");
 const crypto = require("crypto");
 
 const REPO = "jpvelasco/juggernaut";
 const BIN_DIR = path.join(__dirname, "bin");
+const ALLOWED_HOSTS = new Set([
+  "github.com",
+  "api.github.com",
+  "release-assets.githubusercontent.com",
+]);
 
 function getPlatform() {
   const osMap = { darwin: "darwin", linux: "linux", win32: "windows" };
@@ -20,12 +25,22 @@ function getPlatform() {
   return { os: p, arch: a, platform: `${p}_${a}` };
 }
 
-function httpsGet(url) {
+function httpsGetBuffer(url) {
+  const parsed = new URL(url);
+  if (!ALLOWED_HOSTS.has(parsed.hostname)) {
+    throw new Error(`URL host not allowed: ${parsed.hostname}`);
+  }
   return new Promise((resolve, reject) => {
     https
       .get(url, { headers: { "User-Agent": "juggernaut-npm-installer/1.0" } }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
-          httpsGet(res.headers.location).then(resolve).catch(reject);
+          const location = res.headers.location;
+          const redirectParsed = new URL(location);
+          if (!ALLOWED_HOSTS.has(redirectParsed.hostname)) {
+            reject(new Error(`Redirect host not allowed: ${redirectParsed.hostname}`));
+            return;
+          }
+          httpsGetBuffer(location).then(resolve).catch(reject);
           return;
         }
         const chunks = [];
@@ -37,28 +52,8 @@ function httpsGet(url) {
   });
 }
 
-function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    function fetch(fetchUrl) {
-      https
-        .get(fetchUrl, { headers: { "User-Agent": "juggernaut-npm-installer/1.0" } }, (res) => {
-          if (res.statusCode === 301 || res.statusCode === 302) {
-            fetch(res.headers.location);
-            return;
-          }
-          res.pipe(file);
-          file.on("finish", () => file.close(resolve));
-          file.on("error", reject);
-        })
-        .on("error", reject);
-    }
-    fetch(url);
-  });
-}
-
 async function getLatestVersion() {
-  const data = await httpsGet(`https://api.github.com/repos/${REPO}/releases/latest`);
+  const data = await httpsGetBuffer(`https://api.github.com/repos/${REPO}/releases/latest`);
   const release = JSON.parse(data.toString());
   return release.tag_name.replace(/^v/, "");
 }
@@ -70,46 +65,30 @@ async function main() {
   const archive = `juggernaut_${platform}.${ext}`;
   const baseUrl = `https://github.com/${REPO}/releases/download/v${version}`;
 
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-"));
-  const archivePath = path.join(tmp, archive);
-  const checksumPath = path.join(tmp, "checksums.txt");
+  console.log(`Downloading Juggernaut v${version} (${platform})...`);
+  const archiveBuf = await httpsGetBuffer(`${baseUrl}/${archive}`);
+  const checksumsBuf = await httpsGetBuffer(`${baseUrl}/checksums.txt`);
 
-  try {
-    console.log(`Downloading Juggernaut v${version} (${platform})...`);
-    await downloadFile(`${baseUrl}/${archive}`, archivePath);
-    await downloadFile(`${baseUrl}/checksums.txt`, checksumPath);
-
-    // Verify checksum.
-    const checksums = fs.readFileSync(checksumPath, "utf8");
-    const line = checksums.split("\n").find((l) => l.includes(archive));
-    if (!line) throw new Error(`Checksum not found for ${archive}`);
-    const expected = line.trim().split(/\s+/)[0].toLowerCase();
-    const actual = crypto
-      .createHash("sha256")
-      .update(fs.readFileSync(archivePath))
-      .digest("hex")
-      .toLowerCase();
-    if (actual !== expected) {
-      throw new Error(`Checksum mismatch for ${archive}\n  expected: ${expected}\n  got:      ${actual}`);
-    }
-
-    fs.mkdirSync(BIN_DIR, { recursive: true });
-
-    if (ext === "zip") {
-      const AdmZip = require("adm-zip");
-      const zip = new AdmZip(archivePath);
-      zip.extractEntryTo("juggernaut.exe", BIN_DIR, false, true);
-    } else {
-      const tar = require("tar");
-      await tar.x({ file: archivePath, cwd: BIN_DIR });
-      fs.chmodSync(path.join(BIN_DIR, "juggernaut"), 0o755);
-    }
-
-    console.log(`Juggernaut v${version} installed successfully.`);
-    console.log(`Run: juggernaut apply`);
-  } finally {
-    fs.rmSync(tmp, { recursive: true, force: true });
+  const checksums = checksumsBuf.toString("utf8");
+  const line = checksums.split("\n").find((l) => l.includes(archive));
+  if (!line) throw new Error(`Checksum not found for ${archive}`);
+  const expected = line.trim().split(/\s+/)[0].toLowerCase();
+  const actual = crypto.createHash("sha256").update(archiveBuf).digest("hex").toLowerCase();
+  if (actual !== expected) {
+    throw new Error(`Checksum mismatch for ${archive}\n  expected: ${expected}\n  got:      ${actual}`);
   }
+
+  if (ext === "zip") {
+    const AdmZip = require("adm-zip");
+    const zip = new AdmZip(archiveBuf);
+    zip.extractEntryTo("juggernaut.exe", BIN_DIR, false, true);
+  } else {
+    const tar = require("tar");
+    await tar.x({ cwd: BIN_DIR, mode: 0o700, strict: true }, Readable.from(archiveBuf));
+  }
+
+  console.log(`Juggernaut v${version} installed successfully.`);
+  console.log(`Run: juggernaut apply`);
 }
 
 main().catch((err) => {

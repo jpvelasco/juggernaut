@@ -70,6 +70,9 @@ pester-results.xml
 # CI test output artifacts (written by tee in test jobs)
 test-results/
 bin/
+!npm/bin/
+npm/bin/*
+!npm/bin/.gitkeep
 
 # Local planning/design docs (internal tooling artifacts)
 docs/superpowers/
