@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jpvelasco/juggernaut/internal/keychain"
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 const cmdShim = "@echo off\njuggernaut --launcher %*\n"
@@ -28,7 +29,7 @@ func DefaultBinDir() string {
 
 // Install creates the claude shim in binDir (symlink on Unix, .cmd on Windows).
 func Install(binDir string) error {
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := safepath.MkdirAll(binDir); err != nil {
 		return fmt.Errorf("creating bin dir: %w", err)
 	}
 
@@ -83,41 +84,39 @@ func RunAsLauncher(args []string) error {
 	}
 	_ = os.Setenv("CLAUDE_CODE_USE_BEDROCK", "1")
 
-	claudePath, err := findRealClaude()
+	originalPath := os.Getenv("PATH")
+	scrubbed := scrubPathEntry(originalPath, DefaultBinDir())
+	if err := os.Setenv("PATH", scrubbed); err != nil {
+		return fmt.Errorf("scrubbing PATH for claude lookup: %w", err)
+	}
+	defer func() { _ = os.Setenv("PATH", originalPath) }()
+
+	claudePath, err := exec.LookPath("claude")
 	if err != nil {
-		return err
+		return fmt.Errorf("claude binary not found on PATH — is Claude Code installed?")
 	}
 
-	cmd := exec.Command(claudePath, args...) //nolint:gosec
+	cmd := exec.Command("claude", args...)
+	cmd.Path = claudePath
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func findRealClaude() (string, error) {
-	self, _ := os.Executable()
-	selfBase := strings.TrimSuffix(filepath.Base(self), ".exe")
-
-	paths := filepath.SplitList(os.Getenv("PATH"))
-	for _, dir := range paths {
-		candidate := filepath.Join(dir, "claude")
-		if runtime.GOOS == "windows" {
-			candidate += ".exe"
-		}
-		info, err := os.Lstat(candidate)
-		if err != nil {
+func scrubPathEntry(pathList, dropDir string) string {
+	if pathList == "" || dropDir == "" {
+		return pathList
+	}
+	dropDir = filepath.Clean(dropDir)
+	var kept []string
+	for _, dir := range filepath.SplitList(pathList) {
+		if filepath.Clean(dir) == dropDir {
 			continue
 		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			target, _ := os.Readlink(candidate)
-			if strings.TrimSuffix(filepath.Base(target), ".exe") == selfBase {
-				continue
-			}
-		}
-		return candidate, nil
+		kept = append(kept, dir)
 	}
-	return "", fmt.Errorf("claude binary not found on PATH — is Claude Code installed?")
+	return strings.Join(kept, string(filepath.ListSeparator))
 }
 
 func removeIfExists(path string) error {
