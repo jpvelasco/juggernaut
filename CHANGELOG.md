@@ -2,6 +2,21 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.0.3] - 2026-06-13
+
+**Patch release.** Brings Go Report Card to 100% on the v4 module path and updates CI tooling.
+
+### Fixed
+
+- **Go Report Card quality.** Normalize Go sources to LF via `.gitattributes`, fix missing final newlines, and reduce cyclomatic complexity in `apply`/`uninstall` so all GRC checks pass.
+- **Go Report Card badge.** Point the README badge at `github.com/jpvelasco/juggernaut/v4` so the report resolves the correct module.
+
+### Other
+
+- **CI.** Bump `golangci/golangci-lint-action` to latest v9 SHA ([#146](https://github.com/jpvelasco/juggernaut/pull/146)).
+
+---
+
 ## [4.0.2] - 2026-06-13
 
 **Patch release.** Fixes Go module path for v4 semver tags so the module is indexable on `proxy.golang.org` and Go Report Card works.
@@ -569,6 +584,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
 [4.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.2
 [4.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.1
 [4.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.0
