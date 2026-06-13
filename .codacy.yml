@@ -2,9 +2,16 @@
 exclude_paths:
   - ".remember/**"
   - ".codacy/**"
+  - "mcps/**"
 
 engines:
   opengrep:
     exclude_paths:
       - ".remember/**"
       - ".codacy/**"
+      - "mcps/**"
+  eslint-8:
+    exclude_paths:
+      - ".remember/**"
+      - ".codacy/**"
+      - "mcps/**"

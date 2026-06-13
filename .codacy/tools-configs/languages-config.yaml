@@ -1,0 +1,21 @@
+tools:
+    - name: eslint
+      languages: [Javascript, TypeScript]
+      extensions: [.js, .jsm, .jsx, .mjs, .ts, .tsx, .vue]
+      files: []
+    - name: lizard
+      languages: [Go, Javascript, TypeScript]
+      extensions: [.go, .js, .jsm, .jsx, .mjs, .ts, .tsx, .vue]
+      files: []
+    - name: opengrep
+      languages: [Go, Javascript, Shell, TypeScript, YAML]
+      extensions: [.bash, .env, .go, .js, .jsm, .jsx, .mjs, .sh, .ts, .tsx, .vue, .yaml, .yml]
+      files: []
+    - name: pmd
+      languages: [Javascript]
+      extensions: [.js, .jsm, .jsx, .mjs, .vue]
+      files: []
+    - name: trivy
+      languages: [Go, JSON, Javascript, TypeScript, YAML]
+      extensions: [.env, .go, .js, .jsm, .json, .jsx, .mjs, .ts, .tsx, .vue, .yaml, .yml]
+      files: [.env, .env.dev, .env.development, .env.prod, .env.production, .env.staging, go.mod, package-lock.json, package.json, pnpm-lock.yaml, yarn.lock]

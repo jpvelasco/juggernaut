@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/internal/authmode"
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 func TestApply_DryRun_IAM(t *testing.T) {
@@ -70,10 +71,7 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 		t.Fatalf("apply error: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-	if err != nil {
-		t.Fatalf("settings.json not created: %v", err)
-	}
+	data := readSettingsJSON(t, home)
 
 	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
@@ -122,10 +120,7 @@ func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 		t.Fatalf("apply error: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-	if err != nil {
-		t.Fatalf("reading settings.json: %v", err)
-	}
+	data := readSettingsJSON(t, home)
 	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
@@ -161,10 +156,7 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 		t.Fatalf("uninstall error: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
-	if err != nil {
-		t.Fatalf("settings.json should still exist: %v", err)
-	}
+	data := readSettingsJSON(t, home)
 	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
@@ -175,4 +167,13 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	if _, ok := settings["env"]; ok {
 		t.Error("env key should be removed after uninstall")
 	}
+}
+
+func readSettingsJSON(t *testing.T, home string) []byte {
+	t.Helper()
+	data, err := safepath.ReadFile(home, filepath.Join(home, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("reading settings.json: %v", err)
+	}
+	return data
 }

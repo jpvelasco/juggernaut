@@ -2,24 +2,21 @@ package migrate_test
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/internal/migrate"
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 func writeSettings(t *testing.T, dir string, data map[string]any) {
 	t.Helper()
-	path := filepath.Join(dir, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
 	b, err := json.Marshal(data)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if err := os.WriteFile(path, b, 0o600); err != nil {
+	path := filepath.Join(dir, ".claude", "settings.json")
+	if err := safepath.WriteFile(dir, path, b); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 }
@@ -107,7 +104,7 @@ func TestStripLauncherBlocks(t *testing.T) {
 
 	bashrc := filepath.Join(dir, ".bashrc")
 	content := "export PATH=$PATH:~/.local/bin\n# BEGIN: Juggernaut Launcher\nfunction claude() { echo old; }\n# END: Juggernaut Launcher\nexport FOO=bar\n"
-	if err := os.WriteFile(bashrc, []byte(content), 0o600); err != nil {
+	if err := safepath.WriteFile(dir, bashrc, []byte(content)); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -116,7 +113,7 @@ func TestStripLauncherBlocks(t *testing.T) {
 		t.Errorf("expected 1 stripped file, got %d", len(stripped))
 	}
 
-	result, _ := os.ReadFile(bashrc)
+	result, _ := safepath.ReadFile(dir, bashrc)
 	if contains(string(result), "Juggernaut Launcher") {
 		t.Error("launcher block should be removed")
 	}
@@ -131,10 +128,7 @@ func TestStripLauncherBlocks(t *testing.T) {
 func TestDetect_CorruptedJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+	if err := safepath.WriteFile(dir, path, []byte("{not valid json")); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

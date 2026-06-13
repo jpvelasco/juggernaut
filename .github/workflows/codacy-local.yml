@@ -23,10 +23,15 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y curl tar
 
+      - name: Install optional standalone linters
+        run: sudo apt-get install -y shellcheck
+
       - name: Install Codacy tools
         shell: bash
         run: bash <(curl -Ls https://raw.githubusercontent.com/codacy/codacy-cli-v2/main/codacy-cli.sh) install
 
-      - name: Run Codacy local analysis
+      - name: Run Codacy full analysis
         shell: bash
-        run: bash <(curl -Ls https://raw.githubusercontent.com/codacy/codacy-cli-v2/main/codacy-cli.sh) analyze --format sarif --output .codacy/codacy-results.sarif
+        run: |
+          chmod +x scripts/codacy-full.sh
+          ./scripts/codacy-full.sh

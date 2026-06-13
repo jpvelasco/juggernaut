@@ -60,8 +60,10 @@ secrets.*
 # Claude Code local settings
 .claude/
 
-# Codacy local artifacts
-.codacy/
+# Codacy local artifacts (configs under .codacy/ are committed for CI parity)
+.codacy/logs/
+.codacy/*.sarif
+.codacy/server-issues.json
 
 # Pester result artifacts
 testResults.xml
