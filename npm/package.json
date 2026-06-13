@@ -8,10 +8,6 @@
   "scripts": {
     "postinstall": "node install.js"
   },
-  "dependencies": {
-    "tar": "7.5.16",
-    "adm-zip": "0.5.17"
-  },
   "os": ["darwin", "linux", "win32"],
   "cpu": ["x64", "arm64"],
   "keywords": [
