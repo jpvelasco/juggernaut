@@ -10,6 +10,7 @@ engines:
       - ".remember/**"
       - ".codacy/**"
       - "mcps/**"
+      - "npm/install.js"
   eslint-8:
     exclude_paths:
       - ".remember/**"
