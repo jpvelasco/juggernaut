@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jpvelasco/juggernaut/internal/authmode"
 	"github.com/jpvelasco/juggernaut/internal/keychain"
 	"github.com/jpvelasco/juggernaut/internal/launcher"
 	"github.com/jpvelasco/juggernaut/internal/migrate"
@@ -53,7 +54,7 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 
 	if migrateDryRun {
 		fmt.Println("\nWould migrate:")
-		if state.AuthMode == "bedrock-api-key" {
+		if authmode.IsBedrockAPIKey(state.AuthMode) {
 			fmt.Println("  • Transfer bearer token from keychain → go-keyring")
 		}
 		fmt.Println("  • Upgrade settings.json schema v1 → v2")
@@ -65,7 +66,7 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 
 	fmt.Println("Migrating to Juggernaut v4...")
 
-	if state.AuthMode == "bedrock-api-key" {
+	if authmode.IsBedrockAPIKey(state.AuthMode) {
 		token, err := keychain.Default().Get()
 		if err == nil && token != "" {
 			if err := keychain.Default().Set(token); err != nil {

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/charmbracelet/huh"
+	"github.com/jpvelasco/juggernaut/internal/authmode"
 	"github.com/jpvelasco/juggernaut/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/internal/config"
 	"github.com/jpvelasco/juggernaut/internal/keychain"
@@ -45,7 +46,7 @@ var applyFlags struct {
 
 func init() {
 	f := applyCmd.Flags()
-	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or bedrock-api-key")
+	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")
@@ -124,17 +125,25 @@ func runApply(_ *cobra.Command, _ []string) error {
 
 	if applyFlags.dryRun {
 		fmt.Println("Dry run — no changes written.")
-		fmt.Printf("Would write juggernaut block to %s\n", settingsPath(home, applyFlags.scope))
+		path, perr := settingsPath(home, applyFlags.scope)
+		if perr != nil {
+			return perr
+		}
+		fmt.Printf("Would write juggernaut block to %s\n", path)
 		return nil
 	}
 
-	if authMode == "bedrock-api-key" && token != "" {
+	if authmode.IsBedrockAPIKey(authMode) && token != "" {
 		if err := keychain.Default().Set(token); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
 		}
 	}
 
-	mgr := config.NewManager(settingsPath(home, applyFlags.scope))
+	path, err := settingsPath(home, applyFlags.scope)
+	if err != nil {
+		return err
+	}
+	mgr := config.NewManager(path)
 	blockMap, err := toMap(block)
 	if err != nil {
 		return err
@@ -168,7 +177,12 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 		return
 	}
 
-	mgr := config.NewManager(settingsPath(home, applyFlags.scope))
+	path, herr := settingsPath(home, applyFlags.scope)
+	if herr != nil {
+		err = herr
+		return
+	}
+	mgr := config.NewManager(path)
 	has, herr := mgr.HasJuggernautBlock()
 	if herr != nil {
 		err = fmt.Errorf("checking existing configuration: %w", herr)
@@ -196,7 +210,7 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 				Title("Authentication method").
 				Options(
 					huh.NewOption("IAM / SSO (recommended for organizations)", "iam"),
-					huh.NewOption("Bedrock API key", "bedrock-api-key"),
+					huh.NewOption("Bedrock API key", authmode.BedrockAPIKey),
 				).
 				Value(&authMode),
 			huh.NewInput().
@@ -213,7 +227,7 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 }
 
 func resolveCredential(authMode string) (string, error) {
-	if authMode != "bedrock-api-key" {
+	if !authmode.IsBedrockAPIKey(authMode) {
 		return "", nil
 	}
 	if applyFlags.bedrockKey != "" {
@@ -267,7 +281,7 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 
 	fmt.Println("Migrating to Juggernaut v4...")
 
-	if state.AuthMode == "bedrock-api-key" {
+	if authmode.IsBedrockAPIKey(state.AuthMode) {
 		token, err := keychain.Default().Get()
 		if err == nil && token != "" {
 			if err := keychain.Default().Set(token); err != nil {

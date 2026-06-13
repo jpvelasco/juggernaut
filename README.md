@@ -45,8 +45,8 @@ irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/instal
 # IAM / SSO (recommended)
 juggernaut apply --auth=iam
 
-# Bedrock API key (stored securely in OS keychain)
-juggernaut apply --auth=bedrock-api-key
+# Bedrock API key (stored securely in OS keychain; mode shown in --help)
+juggernaut apply
 
 # Interactive first-run — omit flags for a guided prompt
 juggernaut apply

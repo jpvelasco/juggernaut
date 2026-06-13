@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/internal/launcher"
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 func TestInstall(t *testing.T) {
@@ -17,7 +18,7 @@ func TestInstall(t *testing.T) {
 
 	if runtime.GOOS == "windows" {
 		shim := filepath.Join(dir, "claude.cmd")
-		data, err := os.ReadFile(shim)
+		data, err := safepath.ReadFile(dir, shim)
 		if err != nil {
 			t.Fatalf("claude.cmd not created: %v", err)
 		}

@@ -60,7 +60,12 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 	}
 
 	for _, scope := range scopes {
-		mgr := config.NewManager(settingsPath(home, scope))
+		path, perr := settingsPath(home, scope)
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: invalid %s settings path: %v\n", scope, perr)
+			continue
+		}
+		mgr := config.NewManager(path)
 		has, err := mgr.HasJuggernautBlock()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not check %s scope: %v\n", scope, err)

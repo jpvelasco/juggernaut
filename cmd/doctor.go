@@ -38,15 +38,20 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("bedrock-config.json", doctor.OK, "loaded (v"+bCfg.Version+")")
 	}
 
-	mgr := config.NewManager(settingsPath(home, "user"))
-	has, err := mgr.HasJuggernautBlock()
-	switch {
-	case err != nil:
-		r.Check("settings.json", doctor.Fail, err.Error())
-	case !has:
-		r.Check("settings.json", doctor.Fail, "juggernaut block not found — run `juggernaut apply`")
-	default:
-		r.Check("settings.json", doctor.OK, "juggernaut block present")
+	path, perr := settingsPath(home, "user")
+	if perr != nil {
+		r.Check("settings.json", doctor.Fail, perr.Error())
+	} else {
+		mgr := config.NewManager(path)
+		has, err := mgr.HasJuggernautBlock()
+		switch {
+		case err != nil:
+			r.Check("settings.json", doctor.Fail, err.Error())
+		case !has:
+			r.Check("settings.json", doctor.Fail, "juggernaut block not found — run `juggernaut apply`")
+		default:
+			r.Check("settings.json", doctor.OK, "juggernaut block present")
+		}
 	}
 
 	token, err := keychain.Default().Get()

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/jpvelasco/juggernaut/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/internal/safepath"
 )
 
 // embeddedConfigBytes holds bedrock-config.json bytes injected at startup from main.go.
@@ -56,11 +57,11 @@ func homeDir() string {
 	return os.Getenv("USERPROFILE")
 }
 
-func settingsPath(homeDir, scope string) string {
+func settingsPath(homeDir, scope string) (string, error) {
 	if scope == "project" {
-		return filepath.Join(".", ".claude", "settings.json")
+		return filepath.Join(".", ".claude", "settings.json"), nil
 	}
-	return filepath.Join(homeDir, ".claude", "settings.json")
+	return safepath.JoinUnder(homeDir, ".claude", "settings.json")
 }
 
 func toMap(v any) (map[string]any, error) {

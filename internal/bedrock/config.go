@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 )
 
@@ -36,7 +37,11 @@ type Defaults struct {
 
 // Load reads and parses bedrock-config.json from the given path.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	clean := filepath.Clean(path)
+	if filepath.Base(clean) != "bedrock-config.json" {
+		return nil, fmt.Errorf("invalid bedrock config filename: %s", filepath.Base(clean))
+	}
+	data, err := os.ReadFile(clean)
 	if err != nil {
 		return nil, fmt.Errorf("reading bedrock-config.json: %w", err)
 	}

@@ -1,0 +1,225 @@
+<?xml version="1.0"?>
+<ruleset name="Codacy PMD Ruleset"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>Codacy PMD Ruleset</description>
+    <rule ref="category/java/errorprone.xml/NonSerializableClass"/>
+    <rule ref="category/java/errorprone.xml/ReturnEmptyCollectionRatherThanNull"/>
+    <rule ref="category/java/errorprone.xml/ImplicitSwitchFallThrough"/>
+    <rule ref="category/apex/performance.xml/EagerlyLoadedDescribeSObjectResult">
+        <properties>
+            <property name="noDefault" value="false"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/ComparisonWithNaN"/>
+    <rule ref="category/java/design.xml/MutableStaticState"/>
+    <rule ref="category/apex/performance.xml/AvoidDebugStatements"/>
+    <rule ref="category/apex/errorprone.xml/InaccessibleAuraEnabledGetter"/>
+    <rule ref="category/vf/security.xml/VfHtmlStyleTagXss"/>
+    <rule ref="category/java/errorprone.xml/DoNotTerminateVM"/>
+    <rule ref="category/apex/performance.xml/OperationWithLimitsInLoop"/>
+    <rule ref="category/apex/errorprone.xml/OverrideBothEqualsAndHashcode"/>
+    <rule ref="category/java/performance.xml/UseIOStreamsWithApacheCommonsFileItem"/>
+    <rule ref="category/java/performance.xml/AvoidCalendarDateCreation"/>
+    <rule ref="category/apex/errorprone.xml/TestMethodsMustBeInTestClasses"/>
+    <rule ref="category/apex/errorprone.xml/ApexCSRF"/>
+    <rule ref="category/java/errorprone.xml/InvalidLogMessageFormat"/>
+    <rule ref="category/apex/errorprone.xml/AvoidNonExistentAnnotations"/>
+    <rule ref="category/java/multithreading.xml/UnsynchronizedStaticFormatter"/>
+    <rule ref="category/java/errorprone.xml/DetachedTestCase"/>
+    <rule ref="category/java/security.xml/InsecureCryptoIv"/>
+    <rule ref="category/java/security.xml/HardCodedCryptoKey"/>
+    <rule ref="category/java/errorprone.xml/InstantiationToGetClass"/>
+    <rule ref="category/vm/errorprone.xml/EmptyForeachStmt"/>
+    <rule ref="category/apex/security.xml/ApexBadCrypto"/>
+    <rule ref="category/java/errorprone.xml/DoNotCallGarbageCollectionExplicitly"/>
+    <rule ref="category/java/errorprone.xml/SingleMethodSingleton"/>
+    <rule ref="category/java/errorprone.xml/CloneMethodReturnTypeMustMatchClassName"/>
+    <rule ref="category/java/errorprone.xml/EmptyFinalizer"/>
+    <rule ref="category/apex/errorprone.xml/EmptyCatchBlock">
+        <properties>
+            <property name="allowCommentedBlocks" value="false"/>
+            <property name="allowExceptionNameRegex" value="^(ignored|expected)$"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/UselessOperationOnImmutable"/>
+    <rule ref="category/plsql/bestpractices.xml/TomKytesDespair"/>
+    <rule ref="category/java/errorprone.xml/SingletonClassReturningNewInstance"/>
+    <rule ref="category/java/errorprone.xml/ConstructorCallsOverridableMethod"/>
+    <rule ref="category/java/errorprone.xml/MethodWithSameNameAsEnclosingClass"/>
+    <rule ref="category/java/errorprone.xml/UseProperClassLoader"/>
+    <rule ref="category/apex/security.xml/ApexXSSFromURLParam"/>
+    <rule ref="category/java/performance.xml/InefficientEmptyStringCheck"/>
+    <rule ref="category/java/errorprone.xml/EqualsNull"/>
+    <rule ref="category/apex/security.xml/ApexSOQLInjection"/>
+    <rule ref="category/java/performance.xml/AvoidFileStream"/>
+    <rule ref="category/java/performance.xml/ConsecutiveAppendsShouldReuse"/>
+    <rule ref="category/apex/errorprone.xml/EmptyStatementBlock">
+        <properties>
+            <property name="reportEmptyVirtualMethod" value="true"/>
+            <property name="reportEmptyPrivateNoArgConstructor" value="true"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/DoNotThrowExceptionInFinally"/>
+    <rule ref="category/java/performance.xml/InsufficientStringBufferDeclaration"/>
+    <rule ref="category/java/errorprone.xml/CallSuperFirst"/>
+    <rule ref="category/java/errorprone.xml/UnnecessaryConversionTemporary"/>
+    <rule ref="category/java/performance.xml/UseArraysAsList"/>
+    <rule ref="category/java/errorprone.xml/JumbledIncrementer"/>
+    <rule ref="category/apex/security.xml/ApexXSSFromEscapeFalse"/>
+    <rule ref="category/java/errorprone.xml/UnnecessaryBooleanAssertion"/>
+    <rule ref="category/apex/errorprone.xml/EmptyTryOrFinallyBlock"/>
+    <rule ref="category/java/errorprone.xml/DontImportSun"/>
+    <rule ref="category/apex/security.xml/ApexDangerousMethods"/>
+    <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
+        <properties>
+            <property name="allowCommentedBlocks" value="false"/>
+            <property name="allowExceptionNameRegex" value="^(ignored|expected)$"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/AvoidDuplicateLiterals"/>
+    <rule ref="category/ecmascript/errorprone.xml/InnaccurateNumericLiteral"/>
+    <rule ref="category/java/errorprone.xml/AvoidDecimalLiteralsInBigDecimalConstructor"/>
+    <rule ref="category/java/errorprone.xml/SimpleDateFormatNeedsLocale"/>
+    <rule ref="category/java/errorprone.xml/MoreThanOneLogger"/>
+    <rule ref="category/java/errorprone.xml/AvoidCallingFinalize"/>
+    <rule ref="category/java/errorprone.xml/UseCorrectExceptionLogging"/>
+    <rule ref="category/java/errorprone.xml/UnconditionalIfStatement"/>
+    <rule ref="category/java/errorprone.xml/OverrideBothEqualsAndHashcode"/>
+    <rule ref="category/java/errorprone.xml/DontUseFloatTypeForLoopIndices"/>
+    <rule ref="category/java/errorprone.xml/NonStaticInitializer"/>
+    <rule ref="category/apex/security.xml/ApexOpenRedirect"/>
+    <rule ref="category/java/errorprone.xml/JUnitSpelling"/>
+    <rule ref="category/java/performance.xml/UseArrayListInsteadOfVector"/>
+    <rule ref="category/java/errorprone.xml/AvoidInstanceofChecksInCatchClause"/>
+    <rule ref="category/vm/errorprone.xml/EmptyIfStmt"/>
+    <rule ref="category/java/errorprone.xml/JUnitStaticSuite"/>
+    <rule ref="category/java/multithreading.xml/AvoidThreadGroup"/>
+    <rule ref="category/java/errorprone.xml/AvoidAssertAsIdentifier"/>
+    <rule ref="category/java/errorprone.xml/SuspiciousEqualsMethodName"/>
+    <rule ref="category/java/performance.xml/UseStringBufferForStringAppends"/>
+    <rule ref="category/java/multithreading.xml/AvoidSynchronizedAtMethodLevel"/>
+    <rule ref="category/java/errorprone.xml/AvoidBranchingStatementAsLastInLoop"/>
+    <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock"/>
+    <rule ref="category/java/errorprone.xml/AssignmentToNonFinalStatic"/>
+    <rule ref="category/java/errorprone.xml/ProperLogger">
+        <properties>
+            <property name="loggerName" value="log"/>
+            <property name="loggerClass" value="Log"/>
+            <property name="staticLoggerName" value="LOG"/>
+        </properties>
+    </rule>
+    <rule ref="category/plsql/errorprone.xml/TO_TIMESTAMPWithoutDateFormat"/>
+    <rule ref="category/jsp/security.xml/IframeMissingSrcAttribute"/>
+    <rule ref="category/java/performance.xml/AddEmptyString"/>
+    <rule ref="category/java/errorprone.xml/NullAssignment"/>
+    <rule ref="category/java/performance.xml/InefficientStringBuffering"/>
+    <rule ref="category/java/errorprone.xml/AvoidMultipleUnaryOperators"/>
+    <rule ref="category/java/errorprone.xml/CallSuperLast"/>
+    <rule ref="category/apex/security.xml/ApexSuggestUsingNamedCred"/>
+    <rule ref="category/apex/security.xml/ApexInsecureEndpoint"/>
+    <rule ref="category/java/errorprone.xml/AvoidUsingOctalValues"/>
+    <rule ref="category/java/errorprone.xml/UnnecessaryCaseChange"/>
+    <rule ref="category/java/errorprone.xml/FinalizeOverloaded"/>
+    <rule ref="category/apex/security.xml/ApexSharingViolations"/>
+    <rule ref="category/java/errorprone.xml/AvoidLiteralsInIfCondition">
+        <properties>
+            <property name="ignoreExpressions" value="true"/>
+            <property name="ignoreMagicNumbers" value="-1,0"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/multithreading.xml/NonThreadSafeSingleton"/>
+    <rule ref="category/java/multithreading.xml/UseConcurrentHashMap"/>
+    <rule ref="category/java/errorprone.xml/TestClassWithoutTestCases"/>
+    <rule ref="category/java/errorprone.xml/AvoidCatchingNPE"/>
+    <rule ref="category/java/multithreading.xml/DoNotUseThreads"/>
+    <rule ref="category/java/performance.xml/AvoidArrayLoops"/>
+    <rule ref="category/java/bestpractices.xml/GuardLogStatement"/>
+    <rule ref="category/java/errorprone.xml/DoNotExtendJavaLangThrowable"/>
+    <rule ref="category/java/performance.xml/AvoidInstantiatingObjectsInLoops"/>
+    <rule ref="category/java/errorprone.xml/MissingSerialVersionUID"/>
+    <rule ref="category/java/errorprone.xml/AvoidEnumAsIdentifier"/>
+    <rule ref="category/java/design.xml/FinalFieldCouldBeStatic"/>
+    <rule ref="category/jsp/errorprone.xml/JspEncoding"/>
+    <rule ref="category/pom/errorprone.xml/InvalidDependencyTypes">
+        <properties>
+            <property name="validTypes" value="pom,jar,maven-plugin,ejb,war,ear,rar,par"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/FinalizeOnlyCallsSuperFinalize"/>
+    <rule ref="category/apex/errorprone.xml/AvoidDirectAccessTriggerMap"/>
+    <rule ref="category/java/errorprone.xml/CloneMethodMustBePublic"/>
+    <rule ref="category/ecmascript/errorprone.xml/AvoidTrailingComma">
+        <properties>
+            <property name="allowArrayLiteral" value="false"/>
+            <property name="allowObjectLiteral" value="false"/>
+        </properties>
+    </rule>
+    <rule ref="category/ecmascript/errorprone.xml/EqualComparison"/>
+    <rule ref="category/java/performance.xml/UseStringBufferLength"/>
+    <rule ref="category/java/errorprone.xml/ClassCastExceptionWithToArray"/>
+    <rule ref="category/java/errorprone.xml/UnusedNullCheckInEquals"/>
+    <rule ref="category/java/errorprone.xml/NonCaseLabelInSwitchStatement"/>
+    <rule ref="category/java/errorprone.xml/AvoidCatchingThrowable"/>
+    <rule ref="category/java/errorprone.xml/ProperCloneImplementation"/>
+    <rule ref="category/xml/errorprone.xml/MistypedCDATASection"/>
+    <rule ref="category/jsp/bestpractices.xml/NoHtmlComments"/>
+    <rule ref="category/java/errorprone.xml/AssignmentInOperand"/>
+    <rule ref="category/java/performance.xml/ConsecutiveLiteralAppends"/>
+    <rule ref="category/vf/security.xml/VfUnescapeEl"/>
+    <rule ref="category/java/errorprone.xml/CheckSkipResult"/>
+    <rule ref="category/jsp/security.xml/NoUnsanitizedJSPExpression"/>
+    <rule ref="category/java/performance.xml/StringInstantiation"/>
+    <rule ref="category/java/errorprone.xml/IdempotentOperations"/>
+    <rule ref="category/apex/security.xml/ApexCRUDViolation"/>
+    <rule ref="category/java/errorprone.xml/UseLocaleWithCaseConversions"/>
+    <rule ref="category/java/errorprone.xml/CloseResource"/>
+    <rule ref="category/java/errorprone.xml/StringBufferInstantiationWithChar"/>
+    <rule ref="category/java/performance.xml/UselessStringValueOf"/>
+    <rule ref="category/java/multithreading.xml/DontCallThreadRun"/>
+    <rule ref="category/java/errorprone.xml/AvoidFieldNameMatchingTypeName"/>
+    <rule ref="category/java/errorprone.xml/MisplacedNullCheck"/>
+    <rule ref="category/apex/errorprone.xml/MethodWithSameNameAsEnclosingClass"/>
+    <rule ref="category/vf/security.xml/VfCsrf"/>
+    <rule ref="category/apex/errorprone.xml/EmptyWhileStmt"/>
+    <rule ref="category/java/errorprone.xml/CloneMethodMustImplementCloneable"/>
+    <rule ref="category/java/multithreading.xml/DoubleCheckedLocking"/>
+    <rule ref="category/java/errorprone.xml/StaticEJBFieldShouldBeFinal"/>
+    <rule ref="category/plsql/errorprone.xml/TO_DATE_TO_CHAR"/>
+    <rule ref="category/java/performance.xml/AppendCharacterWithChar"/>
+    <rule ref="category/java/performance.xml/BigIntegerInstantiation"/>
+    <rule ref="category/java/errorprone.xml/DoNotHardCodeSDCard"/>
+    <rule ref="category/java/errorprone.xml/FinalizeDoesNotCallSuperFinalize"/>
+    <rule ref="category/java/errorprone.xml/AvoidAccessibilityAlteration"/>
+    <rule ref="category/java/errorprone.xml/BrokenNullCheck"/>
+    <rule ref="category/java/errorprone.xml/SuspiciousOctalEscape"/>
+    <rule ref="category/java/performance.xml/OptimizableToArrayCall"/>
+    <rule ref="category/java/errorprone.xml/AvoidFieldNameMatchingMethodName"/>
+    <rule ref="category/java/errorprone.xml/SuspiciousHashcodeMethodName"/>
+    <rule ref="category/java/bestpractices.xml/AccessorMethodGeneration"/>
+    <rule ref="category/apex/errorprone.xml/AvoidHardcodingId"/>
+    <rule ref="category/xsl/performance.xml/AvoidAxisNavigation">
+        <properties>
+            <property name="checkSelfDescendantAbreviation" value="false"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/CompareObjectsWithEquals">
+        <properties>
+            <property name="typesThatCompareByReference" value="java.lang.Enum,java.lang.Class"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/MissingStaticMethodInNonInstantiatableClass">
+        <properties>
+            <property name="annotations" value="org.springframework.beans.factory.annotation.Autowired,javax.inject.Inject"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/UseEqualsToCompareStrings"/>
+    <rule ref="category/pom/errorprone.xml/ProjectVersionAsDependencyVersion"/>
+    <rule ref="category/plsql/errorprone.xml/TO_DATEWithoutDateFormat"/>
+    <rule ref="category/java/performance.xml/RedundantFieldInitializer"/>
+    <rule ref="category/apex/errorprone.xml/EmptyIfStmt"/>
+    <rule ref="category/java/errorprone.xml/AvoidLosingExceptionInformation"/>
+    <rule ref="category/java/errorprone.xml/FinalizeShouldBeProtected"/>
+    <rule ref="category/java/performance.xml/StringToString"/>
+</ruleset>

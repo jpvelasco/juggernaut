@@ -11,7 +11,7 @@ const BIN_DIR = path.join(__dirname, "bin");
 const ALLOWED_HOSTS = new Set([
   "github.com",
   "api.github.com",
-  "release-assets.githubusercontent.com",
+  "release-assets.githubusercontent.com"
 ]);
 
 function getPlatform() {
