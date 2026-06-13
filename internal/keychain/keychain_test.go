@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
 )
 
 func testStore() *keychain.Store {

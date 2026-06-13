@@ -6,13 +6,13 @@ import (
 	"os"
 
 	"github.com/charmbracelet/huh"
-	"github.com/jpvelasco/juggernaut/internal/authmode"
-	"github.com/jpvelasco/juggernaut/internal/bedrock"
-	"github.com/jpvelasco/juggernaut/internal/config"
-	"github.com/jpvelasco/juggernaut/internal/keychain"
-	"github.com/jpvelasco/juggernaut/internal/launcher"
-	"github.com/jpvelasco/juggernaut/internal/migrate"
-	"github.com/jpvelasco/juggernaut/internal/schema"
+	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v4/internal/config"
+	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
+	"github.com/jpvelasco/juggernaut/v4/internal/migrate"
+	"github.com/jpvelasco/juggernaut/v4/internal/schema"
 	"github.com/spf13/cobra"
 )
 

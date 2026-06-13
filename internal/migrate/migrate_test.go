@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/internal/migrate"
-	"github.com/jpvelasco/juggernaut/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v4/internal/migrate"
+	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
 func writeSettings(t *testing.T, dir string, data map[string]any) {
