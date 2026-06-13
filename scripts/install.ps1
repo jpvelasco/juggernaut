@@ -15,19 +15,36 @@ if ($Version -eq "latest") {
   $Version = Get-LatestVersion
 }
 
-$Archive = "juggernaut_windows_amd64.tar.gz"
+$Platform = "windows_amd64"
+$TarArchive = "juggernaut_$Platform.tar.gz"
+$ZipArchive = "juggernaut_$Platform.zip"
 $BaseUrl = "https://github.com/$Repo/releases/download/v$Version"
-$Url = "$BaseUrl/$Archive"
 $ChecksumUrl = "$BaseUrl/checksums.txt"
 
-Write-Output "Installing Juggernaut v$Version (windows_amd64)..."
+Write-Output "Installing Juggernaut v$Version ($Platform)..."
 
 $Tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), [System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 
 try {
-  Invoke-WebRequest $Url -OutFile "$Tmp\$Archive"
   Invoke-WebRequest $ChecksumUrl -OutFile "$Tmp\checksums.txt"
+  $Checksums = Get-Content "$Tmp\checksums.txt" -Raw
+
+  $ArchiveKind = $null
+  $Archive = $null
+  if ($Checksums -match [regex]::Escape($TarArchive)) {
+    $Archive = $TarArchive
+    $ArchiveKind = "tar.gz"
+  } elseif ($Checksums -match [regex]::Escape($ZipArchive)) {
+    $Archive = $ZipArchive
+    $ArchiveKind = "zip"
+  } else {
+    Write-Error "No supported archive found in release checksums for $Platform"
+    exit 1
+  }
+
+  $Url = "$BaseUrl/$Archive"
+  Invoke-WebRequest $Url -OutFile "$Tmp\$Archive"
 
   # Verify checksum.
   $Expected = (Get-Content "$Tmp\checksums.txt" | Where-Object { $_ -match [regex]::Escape($Archive) }) -split '\s+' | Select-Object -First 1
@@ -38,7 +55,11 @@ try {
   }
 
   New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-  tar -xzf "$Tmp\$Archive" -C $BinDir
+  if ($ArchiveKind -eq "zip") {
+    Expand-Archive -LiteralPath "$Tmp\$Archive" -DestinationPath $BinDir -Force
+  } else {
+    tar -xzf "$Tmp\$Archive" -C $BinDir
+  }
 
 } finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
