@@ -25,3 +25,6 @@ juggernaut text eol=lf
 
 # Keep VERSION file with LF
 VERSION text eol=lf
+
+# Go source — LF required for gofmt / Go Report Card
+*.go text eol=lf
