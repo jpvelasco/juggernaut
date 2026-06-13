@@ -2,7 +2,34 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
-## [4.0.0] — unreleased
+## [4.0.1] - 2026-06-13
+
+**Patch release.** Security hardening for the Go binary and npm installer, Codacy cleanup, and dependency/CI updates since v4.0.0.
+
+### Fixed
+
+- **npm installer hardening.** Downloads release artifacts to memory with GitHub host allowlisting; extracts archives via buffer APIs to avoid path traversal; ships `npm/bin` in the package; tightens installed binary permissions to `0o700`.
+- **Go path handling and process execution.** Adds `internal/safepath` for path containment checks; migrate and config code use safepath instead of raw `os` calls; launcher resolves `claude` via `exec.LookPath` after scrubbing the shim from PATH; renames keychain account to `bedrock-credential` with legacy `api-key` fallback.
+- **Codacy false positives and local parity.** Centralizes auth mode strings in `internal/authmode`; hardens settings/profile paths via safepath; adds local Codacy parity workflow; satisfies PSScriptAnalyzer in the Codacy CI job.
+- **Security scan hygiene.** Pins npm deps to exact versions (`tar` 7.5.16, `adm-zip` 0.5.17); bumps Go to 1.26.4; tightens file permissions (`0o700` dirs, `0o600` files); suppresses intentional false-positive findings with targeted `nolint` and ESLint exclusions.
+- **CI alignment.** Aligns CI `go-version` with `go.mod`; suppresses `os.Setenv` errcheck false positive.
+
+### Documentation
+
+- **README rewrite for v4.** Documents npm/curl/PowerShell install paths and the Go binary workflow.
+- **CLAUDE.md.** Adds single-test commands, helpers pattern, Codacy, and CI/release notes.
+
+### Other
+
+- Upgrades to Go 1.26 stable and applies modern Go idioms (`slices.Contains`, `maps.Copy`, etc.).
+- Bumps GitHub Actions: `checkout` 4→6, `setup-go` 5→6, `setup-node` 4→6, `golangci-lint-action` 6→9, `goreleaser-action` 6→7.
+- Repo cleanup: removes planning artifacts, updates docs for v4, fixes release workflow.
+
+---
+
+## [4.0.0] - 2026-06-05
+
+**Major release.** Full rewrite from bash/PowerShell to a single cross-platform Go binary with npm distribution.
 
 ### Changed
 - Full rewrite from bash/PowerShell to Go — single cross-platform binary, no shell dependencies
@@ -532,6 +559,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[4.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.1
+[4.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.0
 [3.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.3
 [3.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.2
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
