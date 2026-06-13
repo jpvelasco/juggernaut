@@ -2,6 +2,26 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.0.4] - 2026-06-13
+
+**Patch release.** Drops npm archive dependencies and ships tar.gz release artifacts on all platforms.
+
+### Changed
+
+- **npm installer.** Removes `tar` and `adm-zip` dependencies; extracts release archives with the system `tar` command and a PowerShell fallback for legacy Windows `.zip` assets.
+- **Release artifacts.** GoReleaser now publishes `.tar.gz` on all platforms, including Windows.
+
+### Fixed
+
+- **PowerShell installer.** Picks archive format from `checksums.txt` so pinned installs of pre-v4.0.4 releases still download the Windows `.zip` asset.
+- **Codacy local analysis.** Restores ESLint coverage and skips opengrep path-traversal false positives on the npm installer via `.semgrepignore`.
+
+### Other
+
+- **Refactor.** Drop npm archive deps ([#148](https://github.com/jpvelasco/juggernaut/pull/148)).
+
+---
+
 ## [4.0.3] - 2026-06-13
 
 **Patch release.** Brings Go Report Card to 100% on the v4 module path and updates CI tooling.
@@ -584,6 +604,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
 [4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
 [4.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.2
 [4.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.1
