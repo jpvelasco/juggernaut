@@ -36,7 +36,7 @@ const block = `        languageOptions: {
 if (!src.includes("ignores:")) {
   src = src.replace(
     "export default [",
-    `export default [\n    {\n        ignores: [\".remember/**\", \".codacy/**\", \"mcps/**\", \"npm/install.js\"],\n    },`
+    `export default [\n    {\n        ignores: [\".remember/**\", \".codacy/**\", \"mcps/**\"],\n    },`
   );
 }
 src = src.replace(

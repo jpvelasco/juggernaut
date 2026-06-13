@@ -1,6 +1,6 @@
 export default [
     {
-        ignores: [".remember/**", ".codacy/**", "mcps/**", "npm/install.js"],
+        ignores: [".remember/**", ".codacy/**", "mcps/**"],
     },
     {
         files: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs", "**/*.vue"],

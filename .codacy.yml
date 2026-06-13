@@ -5,12 +5,6 @@ exclude_paths:
   - "mcps/**"
 
 engines:
-  opengrep:
-    exclude_paths:
-      - ".remember/**"
-      - ".codacy/**"
-      - "mcps/**"
-      - "npm/install.js"
   eslint-8:
     exclude_paths:
       - ".remember/**"
