@@ -7,7 +7,7 @@
   <a href="https://github.com/jpvelasco/juggernaut/releases/latest"><img src="https://img.shields.io/github/v/release/jpvelasco/juggernaut" alt="Release"></a>
   <a href="https://github.com/jpvelasco/juggernaut/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jpvelasco/juggernaut" alt="License"></a>
   <a href="https://github.com/jpvelasco/juggernaut/blob/main/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/jpvelasco/juggernaut" alt="Go"></a>
-  <a href="https://goreportcard.com/report/github.com/jpvelasco/juggernaut"><img src="https://goreportcard.com/badge/github.com/jpvelasco/juggernaut" alt="Go Report Card"></a>
+  <a href="https://goreportcard.com/report/github.com/jpvelasco/juggernaut/v4"><img src="https://goreportcard.com/badge/github.com/jpvelasco/juggernaut/v4" alt="Go Report Card"></a>
   <a href="https://www.npmjs.com/package/juggernaut-bedrock"><img src="https://img.shields.io/npm/v/juggernaut-bedrock" alt="npm"></a>
   <a href="https://app.codacy.com/gh/jpvelasco/juggernaut/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade"><img src="https://app.codacy.com/project/badge/Grade/2bf1e68b80964537b5c65350663c3073" alt="Codacy Grade"></a>
 </p>
