@@ -74,14 +74,14 @@ function pickArchive(platform, checksumsText) {
   throw new Error(`No supported archive found in release checksums for ${platform}`);
 }
 
-function extractTarGz(archiveBuf, destDir) {
+function extractTarGz(archiveBuf) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-install-"));
   const archivePath = path.join(tmpDir, "archive.tar.gz");
   try {
     fs.writeFileSync(archivePath, archiveBuf);
-    fs.mkdirSync(destDir, { recursive: true });
+    fs.mkdirSync(BIN_DIR, { recursive: true });
     try {
-      execFileSync("tar", ["-xzf", archivePath, "-C", destDir], { stdio: "pipe" });
+      execFileSync("tar", ["-xzf", archivePath, "-C", BIN_DIR], { stdio: "pipe" });
     } catch (err) {
       if (err.code === "ENOENT") {
         throw new Error(
@@ -92,7 +92,7 @@ function extractTarGz(archiveBuf, destDir) {
       throw new Error(`tar extraction failed: ${detail}`);
     }
     if (process.platform !== "win32") {
-      const binPath = path.join(destDir, "juggernaut");
+      const binPath = path.join(BIN_DIR, "juggernaut");
       if (fs.existsSync(binPath)) {
         fs.chmodSync(binPath, 0o700);
       }
@@ -102,15 +102,15 @@ function extractTarGz(archiveBuf, destDir) {
   }
 }
 
-async function extractZip(archiveBuf, destDir) {
+async function extractZip(archiveBuf) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-install-"));
   const archivePath = path.join(tmpDir, "archive.zip");
   try {
     fs.writeFileSync(archivePath, archiveBuf);
-    fs.mkdirSync(destDir, { recursive: true });
+    fs.mkdirSync(BIN_DIR, { recursive: true });
     const script = [
       "$ErrorActionPreference = 'Stop'",
-      `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`
+      `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${BIN_DIR.replace(/'/g, "''")}' -Force`
     ].join("; ");
     await execFileAsync(
       "powershell",
@@ -142,9 +142,9 @@ async function main() {
   }
 
   if (kind === "zip") {
-    await extractZip(archiveBuf, BIN_DIR);
+    await extractZip(archiveBuf);
   } else {
-    extractTarGz(archiveBuf, BIN_DIR);
+    extractTarGz(archiveBuf);
   }
 
   console.log(`Juggernaut v${version} installed successfully.`);
