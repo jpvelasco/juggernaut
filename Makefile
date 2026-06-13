@@ -1,7 +1,7 @@
 .PHONY: build test lint clean codacy codacy-sync
 
 build:
-	go build -ldflags "-X github.com/jpvelasco/juggernaut/cmd.Version=$(shell cat VERSION)" -o bin/juggernaut .
+	go build -ldflags "-X github.com/jpvelasco/juggernaut/v4/cmd.Version=$(shell cat VERSION)" -o bin/juggernaut .
 
 test:
 	go test ./... -v

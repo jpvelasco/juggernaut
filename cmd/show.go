@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jpvelasco/juggernaut/internal/config"
+	"github.com/jpvelasco/juggernaut/v4/internal/config"
 	"github.com/spf13/cobra"
 )
 

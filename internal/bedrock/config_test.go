@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
 )
 
 func TestLoad(t *testing.T) {

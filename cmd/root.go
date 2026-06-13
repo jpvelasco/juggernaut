@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jpvelasco/juggernaut/internal/launcher"
+	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

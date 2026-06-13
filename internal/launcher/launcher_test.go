@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/internal/launcher"
-	"github.com/jpvelasco/juggernaut/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
+	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
 func TestInstall(t *testing.T) {

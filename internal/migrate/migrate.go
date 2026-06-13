@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jpvelasco/juggernaut/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
 // State describes what was found during migration detection.

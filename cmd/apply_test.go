@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/internal/authmode"
-	"github.com/jpvelasco/juggernaut/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
 func TestApply_DryRun_IAM(t *testing.T) {

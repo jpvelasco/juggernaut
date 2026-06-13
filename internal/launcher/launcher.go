@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/jpvelasco/juggernaut/internal/keychain"
-	"github.com/jpvelasco/juggernaut/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
 const cmdShim = "@echo off\njuggernaut --launcher %*\n"

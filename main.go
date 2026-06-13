@@ -4,7 +4,7 @@ package main
 import (
 	_ "embed"
 
-	"github.com/jpvelasco/juggernaut/cmd"
+	"github.com/jpvelasco/juggernaut/v4/cmd"
 )
 
 //go:embed bedrock-config.json

@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jpvelasco/juggernaut/internal/config"
-	"github.com/jpvelasco/juggernaut/internal/keychain"
-	"github.com/jpvelasco/juggernaut/internal/launcher"
-	"github.com/jpvelasco/juggernaut/internal/migrate"
+	"github.com/jpvelasco/juggernaut/v4/internal/config"
+	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
+	"github.com/jpvelasco/juggernaut/v4/internal/migrate"
 	"github.com/spf13/cobra"
 )
 

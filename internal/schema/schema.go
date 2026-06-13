@@ -6,7 +6,7 @@ import (
 	"maps"
 	"time"
 
-	"github.com/jpvelasco/juggernaut/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
 )
 
 // SchemaVersion is the current version of the Juggernaut settings.json block.
