@@ -121,17 +121,25 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	native := block.NativeKeys()
 
 	if applyFlags.dryRun {
-		fmt.Println("Dry run — no changes written.")
-		path, perr := settingsPath(home, applyFlags.scope)
-		if perr != nil {
-			return perr
-		}
-		fmt.Printf("Would write juggernaut block to %s\n", path)
-		return nil
+		return printApplyDryRun(home)
 	}
+	return commitApply(home, authMode, token, block)
+}
+
+func printApplyDryRun(home string) error {
+	fmt.Println("Dry run — no changes written.")
+	path, err := settingsPath(home, applyFlags.scope)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Would write juggernaut block to %s\n", path)
+	return nil
+}
+
+func commitApply(home, authMode, token string, block *schema.Block) error {
+	native := block.NativeKeys()
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
 		if err := keychain.Default().Set(token); err != nil {
@@ -152,17 +160,21 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	binDir := launcher.DefaultBinDir()
-	if !launcher.IsInstalled(binDir) {
-		if err := launcher.Install(binDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not install claude shim: %v\n", err)
-		} else {
-			fmt.Printf("  ✓ Installed claude shim → %s\n", binDir)
-		}
-	}
-
+	installLauncherShimIfMissing()
 	fmt.Println("Configuration written successfully.")
 	return nil
+}
+
+func installLauncherShimIfMissing() {
+	binDir := launcher.DefaultBinDir()
+	if launcher.IsInstalled(binDir) {
+		return
+	}
+	if err := launcher.Install(binDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not install claude shim: %v\n", err)
+		return
+	}
+	fmt.Printf("  ✓ Installed claude shim → %s\n", binDir)
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
@@ -264,8 +276,8 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 	}
 	if state.TooOld {
 		return fmt.Errorf(
-			"legacy version detected (pre-v3.2.3). Please upgrade to v3.2.3 first:\n"+
-				"  curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash\n"+
+			"legacy version detected (pre-v3.2.3). Please upgrade to v3.2.3 first:\n" +
+				"  curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash\n" +
 				"Then re-run: juggernaut apply",
 		)
 	}

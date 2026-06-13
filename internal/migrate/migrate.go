@@ -16,8 +16,8 @@ type State struct {
 	HasV3Block bool
 	V3Version  string
 	AuthMode   string
-	TooOld     bool  // version < 3.2.3 — must upgrade v3 first
-	AlreadyV4  bool  // schemaVersion == 2 — migration already complete
+	TooOld     bool // version < 3.2.3 — must upgrade v3 first
+	AlreadyV4  bool // schemaVersion == 2 — migration already complete
 }
 
 // Detect inspects homeDir for a v3 Juggernaut block.
