@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.0.2] - 2026-06-13
+
+**Patch release.** Fixes Go module path for v4 semver tags so the module is indexable on `proxy.golang.org` and Go Report Card works.
+
+### Fixed
+
+- **Go module path.** Declares `github.com/jpvelasco/juggernaut/v4` in `go.mod` and updates all internal imports — required for v4.x tags per Go module versioning rules.
+
+---
+
 ## [4.0.1] - 2026-06-13
 
 **Patch release.** Security hardening for the Go binary and npm installer, Codacy cleanup, and dependency/CI updates since v4.0.0.
@@ -559,6 +569,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[4.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.2
 [4.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.1
 [4.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.0
 [3.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.3
