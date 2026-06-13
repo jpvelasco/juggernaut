@@ -2,11 +2,21 @@
   <img src="docs/logo.png" alt="Juggernaut" width="200">
 </p>
 
+<p align="center">
+  <a href="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml"><img src="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/jpvelasco/juggernaut/releases/latest"><img src="https://img.shields.io/github/v/release/jpvelasco/juggernaut" alt="Release"></a>
+  <a href="https://github.com/jpvelasco/juggernaut/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jpvelasco/juggernaut" alt="License"></a>
+  <a href="https://github.com/jpvelasco/juggernaut/blob/main/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/jpvelasco/juggernaut" alt="Go"></a>
+  <a href="https://www.npmjs.com/package/juggernaut-bedrock"><img src="https://img.shields.io/npm/v/juggernaut-bedrock" alt="npm"></a>
+</p>
+
 <h1 align="center">Juggernaut</h1>
 
 <p align="center"><strong>Claude Code → Amazon Bedrock in one command</strong></p>
 
 Single cross-platform binary that configures Claude Code to route through Amazon Bedrock instead of Anthropic's direct API — IAM, SSO, or Bedrock API key auth.
+
+**Install from npm:** [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) — `npm install -g juggernaut-bedrock`
 
 ## Why Bedrock?
 
@@ -21,7 +31,9 @@ Single cross-platform binary that configures Claude Code to route through Amazon
 
 ## Install
 
-**npm (recommended — works everywhere Claude Code is installed):**
+### Via npm (recommended)
+
+Published as [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) on npm. Works everywhere Claude Code is installed.
 
 ```bash
 npm install -g juggernaut-bedrock
