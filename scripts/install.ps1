@@ -15,7 +15,7 @@ if ($Version -eq "latest") {
   $Version = Get-LatestVersion
 }
 
-$Archive = "juggernaut_windows_amd64.zip"
+$Archive = "juggernaut_windows_amd64.tar.gz"
 $BaseUrl = "https://github.com/$Repo/releases/download/v$Version"
 $Url = "$BaseUrl/$Archive"
 $ChecksumUrl = "$BaseUrl/checksums.txt"
@@ -38,8 +38,7 @@ try {
   }
 
   New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-  Expand-Archive "$Tmp\$Archive" -DestinationPath $Tmp -Force
-  Move-Item "$Tmp\juggernaut.exe" "$BinDir\juggernaut.exe" -Force
+  tar -xzf "$Tmp\$Archive" -C $BinDir
 
 } finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
