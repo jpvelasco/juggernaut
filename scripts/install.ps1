@@ -20,7 +20,7 @@ $BaseUrl = "https://github.com/$Repo/releases/download/v$Version"
 $Url = "$BaseUrl/$Archive"
 $ChecksumUrl = "$BaseUrl/checksums.txt"
 
-Write-Host "Installing Juggernaut v$Version (windows_amd64)..."
+Write-Output "Installing Juggernaut v$Version (windows_amd64)..."
 
 $Tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), [System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $Tmp | Out-Null
@@ -45,6 +45,6 @@ try {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
 }
 
-Write-Host "Juggernaut v$Version installed to $BinDir\juggernaut.exe"
-Write-Host ""
-Write-Host "Next step: juggernaut apply"
+Write-Output "Juggernaut v$Version installed to $BinDir\juggernaut.exe"
+Write-Output ""
+Write-Output "Next step: juggernaut apply"

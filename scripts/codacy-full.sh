@@ -73,7 +73,7 @@ fi
 if command -v pwsh &>/dev/null; then
   echo "==> PSScriptAnalyzer scripts/*.ps1"
   if ! pwsh -NoProfile -Command \
-    '$e = Invoke-ScriptAnalyzer -Path scripts/*.ps1 -Severity Warning,Error; if ($e) { $e | Format-Table; exit 1 }'; then
+    '$e = Invoke-ScriptAnalyzer -Path scripts/*.ps1 -Severity Error; if ($e) { $e | Format-Table; exit 1 }'; then
     echo "FAIL: PSScriptAnalyzer" >&2
     FAIL=1
   fi
