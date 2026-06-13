@@ -44,8 +44,8 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 
 	if state.TooOld {
 		return fmt.Errorf(
-			"legacy version detected (pre-v3.2.3). Please upgrade to v3.2.3 first:\n"+
-				"  curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash\n"+
+			"legacy version detected (pre-v3.2.3). Please upgrade to v3.2.3 first:\n" +
+				"  curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash\n" +
 				"Then re-run: juggernaut migrate",
 		)
 	}
