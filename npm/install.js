@@ -11,23 +11,45 @@ const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
 
 const REPO = "jpvelasco/juggernaut";
-const BIN_DIR = path.resolve(__dirname, "bin");
+const PACKAGE_DIR = __dirname;
+const BIN_DIR = path.join(PACKAGE_DIR, "bin");
+const TMP_PREFIX = path.join(os.tmpdir(), "juggernaut-install-");
+const ARCHIVE_TAR = "archive.tar.gz";
+const ARCHIVE_ZIP = "archive.zip";
+const BIN_NAME = "juggernaut";
 const ALLOWED_HOSTS = new Set([
   "github.com",
   "api.github.com",
   "release-assets.githubusercontent.com"
 ]);
 
-function assertWithin(base, target) {
-  const resolvedBase = path.resolve(base);
-  const normalBase = resolvedBase + path.sep;
-  const normalTarget = path.resolve(target);
+function joinUnder(base, ...segments) {
+  if (base.indexOf("\0") !== -1) {
+    throw new Error("Invalid base path");
+  }
+  for (const seg of segments) {
+    if (seg.indexOf("..") !== -1 || seg.indexOf("/") !== -1 || seg.indexOf("\\") !== -1) {
+      throw new Error(`Invalid path segment: ${seg}`);
+    }
+  }
+  const joined = path.join(base, ...segments);
+  const normalBase = path.normalize(base) + path.sep;
+  const normalJoined = path.normalize(joined);
   const compare = process.platform === "win32"
     ? (a, b) => a.toLowerCase().startsWith(b.toLowerCase())
     : (a, b) => a.startsWith(b);
-  if (!compare(normalTarget, normalBase) && normalTarget.toLowerCase() !== resolvedBase.toLowerCase()) {
-    throw new Error(`Path traversal detected: ${target} is outside ${base}`);
+  if (!compare(normalJoined, normalBase)) {
+    const exactBase = process.platform === "win32"
+      ? path.normalize(base).toLowerCase()
+      : path.normalize(base);
+    const exactJoined = process.platform === "win32"
+      ? normalJoined.toLowerCase()
+      : normalJoined;
+    if (exactJoined !== exactBase) {
+      throw new Error(`Path traversal detected: ${joined} is outside ${base}`);
+    }
   }
+  return normalJoined;
 }
 
 function getPlatform() {
@@ -76,9 +98,7 @@ async function getLatestVersion() {
 
 function pickArchive(platform, checksumsText) {
   const tarArchive = `juggernaut_${platform}.tar.gz`;
-  if (checksumsText.includes(tarArchive)) {
-    return { name: tarArchive, kind: "tar.gz" };
-  }
+  if (checksumsText.includes(tarArchive)) return { name: tarArchive, kind: "tar.gz" };
   const zipArchive = `juggernaut_${platform}.zip`;
   if (process.platform === "win32" && checksumsText.includes(zipArchive)) {
     return { name: zipArchive, kind: "zip" };
@@ -87,15 +107,16 @@ function pickArchive(platform, checksumsText) {
 }
 
 function extractTarGz(archiveBuf) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-install-"));
-  const archivePath = path.resolve(tmpDir, "archive.tar.gz");
-  assertWithin(tmpDir, archivePath);
+  const tmpDir = fs.mkdtempSync(TMP_PREFIX);
+  const archivePath = joinUnder(tmpDir, ARCHIVE_TAR);
+  const prevCwd = process.cwd();
   try {
-    fs.writeFileSync(archivePath, archiveBuf);
-    const resolvedBinDir = path.resolve(BIN_DIR);
-    fs.mkdirSync(resolvedBinDir, { recursive: true });
+    process.chdir(tmpDir);
+    fs.writeFileSync(ARCHIVE_TAR, archiveBuf);
+    process.chdir(PACKAGE_DIR);
+    fs.mkdirSync("bin", { recursive: true });
     try {
-      execFileSync("tar", ["-xzf", archivePath, "-C", resolvedBinDir], { stdio: "pipe" });
+      execFileSync("tar", ["-xzf", archivePath, "-C", BIN_DIR], { stdio: "pipe" });
     } catch (err) {
       if (err.code === "ENOENT") {
         throw new Error(
@@ -106,28 +127,29 @@ function extractTarGz(archiveBuf) {
       throw new Error(`tar extraction failed: ${detail}`);
     }
     if (process.platform !== "win32") {
-      const binPath = path.resolve(resolvedBinDir, "juggernaut");
-      assertWithin(resolvedBinDir, binPath);
-      if (fs.existsSync(binPath)) {
-        fs.chmodSync(binPath, 0o700);
+      process.chdir(BIN_DIR);
+      if (fs.existsSync(BIN_NAME)) {
+        fs.chmodSync(BIN_NAME, 0o700);
       }
     }
   } finally {
+    process.chdir(prevCwd);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
 async function extractZip(archiveBuf) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-install-"));
-  const archivePath = path.resolve(tmpDir, "archive.zip");
-  assertWithin(tmpDir, archivePath);
+  const tmpDir = fs.mkdtempSync(TMP_PREFIX);
+  const archivePath = joinUnder(tmpDir, ARCHIVE_ZIP);
+  const prevCwd = process.cwd();
   try {
-    fs.writeFileSync(archivePath, archiveBuf);
-    const resolvedBinDir = path.resolve(BIN_DIR);
-    fs.mkdirSync(resolvedBinDir, { recursive: true });
+    process.chdir(tmpDir);
+    fs.writeFileSync(ARCHIVE_ZIP, archiveBuf);
+    process.chdir(PACKAGE_DIR);
+    fs.mkdirSync("bin", { recursive: true });
     const script = [
       "$ErrorActionPreference = 'Stop'",
-      `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${resolvedBinDir.replace(/'/g, "''")}' -Force`
+      `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${BIN_DIR.replace(/'/g, "''")}' -Force`
     ].join("; ");
     try {
       await execFileAsync(
@@ -145,6 +167,7 @@ async function extractZip(archiveBuf) {
       throw new Error(`ZIP extraction failed: ${detail}`);
     }
   } finally {
+    process.chdir(prevCwd);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
@@ -168,11 +191,8 @@ async function main() {
     throw new Error(`Checksum mismatch for ${archive}\n  expected: ${expected}\n  got:      ${actual}`);
   }
 
-  if (kind === "zip") {
-    await extractZip(archiveBuf);
-  } else {
-    extractTarGz(archiveBuf);
-  }
+  if (kind === "zip") await extractZip(archiveBuf);
+  else extractTarGz(archiveBuf);
 
   console.log(`Juggernaut v${version} installed successfully.`);
   console.log(`Run: juggernaut apply`);
