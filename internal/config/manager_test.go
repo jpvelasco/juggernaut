@@ -45,8 +45,9 @@ func TestMergeJuggernautBlock(t *testing.T) {
 
 	block := map[string]any{"managedBy": "juggernaut"}
 	nativeEnv := map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"}
+	nativeKeys := map[string]any{"effortLevel": "xhigh", "skipWebFetchPreflight": true}
 
-	if err := m.MergeJuggernautBlock(block, nativeEnv, ""); err != nil {
+	if err := m.MergeJuggernautBlock(block, nativeEnv, nativeKeys); err != nil {
 		t.Fatalf("MergeJuggernautBlock() error: %v", err)
 	}
 
@@ -57,6 +58,53 @@ func TestMergeJuggernautBlock(t *testing.T) {
 	if _, ok := got["juggernaut"]; !ok {
 		t.Error("juggernaut block should be present")
 	}
+	if got["effortLevel"] != "xhigh" {
+		t.Errorf("expected effortLevel=xhigh, got %v", got["effortLevel"])
+	}
+	if got["skipWebFetchPreflight"] != true {
+		t.Error("expected skipWebFetchPreflight=true")
+	}
+}
+
+func TestMergeJuggernautBlock_NativeKeys_BoolFalseDeletes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	_ = m.Write(map[string]any{"alwaysThinkingEnabled": true})
+
+	if err := m.MergeJuggernautBlock(
+		map[string]any{},
+		nil,
+		map[string]any{"alwaysThinkingEnabled": false},
+	); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	if _, ok := got["alwaysThinkingEnabled"]; ok {
+		t.Error("alwaysThinkingEnabled=false should remove the key")
+	}
+}
+
+func TestMergeJuggernautBlock_Permissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	nativeKeys := map[string]any{
+		"permissions": map[string]any{"defaultMode": "auto"},
+	}
+	if err := m.MergeJuggernautBlock(map[string]any{}, nil, nativeKeys); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	perms, ok := got["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("permissions key should be present and a map")
+	}
+	if perms["defaultMode"] != "auto" {
+		t.Errorf("expected defaultMode=auto, got %v", perms["defaultMode"])
+	}
 }
 
 func TestRemoveJuggernautBlock(t *testing.T) {
@@ -64,11 +112,15 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 	m := config.NewManager(path)
 
 	data := map[string]any{
-		"userPref":       "keep-me",
-		"juggernaut":     map[string]any{"managedBy": "juggernaut"},
-		"env":            map[string]any{"CLAUDE_CODE_USE_BEDROCK": "1"},
-		"model":          "opusplan",
-		"modelOverrides": map[string]any{},
+		"userPref":              "keep-me",
+		"juggernaut":            map[string]any{"managedBy": "juggernaut"},
+		"env":                   map[string]any{"CLAUDE_CODE_USE_BEDROCK": "1"},
+		"model":                 "opusplan",
+		"modelOverrides":        map[string]any{},
+		"effortLevel":           "xhigh",
+		"alwaysThinkingEnabled": true,
+		"skipWebFetchPreflight": true,
+		"permissions":           map[string]any{"defaultMode": "auto"},
 	}
 	_ = m.Write(data)
 
@@ -77,11 +129,10 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 	}
 
 	got, _ := m.Read()
-	if _, ok := got["juggernaut"]; ok {
-		t.Error("juggernaut key should be removed")
-	}
-	if _, ok := got["model"]; ok {
-		t.Error("model key should be removed")
+	for _, k := range []string{"juggernaut", "env", "model", "modelOverrides", "effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions"} {
+		if _, ok := got[k]; ok {
+			t.Errorf("key %q should be removed after uninstall", k)
+		}
 	}
 	if got["userPref"] != "keep-me" {
 		t.Error("user pref should be preserved after remove")
@@ -118,7 +169,7 @@ func TestBackupRotation(t *testing.T) {
 	m := config.NewManager(path)
 
 	data := map[string]any{"x": 1}
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		data["x"] = i
 		_ = m.Write(data)
 	}

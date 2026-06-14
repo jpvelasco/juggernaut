@@ -242,6 +242,135 @@ func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
 	}
 }
 
+func TestApply_PermissionMode_AutoSetsBedrockEnvVar(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+
+	env, _ := settings["env"].(map[string]any)
+	if env["CLAUDE_CODE_ENABLE_AUTO_MODE"] != "1" {
+		t.Error("expected CLAUDE_CODE_ENABLE_AUTO_MODE=1 when --mode=auto")
+	}
+
+	perms, ok := settings["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("expected permissions key in settings.json")
+	}
+	if perms["defaultMode"] != "auto" {
+		t.Errorf("expected permissions.defaultMode=auto, got %v", perms["defaultMode"])
+	}
+}
+
+func TestApply_PermissionMode_InvalidErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--mode=bogus", "--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid --mode value")
+	}
+}
+
+func TestApply_ServiceTier_WritesEnvVar(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--service-tier=flex", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	env, _ := settings["env"].(map[string]any)
+	if env["ANTHROPIC_BEDROCK_SERVICE_TIER"] != "flex" {
+		t.Errorf("expected ANTHROPIC_BEDROCK_SERVICE_TIER=flex, got %v", env["ANTHROPIC_BEDROCK_SERVICE_TIER"])
+	}
+}
+
+func TestApply_AlwaysThinking_WritesNativeKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--always-thinking", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if settings["alwaysThinkingEnabled"] != true {
+		t.Errorf("expected alwaysThinkingEnabled=true in settings.json, got %v", settings["alwaysThinkingEnabled"])
+	}
+}
+
+func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--effort=max", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if settings["effortLevel"] != "max" {
+		t.Errorf("expected effortLevel=max as native key in settings.json, got %v", settings["effortLevel"])
+	}
+}
+
+func TestApply_SkipWebFetchPreflight_AlwaysSet(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if settings["skipWebFetchPreflight"] != true {
+		t.Errorf("expected skipWebFetchPreflight=true for all Bedrock configs, got %v", settings["skipWebFetchPreflight"])
+	}
+}
+
 func readSettingsJSON(t *testing.T, home string) []byte {
 	t.Helper()
 	data, err := safepath.ReadFile(home, filepath.Join(home, ".claude", "settings.json"))

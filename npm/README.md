@@ -50,7 +50,7 @@ juggernaut apply --auth=iam
 That one command:
 
 1. **Writes** Bedrock config to `~/.claude/settings.json` (or project scope)
-2. **Sets** model IDs, region, effort level, and `CLAUDE_CODE_USE_BEDROCK=1` — only after credentials check out
+2. **Sets** model IDs, region, effort level, permission mode, and `CLAUDE_CODE_USE_BEDROCK=1` — only after credentials check out
 3. **Installs** a `claude` launcher shim that reads your token from the keychain and execs the real binary
 
 No `.bashrc` edits. No copying API keys into env vars. No "why isn't Bedrock routing?" at 2am.
@@ -87,13 +87,50 @@ No `.bashrc` edits. No copying API keys into env vars. No "why isn't Bedrock rou
 
 ## Default models
 
-| Tier | Model |
-|------|-------|
-| **Primary** | Claude Sonnet 4.6 |
-| **Opus** | Claude Opus 4.7 |
-| **Fast** | Claude Haiku 4.5 |
+| Tier | Model | Global inference profile |
+|------|-------|--------------------------|
+| **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
+| **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
+| **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
 Override any tier: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
+
+## Effort levels
+
+Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | max`
+
+```bash
+juggernaut apply --auth=iam --effort=max
+```
+
+Default: `xhigh`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported.
+
+## Permission modes
+
+Controls how Claude Code handles tool-use approvals:
+
+| Mode | Behavior |
+|------|----------|
+| `default` | Prompts for each action |
+| `acceptEdits` | Auto-approves file edits |
+| `plan` | Propose only, no execution |
+| `auto` | Agentic safety classifier |
+| `bypassPermissions` | Skip all prompts (containers/VMs only) |
+
+```bash
+juggernaut apply --auth=iam --mode=auto
+```
+
+Auto mode on Bedrock requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — Juggernaut sets this automatically.
+
+## Other options
+
+```bash
+--always-thinking       # enable extended thinking by default (alwaysThinkingEnabled)
+--service-tier=flex     # Bedrock service tier: default | flex | priority
+--opusplan              # route /plan to Opus 4.8, execution to Sonnet 4.6
+--scope=project         # write to ./.claude/settings.json instead of ~/.claude/
+```
 
 ## Troubleshooting
 

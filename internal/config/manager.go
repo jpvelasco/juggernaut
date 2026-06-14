@@ -85,8 +85,23 @@ func (m *Manager) Write(data map[string]any) error {
 	return nil
 }
 
-// MergeJuggernautBlock merges the juggernaut block and native keys into existing settings.
-func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[string]string, model string) error {
+// nativeManagedKeys lists every top-level settings.json key Juggernaut owns.
+// They are all removed on uninstall and fully replaced on each apply.
+var nativeManagedKeys = []string{
+	"env",
+	"model",
+	"modelOverrides",
+	"effortLevel",
+	"alwaysThinkingEnabled",
+	"skipWebFetchPreflight",
+	"permissions",
+}
+
+// MergeJuggernautBlock merges the juggernaut block and native top-level keys into
+// existing settings. nativeKeys carries all non-env top-level values Juggernaut
+// manages (model, effortLevel, alwaysThinkingEnabled, skipWebFetchPreflight,
+// permissions). Keys with zero/nil values are deleted from the file.
+func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[string]string, nativeKeys map[string]any) error {
 	existing, err := m.Read()
 	if err != nil {
 		return err
@@ -95,10 +110,33 @@ func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[strin
 	if len(nativeEnv) > 0 {
 		existing["env"] = nativeEnv
 	}
-	if model != "" {
-		existing["model"] = model
-	} else {
-		delete(existing, "model")
+	for k, v := range nativeKeys {
+		switch val := v.(type) {
+		case string:
+			if val != "" {
+				existing[k] = val
+			} else {
+				delete(existing, k)
+			}
+		case bool:
+			if val {
+				existing[k] = val
+			} else {
+				delete(existing, k)
+			}
+		case map[string]any:
+			if len(val) > 0 {
+				existing[k] = val
+			} else {
+				delete(existing, k)
+			}
+		default:
+			if v != nil {
+				existing[k] = v
+			} else {
+				delete(existing, k)
+			}
+		}
 	}
 	return m.Write(existing)
 }
@@ -110,9 +148,9 @@ func (m *Manager) RemoveJuggernautBlock() error {
 		return err
 	}
 	delete(existing, "juggernaut")
-	delete(existing, "env")
-	delete(existing, "model")
-	delete(existing, "modelOverrides")
+	for _, k := range nativeManagedKeys {
+		delete(existing, k)
+	}
 	return m.Write(existing)
 }
 

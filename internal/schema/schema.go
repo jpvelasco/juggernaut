@@ -14,20 +14,23 @@ const SchemaVersion = 2
 
 // Options holds all user-supplied apply parameters.
 type Options struct {
-	AuthMode      string
-	Region        string
-	Effort        string
-	Scope         string
-	Version       string
-	OpusModel     string
-	SonnetModel   string
-	HaikuModel    string
-	Opusplan      bool
-	Use1M         bool
-	UseMantle     bool
-	MantleURL     string
-	Storage       string
-	AuthValidated bool
+	AuthMode       string
+	Region         string
+	Effort         string
+	Scope          string
+	Version        string
+	OpusModel      string
+	SonnetModel    string
+	HaikuModel     string
+	Opusplan       bool
+	Use1M          bool
+	UseMantle      bool
+	MantleURL      string
+	Storage        string
+	AuthValidated  bool
+	PermissionMode string // "", "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"
+	AlwaysThinking bool
+	ServiceTier    string // "", "default", "flex", "priority"
 }
 
 // Block is the .juggernaut block written to settings.json.
@@ -55,27 +58,43 @@ type ModelOverrides struct {
 
 // Meta holds Juggernaut metadata stored in the block.
 type Meta struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	Version       string `json:"version"`
-	ManagedBy     string `json:"managedBy"`
-	Scope         string `json:"scope"`
-	AppliedAt     string `json:"appliedAt"`
-	Opusplan      bool   `json:"opusplan"`
-	Use1M         bool   `json:"use1mContext"`
-	UseMantle     bool   `json:"useMantle"`
-	MantleURL     string `json:"mantleBaseUrl,omitempty"`
-	Effort        string `json:"effort"`
+	SchemaVersion  int    `json:"schemaVersion"`
+	Version        string `json:"version"`
+	ManagedBy      string `json:"managedBy"`
+	Scope          string `json:"scope"`
+	AppliedAt      string `json:"appliedAt"`
+	Opusplan       bool   `json:"opusplan"`
+	Use1M          bool   `json:"use1mContext"`
+	UseMantle      bool   `json:"useMantle"`
+	MantleURL      string `json:"mantleBaseUrl,omitempty"`
+	Effort         string `json:"effort"`
+	PermissionMode string `json:"permissionMode,omitempty"`
+	AlwaysThinking bool   `json:"alwaysThinkingEnabled,omitempty"`
+	ServiceTier    string `json:"serviceTier,omitempty"`
 }
 
 // NativeKeys are the top-level settings.json keys Claude Code reads directly.
 type NativeKeys struct {
-	Model          string            `json:"model,omitempty"`
-	ModelOverrides map[string]string `json:"modelOverrides,omitempty"`
-	Env            map[string]string `json:"env"`
+	Model                string            `json:"model,omitempty"`
+	ModelOverrides       map[string]string `json:"modelOverrides,omitempty"`
+	Env                  map[string]string `json:"env"`
+	EffortLevel          string            `json:"effortLevel,omitempty"`
+	AlwaysThinking       bool              `json:"alwaysThinkingEnabled,omitempty"`
+	SkipWebFetchPreflight bool             `json:"skipWebFetchPreflight,omitempty"`
+	Permissions          map[string]any    `json:"permissions,omitempty"`
 }
 
 var validEfforts = map[string]bool{
 	"low": true, "medium": true, "high": true, "xhigh": true, "max": true,
+}
+
+var validPermissionModes = map[string]bool{
+	"default": true, "acceptEdits": true, "plan": true,
+	"auto": true, "dontAsk": true, "bypassPermissions": true,
+}
+
+var validServiceTiers = map[string]bool{
+	"default": true, "flex": true, "priority": true,
 }
 
 // Build constructs and validates a Block from bedrock config and options.
@@ -85,6 +104,12 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 	if !validEfforts[opts.Effort] {
 		return nil, fmt.Errorf("invalid effort %q — must be one of: low, medium, high, xhigh, max", opts.Effort)
+	}
+	if opts.PermissionMode != "" && !validPermissionModes[opts.PermissionMode] {
+		return nil, fmt.Errorf("invalid mode %q — must be one of: default, acceptEdits, plan, auto, dontAsk, bypassPermissions", opts.PermissionMode)
+	}
+	if opts.ServiceTier != "" && !validServiceTiers[opts.ServiceTier] {
+		return nil, fmt.Errorf("invalid service-tier %q — must be one of: default, flex, priority", opts.ServiceTier)
 	}
 
 	opus := opts.OpusModel
@@ -123,6 +148,13 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 			env["ANTHROPIC_BEDROCK_MANTLE_BASE_URL"] = opts.MantleURL
 		}
 	}
+	if opts.PermissionMode == "auto" {
+		// Required on Bedrock/Vertex/Foundry — without it auto mode silently does nothing.
+		env["CLAUDE_CODE_ENABLE_AUTO_MODE"] = "1"
+	}
+	if opts.ServiceTier != "" {
+		env["ANTHROPIC_BEDROCK_SERVICE_TIER"] = opts.ServiceTier
+	}
 
 	storage := opts.Storage
 	if storage == "" {
@@ -143,16 +175,19 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		},
 		Env: env,
 		Meta: Meta{
-			SchemaVersion: SchemaVersion,
-			Version:       opts.Version,
-			ManagedBy:     "juggernaut",
-			Scope:         opts.Scope,
-			AppliedAt:     time.Now().UTC().Format(time.RFC3339),
-			Opusplan:      opts.Opusplan,
-			Use1M:         opts.Use1M,
-			UseMantle:     opts.UseMantle,
-			MantleURL:     opts.MantleURL,
-			Effort:        opts.Effort,
+			SchemaVersion:  SchemaVersion,
+			Version:        opts.Version,
+			ManagedBy:      "juggernaut",
+			Scope:          opts.Scope,
+			AppliedAt:      time.Now().UTC().Format(time.RFC3339),
+			Opusplan:       opts.Opusplan,
+			Use1M:          opts.Use1M,
+			UseMantle:      opts.UseMantle,
+			MantleURL:      opts.MantleURL,
+			Effort:         opts.Effort,
+			PermissionMode: opts.PermissionMode,
+			AlwaysThinking: opts.AlwaysThinking,
+			ServiceTier:    opts.ServiceTier,
 		},
 	}, nil
 }
@@ -163,6 +198,14 @@ func (b *Block) NativeKeys() NativeKeys {
 	if b.Meta.Opusplan {
 		model = "opusplan"
 	}
+
+	var permissions map[string]any
+	if b.Meta.PermissionMode != "" {
+		permissions = map[string]any{
+			"defaultMode": b.Meta.PermissionMode,
+		}
+	}
+
 	return NativeKeys{
 		Model: model,
 		ModelOverrides: map[string]string{
@@ -170,6 +213,10 @@ func (b *Block) NativeKeys() NativeKeys {
 			"sonnet": b.Models.Sonnet,
 			"haiku":  b.Models.Haiku,
 		},
-		Env: b.Env,
+		Env:                   b.Env,
+		EffortLevel:           b.Meta.Effort,
+		AlwaysThinking:        b.Meta.AlwaysThinking,
+		SkipWebFetchPreflight: true, // always set for Bedrock users
+		Permissions:           permissions,
 	}
 }
