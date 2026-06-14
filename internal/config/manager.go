@@ -130,12 +130,10 @@ func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[strin
 			} else {
 				delete(existing, k)
 			}
+		case nil:
+			delete(existing, k)
 		default:
-			if v != nil {
-				existing[k] = v
-			} else {
-				delete(existing, k)
-			}
+			return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, or map[string]any)", v, k)
 		}
 	}
 	return m.Write(existing)

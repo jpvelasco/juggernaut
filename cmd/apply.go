@@ -170,8 +170,13 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	if err != nil {
 		return err
 	}
+	modelOverrides := map[string]any{}
+	for k, v := range native.ModelOverrides {
+		modelOverrides[k] = v
+	}
 	nativeKeys := map[string]any{
 		"model":                 native.Model,
+		"modelOverrides":        modelOverrides,
 		"effortLevel":           native.EffortLevel,
 		"alwaysThinkingEnabled": native.AlwaysThinking,
 		"skipWebFetchPreflight": native.SkipWebFetchPreflight,
@@ -206,10 +211,6 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	}
 	opusplan = applyFlags.opusplan
 
-	if authMode != "" {
-		return
-	}
-
 	path, herr := settingsPath(home, applyFlags.scope)
 	if herr != nil {
 		err = herr
@@ -222,18 +223,32 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 		return
 	}
 	if has {
-		// Preserve existing auth mode from the block rather than reverting to the global default.
+		// Preserve auth mode and permission mode from the existing block when not supplied as flags.
 		if existing, rerr := mgr.Read(); rerr == nil {
 			if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
-				if auth, ok := jBlock["auth"].(map[string]any); ok {
-					if mode, ok := auth["mode"].(string); ok && mode != "" {
-						authMode = mode
-						return
+				if authMode == "" {
+					if auth, ok := jBlock["auth"].(map[string]any); ok {
+						if mode, ok := auth["mode"].(string); ok && mode != "" {
+							authMode = mode
+						}
+					}
+				}
+				if applyFlags.mode == "" {
+					if meta, ok := jBlock["meta"].(map[string]any); ok {
+						if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
+							applyFlags.mode = pmode
+						}
 					}
 				}
 			}
 		}
-		authMode = bCfg.Defaults.AuthMode
+		if authMode == "" {
+			authMode = bCfg.Defaults.AuthMode
+		}
+		return
+	}
+
+	if authMode != "" {
 		return
 	}
 

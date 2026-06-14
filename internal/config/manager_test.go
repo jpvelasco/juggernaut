@@ -107,6 +107,32 @@ func TestMergeJuggernautBlock_Permissions(t *testing.T) {
 	}
 }
 
+func TestMergeJuggernautBlock_NativeKeys_NilValueDeletes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	_ = m.Write(map[string]any{"permissions": map[string]any{"defaultMode": "auto"}})
+
+	if err := m.MergeJuggernautBlock(map[string]any{}, nil, map[string]any{"permissions": nil}); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	if _, ok := got["permissions"]; ok {
+		t.Error("permissions key should be deleted when nil is passed")
+	}
+}
+
+func TestMergeJuggernautBlock_NativeKeys_UnknownTypeErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	err := m.MergeJuggernautBlock(map[string]any{}, nil, map[string]any{"effortLevel": 42})
+	if err == nil {
+		t.Error("expected error for unsupported native key type int")
+	}
+}
+
 func TestRemoveJuggernautBlock(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)

@@ -147,14 +147,14 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	// First apply to create settings.json
+	// Apply with all new flags to ensure they get cleaned up.
 	if err := ExecuteArgs([]string{
-		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--mode=auto", "--always-thinking", "--effort=max", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
 
-	// Then uninstall
 	if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {
 		t.Fatalf("uninstall error: %v", err)
 	}
@@ -164,11 +164,80 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	if err := json.Unmarshal(data, &settings); err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
-	if _, ok := settings["juggernaut"]; ok {
-		t.Error("juggernaut block should be removed after uninstall")
+
+	for _, k := range []string{
+		"juggernaut", "env", "model", "modelOverrides",
+		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions",
+	} {
+		if _, ok := settings[k]; ok {
+			t.Errorf("key %q should be removed after uninstall", k)
+		}
 	}
-	if _, ok := settings["env"]; ok {
-		t.Error("env key should be removed after uninstall")
+}
+
+func TestApply_ReApply_PermissionMode_Preserved(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// First apply sets mode=auto.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+
+	// Second apply without --mode should preserve auto.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("second apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	perms, ok := settings["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("permissions key should be preserved on re-apply")
+	}
+	if perms["defaultMode"] != "auto" {
+		t.Errorf("expected permissions.defaultMode=auto to be preserved, got %v", perms["defaultMode"])
+	}
+	env, _ := settings["env"].(map[string]any)
+	if env["CLAUDE_CODE_ENABLE_AUTO_MODE"] != "1" {
+		t.Error("CLAUDE_CODE_ENABLE_AUTO_MODE=1 should be preserved on re-apply")
+	}
+}
+
+func TestApply_ReApply_AlwaysThinkingOff_DeletesKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// First apply with --always-thinking.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--always-thinking", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+
+	// Second apply without --always-thinking should remove the key entirely.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("second apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if _, ok := settings["alwaysThinkingEnabled"]; ok {
+		t.Error("alwaysThinkingEnabled should be removed when --always-thinking is not passed on re-apply")
 	}
 }
 
