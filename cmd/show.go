@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/jpvelasco/juggernaut/v4/internal/config"
 	"github.com/spf13/cobra"
@@ -39,11 +40,13 @@ func runShow(_ *cobra.Command, _ []string) error {
 	for _, scope := range scopes {
 		path, perr := settingsPath(home, scope)
 		if perr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not determine %s scope path: %v\n", scope, perr)
 			continue
 		}
 		mgr := config.NewManager(path)
 		data, err := mgr.Read()
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not read %s settings: %v\n", scope, err)
 			continue
 		}
 		results[scope] = data["juggernaut"]
