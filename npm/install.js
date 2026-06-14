@@ -11,12 +11,20 @@ const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
 
 const REPO = "jpvelasco/juggernaut";
-const BIN_DIR = path.join(__dirname, "bin");
+const BIN_DIR = path.resolve(__dirname, "bin");
 const ALLOWED_HOSTS = new Set([
   "github.com",
   "api.github.com",
   "release-assets.githubusercontent.com"
 ]);
+
+function assertWithin(base, target) {
+  const normalBase = path.resolve(base) + path.sep;
+  const normalTarget = path.resolve(target);
+  if (!normalTarget.startsWith(normalBase) && normalTarget !== path.resolve(base)) {
+    throw new Error(`Path traversal detected: ${target} is outside ${base}`);
+  }
+}
 
 function getPlatform() {
   const osMap = { darwin: "darwin", linux: "linux", win32: "windows" };
@@ -76,12 +84,14 @@ function pickArchive(platform, checksumsText) {
 
 function extractTarGz(archiveBuf) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-install-"));
-  const archivePath = path.join(tmpDir, "archive.tar.gz");
+  const archivePath = path.resolve(tmpDir, "archive.tar.gz");
+  assertWithin(tmpDir, archivePath);
   try {
     fs.writeFileSync(archivePath, archiveBuf);
-    fs.mkdirSync(BIN_DIR, { recursive: true });
+    const resolvedBinDir = path.resolve(BIN_DIR);
+    fs.mkdirSync(resolvedBinDir, { recursive: true });
     try {
-      execFileSync("tar", ["-xzf", archivePath, "-C", BIN_DIR], { stdio: "pipe" });
+      execFileSync("tar", ["-xzf", archivePath, "-C", resolvedBinDir], { stdio: "pipe" });
     } catch (err) {
       if (err.code === "ENOENT") {
         throw new Error(
@@ -92,7 +102,8 @@ function extractTarGz(archiveBuf) {
       throw new Error(`tar extraction failed: ${detail}`);
     }
     if (process.platform !== "win32") {
-      const binPath = path.join(BIN_DIR, "juggernaut");
+      const binPath = path.resolve(resolvedBinDir, "juggernaut");
+      assertWithin(resolvedBinDir, binPath);
       if (fs.existsSync(binPath)) {
         fs.chmodSync(binPath, 0o700);
       }
@@ -104,13 +115,15 @@ function extractTarGz(archiveBuf) {
 
 async function extractZip(archiveBuf) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-install-"));
-  const archivePath = path.join(tmpDir, "archive.zip");
+  const archivePath = path.resolve(tmpDir, "archive.zip");
+  assertWithin(tmpDir, archivePath);
   try {
     fs.writeFileSync(archivePath, archiveBuf);
-    fs.mkdirSync(BIN_DIR, { recursive: true });
+    const resolvedBinDir = path.resolve(BIN_DIR);
+    fs.mkdirSync(resolvedBinDir, { recursive: true });
     const script = [
       "$ErrorActionPreference = 'Stop'",
-      `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${BIN_DIR.replace(/'/g, "''")}' -Force`
+      `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${resolvedBinDir.replace(/'/g, "''")}' -Force`
     ].join("; ");
     await execFileAsync(
       "powershell",
