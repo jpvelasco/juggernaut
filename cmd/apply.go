@@ -158,23 +158,21 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 		return err
 	}
 
-	if err := installLauncherShimIfMissing(); err != nil {
-		return fmt.Errorf("installing claude shim: %w", err)
-	}
+	installLauncherShimIfMissing()
 	fmt.Println("Configuration written successfully.")
 	return nil
 }
 
-func installLauncherShimIfMissing() error {
+func installLauncherShimIfMissing() {
 	binDir := launcher.DefaultBinDir()
 	if launcher.IsInstalled(binDir) {
-		return nil
+		return
 	}
 	if err := launcher.Install(binDir); err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "Warning: could not install claude shim: %v\n", err)
+		return
 	}
 	fmt.Printf("  ✓ Installed claude shim → %s\n", binDir)
-	return nil
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
@@ -293,13 +291,16 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 
 	fmt.Println("Migrating to Juggernaut v4...")
 
+	keychainOK := true
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
 		token, err := keychain.Default().Get()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token for migration:", err)
+			keychainOK = false
 		} else if token != "" {
 			if err := keychain.Default().Set(token); err != nil {
 				fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token:", err)
+				keychainOK = false
 			} else {
 				fmt.Println("  ✓ Bearer token transferred to go-keyring")
 			}
@@ -311,6 +312,11 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 		fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
 	}
 
-	fmt.Println("Migration complete. No credentials were re-entered.")
+	if !keychainOK {
+		fmt.Println("Migration complete with warnings. Re-enter your credentials:")
+		fmt.Println("  juggernaut apply --auth=bedrock-api-key")
+	} else {
+		fmt.Println("Migration complete. No credentials were re-entered.")
+	}
 	return nil
 }

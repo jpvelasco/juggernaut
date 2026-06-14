@@ -65,6 +65,9 @@ func settingsPath(homeDir, scope string) (string, error) {
 	if scope == "project" {
 		return filepath.Join(".", ".claude", "settings.json"), nil
 	}
+	if homeDir == "" {
+		return "", fmt.Errorf("could not determine home directory")
+	}
 	return safepath.JoinUnder(homeDir, ".claude", "settings.json")
 }
 
