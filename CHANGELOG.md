@@ -2,6 +2,28 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.0] - 2026-06-14
+
+**Feature release.** Eliminates the `--allow-scripts` friction for npm 9+ users by shipping platform-specific binaries directly inside optional sub-packages — no postinstall script, no download at install time.
+
+### New Features
+
+- **Platform sub-packages.** Five new optional packages (`juggernaut-bedrock-linux-x64`, `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`) each ship the pre-built binary directly. npm installs only the matching one based on OS/arch. No scripts, no downloads, no `--allow-scripts` flag needed.
+- **`index.js` binary resolver.** Replaces `install.js`: resolves the binary from the installed sub-package and execs it directly. Prints a clear, actionable error on unsupported platforms or missing binaries.
+
+### Fixed
+
+- **npm 9+ silent install failure.** `npm install -g juggernaut-bedrock` previously succeeded silently but left no working binary on npm 9+ because postinstall scripts are blocked by default. Now works with a plain `npm install -g juggernaut-bedrock`.
+- **Main package tarball bloat.** `packages/` subdirectories and `index.test.js` were accidentally included in the main package tarball. Added `.npmignore` to exclude them.
+- **repository.url format.** Package `repository.url` fields now use the canonical `git+https://` format to suppress npm auto-correct warnings on publish.
+
+### Other
+
+- **`install.js` deleted.** The 200-line postinstall downloader is no longer needed.
+- **GoReleaser `after` hooks.** Copies each compiled binary into its sub-package `bin/` directory after build so the release workflow can publish all packages in one job.
+
+---
+
 ## [4.1.0] - 2026-06-14
 
 **Feature release.** Brings Claude Code feature parity for Bedrock users — Opus 4.8, agentic permission modes, effort level parity, and a reliable v3→v4 migration path for all credential storage backends.
@@ -644,6 +666,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[4.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.0
 [4.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.1.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
 [4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
