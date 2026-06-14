@@ -120,6 +120,8 @@ func CleanupLegacyFiles(homeDir string) []string {
 	for _, p := range candidates {
 		if err := os.Remove(p); err == nil {
 			removed = append(removed, p)
+		} else if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Warning: could not remove legacy credential file %s: %v\n", p, err)
 		}
 	}
 	return removed
@@ -131,16 +133,19 @@ func readProfileToken(homeDir string) (string, error) {
 		configHome = filepath.Join(homeDir, ".config")
 	}
 	tokenPath := filepath.Join(configHome, "juggernaut", "bearer-token")
-	base := filepath.Dir(tokenPath)
 
-	data, err := safepath.ReadFile(base, tokenPath)
+	data, err := safepath.ReadFile(homeDir, tokenPath)
 	if os.IsNotExist(err) {
 		return "", nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("reading profile token: %w", err)
 	}
-	return strings.TrimSpace(string(data)), nil
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", nil
+	}
+	return token, nil
 }
 
 // StripLauncherBlocks removes legacy shell launcher blocks from shell profiles in homeDir.

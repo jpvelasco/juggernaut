@@ -75,8 +75,9 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 
 	fmt.Println("Migrating to Juggernaut v4...")
 
+	tokenOK := true
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
-		transferLegacyToken(home, state.Storage)
+		tokenOK = transferLegacyToken(home, state.Storage)
 	}
 
 	binDir := launcher.DefaultBinDir()
@@ -95,7 +96,12 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  ✓ Removed legacy credential file: %s\n", p)
 	}
 
-	fmt.Println("\nMigration complete. No credentials were re-entered.")
+	if !tokenOK {
+		fmt.Println("\nMigration complete with warnings — re-enter your credentials:")
+		fmt.Println("  juggernaut apply --auth=" + authmode.BedrockAPIKey)
+	} else {
+		fmt.Println("\nMigration complete.")
+	}
 	fmt.Println("Run `juggernaut apply` to refresh your configuration with v4 settings.")
 	return nil
 }
