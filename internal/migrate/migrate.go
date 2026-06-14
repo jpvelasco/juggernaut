@@ -134,7 +134,7 @@ func readProfileToken(homeDir string) (string, error) {
 	}
 	tokenPath := filepath.Join(configHome, "juggernaut", "bearer-token")
 
-	data, err := safepath.ReadFile(homeDir, tokenPath)
+	data, err := os.ReadFile(tokenPath)
 	if os.IsNotExist(err) {
 		return "", nil
 	}

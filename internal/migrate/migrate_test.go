@@ -205,9 +205,9 @@ func TestDetect_StorageField(t *testing.T) {
 
 func TestReadLegacyToken_ProfileStorage(t *testing.T) {
 	home := t.TempDir()
-
-	// Write a profile token the way v3 would.
 	configHome := filepath.Join(home, ".config")
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
 	tokenPath := filepath.Join(configHome, "juggernaut", "bearer-token")
 	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -230,6 +230,7 @@ func TestReadLegacyToken_ProfileStorage(t *testing.T) {
 
 func TestReadLegacyToken_ProfileMissing(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	token, dpapi, err := migrate.ReadLegacyToken(home, "profile")
 	if err != nil {
 		t.Fatalf("ReadLegacyToken() error: %v", err)
@@ -269,6 +270,7 @@ func TestReadLegacyToken_KeychainReturnsEmpty(t *testing.T) {
 
 func TestCleanupLegacyFiles(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	// Create both legacy files.
 	dpapi := filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin")
