@@ -26,7 +26,10 @@ func init() {
 }
 
 func runShow(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 	scopes := []string{"user", "project"}
 	if showFlags.scope != "" {
 		scopes = []string{showFlags.scope}

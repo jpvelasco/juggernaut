@@ -36,7 +36,10 @@ func init() {
 }
 
 func runUninstall(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 
 	if aborted, err := confirmUninstallAborted(); aborted || err != nil {
 		return err

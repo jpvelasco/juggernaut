@@ -28,7 +28,10 @@ func init() {
 }
 
 func runDoctor(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 	r := doctor.NewReport()
 
 	bCfg, err := loadBedrockConfig()

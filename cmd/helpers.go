@@ -50,23 +50,23 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func homeDir() string {
+func homeDir() (string, error) {
 	if h := os.Getenv("HOME"); h != "" {
-		return h
+		return h, nil
 	}
 	if h := os.Getenv("USERPROFILE"); h != "" {
-		return h
+		return h, nil
 	}
-	h, _ := os.UserHomeDir()
-	return h
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return h, nil
 }
 
 func settingsPath(homeDir, scope string) (string, error) {
 	if scope == "project" {
 		return filepath.Join(".", ".claude", "settings.json"), nil
-	}
-	if homeDir == "" {
-		return "", fmt.Errorf("could not determine home directory")
 	}
 	return safepath.JoinUnder(homeDir, ".claude", "settings.json")
 }

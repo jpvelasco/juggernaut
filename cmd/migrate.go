@@ -25,7 +25,10 @@ func init() {
 }
 
 func runMigrate(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 
 	state, err := migrate.Detect(home)
 	if err != nil {

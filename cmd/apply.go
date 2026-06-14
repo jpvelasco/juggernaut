@@ -68,7 +68,10 @@ func init() {
 }
 
 func runApply(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
