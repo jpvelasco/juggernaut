@@ -1,0 +1,12 @@
+{
+  "name": "juggernaut-bedrock-darwin-x64",
+  "version": "0.0.0",
+  "description": "macOS x64 binary for juggernaut-bedrock",
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jpvelasco/juggernaut"
+  }
+}
