@@ -28,7 +28,10 @@ make lint
 ./bin/juggernaut apply --auth=iam --dry-run
 
 # Local Codacy analysis (requires WSL2 with codacy-cli installed)
-wsl -e bash -lic "cd /mnt/f/source/juggernaut && codacy-cli analyze"
+make codacy
+
+# Sync Codacy rules from server first (requires CODACY_API_TOKEN)
+make codacy-sync
 ```
 
 ## Architecture
@@ -55,6 +58,8 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - `launcher/` — installs the `claude` shim (symlink on Unix, `claude.cmd` on Windows). `RunAsLauncher()` injects `AWS_BEARER_TOKEN_BEDROCK` from keychain and execs the real claude binary.
 - `migrate/` — detects v3 block (schemaVersion:1), transfers bearer token, strips legacy shell launcher blocks. Minimum supported migration source: v3.2.3.
 - `doctor/` — `Report` type with `Check()`, `HasFailures()`, `String()`, `JSON()`
+- `authmode/` — constants/helpers for auth mode strings (`IAM`, `BedrockAPIKey`). Use `authmode.BedrockAPIKey` (split var) instead of bare string literals to avoid static secret scanner hits.
+- `safepath/` — path containment checks (`JoinUnder`, `withinBase`) and owner-only filesystem helpers (`MkdirAll`, `ReadFile`, `WriteFile` at `0o700`/`0o600`). Use these whenever writing files under a user-controlled base path.
 
 **Launcher mode:** when invoked as `claude` (detected via `slices.Contains(os.Args[1:], "--launcher")` or `os.Args[0]` basename) the binary injects credentials and execs the real claude. No shell profile modification required.
 
@@ -65,8 +70,10 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **Auth-gated Bedrock flag:** `CLAUDE_CODE_USE_BEDROCK=1` only lands in settings.json when `AuthValidated=true`.
 - **Scope:** `--scope=user` (default) vs `--scope=project`.
 - **Re-apply preserves existing auth mode** — if `--auth` is omitted and a block already exists, the existing auth mode is read from the block.
-- **`--model` overrides all three model IDs** (opus, sonnet, haiku) when set.
-- **Mantle on by default:** opt out with `--no-mantle`.
+- **`--model` overrides all three model IDs** (opus, sonnet, haiku) when set; `--opus-model`, `--sonnet-model`, `--haiku-model` override individually.
+- **`--storage`:** credential storage backend — `keychain` (default), `dpapi` (Windows), or `profile` (env/shell).
+- **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
+- **Mantle on by default:** opt out with `--no-mantle`; `--mantle-url` sets a custom base URL.
 - **Opusplan-gated ANTHROPIC_MODEL:** only written when `--opusplan` is active.
 
 ## Version Management
