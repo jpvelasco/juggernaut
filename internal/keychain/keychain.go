@@ -2,6 +2,8 @@
 package keychain
 
 import (
+	"os"
+
 	keyring "github.com/zalando/go-keyring"
 )
 
@@ -26,8 +28,12 @@ func NewStore(service string) *Store {
 	return &Store{service: service}
 }
 
-// Default returns a Store using the production service name.
+// Default returns a Store using the production service name, or the value of
+// JUGGERNAUT_KEYCHAIN_SERVICE if set (used by tests to isolate keychain state).
 func Default() *Store {
+	if svc := os.Getenv("JUGGERNAUT_KEYCHAIN_SERVICE"); svc != "" {
+		return NewStore(svc)
+	}
 	return NewStore(defaultService)
 }
 

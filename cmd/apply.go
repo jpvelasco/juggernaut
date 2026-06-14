@@ -252,9 +252,11 @@ func resolveCredential(authMode string) (string, error) {
 	}
 	token, err := keychain.Default().Get()
 	if err != nil {
-		return "", fmt.Errorf("reading existing key: %w", err)
-	}
-	if token != "" {
+		if applyFlags.preserveKey {
+			return "", fmt.Errorf("reading existing key: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Warning: could not read keychain (will prompt for key): %v\n", err)
+	} else if token != "" {
 		return token, nil
 	}
 	if applyFlags.preserveKey {

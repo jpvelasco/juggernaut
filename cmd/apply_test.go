@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
@@ -166,6 +168,69 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	}
 	if _, ok := settings["env"]; ok {
 		t.Error("env key should be removed after uninstall")
+	}
+}
+
+// setupIsolatedKeychain sets JUGGERNAUT_KEYCHAIN_SERVICE to an isolated test
+// service name and returns a cleanup function that deletes the test entry.
+func setupIsolatedKeychain(t *testing.T) {
+	t.Helper()
+	svc := "juggernaut-apply-test-" + t.Name()
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", svc)
+}
+
+func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupIsolatedKeychain(t)
+
+	// Pre-seed the keychain (simulates post-migration state).
+	store := keychain.Default()
+	if err := store.Set("migrated-api-key"); err != nil {
+		t.Skipf("keychain backend unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Delete() })
+
+	// apply without --bedrock-key — should use keychain, not prompt.
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	// Settings should have been written.
+	readSettingsJSON(t, home)
+}
+
+func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupIsolatedKeychain(t)
+
+	// Ensure keychain is empty.
+	store := keychain.Default()
+	if err := store.Set("probe"); err != nil {
+		t.Skipf("keychain backend unavailable: %v", err)
+	}
+	_ = store.Delete()
+
+	err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--preserve-key",
+		"--region=us-west-2",
+		"--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected error when keychain is empty and --preserve-key is set")
+	}
+	if !strings.Contains(err.Error(), "no existing key found in keychain") {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
