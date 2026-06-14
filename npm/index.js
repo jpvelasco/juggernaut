@@ -43,6 +43,7 @@ if (require.main === module) {
     process.exit(1);
   }
 
+  // nosemgrep: javascript.lang.security.detect-child-process
   const result = spawnSync(bin, process.argv.slice(2), {
     stdio: "inherit",
     env: process.env,
