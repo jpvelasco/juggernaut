@@ -16,7 +16,7 @@ Built for developers shipping with GenAI today: IAM and SSO for teams, API keys 
 ## Install
 
 ```bash
-npm install -g juggernaut-bedrock --allow-scripts=juggernaut-bedrock
+npm install -g juggernaut-bedrock
 ```
 
 Or try it without installing globally:
