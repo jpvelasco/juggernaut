@@ -36,7 +36,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jpvelasco/juggernaut"
+    "url": "git+https://github.com/jpvelasco/juggernaut.git"
   },
   "bugs": {
     "url": "https://github.com/jpvelasco/juggernaut/issues"
