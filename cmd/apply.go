@@ -34,7 +34,6 @@ var applyFlags struct {
 	effort        string
 	opusplan      bool
 	noOpusplan    bool
-	use1m         bool
 	no1m          bool
 	noMantle      bool
 	mantleURL     string
@@ -57,7 +56,6 @@ func init() {
 	f.StringVar(&applyFlags.effort, "effort", "xhigh", "effort level: low|medium|high|xhigh|max")
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
-	f.BoolVar(&applyFlags.use1m, "1m-context", true, "enable 1M token context")
 	f.BoolVar(&applyFlags.no1m, "no-1m-context", false, "disable 1M token context")
 	f.BoolVar(&applyFlags.noMantle, "no-mantle", false, "disable Mantle routing")
 	f.StringVar(&applyFlags.mantleURL, "mantle-url", "", "custom Mantle base URL")
@@ -160,21 +158,23 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 		return err
 	}
 
-	installLauncherShimIfMissing()
+	if err := installLauncherShimIfMissing(); err != nil {
+		return fmt.Errorf("installing claude shim: %w", err)
+	}
 	fmt.Println("Configuration written successfully.")
 	return nil
 }
 
-func installLauncherShimIfMissing() {
+func installLauncherShimIfMissing() error {
 	binDir := launcher.DefaultBinDir()
 	if launcher.IsInstalled(binDir) {
-		return
+		return nil
 	}
 	if err := launcher.Install(binDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not install claude shim: %v\n", err)
-		return
+		return err
 	}
 	fmt.Printf("  ✓ Installed claude shim → %s\n", binDir)
+	return nil
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
@@ -295,7 +295,9 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
 		token, err := keychain.Default().Get()
-		if err == nil && token != "" {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token for migration:", err)
+		} else if token != "" {
 			if err := keychain.Default().Set(token); err != nil {
 				fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token:", err)
 			} else {
