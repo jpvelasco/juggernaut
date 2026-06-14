@@ -38,8 +38,10 @@ Single cross-platform binary that configures Claude Code to route through Amazon
 Published as [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) on npm. Works everywhere Claude Code is installed.
 
 ```bash
-npm install -g juggernaut-bedrock
+npm install -g juggernaut-bedrock --allow-scripts=juggernaut-bedrock
 ```
+
+> The `--allow-scripts` flag is required because newer npm versions block postinstall scripts by default. The postinstall script downloads the platform binary from GitHub Releases and verifies its SHA-256 checksum.
 
 **curl (Unix / macOS / Linux / Git Bash / WSL):**
 
