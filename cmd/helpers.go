@@ -50,11 +50,18 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func homeDir() string {
+func homeDir() (string, error) {
 	if h := os.Getenv("HOME"); h != "" {
-		return h
+		return h, nil
 	}
-	return os.Getenv("USERPROFILE")
+	if h := os.Getenv("USERPROFILE"); h != "" {
+		return h, nil
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return h, nil
 }
 
 func settingsPath(homeDir, scope string) (string, error) {

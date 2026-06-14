@@ -25,7 +25,10 @@ func init() {
 }
 
 func runMigrate(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 
 	state, err := migrate.Detect(home)
 	if err != nil {
@@ -68,7 +71,9 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
 		token, err := keychain.Default().Get()
-		if err == nil && token != "" {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token:", err)
+		} else if token != "" {
 			if err := keychain.Default().Set(token); err != nil {
 				fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token:", err)
 			} else {

@@ -34,7 +34,6 @@ var applyFlags struct {
 	effort        string
 	opusplan      bool
 	noOpusplan    bool
-	use1m         bool
 	no1m          bool
 	noMantle      bool
 	mantleURL     string
@@ -57,8 +56,11 @@ func init() {
 	f.StringVar(&applyFlags.effort, "effort", "xhigh", "effort level: low|medium|high|xhigh|max")
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
-	f.BoolVar(&applyFlags.use1m, "1m-context", true, "enable 1M token context")
 	f.BoolVar(&applyFlags.no1m, "no-1m-context", false, "disable 1M token context")
+	// Deprecated: --1m-context was always the default and is now a no-op. Kept for script compatibility.
+	var deprecated1m bool
+	f.BoolVar(&deprecated1m, "1m-context", true, "")
+	_ = f.MarkHidden("1m-context")
 	f.BoolVar(&applyFlags.noMantle, "no-mantle", false, "disable Mantle routing")
 	f.StringVar(&applyFlags.mantleURL, "mantle-url", "", "custom Mantle base URL")
 	f.StringVar(&applyFlags.scope, "scope", "user", "settings scope: user or project")
@@ -70,7 +72,10 @@ func init() {
 }
 
 func runApply(_ *cobra.Command, _ []string) error {
-	home := homeDir()
+	home, err := homeDir()
+	if err != nil {
+		return err
+	}
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -293,11 +298,16 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 
 	fmt.Println("Migrating to Juggernaut v4...")
 
+	keychainOK := true
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
 		token, err := keychain.Default().Get()
-		if err == nil && token != "" {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token for migration:", err)
+			keychainOK = false
+		} else if token != "" {
 			if err := keychain.Default().Set(token); err != nil {
 				fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token:", err)
+				keychainOK = false
 			} else {
 				fmt.Println("  ✓ Bearer token transferred to go-keyring")
 			}
@@ -309,6 +319,11 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 		fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
 	}
 
-	fmt.Println("Migration complete. No credentials were re-entered.")
+	if !keychainOK {
+		fmt.Println("Migration complete with warnings. Re-enter your credentials:")
+		fmt.Println("  juggernaut apply --auth=" + authmode.BedrockAPIKey)
+	} else {
+		fmt.Println("Migration complete. No credentials were re-entered.")
+	}
 	return nil
 }
