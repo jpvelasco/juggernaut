@@ -1,12 +1,19 @@
 {
   "name": "juggernaut-bedrock",
-  "version": "4.0.4",
+  "version": "0.0.0",
   "description": "Route Claude Code through Amazon Bedrock in one command — IAM, SSO, or API key. Cross-platform CLI for GenAI developers.",
   "bin": {
-    "juggernaut": "./bin/juggernaut"
+    "juggernaut": "./index.js"
   },
   "scripts": {
-    "postinstall": "node install.js"
+    "test": "node --test index.test.js"
+  },
+  "optionalDependencies": {
+    "juggernaut-bedrock-linux-x64": "0.0.0",
+    "juggernaut-bedrock-linux-arm64": "0.0.0",
+    "juggernaut-bedrock-darwin-x64": "0.0.0",
+    "juggernaut-bedrock-darwin-arm64": "0.0.0",
+    "juggernaut-bedrock-win32-x64": "0.0.0"
   },
   "os": ["darwin", "linux", "win32"],
   "cpu": ["x64", "arm64"],
