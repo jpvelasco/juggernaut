@@ -19,9 +19,13 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 function assertWithin(base, target) {
-  const normalBase = path.resolve(base) + path.sep;
+  const resolvedBase = path.resolve(base);
+  const normalBase = resolvedBase + path.sep;
   const normalTarget = path.resolve(target);
-  if (!normalTarget.startsWith(normalBase) && normalTarget !== path.resolve(base)) {
+  const compare = process.platform === "win32"
+    ? (a, b) => a.toLowerCase().startsWith(b.toLowerCase())
+    : (a, b) => a.startsWith(b);
+  if (!compare(normalTarget, normalBase) && normalTarget.toLowerCase() !== resolvedBase.toLowerCase()) {
     throw new Error(`Path traversal detected: ${target} is outside ${base}`);
   }
 }
@@ -125,11 +129,21 @@ async function extractZip(archiveBuf) {
       "$ErrorActionPreference = 'Stop'",
       `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${resolvedBinDir.replace(/'/g, "''")}' -Force`
     ].join("; ");
-    await execFileAsync(
-      "powershell",
-      ["-NoProfile", "-NonInteractive", "-Command", script],
-      { stdio: "pipe" }
-    );
+    try {
+      await execFileAsync(
+        "powershell",
+        ["-NoProfile", "-NonInteractive", "-Command", script],
+        { stdio: "pipe" }
+      );
+    } catch (err) {
+      if (err.code === "ENOENT") {
+        throw new Error(
+          "PowerShell not found. PowerShell 5.0+ is required to extract archives on Windows."
+        );
+      }
+      const detail = err.stderr ? err.stderr.toString().trim() : err.message;
+      throw new Error(`ZIP extraction failed: ${detail}`);
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
