@@ -57,6 +57,10 @@ func init() {
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
 	f.BoolVar(&applyFlags.no1m, "no-1m-context", false, "disable 1M token context")
+	// Deprecated: --1m-context was always the default and is now a no-op. Kept for script compatibility.
+	var deprecated1m bool
+	f.BoolVar(&deprecated1m, "1m-context", true, "")
+	_ = f.MarkHidden("1m-context")
 	f.BoolVar(&applyFlags.noMantle, "no-mantle", false, "disable Mantle routing")
 	f.StringVar(&applyFlags.mantleURL, "mantle-url", "", "custom Mantle base URL")
 	f.StringVar(&applyFlags.scope, "scope", "user", "settings scope: user or project")
