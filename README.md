@@ -59,7 +59,7 @@ irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/instal
 # IAM / SSO (recommended)
 juggernaut apply --auth=iam
 
-# Bedrock API key (stored securely in OS keychain; mode shown in --help)
+# Bedrock API key (stored securely in OS keychain)
 juggernaut apply
 
 # Interactive first-run — omit flags for a guided prompt
@@ -74,6 +74,9 @@ juggernaut apply
 juggernaut apply --auth=iam --region=us-east-1
 juggernaut apply --auth=iam --opusplan              # Opus in /plan, Sonnet in execute
 juggernaut apply --auth=iam --effort=xhigh          # low | medium | high | xhigh | max
+juggernaut apply --auth=iam --mode=auto             # enable agentic safety-classifier mode
+juggernaut apply --auth=iam --always-thinking       # extended thinking on by default
+juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: default | flex | priority
 juggernaut apply --auth=iam --no-mantle             # disable Mantle routing
 juggernaut apply --auth=iam --dry-run               # preview without writing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
@@ -103,15 +106,52 @@ Juggernaut installs a `claude` shim (`~/.local/bin/claude` on Unix, `claude.cmd`
 | Tier | Model | Global CRIS Profile |
 |------|-------|---------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
-| **Opus** | Claude Opus 4.7 | `global.anthropic.claude-opus-4-7` |
+| **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
 | **Fast / subagent** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
 Override any tier:
 
 ```bash
-juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-4-7
+juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-4-8
 juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6  # override all
 ```
+
+## Effort Levels
+
+Controls adaptive thinking depth. Valid for all Claude 4 models on Bedrock.
+
+| Level | Behavior |
+|-------|----------|
+| `low` | Minimal thinking — fastest, lowest cost |
+| `medium` | Moderate thinking |
+| `high` | Almost always thinks |
+| `xhigh` | Always thinks deeply (default) |
+| `max` | Maximum thinking — deepest reasoning, highest cost |
+
+```bash
+juggernaut apply --auth=iam --effort=max
+```
+
+> On Opus 4.8 and 4.7, only adaptive thinking is supported. Manual thinking mode is rejected by the API.
+
+## Permission Modes
+
+Controls how Claude Code handles tool-use approvals. Set with `--mode`.
+
+| Mode | Behavior |
+|------|----------|
+| `default` | Prompts for permission on each action (Claude Code default) |
+| `acceptEdits` | Auto-approves file edits and common filesystem commands |
+| `plan` | Propose changes only — no execution without explicit approval |
+| `auto` | Agentic safety classifier — auto-approves safe actions, blocks destructive ones |
+| `dontAsk` | Auto-deny unless pre-approved via rules |
+| `bypassPermissions` | Skip all prompts — containers/VMs only |
+
+```bash
+juggernaut apply --auth=iam --mode=auto
+```
+
+> **Bedrock note:** `auto` mode requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1`. Juggernaut sets this automatically — no manual env var needed.
 
 ## What Gets Written
 
@@ -120,12 +160,15 @@ Juggernaut writes only to `~/.claude/settings.json` (user scope) or `./.claude/s
 ```json
 {
   "juggernaut": { "auth": { "mode": "iam", "region": "us-west-2" }, "meta": { ... } },
+  "effortLevel": "xhigh",
+  "skipWebFetchPreflight": true,
+  "permissions": { "defaultMode": "default" },
   "env": {
     "CLAUDE_CODE_USE_BEDROCK": "1",
     "AWS_REGION": "us-west-2",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-7",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",

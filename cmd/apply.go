@@ -23,24 +23,27 @@ var applyCmd = &cobra.Command{
 }
 
 var applyFlags struct {
-	auth          string
-	bedrockKey    string
-	preserveKey   bool
-	region        string
-	model         string
-	opusModel     string
-	sonnetModel   string
-	haikuModel    string
-	effort        string
-	opusplan      bool
-	noOpusplan    bool
-	no1m          bool
-	noMantle      bool
-	mantleURL     string
-	scope         string
-	dryRun        bool
-	skipPreflight bool
-	storage       string
+	auth           string
+	bedrockKey     string
+	preserveKey    bool
+	region         string
+	model          string
+	opusModel      string
+	sonnetModel    string
+	haikuModel     string
+	effort         string
+	opusplan       bool
+	noOpusplan     bool
+	no1m           bool
+	noMantle       bool
+	mantleURL      string
+	scope          string
+	dryRun         bool
+	skipPreflight  bool
+	storage        string
+	mode           string
+	alwaysThinking bool
+	serviceTier    string
 }
 
 func init() {
@@ -67,6 +70,9 @@ func init() {
 	f.BoolVar(&applyFlags.dryRun, "dry-run", false, "preview without writing")
 	f.BoolVar(&applyFlags.skipPreflight, "skip-preflight", false, "skip dependency checks")
 	f.StringVar(&applyFlags.storage, "storage", "keychain", "credential storage: keychain|dpapi|profile")
+	f.StringVar(&applyFlags.mode, "mode", "", "permission mode: default|acceptEdits|plan|auto|dontAsk|bypassPermissions")
+	f.BoolVar(&applyFlags.alwaysThinking, "always-thinking", false, "enable extended thinking by default")
+	f.StringVar(&applyFlags.serviceTier, "service-tier", "", "Bedrock service tier: default|flex|priority")
 
 	rootCmd.AddCommand(applyCmd)
 }
@@ -106,20 +112,23 @@ func runApply(_ *cobra.Command, _ []string) error {
 	}
 
 	opts := schema.Options{
-		AuthMode:      authMode,
-		Region:        region,
-		Effort:        applyFlags.effort,
-		Scope:         applyFlags.scope,
-		Version:       Version,
-		OpusModel:     opusModel,
-		SonnetModel:   sonnetModel,
-		HaikuModel:    haikuModel,
-		Opusplan:      opusplan,
-		Use1M:         !applyFlags.no1m,
-		UseMantle:     !applyFlags.noMantle,
-		MantleURL:     applyFlags.mantleURL,
-		Storage:       applyFlags.storage,
-		AuthValidated: true,
+		AuthMode:       authMode,
+		Region:         region,
+		Effort:         applyFlags.effort,
+		Scope:          applyFlags.scope,
+		Version:        Version,
+		OpusModel:      opusModel,
+		SonnetModel:    sonnetModel,
+		HaikuModel:     haikuModel,
+		Opusplan:       opusplan,
+		Use1M:          !applyFlags.no1m,
+		UseMantle:      !applyFlags.noMantle,
+		MantleURL:      applyFlags.mantleURL,
+		Storage:        applyFlags.storage,
+		AuthValidated:  true,
+		PermissionMode: applyFlags.mode,
+		AlwaysThinking: applyFlags.alwaysThinking,
+		ServiceTier:    applyFlags.serviceTier,
 	}
 
 	block, err := schema.Build(bCfg, opts)
@@ -161,7 +170,19 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	if err != nil {
 		return err
 	}
-	if err := mgr.MergeJuggernautBlock(blockMap, native.Env, native.Model); err != nil {
+	modelOverrides := map[string]any{}
+	for k, v := range native.ModelOverrides {
+		modelOverrides[k] = v
+	}
+	nativeKeys := map[string]any{
+		"model":                 native.Model,
+		"modelOverrides":        modelOverrides,
+		"effortLevel":           native.EffortLevel,
+		"alwaysThinkingEnabled": native.AlwaysThinking,
+		"skipWebFetchPreflight": native.SkipWebFetchPreflight,
+		"permissions":           native.Permissions,
+	}
+	if err := mgr.MergeJuggernautBlock(blockMap, native.Env, nativeKeys); err != nil {
 		return err
 	}
 
@@ -190,10 +211,6 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	}
 	opusplan = applyFlags.opusplan
 
-	if authMode != "" {
-		return
-	}
-
 	path, herr := settingsPath(home, applyFlags.scope)
 	if herr != nil {
 		err = herr
@@ -206,21 +223,36 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 		return
 	}
 	if has {
-		// Preserve existing auth mode from the block rather than reverting to the global default.
+		// Preserve auth mode and permission mode from the existing block when not supplied as flags.
 		if existing, rerr := mgr.Read(); rerr == nil {
 			if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
-				if auth, ok := jBlock["auth"].(map[string]any); ok {
-					if mode, ok := auth["mode"].(string); ok && mode != "" {
-						authMode = mode
-						return
+				if authMode == "" {
+					if auth, ok := jBlock["auth"].(map[string]any); ok {
+						if mode, ok := auth["mode"].(string); ok && mode != "" {
+							authMode = mode
+						}
+					}
+				}
+				if applyFlags.mode == "" {
+					if meta, ok := jBlock["meta"].(map[string]any); ok {
+						if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
+							applyFlags.mode = pmode
+						}
 					}
 				}
 			}
 		}
-		authMode = bCfg.Defaults.AuthMode
+		if authMode == "" {
+			authMode = bCfg.Defaults.AuthMode
+		}
 		return
 	}
 
+	if authMode != "" {
+		return
+	}
+
+	permMode := applyFlags.mode
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -234,12 +266,26 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 				Title("AWS region").
 				Placeholder(bCfg.Defaults.Region).
 				Value(&region),
+			huh.NewSelect[string]().
+				Title("Permission mode").
+				Options(
+					huh.NewOption("default (prompt for each action)", "default"),
+					huh.NewOption("acceptEdits (auto-approve file edits)", "acceptEdits"),
+					huh.NewOption("auto (agentic safety classifier)", "auto"),
+					huh.NewOption("plan (propose only, no execution)", "plan"),
+				).
+				Value(&permMode),
 			huh.NewConfirm().
 				Title("Enable opusplan? (routes planning to Opus 4.8, execution to Sonnet 4.6)").
 				Value(&opusplan),
 		),
 	)
-	err = form.Run()
+	if err = form.Run(); err != nil {
+		return
+	}
+	if permMode != "" && applyFlags.mode == "" {
+		applyFlags.mode = permMode
+	}
 	return
 }
 

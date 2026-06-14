@@ -52,8 +52,8 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 
 **Internal packages in `internal/`:**
 - `bedrock/` — loads `bedrock-config.json` into typed structs. `LoadBytes()` is used by cmd (embedded); `Load(path)` is the filesystem fallback for tests.
-- `schema/` — builds and validates the `Block`; derives native settings.json keys. `CLAUDE_CODE_USE_BEDROCK=1` is gated behind `AuthValidated=true`.
-- `config/` — atomic read/merge/write of settings.json; backup rotation (5 most recent); file locking via `gofrs/flock`
+- `schema/` — builds and validates the `Block`; derives native settings.json keys via `NativeKeys()`. `CLAUDE_CODE_USE_BEDROCK=1` is gated behind `AuthValidated=true`. `CLAUDE_CODE_ENABLE_AUTO_MODE=1` is auto-set when `PermissionMode=="auto"`.
+- `config/` — atomic read/merge/write of settings.json; backup rotation (5 most recent); file locking via `gofrs/flock`. `MergeJuggernautBlock(block, nativeEnv, nativeKeys)` owns all Juggernaut-managed top-level keys.
 - `keychain/` — cross-platform credential storage via `go-keyring`. Service name: `juggernaut-bedrock`.
 - `launcher/` — installs the `claude` shim (symlink on Unix, `claude.cmd` on Windows). `RunAsLauncher()` injects `AWS_BEARER_TOKEN_BEDROCK` from keychain and execs the real claude binary.
 - `migrate/` — detects v3 block (schemaVersion:1), transfers bearer token, strips legacy shell launcher blocks. Minimum supported migration source: v3.2.3.
@@ -75,6 +75,12 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
 - **Mantle on by default:** opt out with `--no-mantle`; `--mantle-url` sets a custom base URL.
 - **Opusplan-gated ANTHROPIC_MODEL:** only written when `--opusplan` is active.
+- **`--mode`:** sets `permissions.defaultMode` in settings.json. When `auto`, also writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` in env (required for Bedrock; without it auto mode silently does nothing).
+- **`--always-thinking`:** writes `alwaysThinkingEnabled: true` as a native settings.json key.
+- **`--service-tier`:** writes `ANTHROPIC_BEDROCK_SERVICE_TIER` env var; values: `default`, `flex`, `priority`.
+- **`skipWebFetchPreflight`:** always written as `true` for all Bedrock users (avoids domain safety preflight delays).
+- **`effortLevel`:** written as both `CLAUDE_CODE_EFFORT_LEVEL` env var (legacy) and native `effortLevel` settings.json key (preferred). Five valid levels: `low`, `medium`, `high`, `xhigh` (default), `max`.
+- **Native keys managed by Juggernaut:** `env`, `model`, `modelOverrides`, `effortLevel`, `alwaysThinkingEnabled`, `skipWebFetchPreflight`, `permissions`. All are removed on uninstall.
 
 ## Version Management
 
