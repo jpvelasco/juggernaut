@@ -75,6 +75,8 @@ bin/
 !npm/bin/
 npm/bin/*
 !npm/bin/.gitkeep
+npm/packages/*/bin/*
+!npm/packages/*/bin/.gitkeep
 
 # Local planning/design docs (internal tooling artifacts)
 docs/superpowers/

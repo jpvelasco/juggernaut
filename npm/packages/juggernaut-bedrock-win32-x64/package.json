@@ -1,0 +1,12 @@
+{
+  "name": "juggernaut-bedrock-win32-x64",
+  "version": "0.0.0",
+  "description": "Windows x64 binary for juggernaut-bedrock",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jpvelasco/juggernaut"
+  }
+}

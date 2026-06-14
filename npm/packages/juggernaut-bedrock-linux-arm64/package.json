@@ -1,0 +1,12 @@
+{
+  "name": "juggernaut-bedrock-linux-arm64",
+  "version": "0.0.0",
+  "description": "Linux arm64 binary for juggernaut-bedrock",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jpvelasco/juggernaut"
+  }
+}
