@@ -349,23 +349,16 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 
 	keychainOK := true
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
-		token, err := keychain.Default().Get()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token for migration:", err)
-			keychainOK = false
-		} else if token != "" {
-			if err := keychain.Default().Set(token); err != nil {
-				fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token:", err)
-				keychainOK = false
-			} else {
-				fmt.Println("  ✓ Bearer token transferred to go-keyring")
-			}
-		}
+		keychainOK = transferLegacyToken(home, state.Storage)
 	}
 
 	stripped := migrate.StripLauncherBlocks(home)
 	for _, p := range stripped {
 		fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
+	}
+
+	for _, p := range migrate.CleanupLegacyFiles(home) {
+		fmt.Printf("  ✓ Removed legacy credential file: %s\n", p)
 	}
 
 	if !keychainOK {
@@ -375,4 +368,41 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 		fmt.Println("Migration complete. No credentials were re-entered.")
 	}
 	return nil
+}
+
+// transferLegacyToken reads the v3 token from whichever storage backend v3 used
+// and stores it in the v4 keychain. Returns false if the transfer failed.
+func transferLegacyToken(home, storage string) bool {
+	token, dpapi, err := migrate.ReadLegacyToken(home, storage)
+	if dpapi {
+		fmt.Fprintln(os.Stderr, "  Warning: v3 used Windows DPAPI credential storage which cannot be read in pure Go.")
+		fmt.Fprintln(os.Stderr, "  Re-enter your Bedrock API key after migration:")
+		fmt.Fprintln(os.Stderr, "    juggernaut apply --auth="+authmode.BedrockAPIKey)
+		return false
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "  Warning: could not read legacy credential:", err)
+		return false
+	}
+
+	// For keychain/profile, also check the OS keychain (keychain.Get already
+	// falls back to the legacy "api-key" account name for keychain storage).
+	if token == "" {
+		token, err = keychain.Default().Get()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token for migration:", err)
+			return false
+		}
+	}
+
+	if token == "" {
+		return true // no token found; not an error — may be IAM-only or fresh install
+	}
+
+	if err := keychain.Default().Set(token); err != nil {
+		fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token to keychain:", err)
+		return false
+	}
+	fmt.Println("  ✓ Bearer token transferred to keychain")
+	return true
 }

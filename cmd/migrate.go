@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
-	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
 	"github.com/jpvelasco/juggernaut/v4/internal/migrate"
 	"github.com/spf13/cobra"
@@ -58,7 +57,14 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 	if migrateDryRun {
 		fmt.Println("\nWould migrate:")
 		if authmode.IsBedrockAPIKey(state.AuthMode) {
-			fmt.Println("  • Transfer bearer token from keychain → go-keyring")
+			switch state.Storage {
+			case "profile":
+				fmt.Println("  • Transfer bearer token from profile file → keychain")
+			case "dpapi":
+				fmt.Println("  • Warning: DPAPI storage cannot be migrated automatically — re-entry required")
+			default:
+				fmt.Println("  • Transfer bearer token from keychain → go-keyring")
+			}
 		}
 		fmt.Println("  • Upgrade settings.json schema v1 → v2")
 		fmt.Printf("  • Install claude shim → %s\n", launcher.DefaultBinDir())
@@ -70,16 +76,7 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 	fmt.Println("Migrating to Juggernaut v4...")
 
 	if authmode.IsBedrockAPIKey(state.AuthMode) {
-		token, err := keychain.Default().Get()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token:", err)
-		} else if token != "" {
-			if err := keychain.Default().Set(token); err != nil {
-				fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token:", err)
-			} else {
-				fmt.Println("  ✓ Bearer token transferred to go-keyring")
-			}
-		}
+		transferLegacyToken(home, state.Storage)
 	}
 
 	binDir := launcher.DefaultBinDir()
@@ -92,6 +89,10 @@ func runMigrate(_ *cobra.Command, _ []string) error {
 	stripped := migrate.StripLauncherBlocks(home)
 	for _, p := range stripped {
 		fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
+	}
+
+	for _, p := range migrate.CleanupLegacyFiles(home) {
+		fmt.Printf("  ✓ Removed legacy credential file: %s\n", p)
 	}
 
 	fmt.Println("\nMigration complete. No credentials were re-entered.")

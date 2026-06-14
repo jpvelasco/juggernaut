@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -175,6 +176,120 @@ func TestDetect_V323_NotTooOld(t *testing.T) {
 	}
 	if state.TooOld {
 		t.Error("expected TooOld=false for v3.2.3 (exact minimum)")
+	}
+}
+
+func TestDetect_StorageField(t *testing.T) {
+	dir := t.TempDir()
+	writeSettings(t, dir, map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{
+				"managedBy":     "juggernaut",
+				"schemaVersion": 1,
+				"version":       "3.2.3",
+			},
+			"auth": map[string]any{
+				"mode":    "bedrock-api-key",
+				"storage": "profile",
+			},
+		},
+	})
+	state, err := migrate.Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect() error: %v", err)
+	}
+	if state.Storage != "profile" {
+		t.Errorf("expected Storage=profile, got %q", state.Storage)
+	}
+}
+
+func TestReadLegacyToken_ProfileStorage(t *testing.T) {
+	home := t.TempDir()
+
+	// Write a profile token the way v3 would.
+	configHome := filepath.Join(home, ".config")
+	tokenPath := filepath.Join(configHome, "juggernaut", "bearer-token")
+	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(tokenPath, []byte("test-profile-token\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	token, dpapi, err := migrate.ReadLegacyToken(home, "profile")
+	if err != nil {
+		t.Fatalf("ReadLegacyToken() error: %v", err)
+	}
+	if dpapi {
+		t.Error("expected dpapi=false for profile storage")
+	}
+	if token != "test-profile-token" {
+		t.Errorf("expected token=test-profile-token, got %q", token)
+	}
+}
+
+func TestReadLegacyToken_ProfileMissing(t *testing.T) {
+	home := t.TempDir()
+	token, dpapi, err := migrate.ReadLegacyToken(home, "profile")
+	if err != nil {
+		t.Fatalf("ReadLegacyToken() error: %v", err)
+	}
+	if dpapi {
+		t.Error("expected dpapi=false")
+	}
+	if token != "" {
+		t.Errorf("expected empty token when file absent, got %q", token)
+	}
+}
+
+func TestReadLegacyToken_DpapiReturnsFlag(t *testing.T) {
+	home := t.TempDir()
+	_, dpapi, err := migrate.ReadLegacyToken(home, "dpapi")
+	if err != nil {
+		t.Fatalf("ReadLegacyToken() error: %v", err)
+	}
+	if !dpapi {
+		t.Error("expected dpapi=true for dpapi storage")
+	}
+}
+
+func TestReadLegacyToken_KeychainReturnsEmpty(t *testing.T) {
+	home := t.TempDir()
+	token, dpapi, err := migrate.ReadLegacyToken(home, "keychain")
+	if err != nil {
+		t.Fatalf("ReadLegacyToken() error: %v", err)
+	}
+	if dpapi {
+		t.Error("expected dpapi=false for keychain storage")
+	}
+	if token != "" {
+		t.Errorf("expected empty token (keychain handled by caller), got %q", token)
+	}
+}
+
+func TestCleanupLegacyFiles(t *testing.T) {
+	home := t.TempDir()
+
+	// Create both legacy files.
+	dpapi := filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin")
+	profile := filepath.Join(home, ".config", "juggernaut", "bearer-token")
+	for _, p := range []string{dpapi, profile} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(p, []byte("stale"), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+
+	removed := migrate.CleanupLegacyFiles(home)
+	if len(removed) != 2 {
+		t.Errorf("expected 2 removed files, got %d: %v", len(removed), removed)
+	}
+	for _, p := range []string{dpapi, profile} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("file %s should be removed", p)
+		}
 	}
 }
 
