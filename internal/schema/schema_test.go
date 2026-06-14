@@ -229,6 +229,35 @@ func TestNativeKeys_AlwaysThinking(t *testing.T) {
 	}
 }
 
+func TestNativeKeys_AlwaysThinking_False(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "xhigh",
+		Scope: "user", Version: "4.1.0", AlwaysThinking: false, AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	native := block.NativeKeys()
+	if native.AlwaysThinking {
+		t.Error("expected alwaysThinkingEnabled=false when not set")
+	}
+}
+
+func TestBuild_ServiceTier_EmptyIsValid(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "xhigh",
+		Scope: "user", Version: "4.1.0", ServiceTier: "", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() with empty ServiceTier should not error: %v", err)
+	}
+	if _, ok := block.Env["ANTHROPIC_BEDROCK_SERVICE_TIER"]; ok {
+		t.Error("expected no ANTHROPIC_BEDROCK_SERVICE_TIER when ServiceTier is empty")
+	}
+}
+
 func TestBuild_NoBedrockFlagWithoutValidation(t *testing.T) {
 	opts := schema.Options{
 		AuthMode:      "iam",

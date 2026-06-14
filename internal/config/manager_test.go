@@ -107,6 +107,65 @@ func TestMergeJuggernautBlock_Permissions(t *testing.T) {
 	}
 }
 
+func TestMergeJuggernautBlock_ModelOverrides(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	nativeKeys := map[string]any{
+		"modelOverrides": map[string]any{
+			"opus":   "global.anthropic.claude-opus-4-8",
+			"sonnet": "global.anthropic.claude-sonnet-4-6",
+			"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+		},
+	}
+	if err := m.MergeJuggernautBlock(map[string]any{}, nil, nativeKeys); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	overrides, ok := got["modelOverrides"].(map[string]any)
+	if !ok {
+		t.Fatal("expected top-level modelOverrides key")
+	}
+	if overrides["opus"] != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("unexpected opus model: %v", overrides["opus"])
+	}
+}
+
+func TestMergeJuggernautBlock_Permissions_PreservesExistingRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	_ = m.Write(map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Bash(git *)"},
+			"deny":  []any{"Bash(rm -rf *)"},
+		},
+	})
+
+	nativeKeys := map[string]any{
+		"permissions": map[string]any{"defaultMode": "plan"},
+	}
+	if err := m.MergeJuggernautBlock(map[string]any{}, nil, nativeKeys); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	perms, ok := got["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("permissions key should be present")
+	}
+	if perms["defaultMode"] != "plan" {
+		t.Errorf("expected defaultMode=plan, got %v", perms["defaultMode"])
+	}
+	if perms["allow"] == nil {
+		t.Error("user allow rules should be preserved alongside defaultMode")
+	}
+	if perms["deny"] == nil {
+		t.Error("user deny rules should be preserved alongside defaultMode")
+	}
+}
+
 func TestMergeJuggernautBlock_NativeKeys_NilPermissionsRemovesDefaultMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)

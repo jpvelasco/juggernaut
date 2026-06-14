@@ -126,6 +126,72 @@ func TestStripLauncherBlocks(t *testing.T) {
 	}
 }
 
+func TestStripLauncherBlocks_NoBlocks(t *testing.T) {
+	dir := t.TempDir()
+
+	bashrc := filepath.Join(dir, ".bashrc")
+	content := "export PATH=$PATH:~/.local/bin\nexport FOO=bar\n"
+	if err := safepath.WriteFile(dir, bashrc, []byte(content)); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	stripped := migrate.StripLauncherBlocks(dir)
+	if len(stripped) != 0 {
+		t.Errorf("expected no stripped files when no blocks present, got %v", stripped)
+	}
+
+	result, _ := safepath.ReadFile(dir, bashrc)
+	if string(result) != content {
+		t.Error("file content should be unchanged when no launcher block present")
+	}
+}
+
+func TestCleanupLegacyFiles_OnlyDPAPI(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	dpapi := filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin")
+	if err := os.MkdirAll(filepath.Dir(dpapi), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(dpapi, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	removed := migrate.CleanupLegacyFiles(home)
+	if len(removed) != 1 {
+		t.Errorf("expected 1 removed file, got %d: %v", len(removed), removed)
+	}
+}
+
+func TestCleanupLegacyFiles_OnlyProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	profile := filepath.Join(home, ".config", "juggernaut", "bearer-token")
+	if err := os.MkdirAll(filepath.Dir(profile), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(profile, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	removed := migrate.CleanupLegacyFiles(home)
+	if len(removed) != 1 {
+		t.Errorf("expected 1 removed file, got %d: %v", len(removed), removed)
+	}
+}
+
+func TestCleanupLegacyFiles_Neither(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	removed := migrate.CleanupLegacyFiles(home)
+	if len(removed) != 0 {
+		t.Errorf("expected 0 removed files on clean install, got %d: %v", len(removed), removed)
+	}
+}
+
 func TestDetect_CorruptedJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".claude", "settings.json")
