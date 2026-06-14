@@ -33,18 +33,42 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Publish to npm (OIDC trusted publishing)
+      - name: Publish platform sub-packages to npm
         working-directory: npm
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Guard: tag must match the project version source of truth
           EXPECTED=$(jq -r '.version' ../bedrock-config.json)
           if [ "$VERSION" != "$EXPECTED" ]; then
             echo "ERROR: tag $VERSION does not match bedrock-config.json $EXPECTED"
             exit 1
           fi
-          CURRENT=$(node -p "require('./package.json').version")
-          if [ "$CURRENT" != "$VERSION" ]; then
-            npm version "$VERSION" --no-git-tag-version
-          fi
-          npm publish
+
+          for PKG in \
+            packages/juggernaut-bedrock-linux-x64 \
+            packages/juggernaut-bedrock-linux-arm64 \
+            packages/juggernaut-bedrock-darwin-x64 \
+            packages/juggernaut-bedrock-darwin-arm64 \
+            packages/juggernaut-bedrock-win32-x64; do
+            echo "Publishing $PKG..."
+            (cd "$PKG" && npm version "$VERSION" --no-git-tag-version && npm publish --access public)
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package to npm
+        working-directory: npm
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Patch version and optionalDependencies to the release version
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = process.argv[1];
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[dep] = process.argv[1];
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          " "$VERSION"
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
