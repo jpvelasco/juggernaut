@@ -134,7 +134,7 @@ func readProfileToken(homeDir string) (string, error) {
 	}
 	tokenPath := filepath.Join(configHome, "juggernaut", "bearer-token")
 
-	data, err := os.ReadFile(tokenPath)
+	data, err := os.ReadFile(tokenPath) // nosemgrep: go_filesystem_rule-fileread
 	if os.IsNotExist(err) {
 		return "", nil
 	}

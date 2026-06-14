@@ -275,7 +275,7 @@ func TestReadLegacyToken_ProfileStorage(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 
 	tokenPath := filepath.Join(configHome, "juggernaut", "bearer-token")
-	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(tokenPath)); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	if err := os.WriteFile(tokenPath, []byte("test-profile-token\n"), 0o600); err != nil {
@@ -342,7 +342,7 @@ func TestCleanupLegacyFiles(t *testing.T) {
 	dpapi := filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin")
 	profile := filepath.Join(home, ".config", "juggernaut", "bearer-token")
 	for _, p := range []string{dpapi, profile} {
-		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		if err := safepath.MkdirAll(filepath.Dir(p)); err != nil {
 			t.Fatalf("MkdirAll: %v", err)
 		}
 		if err := os.WriteFile(p, []byte("stale"), 0o600); err != nil {
