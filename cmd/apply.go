@@ -250,28 +250,31 @@ func resolveCredential(authMode string) (string, error) {
 	if applyFlags.bedrockKey != "" {
 		return applyFlags.bedrockKey, nil
 	}
-	if applyFlags.preserveKey {
-		token, err := keychain.Default().Get()
-		if err != nil {
+	token, err := keychain.Default().Get()
+	if err != nil {
+		if applyFlags.preserveKey {
 			return "", fmt.Errorf("reading existing key: %w", err)
 		}
-		if token != "" {
-			return token, nil
-		}
+		fmt.Fprintf(os.Stderr, "Warning: could not read keychain (will prompt for key): %v\n", err)
+	} else if token != "" {
+		return token, nil
 	}
-	var token string
+	if applyFlags.preserveKey {
+		return "", fmt.Errorf("no existing key found in keychain; re-run without --preserve-key to enter one")
+	}
+	var input string
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Bedrock API key").
 				EchoMode(huh.EchoModePassword).
-				Value(&token),
+				Value(&input),
 		),
 	)
 	if err := form.Run(); err != nil {
 		return "", err
 	}
-	return token, nil
+	return input, nil
 }
 
 func runMigrationIfNeeded(home string, dryRun bool) error {

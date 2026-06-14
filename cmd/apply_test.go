@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
 )
 
@@ -166,6 +169,76 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	}
 	if _, ok := settings["env"]; ok {
 		t.Error("env key should be removed after uninstall")
+	}
+}
+
+// setupIsolatedKeychain sets JUGGERNAUT_KEYCHAIN_SERVICE to a short fixed
+// service name and skips the test if the keychain backend is unavailable.
+// The name is intentionally short — macOS security(1) hangs on long names.
+func setupIsolatedKeychain(t *testing.T) *keychain.Store {
+	t.Helper()
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-cmd-test")
+	store := keychain.Default()
+	// Probe with a timeout: if Set hangs, the test would block for 10 min.
+	done := make(chan error, 1)
+	go func() { done <- store.Set("probe") }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Skipf("keychain backend unavailable: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Skip("keychain backend timed out")
+	}
+	_ = store.Delete()
+	return store
+}
+
+func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	store := setupIsolatedKeychain(t)
+
+	// Pre-seed the keychain (simulates post-migration state).
+	if err := store.Set("migrated-api-key"); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Delete() })
+
+	// apply without --bedrock-key — should use keychain, not prompt.
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	// Settings should have been written.
+	readSettingsJSON(t, home)
+}
+
+func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	store := setupIsolatedKeychain(t)
+	t.Cleanup(func() { _ = store.Delete() })
+
+	err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--preserve-key",
+		"--region=us-west-2",
+		"--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected error when keychain is empty and --preserve-key is set")
+	}
+	if !strings.Contains(err.Error(), "no existing key found in keychain") {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
