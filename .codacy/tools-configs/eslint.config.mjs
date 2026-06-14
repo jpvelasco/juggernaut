@@ -4,7 +4,7 @@ export default [
     },
     {
         files: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs", "**/*.vue"],
-        languageOptions: {
+                languageOptions: {
           globals: {
             require: "readonly",
             module: "readonly",

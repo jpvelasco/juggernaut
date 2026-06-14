@@ -1,6 +1,3 @@
 # Opengrep ships a default ignore list that skips *_test.go.
 # Codacy cloud scans test files — negate that skip for local parity.
 !*_test.go
-
-# npm postinstall writes only under package bin/ and os.tmpdir(); not user-controlled paths.
-npm/install.js
