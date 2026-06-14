@@ -52,14 +52,11 @@ jobs:
             echo "Publishing $PKG..."
             (cd "$PKG" && npm version "$VERSION" --no-git-tag-version && npm publish --access public)
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish main package to npm
         working-directory: npm
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Patch version and optionalDependencies to the release version
           node -e "
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -70,5 +67,3 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           " "$VERSION"
           npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
