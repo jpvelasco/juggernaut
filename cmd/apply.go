@@ -317,7 +317,7 @@ func runMigrationIfNeeded(home string, dryRun bool) error {
 
 	if !keychainOK {
 		fmt.Println("Migration complete with warnings. Re-enter your credentials:")
-		fmt.Println("  juggernaut apply --auth=bedrock-api-key")
+		fmt.Println("  juggernaut apply --auth=" + authmode.BedrockAPIKey)
 	} else {
 		fmt.Println("Migration complete. No credentials were re-entered.")
 	}
