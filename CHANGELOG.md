@@ -2,6 +2,36 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.1.0] - 2026-06-14
+
+**Feature release.** Brings Claude Code feature parity for Bedrock users — Opus 4.8, agentic permission modes, effort level parity, and a reliable v3→v4 migration path for all credential storage backends.
+
+### New Features
+
+- **Claude Opus 4.8.** Default Opus model updated to `global.anthropic.claude-opus-4-8` (1M context, 128K output, adaptive thinking only). Opus 4.7 remains usable via `--opus-model`.
+- **Permission modes (`--mode`).** Sets `permissions.defaultMode` in settings.json. Supported values: `default`, `acceptEdits`, `plan`, `auto`, `dontAsk`, `bypassPermissions`. When `auto` is set, Juggernaut also writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — required on Bedrock for auto mode to activate.
+- **Always-thinking (`--always-thinking`).** Writes `alwaysThinkingEnabled: true` as a native settings.json key, enabling extended thinking by default for all sessions.
+- **Service tier (`--service-tier`).** Sets `ANTHROPIC_BEDROCK_SERVICE_TIER` (values: `default`, `flex`, `priority`) for provisioned throughput users.
+- **Native settings.json keys.** `effortLevel`, `skipWebFetchPreflight`, `permissions`, and `modelOverrides` are now written as top-level settings.json keys (in addition to env vars), matching the Claude Code settings schema. All are removed cleanly on uninstall.
+- **Effort level `max`.** All five effort levels (`low`, `medium`, `high`, `xhigh`, `max`) are now fully supported and documented.
+
+### Fixed
+
+- **Keychain re-prompt after migration.** `juggernaut apply` no longer re-prompts for the API key if the token was already transferred to the keychain during v3→v4 migration.
+- **Keychain error handling.** A keychain backend failure no longer causes a hard error when `--preserve-key` is not set; the command falls through to an interactive prompt instead.
+- **v3 profile token migration.** v3 users on Linux who used `--storage=profile` (token stored at `~/.config/juggernaut/bearer-token`) had their credentials silently lost on upgrade. The migration now reads and transfers profile-stored tokens correctly.
+- **v3 DPAPI migration.** Windows users with DPAPI-stored tokens now receive a clear re-entry message instead of silent failure.
+- **permissions deep-merge.** Juggernaut previously replaced the entire `permissions` object, silently wiping user-defined `allow`/`deny`/`ask` rules on every apply. Now only `permissions.defaultMode` is managed; all other user rules are preserved.
+- **Permission mode preservation on re-apply.** Running `juggernaut apply` without `--mode` on an existing block now preserves the previously-set permission mode.
+- **modelOverrides top-level key.** `modelOverrides` was stored inside the `juggernaut` block but not written as a top-level native key — Claude Code reads the top-level key. Fixed.
+- **npm installer path hardening.** Resolves Codacy path-traversal findings in `npm/install.js` with explicit path containment checks.
+
+### Verification
+
+- 30+ new tests covering permission modes, effort levels, native key lifecycle, v3 migration storage backends, and uninstall/re-apply cycles.
+
+---
+
 ## [4.0.4] - 2026-06-13
 
 **Patch release.** Drops npm archive dependencies and ships tar.gz release artifacts on all platforms.
@@ -604,6 +634,17 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
+[4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
+[4.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.2
+[4.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.1
+[4.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.0
+[3.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.3
+[3.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.2
+[3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
+[3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
+[3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[4.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.1.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
 [4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
 [4.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.2
