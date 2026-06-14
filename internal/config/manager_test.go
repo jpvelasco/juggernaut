@@ -107,10 +107,11 @@ func TestMergeJuggernautBlock_Permissions(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_NativeKeys_NilValueDeletes(t *testing.T) {
+func TestMergeJuggernautBlock_NativeKeys_NilPermissionsRemovesDefaultMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
+	// Only defaultMode — whole permissions key should be gone after nil.
 	_ = m.Write(map[string]any{"permissions": map[string]any{"defaultMode": "auto"}})
 
 	if err := m.MergeJuggernautBlock(map[string]any{}, nil, map[string]any{"permissions": nil}); err != nil {
@@ -119,7 +120,7 @@ func TestMergeJuggernautBlock_NativeKeys_NilValueDeletes(t *testing.T) {
 
 	got, _ := m.Read()
 	if _, ok := got["permissions"]; ok {
-		t.Error("permissions key should be deleted when nil is passed")
+		t.Error("permissions key should be deleted when nil is passed and no user rules exist")
 	}
 }
 
@@ -155,6 +156,7 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 	}
 
 	got, _ := m.Read()
+	// permissions had only defaultMode so the whole key should be gone.
 	for _, k := range []string{"juggernaut", "env", "model", "modelOverrides", "effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions"} {
 		if _, ok := got[k]; ok {
 			t.Errorf("key %q should be removed after uninstall", k)
@@ -162,6 +164,71 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 	}
 	if got["userPref"] != "keep-me" {
 		t.Error("user pref should be preserved after remove")
+	}
+}
+
+func TestMergePermissions_PreservesUserRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	// Pre-existing user permissions with allow/deny rules.
+	_ = m.Write(map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Bash(git *)"},
+			"deny":  []any{"Bash(rm *)"},
+		},
+	})
+
+	// Apply sets defaultMode=auto — should NOT wipe allow/deny.
+	nativeKeys := map[string]any{
+		"permissions": map[string]any{"defaultMode": "auto"},
+	}
+	if err := m.MergeJuggernautBlock(map[string]any{}, nil, nativeKeys); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	perms, ok := got["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("permissions key should be present")
+	}
+	if perms["defaultMode"] != "auto" {
+		t.Errorf("expected defaultMode=auto, got %v", perms["defaultMode"])
+	}
+	if perms["allow"] == nil {
+		t.Error("user allow rules should be preserved")
+	}
+	if perms["deny"] == nil {
+		t.Error("user deny rules should be preserved")
+	}
+}
+
+func TestRemoveJuggernautBlock_PreservesUserPermissionRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	_ = m.Write(map[string]any{
+		"juggernaut": map[string]any{},
+		"permissions": map[string]any{
+			"defaultMode": "auto",
+			"allow":       []any{"Bash(git *)"},
+		},
+	})
+
+	if err := m.RemoveJuggernautBlock(); err != nil {
+		t.Fatalf("RemoveJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	perms, ok := got["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("permissions key should remain when user rules exist")
+	}
+	if _, hasDM := perms["defaultMode"]; hasDM {
+		t.Error("defaultMode should be removed on uninstall")
+	}
+	if perms["allow"] == nil {
+		t.Error("user allow rules should survive uninstall")
 	}
 }
 
