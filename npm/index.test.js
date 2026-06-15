@@ -1,10 +1,10 @@
 "use strict";
 
-var nodeTest = require("node:test"); /* eslint-disable-line n/no-nodejs-modules, n/no-unsupported-features/node-builtins */
+var nodeTest = require("node:test");
 var describe = nodeTest.describe;
 var it = nodeTest.it;
-var path = require("path"); /* eslint-disable-line n/no-nodejs-modules */
-var assert = require("assert"); /* eslint-disable-line n/no-nodejs-modules */
+var path = require("path");
+var assert = require("assert");
 
 var index = require("./index");
 var getPlatformPackage = index.getPlatformPackage;

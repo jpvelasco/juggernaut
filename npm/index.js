@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-/* eslint-disable n/hashbang */
 "use strict";
 
-var path = require("path"); /* eslint-disable-line n/no-nodejs-modules */
-var child_process = require("child_process"); /* eslint-disable-line n/no-nodejs-modules */
-var fs = require("fs"); /* eslint-disable-line n/no-nodejs-modules */
+var path = require("path");
+var child_process = require("child_process");
+var fs = require("fs");
 
 var PACKAGES_DIR = path.join(__dirname, "packages");
 
@@ -62,26 +61,26 @@ if (require.main === module) {
       "juggernaut-bedrock: unsupported platform " + process.platform + "/" + process.arch + "\n" +
       "Please file an issue: https://github.com/jpvelasco/juggernaut/issues\n"
     );
-    process.exit(1); /* eslint-disable-line n/no-process-exit */ // nosemgrep: n_no-process-exit
+    process.exit(1);
   }
 
   var bin = getBinaryPath(pkg, process.platform);
   // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename
-  if (!fs.existsSync(bin)) { /* eslint-disable-line n/no-sync */ // nosemgrep: n_no-sync
+  if (!fs.existsSync(bin)) {
     process.stderr.write(
       "juggernaut-bedrock: binary not found at " + bin + "\n" +
       "Try reinstalling: npm install -g juggernaut-bedrock\n" +
       "If the problem persists, file an issue: https://github.com/jpvelasco/juggernaut/issues\n"
     );
-    process.exit(1); /* eslint-disable-line n/no-process-exit */ // nosemgrep: n_no-process-exit
+    process.exit(1);
   }
 
   // nosemgrep: javascript.lang.security.detect-child-process, javascript_exec_rule-child-process
-  var result = child_process.spawnSync(bin, process.argv.slice(2), { /* eslint-disable-line n/no-sync */ // nosemgrep: n_no-sync
+  var result = child_process.spawnSync(bin, process.argv.slice(2), {
     stdio: "inherit",
     env: process.env
   });
-  process.exit(result.status !== null ? result.status : 1); /* eslint-disable-line n/no-process-exit */ // nosemgrep: n_no-process-exit
+  process.exit(result.status !== null ? result.status : 1);
 }
 
 module.exports = { getPlatformPackage: getPlatformPackage, getBinaryPath: getBinaryPath };
