@@ -151,7 +151,7 @@ func TestCleanupLegacyFiles_OnlyDPAPI(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	dpapi := filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin")
-	if err := os.MkdirAll(filepath.Dir(dpapi), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(dpapi)); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	if err := os.WriteFile(dpapi, []byte("stale"), 0o600); err != nil {
@@ -169,7 +169,7 @@ func TestCleanupLegacyFiles_OnlyProfile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	profile := filepath.Join(home, ".config", "juggernaut", "bearer-token")
-	if err := os.MkdirAll(filepath.Dir(profile), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(profile)); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	if err := os.WriteFile(profile, []byte("stale"), 0o600); err != nil {
