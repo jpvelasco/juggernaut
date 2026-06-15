@@ -4,6 +4,7 @@ package schema
 import (
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
@@ -123,6 +124,14 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	haiku := opts.HaikuModel
 	if haiku == "" {
 		haiku = cfg.Models.Haiku
+	}
+
+	// Mantle uses anthropic.* model IDs; global.* cross-region inference profiles
+	// are incompatible with Mantle routing. Strip the prefix when Mantle is enabled.
+	if opts.UseMantle {
+		opus = strings.TrimPrefix(opus, "global.")
+		sonnet = strings.TrimPrefix(sonnet, "global.")
+		haiku = strings.TrimPrefix(haiku, "global.")
 	}
 
 	env := make(map[string]string, len(cfg.Environment))
