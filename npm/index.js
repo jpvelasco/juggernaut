@@ -5,8 +5,6 @@ var path = require("path");
 var child_process = require("child_process");
 var fs = require("fs");
 
-var PACKAGES_DIR = path.join(__dirname, "packages");
-
 var PLATFORM_MAP = {
   "linux-x64": "juggernaut-bedrock-linux-x64",
   "linux-arm64": "juggernaut-bedrock-linux-arm64",
@@ -46,12 +44,20 @@ function containsPackage(pkgName) {
  * @param {string} platform
  * @returns {string}
  */
+function resolvePkgDir(pkgName) {
+  try {
+    return path.dirname(require.resolve(pkgName + "/package.json"));
+  } catch (_) {
+    return path.join(__dirname, "packages", pkgName);
+  }
+}
+
 function getBinaryPath(pkgName, platform) {
   if (!containsPackage(pkgName)) {
     throw new Error("unexpected package name: " + pkgName);
   }
   var binaryName = platform === "win32" ? "juggernaut.exe" : "juggernaut";
-  return path.join(PACKAGES_DIR, pkgName, "bin", binaryName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  return path.join(resolvePkgDir(pkgName), "bin", binaryName);
 }
 
 if (require.main === module) {
