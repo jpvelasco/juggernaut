@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.1] - 2026-06-14
+
+**Patch release.** Fixes the release workflow — GoReleaser v2.16.0 does not support the `after` top-level key; binary copy moved into the release workflow as an explicit shell step.
+
+### Fixed
+
+- **GoReleaser `after` hook removed.** `after.hooks` is not a valid key in GoReleaser v2.16.0, causing releases to fail at the YAML parse stage. The platform binary copy (`scripts/copy-npm-binaries.sh`) is now run as an explicit workflow step between GoReleaser and npm publish.
+
+---
+
 ## [4.2.0] - 2026-06-14
 
 **Feature release.** Eliminates the `--allow-scripts` friction for npm 9+ users by shipping platform-specific binaries directly inside optional sub-packages — no postinstall script, no download at install time.
@@ -666,6 +676,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[4.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.1
 [4.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.0
 [4.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.1.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4

@@ -28,10 +28,6 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-after:
-  hooks:
-    - sh scripts/copy-npm-binaries.sh
-
 release:
   github:
     owner: jpvelasco
