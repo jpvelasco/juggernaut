@@ -15,13 +15,30 @@ var PLATFORM_MAP = {
   "win32-x64": "juggernaut-bedrock-win32-x64"
 };
 
+var VALID_PACKAGES = [
+  "juggernaut-bedrock-linux-x64",
+  "juggernaut-bedrock-linux-arm64",
+  "juggernaut-bedrock-darwin-x64",
+  "juggernaut-bedrock-darwin-arm64",
+  "juggernaut-bedrock-win32-x64"
+];
+
+/**
+ * @param {string} platform
+ * @param {string} arch
+ * @returns {string|void}
+ */
 function getPlatformPackage(platform, arch) {
-  return PLATFORM_MAP[platform + "-" + arch] || null;
+  return PLATFORM_MAP[platform + "-" + arch] || void 0;
 }
 
+/**
+ * @param {string} pkgName
+ * @param {string} platform
+ * @returns {string}
+ */
 function getBinaryPath(pkgName, platform) {
-  var validPackages = Object.keys(PLATFORM_MAP).map(function(k) { return PLATFORM_MAP[k]; });
-  if (validPackages.indexOf(pkgName) === -1) {
+  if (VALID_PACKAGES.indexOf(pkgName) === -1) {
     throw new Error("unexpected package name: " + pkgName);
   }
   var binaryName = platform === "win32" ? "juggernaut.exe" : "juggernaut";
@@ -35,25 +52,26 @@ if (require.main === module) {
       "juggernaut-bedrock: unsupported platform " + process.platform + "/" + process.arch + "\n" +
       "Please file an issue: https://github.com/jpvelasco/juggernaut/issues\n"
     );
-    process.exit(1); // nosemgrep: eslint.n_no-process-exit
+    process.exit(1); // nosemgrep: n_no-process-exit
   }
 
   var bin = getBinaryPath(pkg, process.platform);
-  if (!fs.existsSync(bin)) { // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename
+  if (!fs.existsSync(bin)) { // nosemgrep: n_no-sync
     process.stderr.write(
       "juggernaut-bedrock: binary not found at " + bin + "\n" +
       "Try reinstalling: npm install -g juggernaut-bedrock\n" +
       "If the problem persists, file an issue: https://github.com/jpvelasco/juggernaut/issues\n"
     );
-    process.exit(1); // nosemgrep: eslint.n_no-process-exit
+    process.exit(1); // nosemgrep: n_no-process-exit
   }
 
-  // nosemgrep: javascript.lang.security.detect-child-process
-  var result = child_process.spawnSync(bin, process.argv.slice(2), {
+  // nosemgrep: javascript.lang.security.detect-child-process, javascript_exec_rule-child-process
+  var result = child_process.spawnSync(bin, process.argv.slice(2), { // nosemgrep: n_no-sync
     stdio: "inherit",
     env: process.env
   });
-  process.exit(result.status !== null ? result.status : 1); // nosemgrep: eslint.n_no-process-exit
+  process.exit(result.status !== null ? result.status : 1); // nosemgrep: n_no-process-exit
 }
 
 module.exports = { getPlatformPackage: getPlatformPackage, getBinaryPath: getBinaryPath };
