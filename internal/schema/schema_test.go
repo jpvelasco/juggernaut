@@ -229,6 +229,50 @@ func TestNativeKeys_AlwaysThinking(t *testing.T) {
 	}
 }
 
+func TestBuild_Mantle_StripsGlobalPrefix(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "xhigh",
+		Scope:         "user",
+		Version:       "4.0.0",
+		AuthValidated: true,
+		UseMantle:     true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Models.Opus != "anthropic.claude-opus-4-8" {
+		t.Errorf("expected opus without global. prefix, got %s", block.Models.Opus)
+	}
+	if block.Models.Sonnet != "anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected sonnet without global. prefix, got %s", block.Models.Sonnet)
+	}
+	if block.Models.Haiku != "anthropic.claude-haiku-4-5-20251001-v1:0" {
+		t.Errorf("expected haiku without global. prefix, got %s", block.Models.Haiku)
+	}
+}
+
+func TestBuild_NoMantle_KeepsGlobalPrefix(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "xhigh",
+		Scope:         "user",
+		Version:       "4.0.0",
+		AuthValidated: true,
+		UseMantle:     false,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Models.Opus != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("expected opus with global. prefix preserved, got %s", block.Models.Opus)
+	}
+}
+
 func TestBuild_NoBedrockFlagWithoutValidation(t *testing.T) {
 	opts := schema.Options{
 		AuthMode:      "iam",
