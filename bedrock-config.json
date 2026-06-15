@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "4.2.2",
+  "version": "4.2.3",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -67,7 +67,7 @@
     "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max. Defaults to xhigh. On Opus 4.8/4.7 effort controls adaptive thinking depth: max (always thinks deeply), xhigh (always thinks), high (almost always), medium (moderate), low (minimal).",
     "subagent_model": "CLAUDE_CODE_SUBAGENT_MODEL controls the model for background subagents independently of ANTHROPIC_DEFAULT_HAIKU_MODEL. Defaults to Haiku for cost efficiency.",
     "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config",
-    "auto_mode": "Auto mode (permissions.defaultMode: auto) enables the agentic safety classifier. On Bedrock, CLAUDE_CODE_ENABLE_AUTO_MODE=1 is required \u00e2\u20ac\u201d without it auto mode silently does nothing. Juggernaut sets this automatically when --mode=auto is used.",
+    "auto_mode": "Auto mode (permissions.defaultMode: auto) enables the agentic safety classifier. On Bedrock, CLAUDE_CODE_ENABLE_AUTO_MODE=1 is required â€” without it auto mode silently does nothing. Juggernaut sets this automatically when --mode=auto is used.",
     "opus_4_8": "Opus 4.8 supports only adaptive thinking mode. Manual thinking.type:enabled is rejected with a 400 error. Use effort level to control thinking depth instead.",
     "source": "Bedrock IDs and context windows verified against AWS Bedrock model cards: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-8.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-6.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-4-5.html. Claude Code model env vars verified against: https://docs.anthropic.com/en/docs/claude-code/model-config"
   }

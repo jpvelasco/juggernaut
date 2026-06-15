@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.3] - 2026-06-15
+
+**Patch release.** Fixes the npm binary not found error on global installs — sub-packages are now resolved via `require.resolve` instead of a hardcoded path that only exists in the repo.
+
+### Fixed
+
+- **npm binary not found on global install.** `npm install -g juggernaut-bedrock` installed sub-packages as siblings in `node_modules/`, but the code looked for them inside the main package's `packages/` subdirectory. Now uses `require.resolve(pkgName + "/package.json")` to find the installed sub-package regardless of where npm places it, with a fallback to `packages/` for local development.
+
+---
+
 ## [4.2.2] - 2026-06-15
 
 **Patch release.** Fixes the missing shebang in the npm package binary and resolves all Codacy findings across the npm package and CI pipeline.
@@ -694,6 +704,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[4.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.3
 [4.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.2
 [4.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.1
 [4.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.0
