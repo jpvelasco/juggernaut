@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.4] - 2026-06-15
+
+**Patch release.** Fixes Claude Code failing to connect when Mantle is enabled — `global.` cross-region inference prefixes are now stripped from model IDs when Mantle routing is active.
+
+### Fixed
+
+- **Mantle + global model IDs incompatible.** Mantle routes using `anthropic.*` model IDs; `global.anthropic.*` cross-region inference profiles are not valid Mantle targets. When Mantle is enabled (the default), Juggernaut now strips the `global.` prefix so model IDs are in the correct format. Without Mantle (`--no-mantle`), the prefix is preserved for standard Bedrock cross-region inference.
+
+---
+
 ## [4.2.3] - 2026-06-15
 
 **Patch release.** Fixes the npm binary not found error on global installs — sub-packages are now resolved via `require.resolve` instead of a hardcoded path that only exists in the repo.
@@ -704,6 +714,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[4.2.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.4
 [4.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.3
 [4.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.2
 [4.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.1
