@@ -3,8 +3,8 @@
 var nodeTest = require("node:test");
 var describe = nodeTest.describe;
 var it = nodeTest.it;
-var path = require("path");
-var assert = require("assert");
+var path = require("node:path");
+var assert = require("node:assert");
 
 var index = require("./index");
 var getPlatformPackage = index.getPlatformPackage;
@@ -31,15 +31,14 @@ describe("getPlatformPackage", function() {
     assert.strictEqual(getPlatformPackage("win32", "x64"), "juggernaut-bedrock-win32-x64");
     return void 0;
   });
-  it("returns null for unsupported platform", function() {
-    assert.ok(getPlatformPackage("freebsd", "x64") === void 0 || getPlatformPackage("freebsd", "x64") === null);
+  it("returns undefined for unsupported platform", function() {
+    assert.strictEqual(getPlatformPackage("freebsd", "x64"), void 0);
     return void 0;
   });
-  it("returns null for unsupported arch", function() {
-    assert.ok(getPlatformPackage("linux", "ia32") === void 0 || getPlatformPackage("linux", "ia32") === null);
+  it("returns undefined for unsupported arch", function() {
+    assert.strictEqual(getPlatformPackage("linux", "ia32"), void 0);
     return void 0;
   });
-  return void 0;
 });
 
 describe("getBinaryPath", function() {
@@ -58,5 +57,4 @@ describe("getBinaryPath", function() {
     assert.ok(result.includes(path.join("packages", "juggernaut-bedrock-darwin-arm64")));
     return void 0;
   });
-  return void 0;
 });
