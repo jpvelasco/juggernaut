@@ -18,8 +18,12 @@ function getPlatformPackage(platform, arch) {
 }
 
 function getBinaryPath(pkgName, platform) {
+  const validPackages = new Set(Object.values(PLATFORM_MAP));
+  if (!validPackages.has(pkgName)) {
+    throw new Error(`unexpected package name: ${pkgName}`);
+  }
   const binaryName = platform === "win32" ? "juggernaut.exe" : "juggernaut";
-  return path.join(PACKAGES_DIR, pkgName, "bin", binaryName);
+  return path.join(PACKAGES_DIR, pkgName, "bin", binaryName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 if (require.main === module) {
@@ -34,7 +38,7 @@ if (require.main === module) {
 
   const bin = getBinaryPath(pkg, process.platform);
   const fs = require("fs");
-  if (!fs.existsSync(bin)) {
+  if (!fs.existsSync(bin)) { // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     process.stderr.write(
       `juggernaut-bedrock: binary not found at ${bin}\n` +
       `Try reinstalling: npm install -g juggernaut-bedrock\n` +
