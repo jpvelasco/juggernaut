@@ -23,7 +23,7 @@ function getBinaryPath(pkgName, platform) {
     throw new Error(`unexpected package name: ${pkgName}`);
   }
   const binaryName = platform === "win32" ? "juggernaut.exe" : "juggernaut";
-  return path.join(PACKAGES_DIR, pkgName, "bin", binaryName);
+  return path.join(PACKAGES_DIR, pkgName, "bin", binaryName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal
 }
 
 if (require.main === module) {
