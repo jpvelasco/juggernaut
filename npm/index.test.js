@@ -1,10 +1,10 @@
 "use strict";
 
-var nodeTest = require("node:test");
+var nodeTest = require("node:test"); /* eslint-disable-line n/no-nodejs-modules, n/no-unsupported-features/node-builtins */
 var describe = nodeTest.describe;
 var it = nodeTest.it;
-var path = require("node:path");
-var assert = require("node:assert");
+var path = require("path"); /* eslint-disable-line n/no-nodejs-modules */
+var assert = require("assert"); /* eslint-disable-line n/no-nodejs-modules */
 
 var index = require("./index");
 var getPlatformPackage = index.getPlatformPackage;
@@ -39,6 +39,7 @@ describe("getPlatformPackage", function() {
     assert.strictEqual(getPlatformPackage("linux", "ia32"), void 0);
     return void 0;
   });
+  return void 0;
 });
 
 describe("getBinaryPath", function() {
@@ -57,4 +58,5 @@ describe("getBinaryPath", function() {
     assert.ok(result.includes(path.join("packages", "juggernaut-bedrock-darwin-arm64")));
     return void 0;
   });
+  return void 0;
 });
