@@ -2,6 +2,24 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.2] - 2026-06-15
+
+**Patch release.** Fixes the missing shebang in the npm package binary and resolves all Codacy findings across the npm package and CI pipeline.
+
+### Fixed
+
+- **npm binary missing shebang.** `npm/index.js` was missing `#!/usr/bin/env node`, causing the installed `juggernaut` command to fail with a shell syntax error on Linux and macOS.
+- **Path traversal validation.** `getBinaryPath` now validates the resolved package name against a fixed allowlist before constructing the binary path.
+- **`migrate_test.go` file permissions.** Two `os.MkdirAll` calls in tests used bare `0o700`; replaced with `safepath.MkdirAll` for consistency.
+
+### Other
+
+- **Trivy upgraded to 0.71.0.** Bumps the pinned Trivy version in `.codacy/codacy.yaml` from 0.70.0 to 0.71.0 (safe; March 2026 supply chain compromise only affected 0.69.4–0.69.6).
+- **codacy-cli pinned to 1.0.0-main.380.** Updates the CI workflow pin from the April 14 build to the June 11 build.
+- **npm package code quality.** Rewrote `npm/index.js` and `npm/index.test.js` to conform to Codacy ESLint rules: replaced ES2015+ syntax with ES5-compatible equivalents, added JSDoc annotations, and updated `engines` to `>=20.0.0`.
+
+---
+
 ## [4.2.1] - 2026-06-14
 
 **Patch release.** Fixes the release workflow — GoReleaser v2.16.0 does not support the `after` top-level key; binary copy moved into the release workflow as an explicit shell step.
@@ -676,6 +694,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [3.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.1
 [3.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.0
 [3.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v3.1.5
+[4.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.2
 [4.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.1
 [4.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.0
 [4.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.1.0
