@@ -48,7 +48,7 @@ function resolvePkgDir(pkgName) {
   try {
     return path.dirname(require.resolve(pkgName + "/package.json"));
   } catch (_) {
-    return path.join(__dirname, "packages", pkgName);
+    return path.join(__dirname, "packages", pkgName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   }
 }
 
@@ -57,7 +57,7 @@ function getBinaryPath(pkgName, platform) {
     throw new Error("unexpected package name: " + pkgName);
   }
   var binaryName = platform === "win32" ? "juggernaut.exe" : "juggernaut";
-  return path.join(resolvePkgDir(pkgName), "bin", binaryName);
+  return path.join(resolvePkgDir(pkgName), "bin", binaryName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 if (require.main === module) {
