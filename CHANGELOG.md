@@ -2,6 +2,20 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.6] - 2026-06-17
+
+**Patch release.** Fixes stale credential cleanup and adds diagnostics for the launch path and poisoned settings that can keep Claude retrying after a fresh Bedrock API key is installed.
+
+### Fixed
+
+- **Stale credential cleanup.** `apply` now removes legacy v3 credential files after storing a new Bedrock API key, so old profile or DPAPI artifacts do not linger beside the refreshed keychain entry.
+- **Launcher-path diagnostics.** `doctor` now warns when `claude` resolves to something other than Juggernaut’s shim and checks both user and project settings scopes.
+- **Poisoned model state.** `doctor` now flags top-level `model = "opusplan"` in settings, which can drive repeated Bedrock retries until `apply` rewrites the config.
+
+### Other
+
+- **Launcher path helper.** Added a shared shim-path helper so launcher install, uninstall, and presence checks use the same platform-specific path logic.
+
 ## [4.2.5] - 2026-06-17
 
 **Patch release.** Tightens the npm wrapper and Codacy config after the 4.2.4 release, resolving the command-injection finding and keeping PMD/ESLint behavior aligned with the repo.
@@ -733,6 +747,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [4.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.2
 [4.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.1
 [4.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.0
+[4.2.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.6
 [4.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.5
 [4.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.1.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4

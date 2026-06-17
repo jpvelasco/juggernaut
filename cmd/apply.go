@@ -159,6 +159,9 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 		if err := keychain.Default().Set(token); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
 		}
+		for _, p := range migrate.CleanupLegacyFiles(home) {
+			fmt.Printf("  ✓ Removed stale legacy credential file: %s\n", p)
+		}
 	}
 
 	path, err := settingsPath(home, applyFlags.scope)
