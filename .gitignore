@@ -80,3 +80,10 @@ npm/packages/*/bin/*
 
 # Local planning/design docs (internal tooling artifacts)
 docs/superpowers/
+
+# Local agent/tool scratch artifacts
+.codacy-backup-test/
+.tmp-badge.svg
+agent-tools/
+mcps/
+terminals/
