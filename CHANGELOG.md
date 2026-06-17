@@ -2,6 +2,20 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [4.2.5] - 2026-06-17
+
+**Patch release.** Tightens the npm wrapper and Codacy config after the 4.2.4 release, resolving the command-injection finding and keeping PMD/ESLint behavior aligned with the repo.
+
+### Fixed
+
+- **npm wrapper command execution.** Hardened `npm/index.js` so the wrapper resolves the target binary safely and no longer leaves a command-injection path that Codacy can flag as critical.
+- **Binary resolution path.** Resolved the npm launcher target to a real absolute path before spawning it, which keeps the published wrapper behavior stable and removes the brittle path construction.
+- **Codacy/npm lint alignment.** Excluded `npm/` from the root ESLint engine and corrected `nosemgrep` rule IDs so the repo’s suppressions match the scanner rules Codacy actually applies.
+
+### Other
+
+- **PMD ruleset tracked.** Added `.codacy/tools-configs/ruleset.xml` to source control so the repo’s PMD scan uses the same config locally and in CI.
+
 ## [4.2.4] - 2026-06-15
 
 **Patch release.** Fixes Claude Code failing to connect when Mantle is enabled — `global.` cross-region inference prefixes are now stripped from model IDs when Mantle routing is active.
@@ -719,6 +733,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [4.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.2
 [4.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.1
 [4.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.0
+[4.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.2.5
 [4.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.1.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
 [4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
