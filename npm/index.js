@@ -41,7 +41,6 @@ function containsPackage(pkgName) {
 
 /**
  * @param {string} pkgName
- * @param {string} platform
  * @returns {string}
  */
 function resolvePkgDir(pkgName) {
@@ -71,7 +70,7 @@ if (require.main === module) {
   }
 
   var bin = getBinaryPath(pkg, process.platform);
-  // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename
+  // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
   if (!fs.existsSync(bin)) {
     process.stderr.write(
       "juggernaut-bedrock: binary not found at " + bin + "\n" +
@@ -81,7 +80,7 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  // nosemgrep: javascript.lang.security.detect-child-process, javascript_exec_rule-child-process
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
   var result = child_process.spawnSync(bin, process.argv.slice(2), {
     stdio: "inherit",
     env: process.env
