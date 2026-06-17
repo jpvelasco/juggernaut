@@ -59,6 +59,21 @@ function getBinaryPath(pkgName, platform) {
   return path.join(resolvePkgDir(pkgName), "bin", binaryName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
+/**
+ * Resolves bin to a real absolute path and asserts it stays within
+ * __dirname, preventing any tainted or traversed path from executing.
+ * @param {string} binPath
+ * @returns {string}
+ */
+function safeResolveBin(binPath) {
+  var real = fs.realpathSync(binPath); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+  var base = fs.realpathSync(__dirname); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (!real.startsWith(base + path.sep) && real !== base) {
+    throw new Error("binary path escapes package directory: " + real);
+  }
+  return real;
+}
+
 if (require.main === module) {
   var pkg = getPlatformPackage(process.platform, process.arch);
   if (!pkg) {
@@ -69,18 +84,17 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  var bin = getBinaryPath(pkg, process.platform);
-  // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
-  if (!fs.existsSync(bin)) {
+  var binRaw = getBinaryPath(pkg, process.platform);
+  if (!fs.existsSync(binRaw)) { // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
     process.stderr.write(
-      "juggernaut-bedrock: binary not found at " + bin + "\n" +
+      "juggernaut-bedrock: binary not found at " + binRaw + "\n" +
       "Try reinstalling: npm install -g juggernaut-bedrock\n" +
       "If the problem persists, file an issue: https://github.com/jpvelasco/juggernaut/issues\n"
     );
     process.exit(1);
   }
 
-  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
+  var bin = safeResolveBin(binRaw);
   var result = child_process.spawnSync(bin, process.argv.slice(2), {
     stdio: "inherit",
     env: process.env
