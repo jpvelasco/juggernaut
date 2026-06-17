@@ -38,7 +38,7 @@ func Install(binDir string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		shimPath := filepath.Join(binDir, "claude.cmd")
+		shimPath := ShimPath(binDir)
 		return os.WriteFile(shimPath, []byte(cmdShim), 0o600)
 	}
 
@@ -47,7 +47,7 @@ func Install(binDir string) error {
 		return fmt.Errorf("resolving executable path: %w", err)
 	}
 
-	shimPath := filepath.Join(binDir, "claude")
+	shimPath := ShimPath(binDir)
 	if err := removeIfExists(shimPath); err != nil {
 		return fmt.Errorf("removing existing claude shim: %w", err)
 	}
@@ -56,22 +56,21 @@ func Install(binDir string) error {
 
 // Uninstall removes the claude shim from binDir.
 func Uninstall(binDir string) error {
-	if runtime.GOOS == "windows" {
-		return removeIfExists(filepath.Join(binDir, "claude.cmd"))
-	}
-	return removeIfExists(filepath.Join(binDir, "claude"))
+	return removeIfExists(ShimPath(binDir))
 }
 
 // IsInstalled returns true if the claude shim exists in binDir.
 func IsInstalled(binDir string) bool {
-	var path string
-	if runtime.GOOS == "windows" {
-		path = filepath.Join(binDir, "claude.cmd")
-	} else {
-		path = filepath.Join(binDir, "claude")
-	}
-	_, err := os.Lstat(path)
+	_, err := os.Lstat(ShimPath(binDir))
 	return err == nil
+}
+
+// ShimPath returns the expected claude shim path for the current platform.
+func ShimPath(binDir string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(binDir, "claude.cmd")
+	}
+	return filepath.Join(binDir, "claude")
 }
 
 // RunAsLauncher injects credentials and execs the real claude binary.
