@@ -10,3 +10,4 @@ engines:
       - ".remember/**"
       - ".codacy/**"
       - "mcps/**"
+      - "npm/**"
