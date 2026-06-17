@@ -9,6 +9,7 @@ var assert = require("assert");
 var index = require("./index");
 var getPlatformPackage = index.getPlatformPackage;
 var getBinaryPath = index.getBinaryPath;
+var safeForwardArgs = index.safeForwardArgs;
 
 describe("getPlatformPackage", function() {
   it("maps linux x64", function() {
@@ -56,6 +57,21 @@ describe("getBinaryPath", function() {
   it("path is under npm/packages/", function() {
     var result = getBinaryPath("juggernaut-bedrock-darwin-arm64", "darwin");
     assert.ok(result.includes(path.join("packages", "juggernaut-bedrock-darwin-arm64")));
+    return void 0;
+  });
+  return void 0;
+});
+
+describe("safeForwardArgs", function() {
+  it("copies forwarded arguments as strings", function() {
+    var result = safeForwardArgs(["--model", "sonnet", 42]);
+    assert.deepStrictEqual(result, ["--model", "sonnet", "42"]);
+    return void 0;
+  });
+  it("rejects NUL bytes", function() {
+    assert.throws(function() {
+      safeForwardArgs(["ok", "bad\u0000arg"]);
+    }, /NUL byte/);
     return void 0;
   });
   return void 0;

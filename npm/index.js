@@ -2,7 +2,7 @@
 "use strict";
 
 var path = require("path");
-var child_process = require("child_process");
+var childProcess = require("node:child_process");
 var fs = require("fs");
 
 var PLATFORM_MAP = {
@@ -74,6 +74,18 @@ function safeResolveBin(binPath) {
   return real;
 }
 
+function safeForwardArgs(args) {
+  var forwarded = [];
+  for (var i = 0; i < args.length; i++) {
+    var arg = String(args[i]);
+    if (arg.indexOf("\u0000") !== -1) {
+      throw new Error("invalid NUL byte in argument");
+    }
+    forwarded.push(arg);
+  }
+  return forwarded;
+}
+
 if (require.main === module) {
   var pkg = getPlatformPackage(process.platform, process.arch);
   if (!pkg) {
@@ -95,11 +107,18 @@ if (require.main === module) {
   }
 
   var bin = safeResolveBin(binRaw);
-  var result = child_process.spawnSync(bin, process.argv.slice(2), {
+  var args = safeForwardArgs(process.argv.slice(2));
+  var result = childProcess.spawnSync(bin, args, {
     stdio: "inherit",
-    env: process.env
+    env: Object.assign({}, process.env),
+    shell: false,
+    windowsHide: true
   });
   process.exit(result.status !== null ? result.status : 1);
 }
 
-module.exports = { getPlatformPackage: getPlatformPackage, getBinaryPath: getBinaryPath };
+module.exports = {
+  getPlatformPackage: getPlatformPackage,
+  getBinaryPath: getBinaryPath,
+  safeForwardArgs: safeForwardArgs
+};
