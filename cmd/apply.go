@@ -6,13 +6,12 @@ import (
 	"os"
 
 	"github.com/charmbracelet/huh"
-	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
-	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
-	"github.com/jpvelasco/juggernaut/v4/internal/config"
-	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
-	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
-	"github.com/jpvelasco/juggernaut/v4/internal/migrate"
-	"github.com/jpvelasco/juggernaut/v4/internal/schema"
+	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -88,10 +87,6 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if err := runMigrationIfNeeded(home, applyFlags.dryRun); err != nil {
-		return err
-	}
-
 	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg)
 	if err != nil {
 		return err
@@ -149,6 +144,8 @@ func printApplyDryRun(home string) error {
 		return err
 	}
 	fmt.Printf("Would write juggernaut block to %s\n", path)
+	fmt.Println("Would install Juggernaut Claude activation blocks in shell profiles")
+	fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
 	return nil
 }
 
@@ -158,9 +155,6 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
 		if err := keychain.Default().Set(token); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
-		}
-		for _, p := range migrate.CleanupLegacyFiles(home) {
-			fmt.Printf("  ✓ Removed stale legacy credential file: %s\n", p)
 		}
 	}
 
@@ -189,21 +183,34 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 		return err
 	}
 
-	installLauncherShimIfMissing()
+	reportLegacyRecovery(home)
+	installActivation(home)
 	fmt.Println("Configuration written successfully.")
 	return nil
 }
 
-func installLauncherShimIfMissing() {
-	binDir := launcher.DefaultBinDir()
-	if launcher.IsInstalled(binDir) {
+func reportLegacyRecovery(home string) {
+	actions, err := activation.RecoverLegacyArtifacts(activation.DefaultBinDir(home))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy launcher artifacts: %v\n", err)
 		return
 	}
-	if err := launcher.Install(binDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not install claude shim: %v\n", err)
+	for _, action := range actions {
+		fmt.Printf("  ✓ %s: %s\n", action.Action, action.Path)
+	}
+}
+
+func installActivation(home string) {
+	paths, err := activation.Install(home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not install shell activation: %v\n", err)
 		return
 	}
-	fmt.Printf("  ✓ Installed claude shim → %s\n", binDir)
+	if len(paths) == 0 {
+		fmt.Println("  ✓ Shell activation already up to date")
+		return
+	}
+	fmt.Printf("  ✓ Installed Claude activation in %d shell profile(s)\n", len(paths))
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
@@ -324,88 +331,4 @@ func resolveCredential(authMode string) (string, error) {
 		return "", err
 	}
 	return input, nil
-}
-
-func runMigrationIfNeeded(home string, dryRun bool) error {
-	state, err := migrate.Detect(home)
-	if err != nil || !state.HasV3Block || state.AlreadyV4 {
-		return err
-	}
-	if state.TooOld {
-		return fmt.Errorf(
-			"legacy version detected (pre-v3.2.3). Please upgrade to v3.2.3 first:\n" +
-				"  curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash\n" +
-				"Then re-run: juggernaut apply",
-		)
-	}
-
-	fmt.Printf("Existing Juggernaut configuration detected (v%s, %s auth).\n", state.V3Version, state.AuthMode)
-
-	if dryRun {
-		fmt.Println("Dry run — migration preview only, no changes made.")
-		fmt.Println("  Would: transfer bearer token to go-keyring")
-		fmt.Println("  Would: remove legacy shell launcher blocks from shell profiles")
-		return nil
-	}
-
-	fmt.Println("Migrating to Juggernaut v4...")
-
-	keychainOK := true
-	if authmode.IsBedrockAPIKey(state.AuthMode) {
-		keychainOK = transferLegacyToken(home, state.Storage)
-	}
-
-	stripped := migrate.StripLauncherBlocks(home)
-	for _, p := range stripped {
-		fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
-	}
-
-	for _, p := range migrate.CleanupLegacyFiles(home) {
-		fmt.Printf("  ✓ Removed legacy credential file: %s\n", p)
-	}
-
-	if !keychainOK {
-		fmt.Println("Migration complete with warnings. Re-enter your credentials:")
-		fmt.Println("  juggernaut apply --auth=" + authmode.BedrockAPIKey)
-	} else {
-		fmt.Println("Migration complete. No credentials were re-entered.")
-	}
-	return nil
-}
-
-// transferLegacyToken reads the v3 token from whichever storage backend v3 used
-// and stores it in the v4 keychain. Returns false if the transfer failed.
-func transferLegacyToken(home, storage string) bool {
-	token, dpapi, err := migrate.ReadLegacyToken(home, storage)
-	if dpapi {
-		fmt.Fprintln(os.Stderr, "  Warning: v3 used Windows DPAPI credential storage which cannot be read in pure Go.")
-		fmt.Fprintln(os.Stderr, "  Re-enter your Bedrock API key after migration:")
-		fmt.Fprintln(os.Stderr, "    juggernaut apply --auth="+authmode.BedrockAPIKey)
-		return false
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "  Warning: could not read legacy credential:", err)
-		return false
-	}
-
-	// For keychain/profile, also check the OS keychain (keychain.Get already
-	// falls back to the legacy "api-key" account name for keychain storage).
-	if token == "" {
-		token, err = keychain.Default().Get()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "  Warning: could not read bearer token for migration:", err)
-			return false
-		}
-	}
-
-	if token == "" {
-		return true // no token found; not an error — may be IAM-only or fresh install
-	}
-
-	if err := keychain.Default().Set(token); err != nil {
-		fmt.Fprintln(os.Stderr, "  Warning: could not transfer bearer token to keychain:", err)
-		return false
-	}
-	fmt.Println("  ✓ Bearer token transferred to keychain")
-	return true
 }

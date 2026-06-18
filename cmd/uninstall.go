@@ -6,10 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/config"
-	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
-	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
-	"github.com/jpvelasco/juggernaut/v4/internal/migrate"
+	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +28,7 @@ var uninstallFlags struct {
 func init() {
 	f := uninstallCmd.Flags()
 	f.StringVar(&uninstallFlags.scope, "scope", "", "remove only user or project scope")
-	f.BoolVar(&uninstallFlags.full, "full", false, "also remove claude shim")
+	f.BoolVar(&uninstallFlags.full, "full", false, "also remove shell activation and recover legacy launcher artifacts")
 	f.BoolVarP(&uninstallFlags.force, "force", "f", false, "skip confirmation prompt")
 	f.BoolVar(&uninstallFlags.dryRun, "dry-run", false, "preview without removing")
 	rootCmd.AddCommand(uninstallCmd)
@@ -50,7 +49,7 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 		removeKeychainToken()
 	}
 	if uninstallFlags.full {
-		uninstallLauncherFull(home)
+		uninstallActivationFull(home)
 	}
 	if !uninstallFlags.dryRun {
 		fmt.Println("Uninstall complete.")
@@ -125,18 +124,26 @@ func removeKeychainToken() {
 	fmt.Println("  ✓ Removed bearer token from keychain")
 }
 
-func uninstallLauncherFull(home string) {
-	binDir := launcher.DefaultBinDir()
+func uninstallActivationFull(home string) {
+	binDir := activation.DefaultBinDir(home)
 	if uninstallFlags.dryRun {
-		fmt.Printf("Would remove claude shim from %s\n", binDir)
+		fmt.Println("Would remove Juggernaut Claude activation blocks from shell profiles")
+		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", binDir)
 		return
 	}
-	if err := launcher.Uninstall(binDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not remove claude shim: %v\n", err)
-	} else {
-		fmt.Println("  ✓ Removed claude shim")
+	removed, err := activation.Uninstall(home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not remove shell activation: %v\n", err)
+	} else if len(removed) > 0 {
+		fmt.Printf("  ✓ Removed Claude activation from %d shell profile(s)\n", len(removed))
 	}
-	for _, p := range migrate.StripLauncherBlocks(home) {
-		fmt.Printf("  ✓ Removed legacy launcher block from %s\n", p)
+
+	actions, err := activation.RecoverLegacyArtifacts(binDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy launcher artifacts: %v\n", err)
+		return
+	}
+	for _, action := range actions {
+		fmt.Printf("  ✓ %s: %s\n", action.Action, action.Path)
 	}
 }

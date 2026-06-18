@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 const backupRetain = 5

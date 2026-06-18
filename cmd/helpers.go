@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
-	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // embeddedConfigBytes holds bedrock-config.json bytes injected at startup from main.go.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/spf13/cobra"
 )
 

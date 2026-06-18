@@ -7,7 +7,7 @@
   <a href="https://github.com/jpvelasco/juggernaut/releases/latest"><img src="https://img.shields.io/github/v/release/jpvelasco/juggernaut" alt="Release"></a>
   <a href="https://github.com/jpvelasco/juggernaut/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jpvelasco/juggernaut" alt="License"></a>
   <a href="https://github.com/jpvelasco/juggernaut/blob/main/go.mod"><img src="https://img.shields.io/github/go-mod/go-version/jpvelasco/juggernaut" alt="Go"></a>
-  <a href="https://goreportcard.com/report/github.com/jpvelasco/juggernaut/v4"><img src="https://goreportcard.com/badge/github.com/jpvelasco/juggernaut/v4" alt="Go Report Card"></a>
+  <a href="https://goreportcard.com/report/github.com/jpvelasco/juggernaut/v5"><img src="https://goreportcard.com/badge/github.com/jpvelasco/juggernaut/v5" alt="Go Report Card"></a>
   <a href="https://www.npmjs.com/package/juggernaut-bedrock"><img src="https://img.shields.io/npm/v/juggernaut-bedrock" alt="npm"></a>
   <a href="https://app.codacy.com/gh/jpvelasco/juggernaut/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade"><img src="https://app.codacy.com/project/badge/Grade/2bf1e68b80964537b5c65350663c3073" alt="Codacy Grade"></a>
 </p>
@@ -33,25 +33,14 @@ Single cross-platform binary that configures Claude Code to route through Amazon
 
 ## Install
 
-### Via npm (recommended)
-
-Published as [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) on npm. Works everywhere Claude Code is installed.
+Install Claude Code from Anthropic, then install Juggernaut from npm.
 
 ```bash
+curl -fsSL https://claude.ai/install.sh | bash
 npm install -g juggernaut-bedrock
 ```
 
-**curl (Unix / macOS / Linux / Git Bash / WSL):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/install.sh | bash
-```
-
-**PowerShell (Windows):**
-
-```powershell
-irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/install.ps1 | iex
-```
+The old `scripts/install.sh` and `scripts/install.ps1` installers are deprecated stubs in v5. Juggernaut is published through [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock).
 
 ## Configure
 
@@ -60,7 +49,7 @@ irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/instal
 juggernaut apply --auth=iam
 
 # Bedrock API key (stored securely in OS keychain)
-juggernaut apply
+juggernaut apply --auth=bedrock-api-key
 
 # Interactive first-run — omit flags for a guided prompt
 juggernaut apply
@@ -88,17 +77,16 @@ juggernaut apply --auth=iam --scope=project         # write to ./.claude/setting
 claude
 ```
 
-Juggernaut installs a `claude` shim (`~/.local/bin/claude` on Unix, `claude.cmd` on Windows) that reads your bearer token from the OS keychain and injects it before launching Claude Code. No manual environment setup required.
+`juggernaut apply` installs a shell function named `claude` in your shell profile. Restart your shell, or source the updated profile, then run Claude normally. Juggernaut never installs over the real `claude` binary.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `apply` | Write Juggernaut config to `settings.json` and install the launcher shim. |
+| `apply` | Write Juggernaut config to `settings.json` and install shell activation. |
 | `show` | Print the current Juggernaut block from user and project scopes. |
-| `doctor` | Read-only diagnostics — checks block, credentials, launcher shim. |
-| `uninstall` | Remove the Juggernaut block, bearer token, and launcher shim. |
-| `migrate` | Migrate from v3 (shell-based) to v4 (Go). Runs automatically on first apply. |
+| `doctor` | Read-only diagnostics for settings, credentials, activation, Claude Code, and legacy v4.2.6 artifacts. |
+| `uninstall` | Remove the Juggernaut block and bearer token. Use `--full` to remove shell activation. |
 | `version` | Print the installed version. |
 
 ## Default Models
@@ -155,7 +143,17 @@ juggernaut apply --auth=iam --mode=auto
 
 ## What Gets Written
 
-Juggernaut writes only to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). No shell profile modification.
+Juggernaut writes Bedrock settings to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). It also writes a marked shell activation block to your shell profiles:
+
+```bash
+# BEGIN: Juggernaut Claude Activation
+claude() {
+  juggernaut launch -- "$@"
+}
+# END: Juggernaut Claude Activation
+```
+
+The hidden `juggernaut launch` command reads the Bedrock API key from the OS keychain when your settings use `bedrock-api-key`, sets `AWS_BEARER_TOKEN_BEDROCK` and `CLAUDE_CODE_USE_BEDROCK=1`, resolves the real Anthropic `claude` binary without recursing into Juggernaut, and launches Claude Code with your original arguments.
 
 ```json
 {
@@ -178,24 +176,6 @@ Juggernaut writes only to `~/.claude/settings.json` (user scope) or `./.claude/s
 }
 ```
 
-## Migrating from v3
-
-If you have a v3 (shell-based) installation, just install v4 and run:
-
-```bash
-juggernaut migrate
-```
-
-Or simply run `juggernaut apply` — migration runs automatically on first use when a v3 config is detected. Credentials are transferred, shell launcher blocks are removed from your profiles, and no re-entry of credentials is required.
-
-Minimum supported migration source: v3.2.3. If you're on an older version, upgrade the shell version first:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/v3.2.3/install.sh | bash
-```
-
-> The v3 shell-based release is preserved on the [`legacy/v3`](https://github.com/jpvelasco/juggernaut/tree/legacy/v3) branch and tagged [`v3.2.3`](https://github.com/jpvelasco/juggernaut/releases/tag/v3.2.3). All v3 install URLs continue to work.
-
 ## IAM Permissions
 
 ```json
@@ -215,13 +195,13 @@ See [`iam-policy.json`](iam-policy.json) for the complete policy. For tighter se
 ## Uninstall
 
 ```bash
-# Remove config and launcher shim
+# Remove settings and keychain token
 juggernaut uninstall
 
 # Preview first
 juggernaut uninstall --dry-run
 
-# Remove everything including the shim binary
+# Also remove Juggernaut shell activation and recover known v4.2.6 launcher artifacts
 juggernaut uninstall --full
 ```
 
