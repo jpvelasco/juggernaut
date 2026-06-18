@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 )
 
 // SchemaVersion is the current version of the Juggernaut settings.json block.
@@ -76,13 +76,13 @@ type Meta struct {
 
 // NativeKeys are the top-level settings.json keys Claude Code reads directly.
 type NativeKeys struct {
-	Model                string            `json:"model,omitempty"`
-	ModelOverrides       map[string]string `json:"modelOverrides,omitempty"`
-	Env                  map[string]string `json:"env"`
-	EffortLevel          string            `json:"effortLevel,omitempty"`
-	AlwaysThinking       bool              `json:"alwaysThinkingEnabled,omitempty"`
-	SkipWebFetchPreflight bool             `json:"skipWebFetchPreflight,omitempty"`
-	Permissions          map[string]any    `json:"permissions,omitempty"`
+	Model                 string            `json:"model,omitempty"`
+	ModelOverrides        map[string]string `json:"modelOverrides,omitempty"`
+	Env                   map[string]string `json:"env"`
+	EffortLevel           string            `json:"effortLevel,omitempty"`
+	AlwaysThinking        bool              `json:"alwaysThinkingEnabled,omitempty"`
+	SkipWebFetchPreflight bool              `json:"skipWebFetchPreflight,omitempty"`
+	Permissions           map[string]any    `json:"permissions,omitempty"`
 }
 
 var validEfforts = map[string]bool{

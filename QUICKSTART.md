@@ -4,8 +4,8 @@
 
 ### 1. Prerequisites Check
 ```bash
-# Check Claude Code is installed
-claude --version
+# Install Claude Code if needed
+curl -fsSL https://claude.ai/install.sh | bash
 
 # Check AWS CLI is installed (for IAM/SSO auth)
 aws --version
@@ -26,19 +26,8 @@ aws sts get-caller-identity
 
 ### 3. Install Juggernaut
 
-**npm (recommended — works on every machine that has Claude Code):**
 ```bash
 npm install -g juggernaut-bedrock
-```
-
-**curl one-liner (Unix / macOS / Linux / Git Bash / WSL):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/install.sh | bash
-```
-
-**PowerShell (Windows):**
-```powershell
-irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/install.ps1 | iex
 ```
 
 ### 4. Configure
@@ -46,8 +35,8 @@ irm https://raw.githubusercontent.com/jpvelasco/juggernaut/latest/scripts/instal
 # IAM / SSO (recommended for organizations)
 juggernaut apply --auth=iam
 
-# Bedrock API key (key stored securely in OS keychain; pick mode in the prompt)
-juggernaut apply
+# Bedrock API key (key stored securely in OS keychain)
+juggernaut apply --auth=bedrock-api-key
 ```
 
 Run without flags for an interactive first-run prompt.
@@ -59,7 +48,7 @@ Run without flags for an interactive first-run prompt.
 claude
 ```
 
-The `claude` shim installed by Juggernaut reads your bearer token from the OS keychain and injects it before launching Claude Code. No manual environment setup required.
+Restart your shell, or source the updated profile, then run `claude` normally. Juggernaut installs a shell function and never overwrites the real Claude Code binary.
 
 ## Verify Setup
 
@@ -75,7 +64,8 @@ juggernaut doctor
 - All three model tiers visible in `/model` selector
 - Optimized token limits (32768 output, 65536 thinking)
 - Mantle routing enabled by default
-- Configuration in `~/.claude/settings.json` only — no shell profile writes
+- Configuration in `~/.claude/settings.json`
+- A marked shell activation block that delegates `claude` to `juggernaut launch`
 
 ## Common Options
 
@@ -92,8 +82,6 @@ juggernaut apply --auth=iam --dry-run
 # Show current config
 juggernaut show
 
-# Migrate from v3 (shell-based) to v4 (Go)
-juggernaut migrate
 ```
 
 ## Troubleshooting

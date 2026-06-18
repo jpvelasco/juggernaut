@@ -2,7 +2,7 @@
 
 **Claude Code → Amazon Bedrock in one command.**
 
-Juggernaut is a cross-platform CLI that wires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to [Amazon Bedrock](https://aws.amazon.com/bedrock/) instead of Anthropic's direct API. One install, one `apply`, then just run `claude` — no shell profile hacks, no manual env vars, no jq.
+Juggernaut is a cross-platform CLI that wires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to [Amazon Bedrock](https://aws.amazon.com/bedrock/) instead of Anthropic's direct API. Install Claude Code with Anthropic's installer, run one `apply`, then keep typing `claude`.
 
 Built for developers shipping with GenAI today: IAM and SSO for teams, API keys for solo runs, and a `doctor` command when something's off.
 
@@ -16,6 +16,7 @@ Built for developers shipping with GenAI today: IAM and SSO for teams, API keys 
 ## Install
 
 ```bash
+curl -fsSL https://claude.ai/install.sh | bash
 npm install -g juggernaut-bedrock
 ```
 
@@ -30,16 +31,16 @@ Works on **macOS**, **Linux**, **Windows**, and **WSL** — `x64` and `arm64`.
 ## Quickstart
 
 ```bash
-# 1. Install (above)
+# 1. Install Claude Code and Juggernaut (above)
 
-# 2. Configure — IAM/SSO (recommended) or interactive prompt
+# 2. Configure - IAM/SSO (recommended) or interactive prompt
 juggernaut apply --auth=iam
 
-# 3. Launch Claude Code (token injected automatically)
+# 3. Restart/source your shell, then launch Claude Code
 claude
 ```
 
-Bedrock API key auth? Run `juggernaut apply` and follow the prompt — credentials land in your OS keychain, not your shell history.
+Bedrock API key auth? Run `juggernaut apply --auth=bedrock-api-key`; credentials land in your OS keychain, not your shell history.
 
 ## What it does
 
@@ -51,9 +52,9 @@ That one command:
 
 1. **Writes** Bedrock config to `~/.claude/settings.json` (or project scope)
 2. **Sets** model IDs, region, effort level, permission mode, and `CLAUDE_CODE_USE_BEDROCK=1` — only after credentials check out
-3. **Installs** a `claude` launcher shim that reads your token from the keychain and execs the real binary
+3. **Installs** a marked shell activation block with a `claude` function that delegates to `juggernaut launch`
 
-No `.bashrc` edits. No copying API keys into env vars. No "why isn't Bedrock routing?" at 2am.
+No overwriting the real Claude Code binary. No copying API keys into env vars.
 
 ## Why Bedrock?
 
@@ -70,7 +71,7 @@ No `.bashrc` edits. No copying API keys into env vars. No "why isn't Bedrock rou
 | Mode | Command | Best for |
 |------|---------|----------|
 | **IAM / SSO** | `juggernaut apply --auth=iam` | Teams, enterprise, existing AWS identity |
-| **Bedrock API key** | `juggernaut apply` | Solo devs, quick setup |
+| **Bedrock API key** | `juggernaut apply --auth=bedrock-api-key` | Solo devs, quick setup |
 | **Interactive** | `juggernaut apply` (no flags) | First run — guided prompts |
 | **Preview** | `juggernaut apply --dry-run` | See what would change, change nothing |
 
@@ -78,11 +79,10 @@ No `.bashrc` edits. No copying API keys into env vars. No "why isn't Bedrock rou
 
 | Command | What it does |
 |---------|--------------|
-| `apply` | Configure Bedrock + install the `claude` shim |
+| `apply` | Configure Bedrock + install shell activation |
 | `show` | Print your current Juggernaut config |
-| `doctor` | Diagnostics — block, credentials, launcher |
-| `migrate` | Upgrade from v3 shell installer to v4 Go binary |
-| `uninstall` | Remove config, token, and shim |
+| `doctor` | Diagnostics for settings, credentials, activation, Claude Code, and legacy v4.2.6 artifacts |
+| `uninstall` | Remove config and token; `--full` also removes shell activation |
 | `version` | Print installed version (`--json` for machines) |
 
 ## Default models

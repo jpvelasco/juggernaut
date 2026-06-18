@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Juggernaut is a cross-platform Go CLI tool that configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API. It writes settings only to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). The binary is self-contained — `bedrock-config.json` is embedded at build time via `//go:embed`.
+Juggernaut is a cross-platform Go CLI tool that configures Claude Code to use Amazon Bedrock instead of Anthropic's direct API. It writes Bedrock settings to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope), and installs marked shell activation blocks that define a `claude` function. The binary is self-contained — `bedrock-config.json` is embedded at build time via `//go:embed`.
 
 ## Commands
 
@@ -43,11 +43,11 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 **Shared helpers in `cmd/helpers.go`:** `homeDir()`, `settingsPath()`, `loadBedrockConfig()`, `toMap()`, `fileExists()`. All command files in `cmd/` use these — don't duplicate them.
 
 **Subcommands in `cmd/`:**
-- `apply.go` — builds and writes the Juggernaut block to settings.json; installs the `claude` launcher shim; runs migration automatically if v3 block detected
+- `apply.go` — builds and writes the Juggernaut block to settings.json; installs shell activation; safely recovers known broken v4.2.6 launcher artifacts
+- `launch.go` — hidden command used by shell activation; injects Bedrock runtime env and runs the real Claude Code binary
 - `show.go` — prints current config from settings.json
-- `doctor.go` — read-only diagnostics (block presence, credentials, launcher shim)
-- `uninstall.go` — removes the Juggernaut block from settings.json and deletes bearer token
-- `migrate.go` — explicit v3→v4 migration; also triggered automatically by `apply`
+- `doctor.go` — read-only diagnostics (settings, credentials, activation, Claude Code binary, v4.2.6 artifacts)
+- `uninstall.go` — removes the Juggernaut block from settings.json and deletes bearer token; `--full` removes activation blocks
 - `version.go` — prints version
 
 **Internal packages in `internal/`:**
@@ -55,18 +55,17 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - `schema/` — builds and validates the `Block`; derives native settings.json keys via `NativeKeys()`. `CLAUDE_CODE_USE_BEDROCK=1` is gated behind `AuthValidated=true`. `CLAUDE_CODE_ENABLE_AUTO_MODE=1` is auto-set when `PermissionMode=="auto"`.
 - `config/` — atomic read/merge/write of settings.json; backup rotation (5 most recent); file locking via `gofrs/flock`. `MergeJuggernautBlock(block, nativeEnv, nativeKeys)` owns all Juggernaut-managed top-level keys.
 - `keychain/` — cross-platform credential storage via `go-keyring`. Service name: `juggernaut-bedrock`.
-- `launcher/` — installs the `claude` shim (symlink on Unix, `claude.cmd` on Windows). `RunAsLauncher()` injects `AWS_BEARER_TOKEN_BEDROCK` from keychain and execs the real claude binary.
-- `migrate/` — detects v3 block (schemaVersion:1), transfers bearer token, strips legacy shell launcher blocks. Minimum supported migration source: v3.2.3.
+- `activation/` — manages shell profile marker blocks, implements `juggernaut launch`, resolves the real Anthropic `claude` binary while avoiding recursion, and recovers only positively identified v4.2.6 launcher artifacts.
 - `doctor/` — `Report` type with `Check()`, `HasFailures()`, `String()`, `JSON()`
 - `authmode/` — constants/helpers for auth mode strings (`IAM`, `BedrockAPIKey`). Use `authmode.BedrockAPIKey` (split var) instead of bare string literals to avoid static secret scanner hits.
 - `safepath/` — path containment checks (`JoinUnder`, `withinBase`) and owner-only filesystem helpers (`MkdirAll`, `ReadFile`, `WriteFile` at `0o700`/`0o600`). Use these whenever writing files under a user-controlled base path.
 
-**Launcher mode:** when invoked as `claude` (detected via `slices.Contains(os.Args[1:], "--launcher")` or `os.Args[0]` basename) the binary injects credentials and execs the real claude. No shell profile modification required.
+**Activation mode:** shell profiles contain `# BEGIN: Juggernaut Claude Activation` / `# END: Juggernaut Claude Activation` blocks defining `claude` as a function that delegates to `juggernaut launch -- "$@"` (or shell equivalent). Juggernaut must never install, overwrite, move, symlink over, or delete an unknown file named `claude`.
 
 ## Key Design Patterns
 
 - **Embedded config:** `bedrock-config.json` is compiled into the binary. Changing it requires rebuilding. Tests fall back to filesystem resolution via `findBedrockConfigFile()`.
-- **Single output target:** settings.json only.
+- **Managed outputs:** settings.json plus marked shell activation blocks only.
 - **Auth-gated Bedrock flag:** `CLAUDE_CODE_USE_BEDROCK=1` only lands in settings.json when `AuthValidated=true`.
 - **Scope:** `--scope=user` (default) vs `--scope=project`.
 - **Re-apply preserves existing auth mode** — if `--auth` is omitted and a block already exists, the existing auth mode is read from the block.
@@ -99,7 +98,7 @@ Version must stay in sync across **three** locations: `VERSION`, `bedrock-config
 - CI (`ci.yml`): lint + version sync check → `go test ./... -v` on ubuntu/macos/windows. Actions pinned to full commit SHAs.
 - Release (`release.yml`): triggered on `v*` tags → GoReleaser builds binaries → npm OIDC publish to `juggernaut-bedrock`.
 - GoReleaser requires a clean git tree — never commit build artifacts (`bin/` is gitignored).
-- npm package is in `npm/` — `postinstall` downloads the platform binary from GitHub Releases and verifies SHA256.
+- npm package is in `npm/` — optional platform sub-packages ship prebuilt binaries; `npm/index.js` resolves and execs the matching package.
 
 ## Codacy
 

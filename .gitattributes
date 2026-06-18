@@ -23,6 +23,13 @@ juggernaut text eol=lf
 # Markdown — LF for consistency
 *.md text eol=lf
 
+# Go module metadata — LF for consistency
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Make recipes — LF for consistency
+Makefile text eol=lf
+
 # Keep VERSION file with LF
 VERSION text eol=lf
 

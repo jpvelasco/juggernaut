@@ -2,15 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
-	"path/filepath"
-	"runtime"
+	"os"
 	"strings"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/config"
-	"github.com/jpvelasco/juggernaut/v4/internal/doctor"
-	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
-	"github.com/jpvelasco/juggernaut/v4/internal/launcher"
+	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/spf13/cobra"
 )
 
@@ -69,14 +67,17 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("keychain", doctor.OK, "bearer token found")
 	}
 
-	binDir := launcher.DefaultBinDir()
-	if launcher.IsInstalled(binDir) {
-		r.Check("claude shim", doctor.OK, binDir)
+	activationPaths := activation.InstalledTargets(home)
+	if len(activationPaths) > 0 {
+		r.Check("claude activation", doctor.OK, strings.Join(activationPaths, ", "))
 	} else {
-		r.Check("claude shim", doctor.Warn, "not installed — run `juggernaut apply` to install")
+		r.Check("claude activation", doctor.Warn, "not installed — run `juggernaut apply` and restart or source your shell")
 	}
-	if status, detail := claudeCommandStatus(binDir); status != "" {
-		r.Check("claude command", status, detail)
+	if status, detail := claudeCommandStatus(); status != "" {
+		r.Check("claude binary", status, detail)
+	}
+	if status, detail := legacyArtifactStatus(home); status != "" {
+		r.Check("v4.2.6 artifacts", status, detail)
 	}
 
 	if doctorFlags.jsonOut {
@@ -95,16 +96,24 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func claudeCommandStatus(binDir string) (doctor.Status, string) {
-	found, err := exec.LookPath("claude")
+func claudeCommandStatus() (doctor.Status, string) {
+	found, err := activation.ResolveClaudeBinary(os.Getenv("PATH"))
 	if err != nil {
-		return doctor.Warn, "not found on PATH — add " + binDir + " ahead of other Claude installs"
+		return doctor.Warn, "real Claude Code binary not found on PATH"
 	}
-	expected := launcher.ShimPath(binDir)
-	if samePath(found, expected) {
-		return doctor.OK, found
+	return doctor.OK, found
+}
+
+func legacyArtifactStatus(home string) (doctor.Status, string) {
+	actions := activation.DetectLegacyArtifacts(activation.DefaultBinDir(home))
+	if len(actions) == 0 {
+		return doctor.OK, "no broken v4.2.6 artifacts detected"
 	}
-	return doctor.Warn, "resolves to " + found + " instead of Juggernaut's shim at " + expected
+	parts := make([]string, 0, len(actions))
+	for _, action := range actions {
+		parts = append(parts, action.Action+": "+action.Path)
+	}
+	return doctor.Warn, strings.Join(parts, "; ") + " — run `juggernaut apply` to recover"
 }
 
 func opusplanProblem(data map[string]any) (string, bool) {
@@ -148,13 +157,4 @@ func readScopeData(home, scope string) map[string]any {
 		return nil
 	}
 	return data
-}
-
-func samePath(a, b string) bool {
-	a = filepath.Clean(a)
-	b = filepath.Clean(b)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(a, b)
-	}
-	return a == b
 }

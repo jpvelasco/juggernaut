@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/authmode"
-	"github.com/jpvelasco/juggernaut/v4/internal/keychain"
-	"github.com/jpvelasco/juggernaut/v4/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 func TestApply_DryRun_IAM(t *testing.T) {
@@ -105,6 +106,15 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["CLAUDE_CODE_USE_BEDROCK"] != "1" {
 		t.Error("expected CLAUDE_CODE_USE_BEDROCK=1 in top-level env")
 	}
+
+	bashrcPath := filepath.Join(home, ".bashrc")
+	bashrc, err := safepath.ReadFile(home, bashrcPath)
+	if err != nil {
+		t.Fatalf("reading activation profile: %v", err)
+	}
+	if !activation.HasBlock(string(bashrc)) {
+		t.Error("apply should install shell activation block")
+	}
 }
 
 func TestApply_ModelFlag_OverridesAll(t *testing.T) {
@@ -172,6 +182,34 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 		if _, ok := settings[k]; ok {
 			t.Errorf("key %q should be removed after uninstall", k)
 		}
+	}
+}
+
+func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	bashrc := filepath.Join(home, ".bashrc")
+	if err := safepath.WriteFile(home, bashrc, []byte("export KEEP=1\n")); err != nil {
+		t.Fatalf("writing bashrc: %v", err)
+	}
+	if err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight"}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	if err := ExecuteArgs([]string{"uninstall", "--full", "--force"}); err != nil {
+		t.Fatalf("uninstall --full error: %v", err)
+	}
+
+	data, err := safepath.ReadFile(home, bashrc)
+	if err != nil {
+		t.Fatalf("reading bashrc: %v", err)
+	}
+	if activation.HasBlock(string(data)) {
+		t.Fatal("uninstall --full should remove shell activation block")
+	}
+	if !strings.Contains(string(data), "export KEEP=1") {
+		t.Fatal("uninstall --full should preserve unrelated profile content")
 	}
 }
 

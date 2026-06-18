@@ -3,8 +3,8 @@ package schema_test
 import (
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/bedrock"
-	"github.com/jpvelasco/juggernaut/v4/internal/schema"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 func testConfig() *bedrock.Config {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/doctor"
+	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 )
 
 func TestReport_AllOK(t *testing.T) {

@@ -2,6 +2,26 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [5.0.0] - 2026-06-18
+
+**Major release.** Juggernaut is now npm-only and no longer installs, replaces, or owns any `claude` binary. Anthropic's installer owns Claude Code; Juggernaut owns Bedrock settings, credentials, and shell activation.
+
+### Changed
+
+- **npm-only install.** `scripts/install.sh` and `scripts/install.ps1` are now deprecation stubs that point users to `curl -fsSL https://claude.ai/install.sh | bash` and `npm install -g juggernaut-bedrock`.
+- **Shell activation replaces file shims.** `juggernaut apply` writes marked shell profile blocks that define `claude` as a function delegating to `juggernaut launch -- "$@"`.
+- **Hidden launch command.** `juggernaut launch` injects Bedrock runtime environment, reads the Bedrock API key from the keychain when settings require it, resolves the real Anthropic `claude` binary while avoiding Juggernaut recursion, and forwards the original arguments.
+- **Doctor diagnostics.** `doctor` now separately reports settings, keychain, shell activation, real Claude Code binary resolution, and legacy v4.2.6 artifacts.
+
+### Removed
+
+- **Launcher shims.** Juggernaut no longer creates `~/.local/bin/claude`, `claude.cmd`, `juggernaut-claude`, or symlink-based launchers.
+- **v3 migration.** The `migrate` command, v3 auto-migration on `apply`, and v3 migration internals were removed.
+
+### Fixed
+
+- **v4.2.6 recovery.** `apply` and `uninstall --full` restore `~/.local/bin/claude.juggernaut-original` only when `claude` is missing, remove only positively identified Juggernaut shims, and leave unknown `claude` files untouched.
+
 ## [4.2.6] - 2026-06-17
 
 **Patch release.** Fixes stale credential cleanup and adds diagnostics for the launch path and poisoned settings that can keep Claude retrying after a fresh Bedrock API key is installed.
@@ -732,6 +752,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
 [4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3
 [4.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.2

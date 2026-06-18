@@ -1,4 +1,4 @@
-module github.com/jpvelasco/juggernaut/v4
+module github.com/jpvelasco/juggernaut/v5
 
 go 1.26.4
 

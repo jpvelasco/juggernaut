@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/v4/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 )
 
 func TestReadMissing(t *testing.T) {
