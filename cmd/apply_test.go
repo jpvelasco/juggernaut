@@ -107,7 +107,8 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 		t.Error("expected CLAUDE_CODE_USE_BEDROCK=1 in top-level env")
 	}
 
-	bashrc, err := os.ReadFile(filepath.Join(home, ".bashrc"))
+	bashrcPath := filepath.Join(home, ".bashrc")
+	bashrc, err := safepath.ReadFile(home, bashrcPath)
 	if err != nil {
 		t.Fatalf("reading activation profile: %v", err)
 	}
@@ -200,7 +201,7 @@ func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
 		t.Fatalf("uninstall --full error: %v", err)
 	}
 
-	data, err := os.ReadFile(bashrc)
+	data, err := safepath.ReadFile(home, bashrc)
 	if err != nil {
 		t.Fatalf("reading bashrc: %v", err)
 	}

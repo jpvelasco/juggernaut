@@ -31,7 +31,7 @@ func TestInstallIsIdempotent(t *testing.T) {
 		t.Fatalf("second install should be unchanged, got %v", second)
 	}
 	for path, before := range snapshots {
-		after, err := os.ReadFile(path)
+		after, err := safepath.ReadFile(filepath.Dir(path), path)
 		if err != nil {
 			t.Fatalf("reading %s: %v", path, err)
 		}
@@ -59,7 +59,7 @@ func TestUninstallPreservesUnrelatedContent(t *testing.T) {
 	if len(removed) == 0 {
 		t.Fatal("expected at least one activation block to be removed")
 	}
-	data, err := os.ReadFile(target)
+	data, err := safepath.ReadFile(home, target)
 	if err != nil {
 		t.Fatalf("reading bashrc: %v", err)
 	}
@@ -94,9 +94,7 @@ func TestBlocksContainValidDelegation(t *testing.T) {
 func TestRecoverLegacyArtifactsDoesNotDeleteUnknownClaude(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, platformNames().claude)
-	if err := os.WriteFile(claude, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating claude fixture: %v", err)
-	}
+	writeFile(t, dir, claude, "real claude")
 
 	actions, err := recoverPlatformArtifacts(dir, executableFixture(t), platformNames())
 	if err != nil {
@@ -105,7 +103,7 @@ func TestRecoverLegacyArtifactsDoesNotDeleteUnknownClaude(t *testing.T) {
 	if len(actions) != 0 {
 		t.Fatalf("unknown claude should not be touched, got actions: %v", actions)
 	}
-	data, err := os.ReadFile(claude)
+	data, err := safepath.ReadFile(dir, claude)
 	if err != nil {
 		t.Fatalf("unknown claude was removed: %v", err)
 	}
@@ -119,9 +117,7 @@ func TestRecoverLegacyArtifactsRestoresBackupWhenClaudeMissing(t *testing.T) {
 	names := platformNames()
 	backup := filepath.Join(dir, names.backup)
 	claude := filepath.Join(dir, names.claude)
-	if err := os.WriteFile(backup, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating backup fixture: %v", err)
-	}
+	writeFile(t, dir, backup, "real claude")
 
 	actions, err := recoverPlatformArtifacts(dir, executableFixture(t), names)
 	if err != nil {
@@ -130,7 +126,7 @@ func TestRecoverLegacyArtifactsRestoresBackupWhenClaudeMissing(t *testing.T) {
 	if len(actions) != 1 || !strings.Contains(actions[0].Action, "restored") {
 		t.Fatalf("expected restore action, got %v", actions)
 	}
-	data, err := os.ReadFile(claude)
+	data, err := safepath.ReadFile(dir, claude)
 	if err != nil {
 		t.Fatalf("restored claude missing: %v", err)
 	}
@@ -145,9 +141,7 @@ func TestRecoverLegacyArtifactsRemovesKnownShim(t *testing.T) {
 	self := executableFixture(t)
 	claude := filepath.Join(dir, names.claude)
 	if runtime.GOOS == "windows" {
-		if err := os.WriteFile(claude, []byte(legacyCmdShimLF), 0o600); err != nil {
-			t.Fatalf("creating cmd shim: %v", err)
-		}
+		writeFile(t, dir, claude, legacyCmdShimLF)
 	} else if err := os.Symlink(self, claude); err != nil {
 		t.Fatalf("creating symlink shim: %v", err)
 	}
@@ -171,22 +165,16 @@ func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		self += ".exe"
 	}
-	if err := os.WriteFile(self, []byte("juggernaut"), 0o700); err != nil {
-		t.Fatalf("creating self fixture: %v", err)
-	}
+	writeExecutableFile(t, dir, self, "juggernaut")
 	if runtime.GOOS == "windows" {
-		if err := os.WriteFile(filepath.Join(dir, "claude.cmd"), []byte(legacyCmdShimLF), 0o600); err != nil {
-			t.Fatalf("creating recursive cmd shim: %v", err)
-		}
+		writeFile(t, dir, filepath.Join(dir, "claude.cmd"), legacyCmdShimLF)
 	} else if err := os.Symlink(self, filepath.Join(dir, "claude")); err != nil {
 		t.Fatalf("creating recursive symlink: %v", err)
 	}
 
 	realDir := t.TempDir()
 	realClaude := filepath.Join(realDir, platformNames().claude)
-	if err := os.WriteFile(realClaude, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating real claude: %v", err)
-	}
+	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	called := false
 	err := launchWithExecutable(t, home, dir+string(os.PathListSeparator)+realDir, self, LaunchOptions{
@@ -215,9 +203,7 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
 	realClaude := filepath.Join(realDir, platformNames().claude)
-	if err := os.WriteFile(realClaude, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating real claude: %v", err)
-	}
+	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	err := LaunchWithOptions(LaunchOptions{
 		Home: home,
@@ -245,9 +231,7 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 	writeSettings(t, home, "iam")
 	realDir := t.TempDir()
 	realClaude := filepath.Join(realDir, platformNames().claude)
-	if err := os.WriteFile(realClaude, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating real claude: %v", err)
-	}
+	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	err := LaunchWithOptions(LaunchOptions{
 		Home: home,
@@ -275,9 +259,7 @@ func TestLaunchWithoutSettingsDoesNotForceBedrockEnv(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
 	realDir := t.TempDir()
 	realClaude := filepath.Join(realDir, platformNames().claude)
-	if err := os.WriteFile(realClaude, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating real claude: %v", err)
-	}
+	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	err := LaunchWithOptions(LaunchOptions{
 		Home: home,
@@ -313,7 +295,7 @@ func readTargets(t *testing.T, home string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
 	for _, target := range DefaultTargets(home) {
-		data, err := os.ReadFile(target.Path)
+		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
 		if err != nil {
 			t.Fatalf("reading %s: %v", target.Path, err)
 		}
@@ -328,10 +310,25 @@ func executableFixture(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		self += ".exe"
 	}
-	if err := os.WriteFile(self, []byte("juggernaut"), 0o700); err != nil {
-		t.Fatalf("creating executable fixture: %v", err)
-	}
+	writeExecutableFile(t, filepath.Dir(self), self, "juggernaut")
 	return self
+}
+
+func writeFile(t *testing.T, base, path, content string) {
+	t.Helper()
+	if err := safepath.WriteFile(base, path, []byte(content)); err != nil {
+		t.Fatalf("writing file fixture %s: %v", path, err)
+	}
+}
+
+func writeExecutableFile(t *testing.T, base, path, content string) {
+	t.Helper()
+	writeFile(t, base, path, content)
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission, go_file-permissions_rule-fileperm
+			t.Fatalf("making file fixture executable %s: %v", path, err)
+		}
+	}
 }
 
 func writeSettings(t *testing.T, home, mode string) {

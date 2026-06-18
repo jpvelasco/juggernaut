@@ -508,7 +508,9 @@ func authModes(home string) ([]string, error) {
 }
 
 func runClaudeBinary(path string, args []string, env []string) error {
-	cmd := exec.Command(path, args...)
+	// path is the resolved real Claude Code executable from ResolveClaudeBinary;
+	// exec.Command is intentionally used without a shell to preserve arguments.
+	cmd := exec.Command(path, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

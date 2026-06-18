@@ -9,6 +9,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 func TestOpusplanProblem(t *testing.T) {
@@ -36,9 +37,7 @@ func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 		name = "claude.cmd"
 	}
 	claude := filepath.Join(dir, name)
-	if err := os.WriteFile(claude, []byte("real claude"), 0o700); err != nil {
-		t.Fatalf("creating claude stub: %v", err)
-	}
+	writeExecutableStub(t, claude)
 	t.Setenv("PATH", dir)
 
 	status, detail := claudeCommandStatus()
@@ -53,7 +52,7 @@ func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 func TestLegacyArtifactStatusWarnsWhenRecoverable(t *testing.T) {
 	home := t.TempDir()
 	binDir := activation.DefaultBinDir(home)
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := safepath.MkdirAll(binDir); err != nil {
 		t.Fatalf("creating bin dir: %v", err)
 	}
 	backupName := "claude.juggernaut-original"
@@ -61,7 +60,7 @@ func TestLegacyArtifactStatusWarnsWhenRecoverable(t *testing.T) {
 		backupName = "claude.juggernaut-original.cmd"
 	}
 	backup := filepath.Join(binDir, backupName)
-	if err := os.WriteFile(backup, []byte("real claude"), 0o700); err != nil {
+	if err := os.WriteFile(backup, []byte("real claude"), 0o600); err != nil {
 		t.Fatalf("creating backup: %v", err)
 	}
 
@@ -115,5 +114,17 @@ func TestLaunchCommandIsHidden(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("launch command should be registered")
+	}
+}
+
+func writeExecutableStub(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("real claude"), 0o600); err != nil {
+		t.Fatalf("creating executable stub: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission, go_file-permissions_rule-fileperm
+			t.Fatalf("making executable stub runnable: %v", err)
+		}
 	}
 }
