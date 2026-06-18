@@ -268,7 +268,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
 		}
 		if token == "" {
-			return errors.New("Bedrock API key not found in keychain; run `juggernaut apply --auth=bedrock-api-key`")
+			return errors.New("bedrock API key not found in keychain; run `juggernaut apply --auth=bedrock-api-key`")
 		}
 		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
 	} else if len(modes) > 0 {
@@ -277,7 +277,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 
 	claudePath, err := ResolveClaudeBinary(opts.Path)
 	if err != nil {
-		return errors.New("Claude Code binary not found on PATH; install it with `curl -fsSL https://claude.ai/install.sh | bash`")
+		return errors.New("real claude binary not found on PATH; install Claude Code with `curl -fsSL https://claude.ai/install.sh | bash`")
 	}
 	return opts.Runner(claudePath, opts.Args, env)
 }
