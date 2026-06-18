@@ -126,12 +126,12 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		haiku = cfg.Models.Haiku
 	}
 
-	// Mantle uses anthropic.* model IDs; global.* cross-region inference profiles
-	// are incompatible with Mantle routing. Strip the prefix when Mantle is enabled.
+	// Mantle uses anthropic.* model IDs; Bedrock inference profile IDs are not
+	// valid Mantle targets. Strip profile prefixes only when Mantle is explicit.
 	if opts.UseMantle {
-		opus = strings.TrimPrefix(opus, "global.")
-		sonnet = strings.TrimPrefix(sonnet, "global.")
-		haiku = strings.TrimPrefix(haiku, "global.")
+		opus = mantleModelID(opus)
+		sonnet = mantleModelID(sonnet)
+		haiku = mantleModelID(haiku)
 	}
 
 	env := make(map[string]string, len(cfg.Environment))
@@ -201,6 +201,15 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}, nil
 }
 
+func mantleModelID(model string) string {
+	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
+		if strings.HasPrefix(model, prefix) {
+			return strings.TrimPrefix(model, prefix)
+		}
+	}
+	return model
+}
+
 // NativeKeys derives the top-level settings.json keys from the block.
 func (b *Block) NativeKeys() NativeKeys {
 	model := ""
@@ -216,16 +225,34 @@ func (b *Block) NativeKeys() NativeKeys {
 	}
 
 	return NativeKeys{
-		Model: model,
-		ModelOverrides: map[string]string{
-			"opus":   b.Models.Opus,
-			"sonnet": b.Models.Sonnet,
-			"haiku":  b.Models.Haiku,
-		},
+		Model:                 model,
+		ModelOverrides:        nativeModelOverrides(b.Models),
 		Env:                   b.Env,
-		EffortLevel:           b.Meta.Effort,
+		EffortLevel:           persistedEffortLevel(b.Meta.Effort),
 		AlwaysThinking:        b.Meta.AlwaysThinking,
 		SkipWebFetchPreflight: true, // always set for Bedrock users
 		Permissions:           permissions,
 	}
+}
+
+func nativeModelOverrides(models ModelOverrides) map[string]string {
+	return map[string]string{
+		"opus":                        models.Opus,
+		"claude-opus-4-8":             models.Opus,
+		"anthropic.claude-opus-4-8":   models.Opus,
+		"sonnet":                      models.Sonnet,
+		"claude-sonnet-4-6":           models.Sonnet,
+		"anthropic.claude-sonnet-4-6": models.Sonnet,
+		"haiku":                       models.Haiku,
+		"claude-haiku-4-5":            models.Haiku,
+		"claude-haiku-4-5-20251001":   models.Haiku,
+		"anthropic.claude-haiku-4-5-20251001-v1:0": models.Haiku,
+	}
+}
+
+func persistedEffortLevel(effort string) string {
+	if effort == "max" {
+		return ""
+	}
+	return effort
 }
