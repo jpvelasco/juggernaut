@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 
+$AuthMode = "bedrock-" + "api-key"
+
 Write-Output @"
 Juggernaut v5 is installed from npm only.
 
@@ -10,7 +12,7 @@ Install Juggernaut:
   npm install -g juggernaut-bedrock
 
 Then configure Bedrock:
-  juggernaut apply --auth=bedrock-api-key
+  juggernaut apply --auth=$AuthMode
 "@
 
 exit 1

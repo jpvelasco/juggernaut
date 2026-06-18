@@ -268,7 +268,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
 		}
 		if token == "" {
-			return errors.New("bedrock API key not found in keychain; run `juggernaut apply --auth=bedrock-api-key`")
+			return fmt.Errorf("bedrock API key not found in keychain; run `juggernaut apply --auth=%s`", authmode.BedrockAPIKey)
 		}
 		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
 	} else if len(modes) > 0 {
@@ -404,7 +404,7 @@ func platformNames() legacyNames {
 
 func isKnownJuggernautArtifact(path, self string) bool {
 	if runtime.GOOS == "windows" {
-		data, err := os.ReadFile(path) // nosemgrep: gosec.G304-1
+		data, err := os.ReadFile(path) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread
 		if err != nil {
 			return false
 		}

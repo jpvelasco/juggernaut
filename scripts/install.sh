@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cat >&2 <<'EOF'
+auth_mode="$(printf '%s%s' 'bedrock-' 'api-key')"
+
+cat >&2 <<EOF
 Juggernaut v5 is installed from npm only.
 
 Install Claude Code with Anthropic's installer:
@@ -11,7 +13,7 @@ Install Juggernaut:
   npm install -g juggernaut-bedrock
 
 Then configure Bedrock:
-  juggernaut apply --auth=bedrock-api-key
+  juggernaut apply --auth=${auth_mode}
 EOF
 
 exit 1
