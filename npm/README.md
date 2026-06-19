@@ -28,6 +28,17 @@ npx juggernaut-bedrock version
 
 Works on **macOS**, **Linux**, **Windows**, and **WSL** — `x64` and `arm64`.
 
+## Upgrading
+
+Older Juggernaut users can install v5 directly:
+
+```bash
+npm install -g juggernaut-bedrock@latest
+juggernaut apply --auth=iam
+```
+
+Using a Bedrock API key from an old Windows v3 install? See the Windows v3 API-key bridge in the [GitHub README](https://github.com/jpvelasco/juggernaut#windows-v3-api-key-installs). You do not need to install v4 first.
+
 ## Quickstart
 
 ```bash
@@ -103,7 +114,7 @@ Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | m
 juggernaut apply --auth=iam --effort=max
 ```
 
-Default: `xhigh`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported.
+Default: `high`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported.
 
 ## Permission modes
 

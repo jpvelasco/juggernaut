@@ -2,6 +2,15 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [5.0.3] - 2026-06-19
+
+**Patch release.** Refreshes upgrade documentation for the v5 npm-only flow.
+
+### Changed
+
+- **Windows v3 API-key upgrades.** Documents the direct v3-to-v5 npm upgrade path and the one-time DPAPI bridge for users who need to preserve an old Windows installer-stored Bedrock API key.
+- **Effort defaults.** Updates README and npm package docs to show `high` as the v5 default effort level.
+
 ## [5.0.2] - 2026-06-19
 
 **Patch release.** Fixes Windows upgrades when existing Claude settings were saved with a UTF-8 byte-order mark.
@@ -771,6 +780,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
 [5.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.1
 [5.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.0
