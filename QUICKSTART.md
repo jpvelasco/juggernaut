@@ -30,6 +30,8 @@ aws sts get-caller-identity
 npm install -g juggernaut-bedrock
 ```
 
+Upgrading from an older Juggernaut? Install v5 directly with npm; there is no required v3 → v4 → v5 chain. Windows v3 API-key users who need to keep an old DPAPI-stored key should use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
+
 ### 4. Configure
 ```bash
 # IAM / SSO (recommended for organizations)

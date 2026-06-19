@@ -42,6 +42,58 @@ npm install -g juggernaut-bedrock
 
 The old `scripts/install.sh` and `scripts/install.ps1` installers are deprecated stubs in v5. Juggernaut is published through [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock).
 
+### Upgrade from older Juggernaut
+
+Go straight to v5 with npm. You do not need to install an intermediate v3 or v4 release first.
+
+```bash
+npm install -g juggernaut-bedrock@latest
+juggernaut version
+```
+
+Then re-run `apply` with your preferred auth mode:
+
+```bash
+juggernaut apply --auth=iam
+juggernaut apply --auth=bedrock-api-key
+```
+
+#### Windows v3 API-key installs
+
+If you are upgrading an old Windows installer-based v3 setup and want to keep a DPAPI-stored Bedrock API key, call the npm v5 binary explicitly and bridge the old key once:
+
+```powershell
+npm install -g juggernaut-bedrock@latest
+
+$NpmPrefix = (npm prefix -g).Trim()
+$Candidates = @(
+  (Join-Path $NpmPrefix "juggernaut.cmd"),
+  (Join-Path $NpmPrefix "bin\juggernaut.cmd"),
+  (Join-Path $env:APPDATA "npm\juggernaut.cmd"),
+  (Join-Path $HOME ".npm-global\juggernaut.cmd")
+)
+
+$Juggernaut = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $Juggernaut) { throw "npm Juggernaut binary not found" }
+
+& $Juggernaut version
+
+. "$HOME\.juggernaut\lib\keychain.ps1"
+$probe = Read-BearerToken
+if (-not $probe -or -not $probe.Value) { throw "Old v3 API key not found" }
+
+& $Juggernaut apply `
+  --auth=bedrock-api-key `
+  --bedrock-key $probe.Value `
+  --region=us-west-2 `
+  --mode=auto `
+  --effort=high
+
+& $Juggernaut doctor
+```
+
+Close and reopen PowerShell after `doctor` is green. This avoids the old `C:\Users\<you>\.juggernaut` launcher taking precedence during the upgrade.
+
 ## Configure
 
 ```bash
@@ -112,8 +164,8 @@ Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhi
 |-------|----------|
 | `low` | Minimal thinking — fastest, lowest cost |
 | `medium` | Moderate thinking |
-| `high` | Almost always thinks |
-| `xhigh` | Always thinks deeply (default) |
+| `high` | Almost always thinks (default) |
+| `xhigh` | Always thinks deeply |
 | `max` | Maximum thinking — deepest reasoning, highest cost |
 
 ```bash
@@ -158,7 +210,7 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
 ```json
 {
   "juggernaut": { "auth": { "mode": "iam", "region": "us-west-2" }, "meta": { ... } },
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
   "skipWebFetchPreflight": true,
   "permissions": { "defaultMode": "default" },
   "env": {
@@ -169,7 +221,7 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
+    "CLAUDE_CODE_EFFORT_LEVEL": "high",
     "ENABLE_PROMPT_CACHING_1H": "1",
     "DISABLE_TELEMETRY": "1"
   }
