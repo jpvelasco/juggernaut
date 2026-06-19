@@ -104,6 +104,8 @@ No overwriting the real Claude Code binary. No copying API keys into env vars.
 | **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
+Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Claude Code strips the suffix before provider calls. Use `--no-1m-context` to opt out.
+
 Override any tier: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
 
 ## Effort levels

@@ -63,6 +63,7 @@ juggernaut doctor
 - Bedrock routing enabled (auth-gated)
 - Claude Sonnet 4.6 as primary model (Global CRIS inference profile)
 - Claude Haiku 4.5 as fast/background model
+- Claude Code 1M context accounting for Opus and Sonnet by default
 - All three model tiers visible in `/model` selector
 - Optimized token limits (32768 output, 65536 thinking)
 - Standard Bedrock inference profiles by default; Mantle is opt-in with `--mantle`

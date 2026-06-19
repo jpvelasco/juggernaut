@@ -106,6 +106,12 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["CLAUDE_CODE_USE_BEDROCK"] != "1" {
 		t.Error("expected CLAUDE_CODE_USE_BEDROCK=1 in top-level env")
 	}
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8[1m]" {
+		t.Errorf("expected Opus default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	}
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6[1m]" {
+		t.Errorf("expected Sonnet default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
 
 	bashrcPath := filepath.Join(home, ".bashrc")
 	bashrc, err := safepath.ReadFile(home, bashrcPath)
@@ -114,6 +120,38 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	}
 	if !activation.HasBlock(string(bashrc)) {
 		t.Error("apply should install shell activation block")
+	}
+}
+
+func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--no-1m-context",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v", err)
+	}
+	env := settings["env"].(map[string]any)
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("expected Opus default model without [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	}
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected Sonnet default model without [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
+	if env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
+		t.Errorf("expected CLAUDE_CODE_DISABLE_1M_CONTEXT=1, got %v", env["CLAUDE_CODE_DISABLE_1M_CONTEXT"])
 	}
 }
 

@@ -102,6 +102,101 @@ func TestNativeKeys_Opusplan(t *testing.T) {
 	}
 }
 
+func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "high",
+		Scope:         "user",
+		Version:       "4.1.0",
+		Use1M:         true,
+		Opusplan:      true,
+		AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8[1m]" {
+		t.Errorf("expected Opus env model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	}
+	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6[1m]" {
+		t.Errorf("expected Sonnet env model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
+	if block.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] != "global.anthropic.claude-haiku-4-5-20251001-v1:0" {
+		t.Errorf("Haiku should not get [1m], got %q", block.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"])
+	}
+	if block.Env["ANTHROPIC_MODEL"] != "opusplan[1m]" {
+		t.Errorf("expected opusplan env model with [1m], got %q", block.Env["ANTHROPIC_MODEL"])
+	}
+	if _, ok := block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"]; ok {
+		t.Error("disable 1M env should not be set when Use1M=true")
+	}
+
+	native := block.NativeKeys()
+	if native.Model != "opusplan[1m]" {
+		t.Errorf("expected native model=opusplan[1m], got %q", native.Model)
+	}
+	if native.ModelOverrides["claude-sonnet-4-6[1m]"] != "global.anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected [1m] Sonnet override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-sonnet-4-6[1m]"])
+	}
+	if native.ModelOverrides["claude-opus-4-8[1m]"] != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-4-8[1m]"])
+	}
+}
+
+func TestBuild_No1MDisablesClaudeCodeExtendedContext(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "high",
+		Scope:         "user",
+		Version:       "4.1.0",
+		Use1M:         false,
+		AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("expected Opus env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	}
+	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected Sonnet env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
+	if block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
+		t.Errorf("expected CLAUDE_CODE_DISABLE_1M_CONTEXT=1, got %q", block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"])
+	}
+	if _, ok := block.NativeKeys().ModelOverrides["claude-sonnet-4-6[1m]"]; ok {
+		t.Error("[1m] model override should be omitted when Use1M=false")
+	}
+}
+
+func TestBuild_Use1MDoesNotAnnotateUnknownCustomModels(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "high",
+		Scope:         "user",
+		Version:       "4.1.0",
+		Use1M:         true,
+		OpusModel:     "custom.opus",
+		SonnetModel:   "custom.sonnet",
+		AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "custom.opus" {
+		t.Errorf("unknown Opus override should not get [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	}
+	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "custom.sonnet" {
+		t.Errorf("unknown Sonnet override should not get [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
+}
+
 func TestBuild_InvalidPermissionMode(t *testing.T) {
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "xhigh",
