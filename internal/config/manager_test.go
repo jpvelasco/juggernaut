@@ -1,10 +1,13 @@
 package config_test
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 func TestReadMissing(t *testing.T) {
@@ -33,6 +36,54 @@ func TestWriteAndRead(t *testing.T) {
 	}
 	if got["someKey"] != "someValue" {
 		t.Errorf("expected someKey=someValue, got %v", got["someKey"])
+	}
+}
+
+func TestReadWithUTF8BOM(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	data := append([]byte{0xEF, 0xBB, 0xBF}, []byte(`{"someKey":"someValue"}`)...)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("writing BOM-prefixed settings: %v", err)
+	}
+
+	got, err := config.NewManager(path).Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if got["someKey"] != "someValue" {
+		t.Errorf("expected someKey=someValue, got %v", got["someKey"])
+	}
+}
+
+func TestMergeJuggernautBlock_RewritesUTF8BOM(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	data := append([]byte{0xEF, 0xBB, 0xBF}, []byte(`{"userPref":"keep-me"}`)...)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("writing BOM-prefixed settings: %v", err)
+	}
+
+	m := config.NewManager(path)
+	if err := m.MergeJuggernautBlock(map[string]any{"managedBy": "juggernaut"}, nil, nil); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	written, err := safepath.ReadFile(filepath.Dir(path), path)
+	if err != nil {
+		t.Fatalf("reading rewritten settings: %v", err)
+	}
+	if bytes.HasPrefix(written, []byte{0xEF, 0xBB, 0xBF}) {
+		t.Fatal("rewritten settings should not retain UTF-8 BOM")
+	}
+
+	got, err := m.Read()
+	if err != nil {
+		t.Fatalf("Read() after merge error: %v", err)
+	}
+	if got["userPref"] != "keep-me" {
+		t.Error("user pref should be preserved after merge")
+	}
+	if _, ok := got["juggernaut"]; !ok {
+		t.Error("juggernaut block should be present")
 	}
 }
 
