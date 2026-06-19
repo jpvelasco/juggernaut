@@ -63,7 +63,7 @@ juggernaut doctor
 - Claude Haiku 4.5 as fast/background model
 - All three model tiers visible in `/model` selector
 - Optimized token limits (32768 output, 65536 thinking)
-- Mantle routing enabled by default
+- Standard Bedrock inference profiles by default; Mantle is opt-in with `--mantle`
 - Configuration in `~/.claude/settings.json`
 - A marked shell activation block that delegates `claude` to `juggernaut launch`
 
@@ -72,6 +72,9 @@ juggernaut doctor
 ```bash
 # OpusPlan — Opus in /plan mode, Sonnet during execution
 juggernaut apply --auth=iam --opusplan
+
+# Auto mode — lets Claude Code auto-approve safe tool calls with background checks
+juggernaut apply --auth=iam --mode=auto
 
 # Override the subagent/background model
 juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6

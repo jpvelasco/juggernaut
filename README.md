@@ -62,11 +62,11 @@ juggernaut apply
 ```bash
 juggernaut apply --auth=iam --region=us-east-1
 juggernaut apply --auth=iam --opusplan              # Opus in /plan, Sonnet in execute
-juggernaut apply --auth=iam --effort=xhigh          # low | medium | high | xhigh | max
+juggernaut apply --auth=iam --effort=high           # low | medium | high | xhigh | max
 juggernaut apply --auth=iam --mode=auto             # enable agentic safety-classifier mode
 juggernaut apply --auth=iam --always-thinking       # extended thinking on by default
 juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: default | flex | priority
-juggernaut apply --auth=iam --no-mantle             # disable Mantle routing
+juggernaut apply --auth=iam --mantle                # enable Mantle routing
 juggernaut apply --auth=iam --dry-run               # preview without writing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
 ```
@@ -106,7 +106,7 @@ juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6  # overri
 
 ## Effort Levels
 
-Controls adaptive thinking depth. Valid for all Claude 4 models on Bedrock.
+Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, and `max`; Claude Code falls back to the highest supported level for the active model. Juggernaut defaults to `high`, which matches Sonnet 4.6.
 
 | Level | Behavior |
 |-------|----------|

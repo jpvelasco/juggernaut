@@ -129,6 +129,8 @@ Auto mode on Bedrock requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — Juggernaut se
 --always-thinking       # enable extended thinking by default (alwaysThinkingEnabled)
 --service-tier=flex     # Bedrock service tier: default | flex | priority
 --opusplan              # route /plan to Opus 4.8, execution to Sonnet 4.6
+--mode=auto             # auto-approve safe tool calls with background checks
+--mantle                # enable Mantle routing
 --scope=project         # write to ./.claude/settings.json instead of ~/.claude/
 ```
 

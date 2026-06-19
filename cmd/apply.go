@@ -34,6 +34,7 @@ var applyFlags struct {
 	opusplan       bool
 	noOpusplan     bool
 	no1m           bool
+	mantle         bool
 	noMantle       bool
 	mantleURL      string
 	scope          string
@@ -55,7 +56,7 @@ func init() {
 	f.StringVar(&applyFlags.opusModel, "opus-model", "", "override Opus model ID")
 	f.StringVar(&applyFlags.sonnetModel, "sonnet-model", "", "override Sonnet model ID")
 	f.StringVar(&applyFlags.haikuModel, "haiku-model", "", "override Haiku model ID")
-	f.StringVar(&applyFlags.effort, "effort", "xhigh", "effort level: low|medium|high|xhigh|max")
+	f.StringVar(&applyFlags.effort, "effort", "high", "effort level: low|medium|high|xhigh|max")
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
 	f.BoolVar(&applyFlags.no1m, "no-1m-context", false, "disable 1M token context")
@@ -63,7 +64,8 @@ func init() {
 	var deprecated1m bool
 	f.BoolVar(&deprecated1m, "1m-context", true, "")
 	_ = f.MarkHidden("1m-context")
-	f.BoolVar(&applyFlags.noMantle, "no-mantle", false, "disable Mantle routing")
+	f.BoolVar(&applyFlags.mantle, "mantle", false, "enable Mantle routing")
+	f.BoolVar(&applyFlags.noMantle, "no-mantle", false, "disable Mantle routing (accepted for compatibility; Mantle is disabled by default)")
 	f.StringVar(&applyFlags.mantleURL, "mantle-url", "", "custom Mantle base URL")
 	f.StringVar(&applyFlags.scope, "scope", "user", "settings scope: user or project")
 	f.BoolVar(&applyFlags.dryRun, "dry-run", false, "preview without writing")
@@ -96,6 +98,10 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	useMantle, err := resolveMantle()
+	if err != nil {
+		return err
+	}
 
 	opusModel := applyFlags.opusModel
 	sonnetModel := applyFlags.sonnetModel
@@ -117,7 +123,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 		HaikuModel:     haikuModel,
 		Opusplan:       opusplan,
 		Use1M:          !applyFlags.no1m,
-		UseMantle:      !applyFlags.noMantle,
+		UseMantle:      useMantle,
 		MantleURL:      applyFlags.mantleURL,
 		Storage:        applyFlags.storage,
 		AuthValidated:  true,
@@ -135,6 +141,13 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return printApplyDryRun(home)
 	}
 	return commitApply(home, authMode, token, block)
+}
+
+func resolveMantle() (bool, error) {
+	if applyFlags.noMantle && (applyFlags.mantle || applyFlags.mantleURL != "") {
+		return false, fmt.Errorf("--no-mantle cannot be combined with --mantle or --mantle-url")
+	}
+	return applyFlags.mantle || applyFlags.mantleURL != "", nil
 }
 
 func printApplyDryRun(home string) error {

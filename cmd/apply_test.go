@@ -117,6 +117,70 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	}
 }
 
+func TestApply_DefaultMantleDisabledPreservesInferenceProfiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v", err)
+	}
+	env := settings["env"].(map[string]any)
+	if _, ok := env["CLAUDE_CODE_USE_MANTLE"]; ok {
+		t.Fatal("Mantle should be disabled by default")
+	}
+	overrides := settings["modelOverrides"].(map[string]any)
+	if overrides["sonnet"] != "global.anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected global Sonnet inference profile by default, got %v", overrides["sonnet"])
+	}
+	block := settings["juggernaut"].(map[string]any)
+	meta := block["meta"].(map[string]any)
+	if meta["useMantle"] != false {
+		t.Errorf("expected juggernaut.meta.useMantle=false by default, got %v", meta["useMantle"])
+	}
+}
+
+func TestApply_MantleFlagStripsInferenceProfilePrefix(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--mantle",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v", err)
+	}
+	env := settings["env"].(map[string]any)
+	if env["CLAUDE_CODE_USE_MANTLE"] != "1" {
+		t.Fatalf("expected CLAUDE_CODE_USE_MANTLE=1 with --mantle, got %v", env["CLAUDE_CODE_USE_MANTLE"])
+	}
+	overrides := settings["modelOverrides"].(map[string]any)
+	if overrides["sonnet"] != "anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected raw Sonnet model ID with --mantle, got %v", overrides["sonnet"])
+	}
+}
+
 func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -442,6 +506,27 @@ func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--effort=medium", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if settings["effortLevel"] != "medium" {
+		t.Errorf("expected effortLevel=medium as native key in settings.json, got %v", settings["effortLevel"])
+	}
+}
+
+func TestApply_MaxEffortUsesEnvOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--effort=max", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply error: %v", err)
@@ -452,8 +537,12 @@ func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
 	if err := json.Unmarshal(data, &settings); err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
-	if settings["effortLevel"] != "max" {
-		t.Errorf("expected effortLevel=max as native key in settings.json, got %v", settings["effortLevel"])
+	if _, ok := settings["effortLevel"]; ok {
+		t.Error("effortLevel should be omitted for max because Claude Code only accepts max via env/session")
+	}
+	env, _ := settings["env"].(map[string]any)
+	if env["CLAUDE_CODE_EFFORT_LEVEL"] != "max" {
+		t.Errorf("expected CLAUDE_CODE_EFFORT_LEVEL=max, got %v", env["CLAUDE_CODE_EFFORT_LEVEL"])
 	}
 }
 

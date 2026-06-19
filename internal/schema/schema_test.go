@@ -168,6 +168,21 @@ func TestBuild_ServiceTier_WritesEnvVar(t *testing.T) {
 
 func TestNativeKeys_EffortLevel(t *testing.T) {
 	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "xhigh",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	native := block.NativeKeys()
+	if native.EffortLevel != "xhigh" {
+		t.Errorf("expected effortLevel=xhigh in NativeKeys, got %q", native.EffortLevel)
+	}
+}
+
+func TestNativeKeys_MaxEffortIsEnvOnly(t *testing.T) {
+	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "max",
 		Scope: "user", Version: "4.1.0", AuthValidated: true,
 	}
@@ -176,8 +191,33 @@ func TestNativeKeys_EffortLevel(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 	native := block.NativeKeys()
-	if native.EffortLevel != "max" {
-		t.Errorf("expected effortLevel=max in NativeKeys, got %q", native.EffortLevel)
+	if native.EffortLevel != "" {
+		t.Errorf("expected max effort to be omitted from NativeKeys effortLevel, got %q", native.EffortLevel)
+	}
+	if native.Env["CLAUDE_CODE_EFFORT_LEVEL"] != "max" {
+		t.Errorf("expected CLAUDE_CODE_EFFORT_LEVEL=max, got %q", native.Env["CLAUDE_CODE_EFFORT_LEVEL"])
+	}
+}
+
+func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	overrides := block.NativeKeys().ModelOverrides
+	for _, key := range []string{"sonnet", "claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"} {
+		if overrides[key] != "global.anthropic.claude-sonnet-4-6" {
+			t.Errorf("expected %s to map to global Sonnet profile, got %q", key, overrides[key])
+		}
+	}
+	for _, key := range []string{"opus", "claude-opus-4-8", "anthropic.claude-opus-4-8"} {
+		if overrides[key] != "global.anthropic.claude-opus-4-8" {
+			t.Errorf("expected %s to map to global Opus profile, got %q", key, overrides[key])
+		}
 	}
 }
 
@@ -251,6 +291,26 @@ func TestBuild_Mantle_StripsGlobalPrefix(t *testing.T) {
 	}
 	if block.Models.Haiku != "anthropic.claude-haiku-4-5-20251001-v1:0" {
 		t.Errorf("expected haiku without global. prefix, got %s", block.Models.Haiku)
+	}
+}
+
+func TestBuild_Mantle_StripsRegionalInferenceProfilePrefix(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "xhigh",
+		Scope:         "user",
+		Version:       "4.0.0",
+		AuthValidated: true,
+		UseMantle:     true,
+		SonnetModel:   "us.anthropic.claude-sonnet-4-6",
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Models.Sonnet != "anthropic.claude-sonnet-4-6" {
+		t.Errorf("expected sonnet without us. prefix, got %s", block.Models.Sonnet)
 	}
 }
 

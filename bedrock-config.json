@@ -1,6 +1,6 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "models": {
     "default": "global.anthropic.claude-sonnet-4-6",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -25,8 +25,8 @@
     "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
     "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,thinking,adaptive_thinking,interleaved_thinking",
-    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
+    "CLAUDE_CODE_EFFORT_LEVEL": "high",
     "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
     "ENABLE_PROMPT_CACHING_1H": "1",
     "DISABLE_ERROR_REPORTING": "1",
@@ -64,7 +64,7 @@
   "notes": {
     "fast_model": "Fast/background model defaults to Haiku 4.5 using ANTHROPIC_DEFAULT_HAIKU_MODEL (Anthropic recommendation for cost & speed on subagents, exploration, etc.). ANTHROPIC_SMALL_FAST_MODEL was removed because it is officially deprecated. See: https://code.claude.com/docs/en/model-config",
     "1m_context": "Opus 4.8, Opus 4.7, and Sonnet 4.6 have native 1M context windows in Amazon Bedrock; default model IDs stay suffix-free. The --1m-context flag records the user's context preference for Juggernaut-managed settings.",
-    "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max. Defaults to xhigh. On Opus 4.8/4.7 effort controls adaptive thinking depth: max (always thinks deeply), xhigh (always thinks), high (almost always), medium (moderate), low (minimal).",
+    "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max. Defaults to high because Sonnet 4.6 does not support xhigh; Claude Code falls back to the highest supported level at or below the requested effort. Use --effort=xhigh for Opus 4.8/4.7 or Fable 5, and --effort=max when you explicitly want the deepest session behavior.",
     "subagent_model": "CLAUDE_CODE_SUBAGENT_MODEL controls the model for background subagents independently of ANTHROPIC_DEFAULT_HAIKU_MODEL. Defaults to Haiku for cost efficiency.",
     "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config",
     "auto_mode": "Auto mode (permissions.defaultMode: auto) enables the agentic safety classifier. On Bedrock, CLAUDE_CODE_ENABLE_AUTO_MODE=1 is required â€” without it auto mode silently does nothing. Juggernaut sets this automatically when --mode=auto is used.",

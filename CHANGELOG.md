@@ -2,6 +2,17 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [5.0.1] - 2026-06-18
+
+**Patch release.** Fixes Bedrock model routing and effort defaults for the v5 activation flow.
+
+### Fixed
+
+- **Mantle is opt-in.** `juggernaut apply` no longer enables Mantle by default. Standard Bedrock now preserves `global.*` inference profile IDs so Claude Code invokes profiles such as `global.anthropic.claude-sonnet-4-6` instead of failing on raw `anthropic.*` base model IDs. Use `--mantle` to opt into Mantle routing.
+- **Claude Code model picker routing.** Native `modelOverrides` now include Claude Code's version keys such as `claude-sonnet-4-6` and `claude-opus-4-8`, plus the Bedrock raw IDs Claude Code may save from `/model`, so picker changes continue to route through Bedrock inference profiles.
+- **Effort display alignment.** Default effort is now `high`, matching Sonnet 4.6's supported levels. `max` remains supported through `CLAUDE_CODE_EFFORT_LEVEL` but is not written to the native `effortLevel` setting, which Claude Code treats as non-`max`.
+- **Sonnet capabilities.** Sonnet 4.6 now declares `max_effort` capability and does not advertise unsupported `xhigh` behavior.
+
 ## [5.0.0] - 2026-06-18
 
 **Major release.** Juggernaut is now npm-only and no longer installs, replaces, or owns any `claude` binary. Anthropic's installer owns Claude Code; Juggernaut owns Bedrock settings, credentials, and shell activation.
