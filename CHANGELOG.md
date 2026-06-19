@@ -2,6 +2,15 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [5.0.4] - 2026-06-19
+
+**Patch release.** Fixes Claude Code's local 1M context-window signaling for pinned Bedrock models.
+
+### Fixed
+
+- **1M context accounting.** Juggernaut now appends Claude Code's `[1m]` suffix to pinned Opus and Sonnet model environment variables by default, so Claude Code uses the correct 1M context window locally while stripping the suffix before Bedrock calls.
+- **`--no-1m-context`.** The opt-out flag now writes `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` and keeps pinned Opus and Sonnet model IDs suffix-free.
+
 ## [5.0.3] - 2026-06-19
 
 **Patch release.** Refreshes upgrade documentation for the v5 npm-only flow.
@@ -780,6 +789,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
 [5.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.1

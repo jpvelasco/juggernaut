@@ -149,6 +149,8 @@ claude
 | **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
 | **Fast / subagent** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
+Juggernaut appends Claude Code's `[1m]` suffix to the Opus and Sonnet alias environment variables by default, so Claude Code accounts against the 1M context window locally. Claude Code strips that suffix before calling Bedrock. Use `--no-1m-context` to opt out.
+
 Override any tier:
 
 ```bash
@@ -218,8 +220,8 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "AWS_REGION": "us-west-2",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6[1m]",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_EFFORT_LEVEL": "high",
     "ENABLE_PROMPT_CACHING_1H": "1",

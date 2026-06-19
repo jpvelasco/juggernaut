@@ -142,14 +142,17 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 
 	env["AWS_REGION"] = opts.Region
-	env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = opus
-	env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = sonnet
+	env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = claudeCodeContextModelID(opus, opts.Use1M)
+	env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = claudeCodeContextModelID(sonnet, opts.Use1M)
 	env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = haiku
 	env["CLAUDE_CODE_SUBAGENT_MODEL"] = haiku
 	env["CLAUDE_CODE_EFFORT_LEVEL"] = opts.Effort
 
 	if opts.Opusplan {
-		env["ANTHROPIC_MODEL"] = "opusplan"
+		env["ANTHROPIC_MODEL"] = claudeCodeContextModelID("opusplan", opts.Use1M)
+	}
+	if !opts.Use1M {
+		env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] = "1"
 	}
 	if opts.UseMantle {
 		env["CLAUDE_CODE_USE_MANTLE"] = "1"
@@ -210,11 +213,34 @@ func mantleModelID(model string) string {
 	return model
 }
 
+func claudeCodeContextModelID(model string, use1M bool) string {
+	if !use1M || strings.HasSuffix(model, "[1m]") || !supportsClaudeCode1M(model) {
+		return model
+	}
+	return model + "[1m]"
+}
+
+func supportsClaudeCode1M(model string) bool {
+	normalized := strings.TrimSuffix(model, "[1m]")
+	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
+		normalized = strings.TrimPrefix(normalized, prefix)
+	}
+	return normalized == "opusplan" ||
+		strings.Contains(normalized, "claude-fable-5") ||
+		strings.Contains(normalized, "claude-opus-4-8") ||
+		strings.Contains(normalized, "claude-opus-4-7") ||
+		strings.Contains(normalized, "claude-opus-4-6") ||
+		strings.Contains(normalized, "claude-sonnet-4-6")
+}
+
 // NativeKeys derives the top-level settings.json keys from the block.
 func (b *Block) NativeKeys() NativeKeys {
 	model := ""
 	if b.Meta.Opusplan {
 		model = "opusplan"
+		if b.Meta.Use1M {
+			model = "opusplan[1m]"
+		}
 	}
 
 	var permissions map[string]any
@@ -226,7 +252,7 @@ func (b *Block) NativeKeys() NativeKeys {
 
 	return NativeKeys{
 		Model:                 model,
-		ModelOverrides:        nativeModelOverrides(b.Models),
+		ModelOverrides:        nativeModelOverrides(b.Models, b.Meta.Use1M),
 		Env:                   b.Env,
 		EffortLevel:           persistedEffortLevel(b.Meta.Effort),
 		AlwaysThinking:        b.Meta.AlwaysThinking,
@@ -235,8 +261,8 @@ func (b *Block) NativeKeys() NativeKeys {
 	}
 }
 
-func nativeModelOverrides(models ModelOverrides) map[string]string {
-	return map[string]string{
+func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
+	overrides := map[string]string{
 		"opus":                        models.Opus,
 		"claude-opus-4-8":             models.Opus,
 		"anthropic.claude-opus-4-8":   models.Opus,
@@ -248,6 +274,15 @@ func nativeModelOverrides(models ModelOverrides) map[string]string {
 		"claude-haiku-4-5-20251001":   models.Haiku,
 		"anthropic.claude-haiku-4-5-20251001-v1:0": models.Haiku,
 	}
+	if use1M {
+		overrides["opus[1m]"] = models.Opus
+		overrides["claude-opus-4-8[1m]"] = models.Opus
+		overrides["anthropic.claude-opus-4-8[1m]"] = models.Opus
+		overrides["sonnet[1m]"] = models.Sonnet
+		overrides["claude-sonnet-4-6[1m]"] = models.Sonnet
+		overrides["anthropic.claude-sonnet-4-6[1m]"] = models.Sonnet
+	}
+	return overrides
 }
 
 func persistedEffortLevel(effort string) string {
