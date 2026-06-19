@@ -2,6 +2,14 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [5.0.2] - 2026-06-19
+
+**Patch release.** Fixes Windows upgrades when existing Claude settings were saved with a UTF-8 byte-order mark.
+
+### Fixed
+
+- **BOM-prefixed Claude settings.** `juggernaut apply` and `juggernaut doctor` now tolerate `settings.json` files that start with a UTF-8 BOM, preserving existing settings and rewriting the file as plain UTF-8 on the next successful apply.
+
 ## [5.0.1] - 2026-06-18
 
 **Patch release.** Fixes Bedrock model routing and effort defaults for the v5 activation flow.
@@ -763,6 +771,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
+[5.0.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.1
 [5.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.0
 [4.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.4
 [4.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v4.0.3

@@ -38,6 +38,7 @@ func (m *Manager) Read() (map[string]any, error) {
 	if len(data) == 0 {
 		return map[string]any{}, nil
 	}
+	data = stripUTF8BOM(data)
 	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", m.path, err)
@@ -240,4 +241,11 @@ func copyFile(src, dst string) error {
 	}
 	dstBase := filepath.Dir(filepath.Clean(dst))
 	return safepath.WriteFile(dstBase, dst, data)
+}
+
+func stripUTF8BOM(data []byte) []byte {
+	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+		return data[3:]
+	}
+	return data
 }

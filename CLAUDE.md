@@ -72,7 +72,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **`--model` overrides all three model IDs** (opus, sonnet, haiku) when set; `--opus-model`, `--sonnet-model`, `--haiku-model` override individually.
 - **`--storage`:** credential storage backend — `keychain` (default), `dpapi` (Windows), or `profile` (env/shell).
 - **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
-- **Mantle on by default:** opt out with `--no-mantle`; `--mantle-url` sets a custom base URL.
+- **Mantle opt-in:** standard Bedrock preserves inference profile IDs by default; use `--mantle` or `--mantle-url` only when explicitly routing through Mantle.
 - **Opusplan-gated ANTHROPIC_MODEL:** only written when `--opusplan` is active.
 - **`--mode`:** sets `permissions.defaultMode` in settings.json. When `auto`, also writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` in env (required for Bedrock; without it auto mode silently does nothing).
 - **`--always-thinking`:** writes `alwaysThinkingEnabled: true` as a native settings.json key.
