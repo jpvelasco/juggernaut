@@ -596,7 +596,7 @@ func TestApply_SwitchingStorage_ClearsPreviousBackend(t *testing.T) {
 	if got, _ := store.Get(); got != "" {
 		t.Errorf("expected keychain cleared after switching to profile storage, got %q", got)
 	}
-	data, err := os.ReadFile(tokenPath)
+	data, err := os.ReadFile(tokenPath) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- test fixture under t.TempDir()
 	if err != nil || string(data) != "profile-key" {
 		t.Errorf("expected profile-key in profile file, got %q (err %v)", string(data), err)
 	}

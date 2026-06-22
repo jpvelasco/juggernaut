@@ -40,8 +40,7 @@ func newBlob(b []byte) dataBlob {
 
 func (b dataBlob) bytes() []byte {
 	out := make([]byte, b.cbData)
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- required to copy a Win32 DATA_BLOB returned by DPAPI
-	copy(out, unsafe.Slice(b.pbData, b.cbData))
+	copy(out, unsafe.Slice(b.pbData, b.cbData)) // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- copy of Win32 DATA_BLOB returned by DPAPI
 	return out
 }
 
@@ -108,15 +107,14 @@ func protect(data, entropy []byte) ([]byte, error) {
 	in := newBlob(data)
 	ent := newBlob(entropy)
 	var out dataBlob
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- required for the Win32 DPAPI syscall ABI
 	r, _, err := procCryptProtectData.Call(
-		uintptr(unsafe.Pointer(&in)),
+		uintptr(unsafe.Pointer(&in)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- Win32 DPAPI syscall ABI
 		0,
-		uintptr(unsafe.Pointer(&ent)),
+		uintptr(unsafe.Pointer(&ent)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- Win32 DPAPI syscall ABI
 		0,
 		0,
 		cryptProtectUIForbidden,
-		uintptr(unsafe.Pointer(&out)),
+		uintptr(unsafe.Pointer(&out)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- Win32 DPAPI syscall ABI
 	)
 	if r == 0 {
 		return nil, err
@@ -129,15 +127,14 @@ func unprotect(data, entropy []byte) ([]byte, error) {
 	in := newBlob(data)
 	ent := newBlob(entropy)
 	var out dataBlob
-	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- required for the Win32 DPAPI syscall ABI
 	r, _, err := procCryptUnprotect.Call(
-		uintptr(unsafe.Pointer(&in)),
+		uintptr(unsafe.Pointer(&in)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- Win32 DPAPI syscall ABI
 		0,
-		uintptr(unsafe.Pointer(&ent)),
+		uintptr(unsafe.Pointer(&ent)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- Win32 DPAPI syscall ABI
 		0,
 		0,
 		cryptProtectUIForbidden,
-		uintptr(unsafe.Pointer(&out)),
+		uintptr(unsafe.Pointer(&out)), // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- Win32 DPAPI syscall ABI
 	)
 	if r == 0 {
 		return nil, err
