@@ -144,8 +144,7 @@ func TestDoctor_ReadsBearerTokenFromConfiguredProfileStorage(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	tokenPath := filepath.Join(home, "profile-token")
-	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	isolateCredentialEnv(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",

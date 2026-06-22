@@ -79,7 +79,7 @@ func init() {
 	rootCmd.AddCommand(applyCmd)
 }
 
-func runApply(_ *cobra.Command, _ []string) error {
+func runApply(cmd *cobra.Command, _ []string) error {
 	home, err := homeDir()
 	if err != nil {
 		return err
@@ -90,7 +90,8 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg)
+	storageChanged := cmd.Flags().Changed("storage")
+	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg, storageChanged)
 	if err != nil {
 		return err
 	}
@@ -239,7 +240,7 @@ func installActivation(home string) {
 	fmt.Printf("  ✓ Installed Claude activation in %d shell profile(s)\n", len(paths))
 }
 
-func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
+func resolveApplyInputs(home string, bCfg *bedrock.Config, storageChanged bool) (authMode, region string, opusplan bool, err error) {
 	authMode = applyFlags.auth
 	region = applyFlags.region
 	if region == "" {
@@ -273,6 +274,16 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 					if meta, ok := jBlock["meta"].(map[string]any); ok {
 						if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
 							applyFlags.mode = pmode
+						}
+					}
+				}
+				// Preserve the configured storage backend when --storage is not
+				// supplied, so a bare re-apply doesn't reset it to the keychain
+				// default (which would also wipe the prior backend via ClearOthers).
+				if !storageChanged {
+					if auth, ok := jBlock["auth"].(map[string]any); ok {
+						if st, ok := auth["storage"].(string); ok && st != "" {
+							applyFlags.storage = st
 						}
 					}
 				}

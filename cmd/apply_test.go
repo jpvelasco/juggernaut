@@ -291,8 +291,7 @@ func TestUninstall_RemovesTokenFromConfiguredProfileStorage(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	tokenPath := filepath.Join(home, "profile-token")
-	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	tokenPath := isolateCredentialEnv(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -459,12 +458,24 @@ func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
 	readSettingsJSON(t, home)
 }
 
+// isolateCredentialEnv points every credential side-channel (keychain service,
+// DPAPI home, profile token path) at test-scoped locations so a test that runs
+// `apply --storage=...` (which clears the non-selected backends) can never touch
+// the developer's real credentials.
+func isolateCredentialEnv(t *testing.T, home string) string {
+	t.Helper()
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-cred-isolated")
+	t.Setenv("JUGGERNAUT_HOME", filepath.Join(home, "iso-juggernaut-home"))
+	tokenPath := filepath.Join(home, "profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	return tokenPath
+}
+
 func TestApply_StorageProfile_WritesTokenToProfileFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	tokenPath := filepath.Join(home, "profile-token")
-	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	tokenPath := isolateCredentialEnv(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -490,8 +501,7 @@ func TestApply_StorageProfile_PreserveKeyReadsProfileFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	tokenPath := filepath.Join(home, "profile-token")
-	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	tokenPath := isolateCredentialEnv(t, home)
 	if err := os.WriteFile(tokenPath, []byte("preexisting-profile-key"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -505,6 +515,49 @@ func TestApply_StorageProfile_PreserveKeyReadsProfileFile(t *testing.T) {
 		"--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply --preserve-key with profile storage error: %v", err)
+	}
+}
+
+func TestApply_ReapplyPreservesStorageMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	// Isolate keychain/CredMan so migration can't pull a real machine credential.
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-reapply-isolated")
+	t.Setenv("JUGGERNAUT_HOME", filepath.Join(home, "no-juggernaut-home"))
+	tokenPath := filepath.Join(home, "profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+
+	// First apply with profile storage.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=profile-key", "--storage=profile",
+		"--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+
+	// Re-apply WITHOUT --storage (e.g. just changing region). Storage must be
+	// preserved as profile, not silently reset to the keychain default — which
+	// would also wipe the profile token via ClearOthers.
+	if err := ExecuteArgs([]string{
+		"apply", "--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("re-apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings: %v", err)
+	}
+	jb, _ := settings["juggernaut"].(map[string]any)
+	auth, _ := jb["auth"].(map[string]any)
+	if auth["storage"] != "profile" {
+		t.Errorf("expected storage preserved as profile on re-apply, got %v", auth["storage"])
+	}
+	if got, _ := os.ReadFile(tokenPath); string(got) != "profile-key" {
+		t.Errorf("expected profile token preserved on re-apply, got %q", string(got))
 	}
 }
 
