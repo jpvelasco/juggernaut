@@ -64,6 +64,27 @@ func TestMigrateInto_FromProfileFile(t *testing.T) {
 	}
 }
 
+func TestMigrateInto_RemovesProfileSourceAfterImport(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-migrate-cleanup")
+	t.Setenv("JUGGERNAUT_HOME", filepath.Join(home, "no-juggernaut-home"))
+	tokenPath := filepath.Join(home, "bearer-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	if err := os.WriteFile(tokenPath, []byte("migrate-me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	target := &fakeBackend{}
+	if _, err := keychain.MigrateInto(target, home); err != nil {
+		t.Fatalf("MigrateInto error: %v", err)
+	}
+
+	// The plaintext v3 profile token must not be left on disk after import.
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Errorf("expected v3 profile source removed after migration, stat err=%v", err)
+	}
+}
+
 func TestMigrateInto_NothingToMigrate(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-migrate-isolated-empty")

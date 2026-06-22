@@ -18,9 +18,9 @@ func legacySources(home string) []legacySource {
 	dpapi, _ := newDPAPIBackend(home)
 	profile := NewProfileBackend(home)
 	sources := []legacySource{
-		{name: "dpapi", read: dpapi.Get},
-		{name: "credential-manager", read: readLegacyCredManToken},
-		{name: "profile", read: profile.Get},
+		{name: "dpapi", read: dpapi.Get, remove: dpapi.Delete},
+		{name: "credential-manager", read: readLegacyCredManToken, remove: deleteLegacyCredManToken},
+		{name: "profile", read: profile.Get, remove: profile.Delete},
 	}
 	return sources
 }
@@ -34,6 +34,16 @@ func readLegacyCredManToken() (string, error) {
 		return "", nil
 	}
 	return decodeUTF16(cred.CredentialBlob), nil
+}
+
+// deleteLegacyCredManToken removes the v3 bare-target Credential Manager entry.
+// Silent when no such entry exists.
+func deleteLegacyCredManToken() error {
+	cred, err := wincred.GetGenericCredential(legacyServiceName())
+	if err != nil {
+		return nil
+	}
+	return cred.Delete()
 }
 
 // decodeUTF16 decodes a little-endian UTF-16 byte blob (as written by the v3

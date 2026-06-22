@@ -508,6 +508,47 @@ func TestApply_StorageProfile_PreserveKeyReadsProfileFile(t *testing.T) {
 	}
 }
 
+func TestApply_SwitchingStorage_ClearsPreviousBackend(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	store := setupIsolatedKeychain(t)
+	t.Cleanup(func() { _ = store.Delete() })
+
+	tokenPath := filepath.Join(home, "profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+
+	// First apply: store in keychain.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=keychain-key", "--storage=keychain",
+		"--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+	if got, _ := store.Get(); got != "keychain-key" {
+		t.Fatalf("expected keychain-key in keychain, got %q", got)
+	}
+
+	// Second apply: switch to profile storage.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=profile-key", "--storage=profile",
+		"--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("second apply error: %v", err)
+	}
+
+	// The keychain token must be cleared to avoid orphaning a stale credential.
+	if got, _ := store.Get(); got != "" {
+		t.Errorf("expected keychain cleared after switching to profile storage, got %q", got)
+	}
+	data, err := os.ReadFile(tokenPath)
+	if err != nil || string(data) != "profile-key" {
+		t.Errorf("expected profile-key in profile file, got %q (err %v)", string(data), err)
+	}
+}
+
 func TestApply_PreserveKey_MigratesV3ProfileTokenIntoKeychain(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -539,6 +580,29 @@ func TestApply_PreserveKey_MigratesV3ProfileTokenIntoKeychain(t *testing.T) {
 	}
 	if got != "v3-legacy-key" {
 		t.Errorf("expected migrated key v3-legacy-key in keychain, got %q", got)
+	}
+}
+
+func TestApply_KeychainOversizeKey_GivesActionableError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupIsolatedKeychain(t)
+
+	// Windows Credential Manager / go-keyring caps blobs at 2560 bytes.
+	bigKey := strings.Repeat("A", 4096)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=" + bigKey, "--storage=keychain",
+		"--region=us-west-2", "--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected error storing oversize key in keychain")
+	}
+	// The error must point the user at an alternative storage backend.
+	if !strings.Contains(err.Error(), "--storage") {
+		t.Errorf("expected actionable guidance mentioning --storage, got: %v", err)
 	}
 }
 

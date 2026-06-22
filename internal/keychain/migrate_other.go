@@ -9,6 +9,6 @@ package keychain
 func legacySources(home string) []legacySource {
 	profile := NewProfileBackend(home)
 	return []legacySource{
-		{name: "profile", read: profile.Get},
+		{name: "profile", read: profile.Get, remove: profile.Delete},
 	}
 }

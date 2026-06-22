@@ -7,8 +7,9 @@ import (
 
 // legacySource is one v3-era credential storage location probed during migration.
 type legacySource struct {
-	name string
-	read func() (string, error)
+	name   string
+	read   func() (string, error)
+	remove func() error
 }
 
 // MigrateInto imports a v3-era Bedrock API key into target when target is empty.
@@ -33,6 +34,11 @@ func MigrateInto(target Backend, home string) (string, error) {
 		if val != "" {
 			if serr := target.Set(val); serr != nil {
 				return "", fmt.Errorf("importing legacy %s credential: %w", src.name, serr)
+			}
+			// Remove the v3 source so a stale credential isn't read later from a
+			// different backend, and plaintext tokens don't linger on disk.
+			if src.remove != nil {
+				_ = src.remove()
 			}
 			return src.name, nil
 		}

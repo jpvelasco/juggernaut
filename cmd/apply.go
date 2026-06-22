@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -171,7 +172,15 @@ func commitApply(home, authMode, token string, block *schema.Block, backend keyc
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
 		if err := backend.Set(token); err != nil {
+			if errors.Is(err, keychain.ErrCredentialTooBig) {
+				return fmt.Errorf("API key too large for %s storage (OS credential store caps blobs at ~2560 bytes); re-run with --storage=dpapi (Windows) or --storage=profile", storageName(applyFlags.storage))
+			}
 			return fmt.Errorf("storing API key: %w", err)
+		}
+		// Clear any credential left in a previously-configured backend so
+		// switching --storage does not orphan a stale key.
+		if err := keychain.ClearOthers(applyFlags.storage, home); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not clear previous credential storage: %v\n", err)
 		}
 	}
 
