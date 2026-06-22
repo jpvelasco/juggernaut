@@ -42,12 +42,15 @@ func TestMigrateInto_FromLegacyCredManUTF16(t *testing.T) {
 	writeLegacyCredMan(t, svc, "v3-credman-secret")
 
 	target := &fakeBackend{}
-	src, err := keychain.MigrateInto(target, home)
+	src, val, err := keychain.MigrateInto(target, home)
 	if err != nil {
 		t.Fatalf("MigrateInto error: %v", err)
 	}
 	if src != "credential-manager" {
 		t.Errorf("expected migration from credential-manager, got %q", src)
+	}
+	if val != "v3-credman-secret" {
+		t.Errorf("expected returned value v3-credman-secret, got %q", val)
 	}
 	if target.val != "v3-credman-secret" {
 		t.Errorf("expected imported value v3-credman-secret, got %q", target.val)
