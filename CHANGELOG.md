@@ -4,6 +4,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-06-22
+
+**Patch release.** Broadens `doctor`'s stale-shim detection to cover v4 npm-bridge shims.
+
 ### Fixed
 
 - **Doctor now detects v4 npm-bridge shims, not just v3 ones.** `juggernaut doctor` previously only flagged legacy launcher shims that pointed at a `~/.juggernaut` tree. It now also flags any `juggernaut.ps1`/`.cmd`/`juggernaut` shim that delegates to an absolute target path which no longer exists (the v4 npm-bridge layout), which otherwise shadows the working npm binary on `PATH` with a dead-end error. The warning lists each stale file and the reason.
@@ -815,6 +819,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.1.1...HEAD
+[5.1.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.1
 [5.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.0
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
