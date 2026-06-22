@@ -2,6 +2,12 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Doctor now detects v4 npm-bridge shims, not just v3 ones.** `juggernaut doctor` previously only flagged legacy launcher shims that pointed at a `~/.juggernaut` tree. It now also flags any `juggernaut.ps1`/`.cmd`/`juggernaut` shim that delegates to an absolute target path which no longer exists (the v4 npm-bridge layout), which otherwise shadows the working npm binary on `PATH` with a dead-end error. The warning lists each stale file and the reason.
+
 ## [5.1.0] - 2026-06-22
 
 **Feature release.** Makes the `--storage` flag fully functional, migrates v3 Bedrock API keys automatically, and detects stale v3 installs.
