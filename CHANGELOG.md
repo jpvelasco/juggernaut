@@ -2,7 +2,9 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
-## [Unreleased]
+## [5.1.0] - 2026-06-22
+
+**Feature release.** Makes the `--storage` flag fully functional, migrates v3 Bedrock API keys automatically, and detects stale v3 installs.
 
 ### Added
 
@@ -15,6 +17,10 @@ All notable changes to Juggernaut will be documented in this file.
 - **Switching `--storage` no longer orphans the old credential.** After storing into the selected backend, any key left in a previously-configured backend is cleared.
 - **Re-apply preserves the configured storage backend.** A bare `juggernaut apply` (e.g. to change region) no longer resets `--storage` to the keychain default — which would otherwise wipe a working `profile`/`dpapi` credential.
 - **Oversize API keys give actionable guidance.** A key exceeding the OS credential-store blob cap (~2560 bytes) now reports the limit and suggests `--storage=dpapi` (Windows) or `--storage=profile`, instead of failing with an opaque backend error.
+
+### Other
+
+- **CI:** bump `actions/checkout` from 6.0.3 to 7.0.0.
 
 ## [5.0.4] - 2026-06-19
 
@@ -803,6 +809,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.0
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
