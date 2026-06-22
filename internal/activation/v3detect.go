@@ -3,12 +3,21 @@ package activation
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 // v3InstallDirMarker is the file the v3 PowerShell installer wrote alongside its
 // shim to record the install directory.
 const v3InstallDirMarker = "juggernaut-install-dir.txt"
+
+// shimDelegationTarget matches the absolute path a legacy launcher shim delegates
+// to — either PowerShell `$target = '...'` or a `.cmd`'s leading `"..."` call.
+// Both v3 (~/.juggernaut) and v4 npm-bridge shims use one of these forms.
+var shimDelegationTargets = []*regexp.Regexp{
+	regexp.MustCompile(`(?m)\$target\s*=\s*['"]([^'"]+)['"]`),
+	regexp.MustCompile(`(?m)^\s*"([^"]+\.(?:ps1|cmd|exe))"`),
+}
 
 // DetectV3Install reports whether binDir contains artifacts from a pre-v5
 // (PowerShell/Bash installer) Juggernaut install. v5 ships only as an npm
@@ -25,14 +34,14 @@ func DetectV3Install(binDir string) (bool, string) {
 
 	for _, name := range []string{"juggernaut.ps1", "juggernaut.cmd", "juggernaut"} {
 		path := filepath.Join(binDir, name)
-		targets, readErr := shimTargetsJuggernautHome(path)
+		stale, readErr := staleShimReason(path)
 		switch {
-		case targets:
-			found = append(found, path)
+		case stale != "":
+			found = append(found, path+" ("+stale+")")
 		case readErr != nil:
 			// The file exists but couldn't be read; surface it conservatively
-			// rather than silently missing a possible v3 artifact.
-			found = append(found, path+" (unreadable; possible v3 shim)")
+			// rather than silently missing a possible stale shim.
+			found = append(found, path+" (unreadable; possible legacy shim)")
 		}
 	}
 
@@ -40,20 +49,40 @@ func DetectV3Install(binDir string) (bool, string) {
 		return false, ""
 	}
 	return true, strings.Join(found, "; ") +
-		" — legacy v3 install detected; reinstall with `npm install -g juggernaut-bedrock` and remove these stale shims"
+		" — legacy launcher shim(s) shadowing the npm binary; remove the listed file(s), then run `npm install -g juggernaut-bedrock` if needed"
 }
 
-// shimTargetsJuggernautHome reports whether the file at path is a shim that
-// delegates to a ~/.juggernaut install tree (the v3 layout). It returns a
-// non-nil error when the file exists but could not be read, so callers can
-// distinguish "definitely not a v3 shim" from "couldn't tell".
-func shimTargetsJuggernautHome(path string) (bool, error) {
+// staleShimReason returns a short reason when the file at path is a stale
+// Juggernaut launcher shim, or "" when it is not (or doesn't exist). A shim is
+// stale if it delegates to a ~/.juggernaut tree (the v3 layout) or to an
+// absolute target path that no longer exists (the v4 npm-bridge layout, whose
+// hardcoded target breaks after the real binary moves). It returns a non-nil
+// error only when the file exists but cannot be read.
+func staleShimReason(path string) (string, error) {
 	if !fileExists(path) {
-		return false, nil
+		return "", nil
 	}
 	data, err := os.ReadFile(path) // #nosec G304 // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- path = constrained binDir (DefaultBinDir via safepath) + one of three fixed shim names
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	return strings.Contains(string(data), ".juggernaut"), nil
+	body := string(data)
+	if strings.Contains(body, ".juggernaut") {
+		return "legacy v3 shim", nil
+	}
+	if target := shimDelegationTarget(body); target != "" && !fileExists(target) {
+		return "delegates to missing target " + target, nil
+	}
+	return "", nil
+}
+
+// shimDelegationTarget extracts the path a launcher shim delegates to, or ""
+// if the body isn't a recognizable delegating shim.
+func shimDelegationTarget(body string) string {
+	for _, re := range shimDelegationTargets {
+		if m := re.FindStringSubmatch(body); m != nil {
+			return strings.TrimSpace(m[1])
+		}
+	}
+	return ""
 }

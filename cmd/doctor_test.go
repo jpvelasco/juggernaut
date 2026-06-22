@@ -202,11 +202,11 @@ func TestDoctor_WarnsOnStaleV3Install(t *testing.T) {
 		_ = ExecuteArgs([]string{"doctor", "--scope=user"})
 	})
 
-	if !strings.Contains(out, "v3 install") {
-		t.Errorf("expected doctor to warn about v3 install, got:\n%s", out)
+	if !strings.Contains(out, "legacy shim") {
+		t.Errorf("expected doctor to warn about a legacy shim, got:\n%s", out)
 	}
 	if !strings.Contains(out, "npm install -g juggernaut-bedrock") {
-		t.Errorf("expected migration guidance in v3 warning, got:\n%s", out)
+		t.Errorf("expected migration guidance in the warning, got:\n%s", out)
 	}
 }
 

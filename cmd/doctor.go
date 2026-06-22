@@ -91,7 +91,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("v4.2.6 artifacts", status, detail)
 	}
 	if detected, detail := activation.DetectV3Install(activation.DefaultBinDir(home)); detected {
-		r.Check("v3 install", doctor.Warn, detail)
+		r.Check("legacy shim", doctor.Warn, detail)
 	}
 
 	if doctorFlags.jsonOut {
