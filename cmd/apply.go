@@ -365,10 +365,13 @@ func resolveCredential(home, authMode string, backend keychain.Backend) (string,
 	// Nothing in the configured backend — try importing a v3-era credential
 	// (e.g. a Windows Credential Manager UTF-16 entry or a profile/DPAPI file
 	// left by an older install) before prompting or failing.
-	if source, migrated, merr := keychain.MigrateInto(backend, home); merr != nil {
+	if source, migrated, cleanupErr, merr := keychain.MigrateInto(backend, home); merr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not migrate legacy credential: %v\n", merr)
 	} else if source != "" {
 		fmt.Printf("  ✓ Migrated Bedrock API key from legacy %s storage\n", source)
+		if cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v (the old credential may still exist; remove it manually)\n", cleanupErr)
+		}
 		return migrated, nil
 	}
 

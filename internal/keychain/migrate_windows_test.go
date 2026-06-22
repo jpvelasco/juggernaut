@@ -42,7 +42,7 @@ func TestMigrateInto_FromLegacyCredManUTF16(t *testing.T) {
 	writeLegacyCredMan(t, svc, "v3-credman-secret")
 
 	target := &fakeBackend{}
-	src, val, err := keychain.MigrateInto(target, home)
+	src, val, _, err := keychain.MigrateInto(target, home)
 	if err != nil {
 		t.Fatalf("MigrateInto error: %v", err)
 	}

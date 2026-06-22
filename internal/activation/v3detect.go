@@ -25,8 +25,14 @@ func DetectV3Install(binDir string) (bool, string) {
 
 	for _, name := range []string{"juggernaut.ps1", "juggernaut.cmd", "juggernaut"} {
 		path := filepath.Join(binDir, name)
-		if shimTargetsJuggernautHome(path) {
+		targets, readErr := shimTargetsJuggernautHome(path)
+		switch {
+		case targets:
 			found = append(found, path)
+		case readErr != nil:
+			// The file exists but couldn't be read; surface it conservatively
+			// rather than silently missing a possible v3 artifact.
+			found = append(found, path+" (unreadable; possible v3 shim)")
 		}
 	}
 
@@ -38,14 +44,16 @@ func DetectV3Install(binDir string) (bool, string) {
 }
 
 // shimTargetsJuggernautHome reports whether the file at path is a shim that
-// delegates to a ~/.juggernaut install tree (the v3 layout).
-func shimTargetsJuggernautHome(path string) bool {
+// delegates to a ~/.juggernaut install tree (the v3 layout). It returns a
+// non-nil error when the file exists but could not be read, so callers can
+// distinguish "definitely not a v3 shim" from "couldn't tell".
+func shimTargetsJuggernautHome(path string) (bool, error) {
 	if !fileExists(path) {
-		return false
+		return false, nil
 	}
-	data, err := os.ReadFile(path) // #nosec G304 // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- path is a fixed bin dir + fixed shim names
+	data, err := os.ReadFile(path) // #nosec G304 // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- path = constrained binDir (DefaultBinDir via safepath) + one of three fixed shim names
 	if err != nil {
-		return false
+		return false, err
 	}
-	return strings.Contains(string(data), ".juggernaut")
+	return strings.Contains(string(data), ".juggernaut"), nil
 }

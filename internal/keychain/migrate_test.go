@@ -37,7 +37,7 @@ func TestMigrateInto_NoopWhenTargetAlreadyHasValue(t *testing.T) {
 	}
 
 	target := &fakeBackend{val: "already-here"}
-	src, _, err := keychain.MigrateInto(target, home)
+	src, _, _, err := keychain.MigrateInto(target, home)
 	if err != nil {
 		t.Fatalf("MigrateInto error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestMigrateInto_FailsFastOnTargetGetError(t *testing.T) {
 	}
 
 	target := &errBackend{err: errors.New("keychain locked")}
-	_, _, err := keychain.MigrateInto(target, home)
+	_, _, _, err := keychain.MigrateInto(target, home)
 	if err == nil {
 		t.Fatal("expected MigrateInto to fail fast on a real target.Get error")
 	}
@@ -80,7 +80,7 @@ func TestMigrateInto_FromProfileFile(t *testing.T) {
 	}
 
 	target := &fakeBackend{}
-	src, val, err := keychain.MigrateInto(target, home)
+	src, val, _, err := keychain.MigrateInto(target, home)
 	if err != nil {
 		t.Fatalf("MigrateInto error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestMigrateInto_RemovesProfileSourceAfterImport(t *testing.T) {
 	}
 
 	target := &fakeBackend{}
-	if _, _, err := keychain.MigrateInto(target, home); err != nil {
+	if _, _, _, err := keychain.MigrateInto(target, home); err != nil {
 		t.Fatalf("MigrateInto error: %v", err)
 	}
 
@@ -123,7 +123,7 @@ func TestMigrateInto_NothingToMigrate(t *testing.T) {
 	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", filepath.Join(home, "absent"))
 
 	target := &fakeBackend{}
-	src, _, err := keychain.MigrateInto(target, home)
+	src, _, _, err := keychain.MigrateInto(target, home)
 	if err != nil {
 		t.Fatalf("MigrateInto error: %v", err)
 	}

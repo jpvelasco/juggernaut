@@ -75,6 +75,31 @@ func TestProfileBackend_ReadsV3PlaintextWithWhitespace(t *testing.T) {
 	}
 }
 
+// JUGGERNAUT_PROFILE_TOKEN_PATH must win over XDG_CONFIG_HOME when both are set.
+func TestProfileBackend_TokenPathEnvVarTakesPrecedenceOverXDG(t *testing.T) {
+	home := t.TempDir()
+	xdg := t.TempDir()
+	explicit := filepath.Join(t.TempDir(), "explicit-token")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", explicit)
+
+	if err := keychain.NewProfileBackend(home).Set("explicit-wins"); err != nil {
+		t.Fatalf("Set() error: %v", err)
+	}
+
+	data, err := os.ReadFile(explicit)
+	if err != nil {
+		t.Fatalf("expected token at explicit path %s: %v", explicit, err)
+	}
+	if string(data) != "explicit-wins" {
+		t.Errorf("expected explicit-wins, got %q", string(data))
+	}
+	// XDG location must NOT have been written.
+	if _, err := os.Stat(filepath.Join(xdg, "juggernaut", "bearer-token")); !os.IsNotExist(err) {
+		t.Errorf("XDG path should be unused when JUGGERNAUT_PROFILE_TOKEN_PATH is set, stat err=%v", err)
+	}
+}
+
 // XDG_CONFIG_HOME must take precedence over the home-derived default, matching v3.
 func TestProfileBackend_RespectsXDGConfigHome(t *testing.T) {
 	home := t.TempDir()

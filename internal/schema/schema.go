@@ -98,6 +98,10 @@ var validServiceTiers = map[string]bool{
 	"default": true, "flex": true, "priority": true,
 }
 
+var validStorage = map[string]bool{
+	"keychain": true, "profile": true, "dpapi": true,
+}
+
 // Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
@@ -111,6 +115,9 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 	if opts.ServiceTier != "" && !validServiceTiers[opts.ServiceTier] {
 		return nil, fmt.Errorf("invalid service-tier %q — must be one of: default, flex, priority", opts.ServiceTier)
+	}
+	if opts.Storage != "" && !validStorage[opts.Storage] {
+		return nil, fmt.Errorf("invalid storage %q — must be one of: keychain, profile, dpapi", opts.Storage)
 	}
 
 	opus := opts.OpusModel

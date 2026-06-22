@@ -43,3 +43,21 @@ func TestDetectV3Install_FindsShimPointingAtJuggernautHome(t *testing.T) {
 		t.Fatal("expected v3 install detected from .juggernaut shim")
 	}
 }
+
+// A shim that exists but can't be read (here: the path is a directory, so
+// os.ReadFile fails) should be reported conservatively rather than silently
+// ignored — a possible v3 artifact is worth surfacing in doctor.
+func TestDetectV3Install_ReportsUnreadableShim(t *testing.T) {
+	binDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(binDir, "juggernaut.ps1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	detected, detail := DetectV3Install(binDir)
+	if !detected {
+		t.Fatal("expected an unreadable shim to be reported as a possible v3 artifact")
+	}
+	if detail == "" {
+		t.Error("expected a non-empty detail for the unreadable shim")
+	}
+}

@@ -316,6 +316,20 @@ func TestUninstall_RemovesTokenFromConfiguredProfileStorage(t *testing.T) {
 	}
 }
 
+func TestUninstall_NoConfiguredStorage_Succeeds(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	isolateCredentialEnv(t, home)
+
+	// Uninstall on a system that was never `apply`-ed: no settings, no stored
+	// credential. Storage resolves to the keychain default and uninstall must
+	// complete cleanly rather than erroring on the missing backend/credential.
+	if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {
+		t.Fatalf("uninstall with no prior config should succeed, got: %v", err)
+	}
+}
+
 func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
