@@ -185,6 +185,32 @@ func TestDoctor_ReadsBearerTokenFromConfiguredProfileStorage(t *testing.T) {
 	}
 }
 
+func TestDoctor_WarnsOnStaleV3Install(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	binDir := activation.DefaultBinDir(home)
+	if err := safepath.MkdirAll(binDir); err != nil {
+		t.Fatalf("creating bin dir: %v", err)
+	}
+	marker := filepath.Join(binDir, "juggernaut-install-dir.txt")
+	if err := os.WriteFile(marker, []byte(filepath.Join(home, ".juggernaut")), 0o600); err != nil {
+		t.Fatalf("writing v3 marker: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		_ = ExecuteArgs([]string{"doctor", "--scope=user"})
+	})
+
+	if !strings.Contains(out, "v3 install") {
+		t.Errorf("expected doctor to warn about v3 install, got:\n%s", out)
+	}
+	if !strings.Contains(out, "npm install -g juggernaut-bedrock") {
+		t.Errorf("expected migration guidance in v3 warning, got:\n%s", out)
+	}
+}
+
 func writeExecutableStub(t *testing.T, path string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte("real claude"), 0o600); err != nil {
