@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // ProfileBackend stores the bearer token as a plaintext file under the user's
@@ -35,15 +37,15 @@ func (b *ProfileBackend) path() string {
 // Set writes the token as UTF-8 plaintext with owner-only permissions.
 func (b *ProfileBackend) Set(token string) error {
 	path := b.path()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(token), 0o600)
+	// The token file always lives directly in its parent dir; use that as the
+	// containment base for the owner-only write (0o700 dir / 0o600 file).
+	return safepath.WriteFile(filepath.Dir(path), path, []byte(token))
 }
 
 // Get returns the stored token trimmed of surrounding whitespace, or "" if absent.
 func (b *ProfileBackend) Get() (string, error) {
-	data, err := os.ReadFile(b.path())
+	path := b.path()
+	data, err := safepath.ReadFile(filepath.Dir(path), path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"unsafe"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"golang.org/x/sys/windows"
 )
 
@@ -39,6 +40,7 @@ func newBlob(b []byte) dataBlob {
 
 func (b dataBlob) bytes() []byte {
 	out := make([]byte, b.cbData)
+	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- required to copy a Win32 DATA_BLOB returned by DPAPI
 	copy(out, unsafe.Slice(b.pbData, b.cbData))
 	return out
 }
@@ -68,15 +70,15 @@ func (b *DPAPIBackend) Set(token string) error {
 		return fmt.Errorf("dpapi protect: %w", err)
 	}
 	path := b.path()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, enc, 0o600)
+	// The DPAPI blob always lives directly in its parent dir; use that as the
+	// containment base for the owner-only write.
+	return safepath.WriteFile(filepath.Dir(path), path, enc)
 }
 
 // Get reads and decrypts the token, returning "" if the file is absent.
 func (b *DPAPIBackend) Get() (string, error) {
-	enc, err := os.ReadFile(b.path())
+	path := b.path()
+	enc, err := safepath.ReadFile(filepath.Dir(path), path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil
@@ -98,10 +100,15 @@ func (b *DPAPIBackend) Delete() error {
 	return nil
 }
 
+// protect/unprotect call the Win32 DPAPI via the syscall ABI, which requires
+// unsafe.Pointer to pass DATA_BLOB structs. This is the only way to reach DPAPI
+// from Go; the pointers do not outlive the call.
+
 func protect(data, entropy []byte) ([]byte, error) {
 	in := newBlob(data)
 	ent := newBlob(entropy)
 	var out dataBlob
+	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- required for the Win32 DPAPI syscall ABI
 	r, _, err := procCryptProtectData.Call(
 		uintptr(unsafe.Pointer(&in)),
 		0,
@@ -114,7 +121,7 @@ func protect(data, entropy []byte) ([]byte, error) {
 	if r == 0 {
 		return nil, err
 	}
-	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.pbData))) //nolint:errcheck
+	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.pbData))) //nolint:errcheck // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe
 	return out.bytes(), nil
 }
 
@@ -122,6 +129,7 @@ func unprotect(data, entropy []byte) ([]byte, error) {
 	in := newBlob(data)
 	ent := newBlob(entropy)
 	var out dataBlob
+	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe -- required for the Win32 DPAPI syscall ABI
 	r, _, err := procCryptUnprotect.Call(
 		uintptr(unsafe.Pointer(&in)),
 		0,
@@ -134,6 +142,6 @@ func unprotect(data, entropy []byte) ([]byte, error) {
 	if r == 0 {
 		return nil, err
 	}
-	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.pbData))) //nolint:errcheck
+	defer windows.LocalFree(windows.Handle(unsafe.Pointer(out.pbData))) //nolint:errcheck // nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block, go_unsafe_rule-unsafe
 	return out.bytes(), nil
 }

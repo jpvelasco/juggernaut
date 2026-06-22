@@ -488,7 +488,7 @@ func TestApply_StorageProfile_WritesTokenToProfileFile(t *testing.T) {
 		t.Fatalf("apply error: %v", err)
 	}
 
-	data, err := os.ReadFile(tokenPath)
+	data, err := os.ReadFile(tokenPath) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- test fixture under t.TempDir()
 	if err != nil {
 		t.Fatalf("expected token at profile path: %v", err)
 	}
@@ -556,7 +556,7 @@ func TestApply_ReapplyPreservesStorageMode(t *testing.T) {
 	if auth["storage"] != "profile" {
 		t.Errorf("expected storage preserved as profile on re-apply, got %v", auth["storage"])
 	}
-	if got, _ := os.ReadFile(tokenPath); string(got) != "profile-key" {
+	if got, _ := os.ReadFile(tokenPath); string(got) != "profile-key" { // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- test fixture under t.TempDir()
 		t.Errorf("expected profile token preserved on re-apply, got %q", string(got))
 	}
 }

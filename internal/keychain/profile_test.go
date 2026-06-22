@@ -58,7 +58,7 @@ func TestProfileBackend_GetMissingIsEmpty(t *testing.T) {
 func TestProfileBackend_ReadsV3PlaintextWithWhitespace(t *testing.T) {
 	dir := t.TempDir()
 	tokenPath := filepath.Join(dir, "juggernaut", "bearer-token")
-	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission, go_file-permissions_rule-fileperm -- test fixture under t.TempDir()
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(tokenPath, []byte("v3-token\n"), 0o600); err != nil {
@@ -87,7 +87,7 @@ func TestProfileBackend_RespectsXDGConfigHome(t *testing.T) {
 	}
 
 	want := filepath.Join(xdg, "juggernaut", "bearer-token")
-	data, err := os.ReadFile(want)
+	data, err := os.ReadFile(want) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- test fixture under t.TempDir()
 	if err != nil {
 		t.Fatalf("expected token at %s: %v", want, err)
 	}

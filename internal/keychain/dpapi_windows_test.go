@@ -24,7 +24,7 @@ func TestDPAPIBackend_RoundTrip(t *testing.T) {
 	}
 
 	// Ciphertext must actually be encrypted on disk, not stored in cleartext.
-	raw, err := os.ReadFile(filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin"))
+	raw, err := os.ReadFile(filepath.Join(home, ".juggernaut", "bearer-token.dpapi.bin")) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- test fixture under t.TempDir()
 	if err != nil {
 		t.Fatalf("reading dpapi file: %v", err)
 	}
