@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
@@ -69,6 +70,30 @@ func settingsPath(homeDir, scope string) (string, error) {
 		return filepath.Join(".", ".claude", "settings.json"), nil
 	}
 	return safepath.JoinUnder(homeDir, ".claude", "settings.json")
+}
+
+// configuredStorage reads the credential storage backend recorded in the
+// Juggernaut block at the given scope. Returns "" (keychain default) when the
+// block, the auth section, or the storage field is absent.
+func configuredStorage(home, scope string) string {
+	path, err := settingsPath(home, scope)
+	if err != nil {
+		return ""
+	}
+	data, err := config.NewManager(path).Read()
+	if err != nil {
+		return ""
+	}
+	block, ok := data["juggernaut"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	auth, ok := block["auth"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	storage, _ := auth["storage"].(string)
+	return storage
 }
 
 func toMap(v any) (map[string]any, error) {

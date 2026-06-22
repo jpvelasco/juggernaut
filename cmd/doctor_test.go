@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -114,6 +117,96 @@ func TestLaunchCommandIsHidden(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("launch command should be registered")
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what was written.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		done <- string(data)
+	}()
+	fn()
+	_ = w.Close()
+	os.Stdout = orig
+	return <-done
+}
+
+func TestDoctor_ReadsBearerTokenFromConfiguredProfileStorage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	isolateCredentialEnv(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=doctor-key",
+		"--storage=profile",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		_ = ExecuteArgs([]string{"doctor", "--scope=user", "--json"})
+	})
+
+	var entries []struct {
+		Label  string `json:"label"`
+		Status string `json:"status"`
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		t.Fatalf("parsing doctor JSON (%q): %v", out, err)
+	}
+
+	var found bool
+	for _, e := range entries {
+		if strings.Contains(e.Label, "profile") {
+			found = true
+			if !strings.Contains(e.Detail, "bearer token found") {
+				t.Errorf("expected bearer token found for profile storage, got %q (status %s)", e.Detail, e.Status)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected a credential check labeled with profile storage; entries: %+v", entries)
+	}
+}
+
+func TestDoctor_WarnsOnStaleV3Install(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	binDir := activation.DefaultBinDir(home)
+	if err := safepath.MkdirAll(binDir); err != nil {
+		t.Fatalf("creating bin dir: %v", err)
+	}
+	marker := filepath.Join(binDir, "juggernaut-install-dir.txt")
+	if err := os.WriteFile(marker, []byte(filepath.Join(home, ".juggernaut")), 0o600); err != nil {
+		t.Fatalf("writing v3 marker: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		_ = ExecuteArgs([]string{"doctor", "--scope=user"})
+	})
+
+	if !strings.Contains(out, "v3 install") {
+		t.Errorf("expected doctor to warn about v3 install, got:\n%s", out)
+	}
+	if !strings.Contains(out, "npm install -g juggernaut-bedrock") {
+		t.Errorf("expected migration guidance in v3 warning, got:\n%s", out)
 	}
 }
 

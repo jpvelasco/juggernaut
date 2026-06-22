@@ -40,6 +40,9 @@ func Default() *Store {
 // Set stores the token in the OS keychain.
 func (s *Store) Set(token string) error {
 	if err := keyring.Set(s.service, account, token); err != nil {
+		if err == keyring.ErrSetDataTooBig {
+			return ErrCredentialTooBig
+		}
 		return err
 	}
 	_ = keyring.Delete(s.service, legacyAccount)

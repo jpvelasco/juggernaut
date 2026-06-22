@@ -2,6 +2,20 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`--storage dpapi` and `--storage profile` now work.** Previously the flag value was recorded in `settings.json` but every credential read/write/delete used the OS keychain regardless, so `dpapi` and `profile` silently did nothing. All paths (apply, launch, doctor, uninstall) now honor the configured backend. `--storage dpapi` is Windows-only and errors clearly elsewhere.
+- **Automatic v3→v5 credential migration.** On `apply`, when the configured backend has no key, Juggernaut imports an existing v3-era Bedrock API key — Windows Credential Manager (legacy UTF-16, bare target), DPAPI file, or profile token file — into the v5 backend and removes the stale source. This replaces the manual DPAPI bridge previously required on Windows upgrades.
+- **Stale v3 install detection.** `juggernaut doctor` warns when leftover v3 PowerShell/Bash install artifacts are found on `PATH` and points to `npm install -g juggernaut-bedrock`.
+
+### Fixed
+
+- **Switching `--storage` no longer orphans the old credential.** After storing into the selected backend, any key left in a previously-configured backend is cleared.
+- **Re-apply preserves the configured storage backend.** A bare `juggernaut apply` (e.g. to change region) no longer resets `--storage` to the keychain default — which would otherwise wipe a working `profile`/`dpapi` credential.
+- **Oversize API keys give actionable guidance.** A key exceeding the OS credential-store blob cap (~2560 bytes) now reports the limit and suggests `--storage=dpapi` (Windows) or `--storage=profile`, instead of failing with an opaque backend error.
+
 ## [5.0.4] - 2026-06-19
 
 **Patch release.** Fixes Claude Code's local 1M context-window signaling for pinned Bedrock models.

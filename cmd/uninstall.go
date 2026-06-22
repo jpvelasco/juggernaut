@@ -44,9 +44,13 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Resolve the configured storage backend before removing the settings block,
+	// since the storage mode is recorded inside that block.
+	storage := uninstallStorage(home)
+
 	uninstallSettingsBlocks(home)
 	if !uninstallFlags.dryRun {
-		removeKeychainToken()
+		removeStoredToken(home, storage)
 	}
 	if uninstallFlags.full {
 		uninstallActivationFull(home)
@@ -116,12 +120,28 @@ func uninstallSettingsBlock(home, scope string) {
 	fmt.Printf("  ✓ Removed juggernaut block from %s settings.json\n", scope)
 }
 
-func removeKeychainToken() {
-	if err := keychain.Default().Delete(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not remove keychain entry: %v\n", err)
+// uninstallStorage returns the storage backend configured in any in-scope
+// Juggernaut block, defaulting to keychain.
+func uninstallStorage(home string) string {
+	for _, scope := range uninstallScopes() {
+		if s := configuredStorage(home, scope); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func removeStoredToken(home, storage string) {
+	backend, err := keychain.Resolve(storage, home)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not resolve credential storage: %v\n", err)
 		return
 	}
-	fmt.Println("  ✓ Removed bearer token from keychain")
+	if err := backend.Delete(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not remove %s entry: %v\n", storageName(storage), err)
+		return
+	}
+	fmt.Printf("  ✓ Removed bearer token from %s\n", storageName(storage))
 }
 
 func uninstallActivationFull(home string) {

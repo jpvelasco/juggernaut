@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -78,7 +79,7 @@ func init() {
 	rootCmd.AddCommand(applyCmd)
 }
 
-func runApply(_ *cobra.Command, _ []string) error {
+func runApply(cmd *cobra.Command, _ []string) error {
 	home, err := homeDir()
 	if err != nil {
 		return err
@@ -89,12 +90,17 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg)
+	storageChanged := cmd.Flags().Changed("storage")
+	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg, storageChanged)
 	if err != nil {
 		return err
 	}
 
-	token, err := resolveCredential(authMode)
+	backend, err := keychain.Resolve(applyFlags.storage, home)
+	if err != nil {
+		return err
+	}
+	token, err := resolveCredential(home, authMode, backend)
 	if err != nil {
 		return err
 	}
@@ -140,7 +146,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if applyFlags.dryRun {
 		return printApplyDryRun(home)
 	}
-	return commitApply(home, authMode, token, block)
+	return commitApply(home, authMode, token, block, backend)
 }
 
 func resolveMantle() (bool, error) {
@@ -162,12 +168,20 @@ func printApplyDryRun(home string) error {
 	return nil
 }
 
-func commitApply(home, authMode, token string, block *schema.Block) error {
+func commitApply(home, authMode, token string, block *schema.Block, backend keychain.Backend) error {
 	native := block.NativeKeys()
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
-		if err := keychain.Default().Set(token); err != nil {
+		if err := backend.Set(token); err != nil {
+			if errors.Is(err, keychain.ErrCredentialTooBig) {
+				return fmt.Errorf("API key too large for %s storage (OS credential store caps blobs at ~2560 bytes); re-run with --storage=dpapi (Windows) or --storage=profile", storageName(applyFlags.storage))
+			}
 			return fmt.Errorf("storing API key: %w", err)
+		}
+		// Clear any credential left in a previously-configured backend so
+		// switching --storage does not orphan a stale key.
+		if err := keychain.ClearOthers(applyFlags.storage, home); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not clear previous credential storage: %v\n", err)
 		}
 	}
 
@@ -226,7 +240,7 @@ func installActivation(home string) {
 	fmt.Printf("  ✓ Installed Claude activation in %d shell profile(s)\n", len(paths))
 }
 
-func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
+func resolveApplyInputs(home string, bCfg *bedrock.Config, storageChanged bool) (authMode, region string, opusplan bool, err error) {
 	authMode = applyFlags.auth
 	region = applyFlags.region
 	if region == "" {
@@ -260,6 +274,16 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 					if meta, ok := jBlock["meta"].(map[string]any); ok {
 						if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
 							applyFlags.mode = pmode
+						}
+					}
+				}
+				// Preserve the configured storage backend when --storage is not
+				// supplied, so a bare re-apply doesn't reset it to the keychain
+				// default (which would also wipe the prior backend via ClearOthers).
+				if !storageChanged {
+					if auth, ok := jBlock["auth"].(map[string]any); ok {
+						if st, ok := auth["storage"].(string); ok && st != "" {
+							applyFlags.storage = st
 						}
 					}
 				}
@@ -312,24 +336,47 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	return
 }
 
-func resolveCredential(authMode string) (string, error) {
+// storageName returns a human-readable name for a storage mode for messages.
+func storageName(mode string) string {
+	if mode == "" {
+		return "keychain"
+	}
+	return mode
+}
+
+func resolveCredential(home, authMode string, backend keychain.Backend) (string, error) {
 	if !authmode.IsBedrockAPIKey(authMode) {
 		return "", nil
 	}
 	if applyFlags.bedrockKey != "" {
 		return applyFlags.bedrockKey, nil
 	}
-	token, err := keychain.Default().Get()
+	store := storageName(applyFlags.storage)
+	token, err := backend.Get()
 	if err != nil {
 		if applyFlags.preserveKey {
 			return "", fmt.Errorf("reading existing key: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Warning: could not read keychain (will prompt for key): %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not read %s (will prompt for key): %v\n", store, err)
 	} else if token != "" {
 		return token, nil
 	}
+
+	// Nothing in the configured backend — try importing a v3-era credential
+	// (e.g. a Windows Credential Manager UTF-16 entry or a profile/DPAPI file
+	// left by an older install) before prompting or failing.
+	if source, migrated, cleanupErr, merr := keychain.MigrateInto(backend, home); merr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not migrate legacy credential: %v\n", merr)
+	} else if source != "" {
+		fmt.Printf("  ✓ Migrated Bedrock API key from legacy %s storage\n", source)
+		if cleanupErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v (the old credential may still exist; remove it manually)\n", cleanupErr)
+		}
+		return migrated, nil
+	}
+
 	if applyFlags.preserveKey {
-		return "", fmt.Errorf("no existing key found in keychain; re-run without --preserve-key to enter one")
+		return "", fmt.Errorf("no existing key found in %s; re-run without --preserve-key to enter one", store)
 	}
 	var input string
 	form := huh.NewForm(
