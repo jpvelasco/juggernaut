@@ -3,10 +3,21 @@
 package keychain
 
 import (
+	"os"
 	"unicode/utf16"
 
 	"github.com/danieljoos/wincred"
 )
+
+// legacyServiceName is the v3 keychain service name (also the bare Windows
+// Credential Manager target name v3 wrote to). Honors JUGGERNAUT_KEYCHAIN_SERVICE
+// for test isolation, matching Default().
+func legacyServiceName() string {
+	if svc := os.Getenv("JUGGERNAUT_KEYCHAIN_SERVICE"); svc != "" {
+		return svc
+	}
+	return defaultService
+}
 
 // legacySources lists the v3 credential locations to probe on Windows, in v3's
 // own read order: DPAPI file, then Credential Manager, then profile file.

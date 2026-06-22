@@ -32,9 +32,15 @@ func normalizeMode(mode string) string {
 // ClearOthers deletes any stored credential from every backend except the
 // selected one. Use after storing into the selected backend so switching
 // storage modes does not orphan a credential in the previously-used backend.
-// Backends unavailable on the current platform (e.g. dpapi off Windows) are skipped.
+//
+// It is best-effort: a backend that can't be resolved (e.g. dpapi off Windows)
+// or whose Delete fails because the backend is simply unreachable (e.g. no
+// Secret Service on headless Linux) is skipped rather than treated as an error —
+// an unreachable backend holds no credential this process could have written.
+// Returns the joined errors only when a reachable backend fails to delete.
 func ClearOthers(selected, home string) error {
 	keep := normalizeMode(selected)
+	var errs []error
 	for _, mode := range allStorageModes {
 		if mode == keep {
 			continue
@@ -44,11 +50,16 @@ func ClearOthers(selected, home string) error {
 			// Backend not available on this platform — nothing to clear.
 			continue
 		}
+		// Probe reachability via Get: an unreachable backend (no keyring daemon)
+		// holds nothing for us to clear, so skip it instead of erroring.
+		if _, gerr := backend.Get(); gerr != nil {
+			continue
+		}
 		if err := backend.Delete(); err != nil {
-			return fmt.Errorf("clearing %s credential: %w", mode, err)
+			errs = append(errs, fmt.Errorf("clearing %s credential: %w", mode, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Resolve returns the credential backend for the given storage mode. An empty

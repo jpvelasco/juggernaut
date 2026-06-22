@@ -1,9 +1,6 @@
 package keychain
 
-import (
-	"fmt"
-	"os"
-)
+import "fmt"
 
 // legacySource is one v3-era credential storage location probed during migration.
 type legacySource struct {
@@ -52,14 +49,4 @@ func MigrateInto(target Backend, home string) (source, value string, err error) 
 		}
 	}
 	return "", "", nil
-}
-
-// legacyServiceName is the v3 keychain service name (also the bare Windows
-// Credential Manager target name v3 wrote to). Honors JUGGERNAUT_KEYCHAIN_SERVICE
-// for test isolation, matching Default().
-func legacyServiceName() string {
-	if svc := os.Getenv("JUGGERNAUT_KEYCHAIN_SERVICE"); svc != "" {
-		return svc
-	}
-	return defaultService
 }
