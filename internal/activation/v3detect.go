@@ -43,7 +43,7 @@ func shimTargetsJuggernautHome(path string) bool {
 	if !fileExists(path) {
 		return false
 	}
-	data, err := os.ReadFile(path) // #nosec G304 -- path is built from a fixed bin dir + fixed names
+	data, err := os.ReadFile(path) // #nosec G304 // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- path is a fixed bin dir + fixed shim names
 	if err != nil {
 		return false
 	}
