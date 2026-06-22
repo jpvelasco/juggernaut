@@ -98,7 +98,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	token, err := resolveCredential(authMode, backend)
+	token, err := resolveCredential(home, authMode, backend)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func storageName(mode string) string {
 	return mode
 }
 
-func resolveCredential(authMode string, backend keychain.Backend) (string, error) {
+func resolveCredential(home, authMode string, backend keychain.Backend) (string, error) {
 	if !authmode.IsBedrockAPIKey(authMode) {
 		return "", nil
 	}
@@ -341,6 +341,19 @@ func resolveCredential(authMode string, backend keychain.Backend) (string, error
 	} else if token != "" {
 		return token, nil
 	}
+
+	// Nothing in the configured backend — try importing a v3-era credential
+	// (e.g. a Windows Credential Manager UTF-16 entry or a profile/DPAPI file
+	// left by an older install) before prompting or failing.
+	if source, merr := keychain.MigrateInto(backend, home); merr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not migrate legacy credential: %v\n", merr)
+	} else if source != "" {
+		if migrated, gerr := backend.Get(); gerr == nil && migrated != "" {
+			fmt.Printf("  ✓ Migrated Bedrock API key from legacy %s storage\n", source)
+			return migrated, nil
+		}
+	}
+
 	if applyFlags.preserveKey {
 		return "", fmt.Errorf("no existing key found in %s; re-run without --preserve-key to enter one", store)
 	}

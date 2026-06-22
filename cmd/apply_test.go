@@ -508,6 +508,40 @@ func TestApply_StorageProfile_PreserveKeyReadsProfileFile(t *testing.T) {
 	}
 }
 
+func TestApply_PreserveKey_MigratesV3ProfileTokenIntoKeychain(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	store := setupIsolatedKeychain(t)
+	t.Cleanup(func() { _ = store.Delete() })
+
+	// Simulate a v3 profile token left on disk, with the v5 keychain empty.
+	tokenPath := filepath.Join(home, "v3-profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	if err := os.WriteFile(tokenPath, []byte("v3-legacy-key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Default --storage is keychain; --preserve-key must migrate rather than error.
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--preserve-key",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --preserve-key should migrate v3 token, got error: %v", err)
+	}
+
+	got, err := store.Get()
+	if err != nil {
+		t.Fatalf("reading keychain after migration: %v", err)
+	}
+	if got != "v3-legacy-key" {
+		t.Errorf("expected migrated key v3-legacy-key in keychain, got %q", got)
+	}
+}
+
 func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
