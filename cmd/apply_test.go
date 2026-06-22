@@ -287,6 +287,36 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	}
 }
 
+func TestUninstall_RemovesTokenFromConfiguredProfileStorage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	tokenPath := filepath.Join(home, "profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=key-to-remove",
+		"--storage=profile",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	if _, err := os.Stat(tokenPath); err != nil {
+		t.Fatalf("profile token should exist after apply: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {
+		t.Fatalf("uninstall error: %v", err)
+	}
+
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Errorf("profile token should be removed after uninstall, stat err=%v", err)
+	}
+}
+
 func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -427,6 +457,55 @@ func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
 
 	// Settings should have been written.
 	readSettingsJSON(t, home)
+}
+
+func TestApply_StorageProfile_WritesTokenToProfileFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	tokenPath := filepath.Join(home, "profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=profile-key-123",
+		"--storage=profile",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		t.Fatalf("expected token at profile path: %v", err)
+	}
+	if string(data) != "profile-key-123" {
+		t.Errorf("expected profile-key-123, got %q", string(data))
+	}
+}
+
+func TestApply_StorageProfile_PreserveKeyReadsProfileFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	tokenPath := filepath.Join(home, "profile-token")
+	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
+	if err := os.WriteFile(tokenPath, []byte("preexisting-profile-key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--preserve-key",
+		"--storage=profile",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --preserve-key with profile storage error: %v", err)
+	}
 }
 
 func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {

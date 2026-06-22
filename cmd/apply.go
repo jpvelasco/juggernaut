@@ -94,7 +94,11 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	token, err := resolveCredential(authMode)
+	backend, err := keychain.Resolve(applyFlags.storage, home)
+	if err != nil {
+		return err
+	}
+	token, err := resolveCredential(authMode, backend)
 	if err != nil {
 		return err
 	}
@@ -140,7 +144,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if applyFlags.dryRun {
 		return printApplyDryRun(home)
 	}
-	return commitApply(home, authMode, token, block)
+	return commitApply(home, authMode, token, block, backend)
 }
 
 func resolveMantle() (bool, error) {
@@ -162,11 +166,11 @@ func printApplyDryRun(home string) error {
 	return nil
 }
 
-func commitApply(home, authMode, token string, block *schema.Block) error {
+func commitApply(home, authMode, token string, block *schema.Block, backend keychain.Backend) error {
 	native := block.NativeKeys()
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
-		if err := keychain.Default().Set(token); err != nil {
+		if err := backend.Set(token); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
 		}
 	}
@@ -312,24 +316,33 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	return
 }
 
-func resolveCredential(authMode string) (string, error) {
+// storageName returns a human-readable name for a storage mode for messages.
+func storageName(mode string) string {
+	if mode == "" {
+		return "keychain"
+	}
+	return mode
+}
+
+func resolveCredential(authMode string, backend keychain.Backend) (string, error) {
 	if !authmode.IsBedrockAPIKey(authMode) {
 		return "", nil
 	}
 	if applyFlags.bedrockKey != "" {
 		return applyFlags.bedrockKey, nil
 	}
-	token, err := keychain.Default().Get()
+	store := storageName(applyFlags.storage)
+	token, err := backend.Get()
 	if err != nil {
 		if applyFlags.preserveKey {
 			return "", fmt.Errorf("reading existing key: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Warning: could not read keychain (will prompt for key): %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not read %s (will prompt for key): %v\n", store, err)
 	} else if token != "" {
 		return token, nil
 	}
 	if applyFlags.preserveKey {
-		return "", fmt.Errorf("no existing key found in keychain; re-run without --preserve-key to enter one")
+		return "", fmt.Errorf("no existing key found in %s; re-run without --preserve-key to enter one", store)
 	}
 	var input string
 	form := huh.NewForm(

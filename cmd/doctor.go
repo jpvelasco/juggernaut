@@ -57,14 +57,25 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	token, err := keychain.Default().Get()
+	storage := configuredStorage(home, "user")
+	if s := configuredStorage(home, "project"); s != "" {
+		storage = s
+	}
+	credLabel := "credential (" + storageName(storage) + ")"
+	backend, resolveErr := keychain.Resolve(storage, home)
 	switch {
-	case err != nil:
-		r.Check("keychain", doctor.Warn, "error reading: "+err.Error())
-	case token == "":
-		r.Check("keychain", doctor.OK, "no bearer token (IAM auth)")
+	case resolveErr != nil:
+		r.Check(credLabel, doctor.Warn, "error resolving storage: "+resolveErr.Error())
 	default:
-		r.Check("keychain", doctor.OK, "bearer token found")
+		token, err := backend.Get()
+		switch {
+		case err != nil:
+			r.Check(credLabel, doctor.Warn, "error reading: "+err.Error())
+		case token == "":
+			r.Check(credLabel, doctor.OK, "no bearer token (IAM auth)")
+		default:
+			r.Check(credLabel, doctor.OK, "bearer token found")
+		}
 	}
 
 	activationPaths := activation.InstalledTargets(home)
