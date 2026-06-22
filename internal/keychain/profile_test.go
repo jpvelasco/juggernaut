@@ -87,7 +87,7 @@ func TestProfileBackend_TokenPathEnvVarTakesPrecedenceOverXDG(t *testing.T) {
 		t.Fatalf("Set() error: %v", err)
 	}
 
-	data, err := os.ReadFile(explicit)
+	data, err := os.ReadFile(explicit) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread -- test fixture under t.TempDir()
 	if err != nil {
 		t.Fatalf("expected token at explicit path %s: %v", explicit, err)
 	}

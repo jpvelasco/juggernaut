@@ -49,7 +49,7 @@ func TestDetectV3Install_FindsShimPointingAtJuggernautHome(t *testing.T) {
 // ignored — a possible v3 artifact is worth surfacing in doctor.
 func TestDetectV3Install_ReportsUnreadableShim(t *testing.T) {
 	binDir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(binDir, "juggernaut.ps1"), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(binDir, "juggernaut.ps1"), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission, go_file-permissions_rule-fileperm -- test fixture under t.TempDir()
 		t.Fatal(err)
 	}
 
