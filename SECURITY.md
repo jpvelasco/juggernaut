@@ -23,7 +23,7 @@ This tool handles:
 
 **Recommendations:**
 - Use IAM/SSO authentication when possible (no secrets stored)
-- Use `--storage=keychain` for API key storage when available
+- API keys are stored in the OS keychain; use IAM/SSO authentication when possible to avoid storing secrets
 - Ensure shell profile permissions are restricted (`chmod 600`)
 - Don't commit `.backup.*` files if they contain sensitive data
 

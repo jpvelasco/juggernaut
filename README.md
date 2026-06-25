@@ -207,7 +207,7 @@ claude() {
 # END: Juggernaut Claude Activation
 ```
 
-The hidden `juggernaut launch` command reads the Bedrock API key from the OS keychain when your settings use `bedrock-api-key`, sets `AWS_BEARER_TOKEN_BEDROCK` and `CLAUDE_CODE_USE_BEDROCK=1`, resolves the real Anthropic `claude` binary without recursing into Juggernaut, and launches Claude Code with your original arguments.
+The hidden `juggernaut launch` command reads the Bedrock API key from the OS keychain when your settings use `bedrock-api-key`, sets `ANTHROPIC_API_KEY` and `CLAUDE_CODE_USE_BEDROCK=1`, resolves the real Anthropic `claude` binary without recursing into Juggernaut, and launches Claude Code with your original arguments.
 
 ```json
 {
@@ -265,7 +265,7 @@ juggernaut uninstall --full
 
 **Model not found** — Use global inference profile IDs (Juggernaut does this by default).
 
-**Keychain unavailable on headless Linux** — IAM auth works without a keychain. For Bedrock API key auth, use `--storage=profile` to store in a local file instead.
+**Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon on Linux.
 
 **SSO session expired** — `aws sso login --profile=<your-profile>` and re-run `claude`.
 

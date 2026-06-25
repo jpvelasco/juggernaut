@@ -10,9 +10,26 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
+
+func TestApply_StorageFlagUnrecognized(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--storage=profile", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected error: --storage flag should be unrecognized")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("expected 'unknown flag' in error, got: %v", err)
+	}
+}
 
 func TestApply_DryRun_IAM(t *testing.T) {
 	home := t.TempDir()
@@ -602,6 +619,40 @@ func TestApply_SkipWebFetchPreflight_AlwaysSet(t *testing.T) {
 	}
 	if settings["skipWebFetchPreflight"] != true {
 		t.Errorf("expected skipWebFetchPreflight=true for all Bedrock configs, got %v", settings["skipWebFetchPreflight"])
+	}
+}
+
+func TestVersionInSync(t *testing.T) {
+	// Version must stay in sync across VERSION, bedrock-config.json, and cmd/root.go.
+	// Go runs tests from the package directory, so resolve repo root relative to this file.
+	repoRoot := filepath.Join("..")
+	verFile, err := os.ReadFile(filepath.Join(repoRoot, "VERSION"))
+	if err != nil {
+		t.Fatalf("reading VERSION: %v", err)
+	}
+	versionFile := strings.TrimSpace(string(verFile))
+
+	// Check cmd/root.go Version var via the version subcommand.
+	err = ExecuteArgs([]string{"version"})
+	if err != nil {
+		t.Fatalf("version command failed: %v", err)
+	}
+
+	// The VERSION file is the source of truth; the Version var (set via -ldflags at build time) must match.
+	if Version == "" {
+		t.Fatal("Version var is empty — was it built without -ldflags?")
+	}
+	if Version != versionFile {
+		t.Errorf("VERSION file (%s) does not match cmd/root.go Version (%s)", versionFile, Version)
+	}
+
+	// Also check bedrock-config.json version matches.
+	bedrockConfig, err := bedrock.Load(filepath.Join(repoRoot, "bedrock-config.json"))
+	if err != nil {
+		t.Fatalf("loading bedrock-config.json: %v", err)
+	}
+	if bedrockConfig.Version != versionFile {
+		t.Errorf("bedrock-config.json version (%s) does not match VERSION file (%s)", bedrockConfig.Version, versionFile)
 	}
 }
 

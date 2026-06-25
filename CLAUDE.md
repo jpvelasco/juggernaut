@@ -70,7 +70,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **Scope:** `--scope=user` (default) vs `--scope=project`.
 - **Re-apply preserves existing auth mode** — if `--auth` is omitted and a block already exists, the existing auth mode is read from the block.
 - **`--model` overrides all three model IDs** (opus, sonnet, haiku) when set; `--opus-model`, `--sonnet-model`, `--haiku-model` override individually.
-- **`--storage`:** credential storage backend — `keychain` (default), `dpapi` (Windows), or `profile` (env/shell).
+- **Credential storage:** always the OS keychain via `go-keyring`. Service name: `juggernaut-bedrock`.
 - **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
 - **Mantle opt-in:** standard Bedrock preserves inference profile IDs by default; use `--mantle` or `--mantle-url` only when explicitly routing through Mantle.
 - **Opusplan-gated ANTHROPIC_MODEL:** only written when `--opusplan` is active.

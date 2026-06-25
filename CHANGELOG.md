@@ -10,7 +10,7 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
-- **Reverted `--storage` flag.** The `--storage` flag was accepted but ignored — all credential operations hardcoded the OS keychain regardless of the selected backend. The flag and all dead code (`Storage` schema field, `ClearOthers`, `MigrateInto`, DPAPI/profile backends) have been removed. Credential storage is now honest: always the OS keychain.
+- **Reverted `--storage` flag.** The `--storage` flag was accepted but ignored — all credential operations hardcoded the OS keychain regardless of the selected backend. The flag, the `Storage` schema field, and all associated dead code (`ClearOthers`, `MigrateInto`, DPAPI/profile backends, v3 detect, legacy shim detection) have been removed. Credential storage is now honest: always the OS keychain.
 - **`Launch()` uses `ANTHROPIC_API_KEY` instead of `AWS_BEARER_TOKEN_BEDROCK`.** Claude Code v2.1.191+ no longer reads `AWS_BEARER_TOKEN_BEDROCK`. Binary inspection confirms it reads `ANTHROPIC_API_KEY`. This fixes the "API error · Retrying" authentication failure when using bedrock-api-key auth mode.
 
 ### Other

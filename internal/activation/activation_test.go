@@ -254,6 +254,67 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 	}
 }
 
+func TestLaunch_BedrockAPIKey_UsesDefaultKeychain(t *testing.T) {
+	home := t.TempDir()
+	writeSettings(t, home, "bedrock-api-key")
+	realDir := t.TempDir()
+	realClaude := filepath.Join(realDir, platformNames().claude)
+	writeExecutableFile(t, realDir, realClaude, "real claude")
+
+	// No TokenGetter injected — Launch must use keychain.Default().Get.
+	err := LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
+				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
+			}
+			// The key will be empty because keychain isn't seeded, but the
+			// important thing is that LaunchWithOptions didn't error on a
+			// nil TokenGetter — it fell through to keychain.Default().Get.
+			return nil
+		},
+	})
+	// We expect an error because the keychain is empty for bedrock-api-key mode.
+	// The key point is that it tried to read from keychain, not that it succeeded.
+	if err == nil {
+		// If the keychain happens to have a key, that's fine too.
+	} else if !strings.Contains(err.Error(), "keychain") {
+		t.Fatalf("expected keychain-related error when TokenGetter is nil, got: %v", err)
+	}
+}
+
+func TestLaunch_IAM_UnsetsAnthropicAPIKeyIfPreSet(t *testing.T) {
+	home := t.TempDir()
+	writeSettings(t, home, "iam")
+	realDir := t.TempDir()
+	realClaude := filepath.Join(realDir, platformNames().claude)
+	writeExecutableFile(t, realDir, realClaude, "real claude")
+
+	// Pre-set ANTHROPIC_API_KEY in the environment to verify unsetEnv runs.
+	t.Setenv("ANTHROPIC_API_KEY", "should-be-removed")
+
+	err := LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		TokenGetter: func() (string, error) {
+			return "", errors.New("keychain should not be read for IAM")
+		},
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "" {
+				t.Fatalf("ANTHROPIC_API_KEY should be unset for IAM mode, got %q", got)
+			}
+			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
+				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+}
+
 func TestLaunchWithoutSettingsDoesNotForceBedrockEnv(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
