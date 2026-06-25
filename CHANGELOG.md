@@ -4,6 +4,14 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.2] - 2026-06-25
+
+**Patch release.** Fixes `Launch()` to resolve the configured storage backend instead of hardcoding the OS keychain.
+
+### Fixed
+
+- **`Launch()` always read from keychain regardless of `--storage`.** The `juggernaut launch` command hardcoded `keychain.Default().Get` as the token getter, meaning users with `--storage=dpapi` or `--storage=profile` had their launch silently fail because the token was read from the wrong backend. `Launch()` now delegates to `LaunchWithOptions`'s storage backend resolution, which reads `auth.storage` from `settings.json` and selects the correct backend via `keychain.Resolve()`.
+
 ## [5.1.1] - 2026-06-22
 
 **Patch release.** Broadens `doctor`'s stale-shim detection to cover v4 npm-bridge shims.
