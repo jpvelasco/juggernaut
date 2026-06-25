@@ -207,7 +207,7 @@ claude() {
 # END: Juggernaut Claude Activation
 ```
 
-The hidden `juggernaut launch` command reads the Bedrock API key from the OS keychain when your settings use `bedrock-api-key`, sets `ANTHROPIC_API_KEY` and `CLAUDE_CODE_USE_BEDROCK=1`, resolves the real Anthropic `claude` binary without recursing into Juggernaut, and launches Claude Code with your original arguments.
+The hidden `juggernaut launch` command reads the Bedrock API key from the OS keychain when your settings use `bedrock-api-key`, sets `AWS_BEARER_TOKEN_BEDROCK` and `CLAUDE_CODE_USE_BEDROCK=1`, resolves the real Anthropic `claude` binary without recursing into Juggernaut, and launches Claude Code with your original arguments.
 
 ```json
 {
