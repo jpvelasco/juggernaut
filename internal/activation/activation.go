@@ -278,9 +278,9 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		if token == "" {
 			return fmt.Errorf("bedrock API key not found in %s storage; run `juggernaut apply --auth=%s`", storageLabel(bearerStorage(configs)), authmode.BedrockAPIKey)
 		}
-		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
+		env = setEnv(env, "ANTHROPIC_API_KEY", token)
 	} else if len(modes) > 0 {
-		env = unsetEnv(env, "AWS_BEARER_TOKEN_BEDROCK")
+		env = unsetEnv(env, "ANTHROPIC_API_KEY")
 	}
 
 	claudePath, err := ResolveClaudeBinary(opts.Path)
