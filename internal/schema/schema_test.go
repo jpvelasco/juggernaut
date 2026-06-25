@@ -219,17 +219,6 @@ func TestBuild_InvalidServiceTier(t *testing.T) {
 	}
 }
 
-func TestBuild_InvalidStorage(t *testing.T) {
-	opts := schema.Options{
-		AuthMode: "iam", Region: "us-west-2", Effort: "xhigh",
-		Scope: "user", Version: "4.1.0", Storage: "bogus",
-	}
-	_, err := schema.Build(testConfig(), opts)
-	if err == nil {
-		t.Error("expected error for invalid storage backend")
-	}
-}
-
 func TestBuild_AutoMode_SetsBedrockEnvVar(t *testing.T) {
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "xhigh",

@@ -96,6 +96,6 @@ juggernaut show
 
 **Model not found** — Use global inference profile IDs (Juggernaut does this by default).
 
-**Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon or use `--storage=profile`.
+**Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon on Linux.
 
 See [README.md](README.md) for full documentation.

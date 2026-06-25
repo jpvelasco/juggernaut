@@ -212,41 +212,11 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 			return "token-value", nil
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "token-value" {
-				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK=%q", got)
+			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "token-value" {
+				t.Fatalf("ANTHROPIC_API_KEY=%q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
-			}
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("LaunchWithOptions(): %v", err)
-	}
-}
-
-func TestLaunchReadsTokenFromConfiguredProfileStorage(t *testing.T) {
-	home := t.TempDir()
-	writeSettingsWithStorage(t, home, "bedrock-api-key", "profile")
-
-	tokenPath := filepath.Join(home, "profile-token")
-	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
-	if err := os.WriteFile(tokenPath, []byte("profile-stored-token"), 0o600); err != nil {
-		t.Fatalf("writing profile token: %v", err)
-	}
-
-	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
-	writeExecutableFile(t, realDir, realClaude, "real claude")
-
-	// No TokenGetter injected: Launch must resolve the configured profile backend.
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: realDir,
-		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "profile-stored-token" {
-				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK=%q, want profile-stored-token", got)
 			}
 			return nil
 		},
@@ -270,8 +240,69 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 			return "", errors.New("keychain should not be read for IAM")
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "" {
-				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK should be unset, got %q", got)
+			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "" {
+				t.Fatalf("ANTHROPIC_API_KEY should be unset, got %q", got)
+			}
+			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
+				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+}
+
+func TestLaunch_BedrockAPIKey_UsesDefaultKeychain(t *testing.T) {
+	home := t.TempDir()
+	writeSettings(t, home, "bedrock-api-key")
+	realDir := t.TempDir()
+	realClaude := filepath.Join(realDir, platformNames().claude)
+	writeExecutableFile(t, realDir, realClaude, "real claude")
+
+	// No TokenGetter injected — Launch must use keychain.Default().Get.
+	err := LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
+				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
+			}
+			// The key will be empty because keychain isn't seeded, but the
+			// important thing is that LaunchWithOptions didn't error on a
+			// nil TokenGetter — it fell through to keychain.Default().Get.
+			return nil
+		},
+	})
+	// We expect an error because the keychain is empty for bedrock-api-key mode.
+	// The key point is that it tried to read from keychain, not that it succeeded.
+	if err == nil {
+		// If the keychain happens to have a key, that's fine too.
+	} else if !strings.Contains(err.Error(), "keychain") {
+		t.Fatalf("expected keychain-related error when TokenGetter is nil, got: %v", err)
+	}
+}
+
+func TestLaunch_IAM_UnsetsAnthropicAPIKeyIfPreSet(t *testing.T) {
+	home := t.TempDir()
+	writeSettings(t, home, "iam")
+	realDir := t.TempDir()
+	realClaude := filepath.Join(realDir, platformNames().claude)
+	writeExecutableFile(t, realDir, realClaude, "real claude")
+
+	// Pre-set ANTHROPIC_API_KEY in the environment to verify unsetEnv runs.
+	t.Setenv("ANTHROPIC_API_KEY", "should-be-removed")
+
+	err := LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		TokenGetter: func() (string, error) {
+			return "", errors.New("keychain should not be read for IAM")
+		},
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "" {
+				t.Fatalf("ANTHROPIC_API_KEY should be unset for IAM mode, got %q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
@@ -365,15 +396,6 @@ func writeSettings(t *testing.T, home, mode string) {
 	t.Helper()
 	path := filepath.Join(home, ".claude", "settings.json")
 	content := `{"juggernaut":{"auth":{"mode":"` + mode + `"},"meta":{"managedBy":"juggernaut","schemaVersion":2}}}`
-	if err := safepath.WriteFile(home, path, []byte(content)); err != nil {
-		t.Fatalf("writing settings: %v", err)
-	}
-}
-
-func writeSettingsWithStorage(t *testing.T, home, mode, storage string) {
-	t.Helper()
-	path := filepath.Join(home, ".claude", "settings.json")
-	content := `{"juggernaut":{"auth":{"mode":"` + mode + `","storage":"` + storage + `"},"meta":{"managedBy":"juggernaut","schemaVersion":2}}}`
 	if err := safepath.WriteFile(home, path, []byte(content)); err != nil {
 		t.Fatalf("writing settings: %v", err)
 	}

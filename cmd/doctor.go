@@ -57,25 +57,14 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	storage := configuredStorage(home, "user")
-	if s := configuredStorage(home, "project"); s != "" {
-		storage = s
-	}
-	credLabel := "credential (" + storageName(storage) + ")"
-	backend, resolveErr := keychain.Resolve(storage, home)
+	token, err := keychain.Default().Get()
 	switch {
-	case resolveErr != nil:
-		r.Check(credLabel, doctor.Warn, "error resolving storage: "+resolveErr.Error())
+	case err != nil:
+		r.Check("keychain", doctor.Warn, "error reading: "+err.Error())
+	case token == "":
+		r.Check("keychain", doctor.OK, "no bearer token (IAM auth)")
 	default:
-		token, err := backend.Get()
-		switch {
-		case err != nil:
-			r.Check(credLabel, doctor.Warn, "error reading: "+err.Error())
-		case token == "":
-			r.Check(credLabel, doctor.OK, "no bearer token (IAM auth)")
-		default:
-			r.Check(credLabel, doctor.OK, "bearer token found")
-		}
+		r.Check("keychain", doctor.OK, "bearer token found")
 	}
 
 	activationPaths := activation.InstalledTargets(home)
@@ -89,9 +78,6 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	}
 	if status, detail := legacyArtifactStatus(home); status != "" {
 		r.Check("v4.2.6 artifacts", status, detail)
-	}
-	if detected, detail := activation.DetectV3Install(activation.DefaultBinDir(home)); detected {
-		r.Check("legacy shim", doctor.Warn, detail)
 	}
 
 	if doctorFlags.jsonOut {
