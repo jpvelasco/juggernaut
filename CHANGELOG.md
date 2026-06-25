@@ -4,37 +4,14 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
-## [5.1.2] - 2026-06-25
+## [5.1.3] - 2026-06-25
 
-**Patch release.** Fixes `Launch()` to resolve the configured storage backend instead of hardcoding the OS keychain.
-
-### Fixed
-
-- **`Launch()` always read from keychain regardless of `--storage`.** The `juggernaut launch` command hardcoded `keychain.Default().Get` as the token getter, meaning users with `--storage=dpapi` or `--storage=profile` had their launch silently fail because the token was read from the wrong backend. `Launch()` now delegates to `LaunchWithOptions`'s storage backend resolution, which reads `auth.storage` from `settings.json` and selects the correct backend via `keychain.Resolve()`.
-
-## [5.1.1] - 2026-06-22
-
-**Patch release.** Broadens `doctor`'s stale-shim detection to cover v4 npm-bridge shims.
+**Patch release.** Reverts the broken storage backend system and fixes the Bedrock API key env var.
 
 ### Fixed
 
-- **Doctor now detects v4 npm-bridge shims, not just v3 ones.** `juggernaut doctor` previously only flagged legacy launcher shims that pointed at a `~/.juggernaut` tree. It now also flags any `juggernaut.ps1`/`.cmd`/`juggernaut` shim that delegates to an absolute target path which no longer exists (the v4 npm-bridge layout), which otherwise shadows the working npm binary on `PATH` with a dead-end error. The warning lists each stale file and the reason.
-
-## [5.1.0] - 2026-06-22
-
-**Feature release.** Makes the `--storage` flag fully functional, migrates v3 Bedrock API keys automatically, and detects stale v3 installs.
-
-### Added
-
-- **`--storage dpapi` and `--storage profile` now work.** Previously the flag value was recorded in `settings.json` but every credential read/write/delete used the OS keychain regardless, so `dpapi` and `profile` silently did nothing. All paths (apply, launch, doctor, uninstall) now honor the configured backend. `--storage dpapi` is Windows-only and errors clearly elsewhere.
-- **Automatic v3→v5 credential migration.** On `apply`, when the configured backend has no key, Juggernaut imports an existing v3-era Bedrock API key — Windows Credential Manager (legacy UTF-16, bare target), DPAPI file, or profile token file — into the v5 backend and removes the stale source. This replaces the manual DPAPI bridge previously required on Windows upgrades.
-- **Stale v3 install detection.** `juggernaut doctor` warns when leftover v3 PowerShell/Bash install artifacts are found on `PATH` and points to `npm install -g juggernaut-bedrock`.
-
-### Fixed
-
-- **Switching `--storage` no longer orphans the old credential.** After storing into the selected backend, any key left in a previously-configured backend is cleared.
-- **Re-apply preserves the configured storage backend.** A bare `juggernaut apply` (e.g. to change region) no longer resets `--storage` to the keychain default — which would otherwise wipe a working `profile`/`dpapi` credential.
-- **Oversize API keys give actionable guidance.** A key exceeding the OS credential-store blob cap (~2560 bytes) now reports the limit and suggests `--storage=dpapi` (Windows) or `--storage=profile`, instead of failing with an opaque backend error.
+- **Reverted `--storage` flag.** The `--storage` flag was accepted but ignored — all credential operations hardcoded the OS keychain regardless of the selected backend. The flag and all dead code (`Storage` schema field, `ClearOthers`, `MigrateInto`, DPAPI/profile backends) have been removed. Credential storage is now honest: always the OS keychain.
+- **`Launch()` uses `ANTHROPIC_API_KEY` instead of `AWS_BEARER_TOKEN_BEDROCK`.** Claude Code v2.1.191+ no longer reads `AWS_BEARER_TOKEN_BEDROCK`. Binary inspection confirms it reads `ANTHROPIC_API_KEY`. This fixes the "API error · Retrying" authentication failure when using bedrock-api-key auth mode.
 
 ### Other
 
@@ -827,9 +804,7 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.1.1...HEAD
-[5.1.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.1
-[5.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.0
+[5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2

@@ -228,13 +228,13 @@ func DetectLegacyArtifacts(binDir string) []LegacyAction {
 }
 
 // Launch runs Claude Code with Juggernaut Bedrock activation.
-// It does NOT set TokenGetter so that LaunchWithOptions resolves the
-// configured storage backend from settings.json instead of hardcoding keychain.
 func Launch(home string, args []string) error {
 	return LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Args: args,
-		Path: os.Getenv("PATH"),
+		Home:        home,
+		Args:        args,
+		Path:        os.Getenv("PATH"),
+		TokenGetter: keychain.Default().Get,
+		Runner:      runClaudeBinary,
 	})
 }
 
@@ -246,41 +246,33 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	if opts.Path == "" {
 		opts.Path = os.Getenv("PATH")
 	}
+	if opts.TokenGetter == nil {
+		opts.TokenGetter = keychain.Default().Get
+	}
 	if opts.Runner == nil {
 		opts.Runner = runClaudeBinary
 	}
 
 	env := os.Environ()
-	configs, err := authConfigs(opts.Home)
+	modes, err := authModes(opts.Home)
 	if err != nil {
 		return err
 	}
-	modes := make([]string, 0, len(configs))
-	for _, c := range configs {
-		modes = append(modes, c.mode)
-	}
 	if len(modes) > 0 {
 		env = setEnv(env, "CLAUDE_CODE_USE_BEDROCK", "1")
-	}
-	if opts.TokenGetter == nil {
-		backend, err := keychain.Resolve(bearerStorage(configs), opts.Home)
-		if err != nil {
-			return err
-		}
-		opts.TokenGetter = backend.Get
 	}
 	needsToken := needsBearerToken(modes)
 	if needsToken {
 		token, err := opts.TokenGetter()
 		if err != nil {
-			return fmt.Errorf("reading Bedrock API key from %s storage: %w", storageLabel(bearerStorage(configs)), err)
+			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
 		}
 		if token == "" {
-			return fmt.Errorf("bedrock API key not found in %s storage; run `juggernaut apply --auth=%s`", storageLabel(bearerStorage(configs)), authmode.BedrockAPIKey)
+			return fmt.Errorf("bedrock API key not found in keychain; run `juggernaut apply --auth=%s`", authmode.BedrockAPIKey)
 		}
-		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
+		env = setEnv(env, "ANTHROPIC_API_KEY", token)
 	} else if len(modes) > 0 {
-		env = unsetEnv(env, "AWS_BEARER_TOKEN_BEDROCK")
+		env = unsetEnv(env, "ANTHROPIC_API_KEY")
 	}
 
 	claudePath, err := ResolveClaudeBinary(opts.Path)
@@ -484,18 +476,12 @@ func needsBearerToken(modes []string) bool {
 	return false
 }
 
-// authConfig is the auth mode and credential storage resolved from one settings block.
-type authConfig struct {
-	mode    string
-	storage string
-}
-
-func authConfigs(home string) ([]authConfig, error) {
+func authModes(home string) ([]string, error) {
 	paths := []string{
 		filepath.Join(".", ".claude", "settings.json"),
 		filepath.Join(home, ".claude", "settings.json"),
 	}
-	var configs []authConfig
+	var modes []string
 	for _, path := range paths {
 		mgr := config.NewManager(path)
 		data, err := mgr.Read()
@@ -514,33 +500,11 @@ func authConfigs(home string) ([]authConfig, error) {
 		if !ok {
 			continue
 		}
-		mode, ok := auth["mode"].(string)
-		if !ok {
-			continue
-		}
-		storage, _ := auth["storage"].(string)
-		configs = append(configs, authConfig{mode: mode, storage: storage})
-	}
-	return configs, nil
-}
-
-// bearerStorage returns the storage backend configured for the first
-// bearer-token auth mode, defaulting to keychain.
-func bearerStorage(configs []authConfig) string {
-	for _, c := range configs {
-		if authmode.IsBedrockAPIKey(c.mode) {
-			return c.storage
+		if mode, ok := auth["mode"].(string); ok {
+			modes = append(modes, mode)
 		}
 	}
-	return ""
-}
-
-// storageLabel returns a human-readable name for a storage mode, for error messages.
-func storageLabel(mode string) string {
-	if mode == "" {
-		return "keychain"
-	}
-	return mode
+	return modes, nil
 }
 
 func runClaudeBinary(path string, args []string, env []string) error {

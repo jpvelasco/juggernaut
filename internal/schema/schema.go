@@ -27,7 +27,6 @@ type Options struct {
 	Use1M          bool
 	UseMantle      bool
 	MantleURL      string
-	Storage        string
 	AuthValidated  bool
 	PermissionMode string // "", "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"
 	AlwaysThinking bool
@@ -44,9 +43,8 @@ type Block struct {
 
 // Auth holds the authentication configuration within the Juggernaut block.
 type Auth struct {
-	Mode    string `json:"mode"`
-	Region  string `json:"region"`
-	Storage string `json:"storage,omitempty"`
+	Mode   string `json:"mode"`
+	Region string `json:"region"`
 }
 
 // ModelOverrides holds the Bedrock model IDs for each tier.
@@ -98,10 +96,6 @@ var validServiceTiers = map[string]bool{
 	"default": true, "flex": true, "priority": true,
 }
 
-var validStorage = map[string]bool{
-	"keychain": true, "profile": true, "dpapi": true,
-}
-
 // Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
@@ -115,9 +109,6 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 	if opts.ServiceTier != "" && !validServiceTiers[opts.ServiceTier] {
 		return nil, fmt.Errorf("invalid service-tier %q — must be one of: default, flex, priority", opts.ServiceTier)
-	}
-	if opts.Storage != "" && !validStorage[opts.Storage] {
-		return nil, fmt.Errorf("invalid storage %q — must be one of: keychain, profile, dpapi", opts.Storage)
 	}
 
 	opus := opts.OpusModel
@@ -175,16 +166,10 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		env["ANTHROPIC_BEDROCK_SERVICE_TIER"] = opts.ServiceTier
 	}
 
-	storage := opts.Storage
-	if storage == "" {
-		storage = "keychain"
-	}
-
 	return &Block{
 		Auth: Auth{
-			Mode:    opts.AuthMode,
-			Region:  opts.Region,
-			Storage: storage,
+			Mode:   opts.AuthMode,
+			Region: opts.Region,
 		},
 		Models: ModelOverrides{
 			Opus:     opus,

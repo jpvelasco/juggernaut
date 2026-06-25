@@ -212,41 +212,11 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 			return "token-value", nil
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "token-value" {
-				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK=%q", got)
+			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "token-value" {
+				t.Fatalf("ANTHROPIC_API_KEY=%q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
-			}
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("LaunchWithOptions(): %v", err)
-	}
-}
-
-func TestLaunchReadsTokenFromConfiguredProfileStorage(t *testing.T) {
-	home := t.TempDir()
-	writeSettingsWithStorage(t, home, "bedrock-api-key", "profile")
-
-	tokenPath := filepath.Join(home, "profile-token")
-	t.Setenv("JUGGERNAUT_PROFILE_TOKEN_PATH", tokenPath)
-	if err := os.WriteFile(tokenPath, []byte("profile-stored-token"), 0o600); err != nil {
-		t.Fatalf("writing profile token: %v", err)
-	}
-
-	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
-	writeExecutableFile(t, realDir, realClaude, "real claude")
-
-	// No TokenGetter injected: Launch must resolve the configured profile backend.
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: realDir,
-		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "profile-stored-token" {
-				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK=%q, want profile-stored-token", got)
 			}
 			return nil
 		},
@@ -270,8 +240,8 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 			return "", errors.New("keychain should not be read for IAM")
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "" {
-				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK should be unset, got %q", got)
+			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "" {
+				t.Fatalf("ANTHROPIC_API_KEY should be unset, got %q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
@@ -365,15 +335,6 @@ func writeSettings(t *testing.T, home, mode string) {
 	t.Helper()
 	path := filepath.Join(home, ".claude", "settings.json")
 	content := `{"juggernaut":{"auth":{"mode":"` + mode + `"},"meta":{"managedBy":"juggernaut","schemaVersion":2}}}`
-	if err := safepath.WriteFile(home, path, []byte(content)); err != nil {
-		t.Fatalf("writing settings: %v", err)
-	}
-}
-
-func writeSettingsWithStorage(t *testing.T, home, mode, storage string) {
-	t.Helper()
-	path := filepath.Join(home, ".claude", "settings.json")
-	content := `{"juggernaut":{"auth":{"mode":"` + mode + `","storage":"` + storage + `"},"meta":{"managedBy":"juggernaut","schemaVersion":2}}}`
 	if err := safepath.WriteFile(home, path, []byte(content)); err != nil {
 		t.Fatalf("writing settings: %v", err)
 	}
