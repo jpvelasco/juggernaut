@@ -228,13 +228,13 @@ func DetectLegacyArtifacts(binDir string) []LegacyAction {
 }
 
 // Launch runs Claude Code with Juggernaut Bedrock activation.
+// It does NOT set TokenGetter so that LaunchWithOptions resolves the
+// configured storage backend from settings.json instead of hardcoding keychain.
 func Launch(home string, args []string) error {
 	return LaunchWithOptions(LaunchOptions{
-		Home:        home,
-		Args:        args,
-		Path:        os.Getenv("PATH"),
-		TokenGetter: keychain.Default().Get,
-		Runner:      runClaudeBinary,
+		Home: home,
+		Args: args,
+		Path: os.Getenv("PATH"),
 	})
 }
 
