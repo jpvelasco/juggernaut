@@ -626,7 +626,7 @@ func TestVersionInSync(t *testing.T) {
 	// Version must stay in sync across VERSION, bedrock-config.json, and cmd/root.go.
 	// Go runs tests from the package directory, so resolve repo root relative to this file.
 	repoRoot := filepath.Join("..")
-	verFile, err := os.ReadFile(filepath.Join(repoRoot, "VERSION"))
+	verFile, err := os.ReadFile(filepath.Join(repoRoot, "VERSION")) // nosemgrep: go_filesystem_rule-fileread — test reads hardcoded file from repo root
 	if err != nil {
 		t.Fatalf("reading VERSION: %v", err)
 	}
