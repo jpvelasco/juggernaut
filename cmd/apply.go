@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/huh"
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
@@ -14,6 +15,11 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
+
+// credentialEchoMode is the EchoMode used for the Bedrock API key prompt.
+// Must be textinput.EchoNone, NOT textinput.EchoPassword — EchoPassword
+// breaks on Windows (keystrokes are silently dropped by the TUI input loop).
+const credentialEchoMode huh.EchoMode = huh.EchoMode(textinput.EchoNone)
 
 var applyCmd = &cobra.Command{
 	Use:   "apply",
@@ -335,7 +341,13 @@ func resolveCredential(authMode string) (string, error) {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Bedrock API key").
-				EchoMode(huh.EchoModePassword).
+				EchoMode(credentialEchoMode).
+				DescriptionFunc(func() string {
+					if input == "" {
+						return "typing hidden — nothing echoed"
+					}
+					return "key entered"
+				}, &input).
 				Value(&input),
 		),
 	)
