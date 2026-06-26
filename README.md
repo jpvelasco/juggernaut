@@ -114,10 +114,12 @@ juggernaut apply
 ```bash
 juggernaut apply --auth=iam --region=us-east-1
 juggernaut apply --auth=iam --opusplan              # Opus in /plan, Sonnet in execute
-juggernaut apply --auth=iam --effort=high           # low | medium | high | xhigh | max
+juggernaut apply --auth=iam --effort=high           # low | medium | high | xhigh | max | auto
 juggernaut apply --auth=iam --mode=auto             # enable agentic safety-classifier mode
 juggernaut apply --auth=iam --always-thinking       # extended thinking on by default
 juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: default | flex | priority
+juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
+juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8
 juggernaut apply --auth=iam --mantle                # enable Mantle routing
 juggernaut apply --auth=iam --dry-run               # preview without writing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
@@ -147,20 +149,25 @@ claude
 |------|-------|---------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
+| **Fable alias** | Claude Fable 5 | Configure with `--fable-model=<bedrock-fable-model-id>` |
 | **Fast / subagent** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
-Juggernaut appends Claude Code's `[1m]` suffix to the Opus and Sonnet alias environment variables by default, so Claude Code accounts against the 1M context window locally. Claude Code strips that suffix before calling Bedrock. Use `--no-1m-context` to opt out.
+Juggernaut appends Claude Code's `[1m]` suffix to the Opus and Sonnet alias environment variables by default, and to the configured Fable alias when it matches Claude Code's Fable ID. Claude Code accounts against 1M context for supported aliases locally, then strips that suffix before calling Bedrock. Use `--no-1m-context` to opt out.
+
+Fable is exposed as an opt-in Claude Code alias. Pass `--fable-model` with a model ID that is available in your Bedrock account and region; Juggernaut does not pin a default Fable ID until one is configured.
 
 Override any tier:
 
 ```bash
 juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-4-8
-juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6  # override all
+juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
+juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6  # override all model aliases
+juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6
 ```
 
 ## Effort Levels
 
-Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, and `max`; Claude Code falls back to the highest supported level for the active model. Juggernaut defaults to `high`, which matches Sonnet 4.6.
+Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, `max`, and `auto`; Claude Code falls back to the highest supported level for the active model. Juggernaut writes fixed persisted levels (`low`, `medium`, `high`, `xhigh`) to both native `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`. Juggernaut defaults to `high`, which matches Sonnet 4.6.
 
 | Level | Behavior |
 |-------|----------|
@@ -169,6 +176,7 @@ Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhi
 | `high` | Almost always thinks (default) |
 | `xhigh` | Always thinks deeply |
 | `max` | Maximum thinking — deepest reasoning, highest cost |
+| `auto` | Claude Code selects the effort level |
 
 ```bash
 juggernaut apply --auth=iam --effort=max
@@ -225,7 +233,7 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_EFFORT_LEVEL": "high",
     "ENABLE_PROMPT_CACHING_1H": "1",
-    "DISABLE_TELEMETRY": "1"
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   }
 }
 ```

@@ -4,6 +4,12 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Fable alias support.** `juggernaut apply` now supports `--fable-model`; when a Fable model ID is configured, Juggernaut writes `ANTHROPIC_DEFAULT_FABLE_MODEL`, Fable companion metadata, and Fable model override aliases.
+- **Native fallback chain.** Added `--fallback-model=a,b` to write Claude Code's native `fallbackModel` array and remove it cleanly on uninstall.
+- **Effort defaults.** `--effort=auto` is now accepted through `CLAUDE_CODE_EFFORT_LEVEL` without emitting an invalid persisted `effortLevel` value; `ultracode` is intentionally rejected because Claude Code treats it as a separate session setting, not an effort level.
+
 ## [5.1.6] - 2026-06-26
 
 **Patch release.** Fixes doctor connectivity check that was stripping the `global.` prefix from inference profile model IDs, causing false HTTP 400 failures.

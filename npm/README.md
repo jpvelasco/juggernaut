@@ -102,15 +102,20 @@ No overwriting the real Claude Code binary. No copying API keys into env vars.
 |------|-------|--------------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
+| **Fable alias** | Claude Fable 5 | Configure with `--fable-model=<bedrock-fable-model-id>` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
-Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Claude Code strips the suffix before provider calls. Use `--no-1m-context` to opt out.
+Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables, and does the same for the configured Fable alias when it matches Claude Code's Fable ID. Claude Code strips the suffix before provider calls. Use `--no-1m-context` to opt out.
 
-Override any tier: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
+Fable is exposed as an opt-in Claude Code alias. Pass `--fable-model` with a model ID that is available in your Bedrock account and region; Juggernaut does not pin a default Fable ID until one is configured.
+
+Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
+Override one tier: `juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>`
+Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6`
 
 ## Effort levels
 
-Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | max`
+Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | max | auto`. Fixed persisted levels (`low | medium | high | xhigh`) are written to native `effortLevel`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`.
 
 ```bash
 juggernaut apply --auth=iam --effort=max
@@ -141,6 +146,8 @@ Auto mode on Bedrock requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — Juggernaut se
 ```bash
 --always-thinking       # enable extended thinking by default (alwaysThinkingEnabled)
 --service-tier=flex     # Bedrock service tier: default | flex | priority
+--fable-model=<id>      # override Claude Code Fable alias
+--fallback-model=a,b    # write Claude Code native fallbackModel chain
 --opusplan              # route /plan to Opus 4.8, execution to Sonnet 4.6
 --mode=auto             # auto-approve safe tool calls with background checks
 --mantle                # enable Mantle routing

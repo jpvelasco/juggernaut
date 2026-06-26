@@ -1,6 +1,7 @@
 package schema_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -14,6 +15,7 @@ func testConfig() *bedrock.Config {
 			Opus:   "global.anthropic.claude-opus-4-8",
 			Sonnet: "global.anthropic.claude-sonnet-4-6",
 			Haiku:  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			Fable:  "global.anthropic.claude-fable-5",
 		},
 		Environment: map[string]string{
 			"CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
@@ -69,19 +71,23 @@ func TestBuild_InvalidRegion(t *testing.T) {
 }
 
 func TestBuild_InvalidEffort(t *testing.T) {
-	opts := schema.Options{
-		AuthMode: "iam",
-		Region:   "us-west-2",
-		Effort:   "turbo",
-		Scope:    "user",
-		Version:  "4.0.0",
-	}
-	_, err := schema.Build(testConfig(), opts)
-	if err == nil {
-		t.Error("expected error for invalid effort level")
+	for _, effort := range []string{"turbo", "ultracode"} {
+		t.Run(effort, func(t *testing.T) {
+			opts := schema.Options{
+				AuthMode: "iam",
+				Region:   "us-west-2",
+				Effort:   effort,
+				Scope:    "user",
+				Version:  "4.0.0",
+			}
+
+			_, err := schema.Build(testConfig(), opts)
+			if err == nil {
+				t.Errorf("expected error for invalid effort level %q", effort)
+			}
+		})
 	}
 }
-
 func TestNativeKeys_Opusplan(t *testing.T) {
 	opts := schema.Options{
 		AuthMode:      "iam",
@@ -126,6 +132,9 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	if block.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] != "global.anthropic.claude-haiku-4-5-20251001-v1:0" {
 		t.Errorf("Haiku should not get [1m], got %q", block.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"])
 	}
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5[1m]" {
+		t.Errorf("expected Fable env model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	}
 	if block.Env["ANTHROPIC_MODEL"] != "opusplan[1m]" {
 		t.Errorf("expected opusplan env model with [1m], got %q", block.Env["ANTHROPIC_MODEL"])
 	}
@@ -142,6 +151,9 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	}
 	if native.ModelOverrides["claude-opus-4-8[1m]"] != "global.anthropic.claude-opus-4-8" {
 		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-4-8[1m]"])
+	}
+	if native.ModelOverrides["claude-fable-5[1m]"] != "global.anthropic.claude-fable-5" {
+		t.Errorf("expected [1m] Fable override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-fable-5[1m]"])
 	}
 }
 
@@ -165,11 +177,17 @@ func TestBuild_No1MDisablesClaudeCodeExtendedContext(t *testing.T) {
 	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6" {
 		t.Errorf("expected Sonnet env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5" {
+		t.Errorf("expected Fable env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	}
 	if block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
 		t.Errorf("expected CLAUDE_CODE_DISABLE_1M_CONTEXT=1, got %q", block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"])
 	}
 	if _, ok := block.NativeKeys().ModelOverrides["claude-sonnet-4-6[1m]"]; ok {
 		t.Error("[1m] model override should be omitted when Use1M=false")
+	}
+	if _, ok := block.NativeKeys().ModelOverrides["claude-fable-5[1m]"]; ok {
+		t.Error("[1m] Fable model override should be omitted when Use1M=false")
 	}
 }
 
@@ -183,6 +201,7 @@ func TestBuild_Use1MDoesNotAnnotateUnknownCustomModels(t *testing.T) {
 		Use1M:         true,
 		OpusModel:     "custom.opus",
 		SonnetModel:   "custom.sonnet",
+		FableModel:    "custom.fable",
 		AuthValidated: true,
 	}
 	block, err := schema.Build(testConfig(), opts)
@@ -194,6 +213,70 @@ func TestBuild_Use1MDoesNotAnnotateUnknownCustomModels(t *testing.T) {
 	}
 	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "custom.sonnet" {
 		t.Errorf("unknown Sonnet override should not get [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
+	}
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "custom.fable" {
+		t.Errorf("unknown Fable override should not get [1m], got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	}
+}
+
+func TestBuild_FableDefaultsAndNativeAliases(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Models.Fable != "global.anthropic.claude-fable-5" {
+		t.Errorf("expected Fable model from config, got %q", block.Models.Fable)
+	}
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"] != "Fable 5" {
+		t.Errorf("expected Fable display name, got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"])
+	}
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION"] == "" {
+		t.Error("expected Fable description to be set")
+	}
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES"] == "" {
+		t.Error("expected Fable supported capabilities to be set")
+	}
+
+	overrides := block.NativeKeys().ModelOverrides
+	for _, key := range []string{"fable", "claude-fable-5", "anthropic.claude-fable-5"} {
+		if overrides[key] != "global.anthropic.claude-fable-5" {
+			t.Errorf("expected %s to map to global Fable profile, got %q", key, overrides[key])
+		}
+	}
+}
+
+func TestBuild_FallbackModelsNativeKey(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		FallbackModels: []string{" global.anthropic.claude-opus-4-8 ", "global.anthropic.claude-sonnet-4-6"},
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	want := []string{"global.anthropic.claude-opus-4-8", "global.anthropic.claude-sonnet-4-6"}
+	if !slices.Equal(block.Meta.FallbackModels, want) {
+		t.Errorf("expected fallbackModels=%v, got %v", want, block.Meta.FallbackModels)
+	}
+	if !slices.Equal(block.NativeKeys().FallbackModel, want) {
+		t.Errorf("expected native fallbackModel=%v, got %v", want, block.NativeKeys().FallbackModel)
+	}
+}
+
+func TestBuild_FallbackModelsRejectEmptyEntries(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		FallbackModels: []string{"global.anthropic.claude-opus-4-8", " "},
+	}
+	_, err := schema.Build(testConfig(), opts)
+	if err == nil {
+		t.Fatal("expected empty fallback model ID to error")
 	}
 }
 
@@ -294,6 +377,28 @@ func TestNativeKeys_MaxEffortIsEnvOnly(t *testing.T) {
 	}
 }
 
+func TestNativeKeys_AutoEffortUsesEnvOnly(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Effort:   "auto",
+		Scope:    "user",
+		Version:  "4.0.0",
+	}
+
+	built, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	native := built.NativeKeys()
+	if native.EffortLevel != "" {
+		t.Errorf("expected native effortLevel to be omitted for auto, got %q", native.EffortLevel)
+	}
+	if native.Env["CLAUDE_CODE_EFFORT_LEVEL"] != "auto" {
+		t.Errorf("expected CLAUDE_CODE_EFFORT_LEVEL=auto, got %q", native.Env["CLAUDE_CODE_EFFORT_LEVEL"])
+	}
+}
 func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",
@@ -312,6 +417,11 @@ func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
 	for _, key := range []string{"opus", "claude-opus-4-8", "anthropic.claude-opus-4-8"} {
 		if overrides[key] != "global.anthropic.claude-opus-4-8" {
 			t.Errorf("expected %s to map to global Opus profile, got %q", key, overrides[key])
+		}
+	}
+	for _, key := range []string{"fable", "claude-fable-5", "anthropic.claude-fable-5"} {
+		if overrides[key] != "global.anthropic.claude-fable-5" {
+			t.Errorf("expected %s to map to global Fable profile, got %q", key, overrides[key])
 		}
 	}
 }
@@ -387,6 +497,9 @@ func TestBuild_Mantle_StripsGlobalPrefix(t *testing.T) {
 	if block.Models.Haiku != "anthropic.claude-haiku-4-5-20251001-v1:0" {
 		t.Errorf("expected haiku without global. prefix, got %s", block.Models.Haiku)
 	}
+	if block.Models.Fable != "anthropic.claude-fable-5" {
+		t.Errorf("expected fable without global. prefix, got %s", block.Models.Fable)
+	}
 }
 
 func TestBuild_Mantle_StripsRegionalInferenceProfilePrefix(t *testing.T) {
@@ -443,5 +556,78 @@ func TestBuild_NoBedrockFlagWithoutValidation(t *testing.T) {
 	}
 	if block.Env["CLAUDE_CODE_USE_BEDROCK"] == "1" {
 		t.Error("CLAUDE_CODE_USE_BEDROCK should NOT be set when AuthValidated=false")
+	}
+}
+
+func TestIsAutoModeCapableModel(t *testing.T) {
+	cases := []struct {
+		model string
+		want  bool
+	}{
+		// Supported on Bedrock: Opus 4.7 and 4.8 (with any region prefix / [1m]).
+		{"global.anthropic.claude-opus-4-8", true},
+		{"global.anthropic.claude-opus-4-8[1m]", true},
+		{"us.anthropic.claude-opus-4-7", true},
+		{"anthropic.claude-opus-4-7", true},
+		{"claude-opus-4-8", true},
+		// Not supported: Sonnet, Haiku, older Opus, Fable, empty.
+		{"global.anthropic.claude-sonnet-4-6", false},
+		{"global.anthropic.claude-sonnet-4-6[1m]", false},
+		{"us.anthropic.claude-opus-4-6", false},
+		{"anthropic.claude-opus-4-5-20251101", false},
+		{"global.anthropic.claude-haiku-4-5-20251001-v1:0", false},
+		{"claude-fable-5", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := schema.IsAutoModeCapableModel(c.model); got != c.want {
+			t.Errorf("IsAutoModeCapableModel(%q) = %v, want %v", c.model, got, c.want)
+		}
+	}
+}
+
+func TestBlock_AutoModeUsable_FalseWhenDefaultModelIsSonnet(t *testing.T) {
+	// Default config: Sonnet-tier active model => auto mode hidden on Bedrock.
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.1.6", PermissionMode: "auto", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.AutoModeUsable() {
+		t.Error("expected AutoModeUsable()=false when the active model is Sonnet 4.6")
+	}
+}
+
+func TestBlock_AutoModeUsable_TrueWhenSonnetPinnedToOpus(t *testing.T) {
+	// --model opus (or --sonnet-model opus) makes the active alias resolve to Opus.
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.1.6", PermissionMode: "auto", AuthValidated: true,
+		SonnetModel: "global.anthropic.claude-opus-4-8",
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if !block.AutoModeUsable() {
+		t.Error("expected AutoModeUsable()=true when the active model resolves to Opus 4.8")
+	}
+}
+
+func TestBlock_AutoModeUsable_FalseWhenModeNotAuto(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.1.6", PermissionMode: "plan", AuthValidated: true,
+		SonnetModel: "global.anthropic.claude-opus-4-8",
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.AutoModeUsable() {
+		t.Error("expected AutoModeUsable()=false when PermissionMode is not auto")
 	}
 }
