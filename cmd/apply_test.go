@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/huh"
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -653,6 +655,15 @@ func TestVersionInSync(t *testing.T) {
 	}
 	if bedrockConfig.Version != versionFile {
 		t.Errorf("bedrock-config.json version (%s) does not match VERSION file (%s)", bedrockConfig.Version, versionFile)
+	}
+}
+
+func TestCredentialEchoMode_IsEchoNone(t *testing.T) {
+	// EchoModePassword breaks on Windows (keystrokes are dropped by the TUI
+	// input loop). The credential prompt must use EchoNone instead.
+	// Regression test for: https://github.com/charmbracelet/bubbles/issues/865
+	if credentialEchoMode != huh.EchoMode(textinput.EchoNone) {
+		t.Fatalf("credential prompt must use EchoModeNone, got %v", credentialEchoMode)
 	}
 }
 
