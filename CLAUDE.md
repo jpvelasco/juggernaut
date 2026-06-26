@@ -74,7 +74,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
 - **Mantle opt-in:** standard Bedrock preserves inference profile IDs by default; use `--mantle` or `--mantle-url` only when explicitly routing through Mantle.
 - **Opusplan-gated ANTHROPIC_MODEL:** only written when `--opusplan` is active.
-- **`--mode`:** sets `permissions.defaultMode` in settings.json. When `auto`, also writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` in env (required for Bedrock; without it auto mode silently does nothing).
+- **`--mode`:** sets `permissions.defaultMode` in settings.json. When `auto`, also writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` in env (required for Bedrock). Auto mode on Bedrock additionally requires the **active session model to be Opus 4.7/4.8** (Claude Code v2.1.158+); Sonnet/Haiku are unsupported and Claude Code hides auto from the Shift+Tab cycle. Because Juggernaut's default model is Sonnet, `apply --mode=auto` prints a warning (via `schema.Block.AutoModeUsable()` / `schema.IsAutoModeCapableModel()`) unless the resolved model is Opus. Users unlock it by running Claude Code on Opus (`claude --model opus` or `/model opus`).
 - **`--always-thinking`:** writes `alwaysThinkingEnabled: true` as a native settings.json key.
 - **`--service-tier`:** writes `ANTHROPIC_BEDROCK_SERVICE_TIER` env var; values: `default`, `flex`, `priority`.
 - **`skipWebFetchPreflight`:** always written as `true` for all Bedrock users (avoids domain safety preflight delays).

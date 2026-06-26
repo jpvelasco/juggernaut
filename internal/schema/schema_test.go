@@ -445,3 +445,76 @@ func TestBuild_NoBedrockFlagWithoutValidation(t *testing.T) {
 		t.Error("CLAUDE_CODE_USE_BEDROCK should NOT be set when AuthValidated=false")
 	}
 }
+
+func TestIsAutoModeCapableModel(t *testing.T) {
+	cases := []struct {
+		model string
+		want  bool
+	}{
+		// Supported on Bedrock: Opus 4.7 and 4.8 (with any region prefix / [1m]).
+		{"global.anthropic.claude-opus-4-8", true},
+		{"global.anthropic.claude-opus-4-8[1m]", true},
+		{"us.anthropic.claude-opus-4-7", true},
+		{"anthropic.claude-opus-4-7", true},
+		{"claude-opus-4-8", true},
+		// Not supported: Sonnet, Haiku, older Opus, Fable, empty.
+		{"global.anthropic.claude-sonnet-4-6", false},
+		{"global.anthropic.claude-sonnet-4-6[1m]", false},
+		{"us.anthropic.claude-opus-4-6", false},
+		{"anthropic.claude-opus-4-5-20251101", false},
+		{"global.anthropic.claude-haiku-4-5-20251001-v1:0", false},
+		{"claude-fable-5", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := schema.IsAutoModeCapableModel(c.model); got != c.want {
+			t.Errorf("IsAutoModeCapableModel(%q) = %v, want %v", c.model, got, c.want)
+		}
+	}
+}
+
+func TestBlock_AutoModeUsable_FalseWhenDefaultModelIsSonnet(t *testing.T) {
+	// Default config: Sonnet-tier active model => auto mode hidden on Bedrock.
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.1.6", PermissionMode: "auto", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.AutoModeUsable() {
+		t.Error("expected AutoModeUsable()=false when the active model is Sonnet 4.6")
+	}
+}
+
+func TestBlock_AutoModeUsable_TrueWhenSonnetPinnedToOpus(t *testing.T) {
+	// --model opus (or --sonnet-model opus) makes the active alias resolve to Opus.
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.1.6", PermissionMode: "auto", AuthValidated: true,
+		SonnetModel: "global.anthropic.claude-opus-4-8",
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if !block.AutoModeUsable() {
+		t.Error("expected AutoModeUsable()=true when the active model resolves to Opus 4.8")
+	}
+}
+
+func TestBlock_AutoModeUsable_FalseWhenModeNotAuto(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.1.6", PermissionMode: "plan", AuthValidated: true,
+		SonnetModel: "global.anthropic.claude-opus-4-8",
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.AutoModeUsable() {
+		t.Error("expected AutoModeUsable()=false when PermissionMode is not auto")
+	}
+}

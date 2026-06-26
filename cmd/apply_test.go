@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -674,4 +675,82 @@ func readSettingsJSON(t *testing.T, home string) []byte {
 		t.Fatalf("reading settings.json: %v", err)
 	}
 	return data
+}
+
+// captureStdout runs fn while redirecting os.Stdout and returns what was printed.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing pipe: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading pipe: %v", err)
+	}
+	return string(out)
+}
+
+func TestApply_AutoMode_WarnsWhenModelNotOpus(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Auto mode on Bedrock requires Opus") {
+		t.Errorf("expected auto-mode model warning with default Sonnet model, got:\n%s", out)
+	}
+}
+
+func TestApply_AutoMode_NoWarnWhenModelIsOpus(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--mode=auto",
+			"--model", "global.anthropic.claude-opus-4-8", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "Auto mode on Bedrock requires Opus") {
+		t.Errorf("did not expect auto-mode warning when model is Opus, got:\n%s", out)
+	}
+}
+
+func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--mode=plan", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "Auto mode on Bedrock requires Opus") {
+		t.Errorf("did not expect auto-mode warning for --mode=plan, got:\n%s", out)
+	}
 }

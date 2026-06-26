@@ -202,7 +202,24 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	reportLegacyRecovery(home)
 	installActivation(home)
 	fmt.Println("Configuration written successfully.")
+	warnAutoModeModel(block)
 	return nil
+}
+
+// warnAutoModeModel alerts the user when --mode=auto was requested but the
+// active session model won't unlock auto mode on Bedrock. Claude Code only
+// offers auto mode there when the model is Opus 4.7/4.8, so with Juggernaut's
+// default Sonnet model the Shift+Tab cycle hides auto entirely.
+func warnAutoModeModel(block *schema.Block) {
+	if block.Meta.PermissionMode != "auto" || block.AutoModeUsable() {
+		return
+	}
+	fmt.Println()
+	fmt.Println("⚠ Auto mode on Bedrock requires Opus 4.7 or 4.8 (Claude Code v2.1.158+).")
+	fmt.Printf("  Your default session model is %s, which Claude Code does\n", block.Models.Sonnet)
+	fmt.Println("  not support for auto mode, so auto will not appear in the Shift+Tab cycle.")
+	fmt.Println("  Run Claude Code on Opus to unlock it — launch with `claude --model opus`")
+	fmt.Println("  or switch with `/model opus` inside a session (your opus alias is pinned to Opus 4.8).")
 }
 
 func reportLegacyRecovery(home string) {

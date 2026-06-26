@@ -196,6 +196,28 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}, nil
 }
 
+// IsAutoModeCapableModel reports whether modelID is an Opus 4.7 or 4.8 model.
+// On Bedrock, Vertex, and Foundry, auto mode is offered only when the active
+// session model is one of these; Sonnet, Haiku, and older models are excluded.
+// See https://code.claude.com/docs/en/permission-modes.
+func IsAutoModeCapableModel(modelID string) bool {
+	normalized := strings.TrimSuffix(modelID, "[1m]")
+	for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
+		normalized = strings.TrimPrefix(normalized, prefix)
+	}
+	return strings.Contains(normalized, "claude-opus-4-8") ||
+		strings.Contains(normalized, "claude-opus-4-7")
+}
+
+// AutoModeUsable reports whether auto mode will actually be offered by Claude
+// Code for this block. It requires PermissionMode=="auto" AND the active default
+// session model (the Sonnet-tier pin, which is the account default on Bedrock)
+// to be an Opus 4.7/4.8 model. opusplan does not qualify: its execution phase
+// runs on Sonnet, and the session's default model is still Sonnet-tier.
+func (b *Block) AutoModeUsable() bool {
+	return b.Meta.PermissionMode == "auto" && IsAutoModeCapableModel(b.Models.Sonnet)
+}
+
 func mantleModelID(model string) string {
 	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
 		if strings.HasPrefix(model, prefix) {
