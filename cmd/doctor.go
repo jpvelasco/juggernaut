@@ -70,7 +70,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("keychain", doctor.OK, "bearer token found")
 	}
 
-	checkConnectivity(r, home, token)
+	checkConnectivity(r, home, token, scopes)
 
 	activationPaths := activation.InstalledTargets(home)
 	if len(activationPaths) > 0 {
@@ -121,15 +121,16 @@ func legacyArtifactStatus(home string) (doctor.Status, string) {
 	return doctor.Warn, strings.Join(parts, "; ") + " — run `juggernaut apply` to recover"
 }
 
-func checkConnectivity(r *doctor.Report, home, token string) {
+func checkConnectivity(r *doctor.Report, home, token string, scopes []string) {
 	cfg, err := loadBedrockConfig()
 	if err != nil {
 		r.Check("bedrock connectivity", doctor.Warn, "cannot load bedrock-config.json: "+err.Error())
 		return
 	}
 
-	// Read auth mode and region from user scope.
-	path, err := settingsPath(home, "user")
+	// Use the same scope(s) as the settings checks.
+	scope := scopes[0]
+	path, err := settingsPath(home, scope)
 	if err != nil {
 		r.Check("bedrock connectivity", doctor.Warn, "cannot resolve settings path: "+err.Error())
 		return

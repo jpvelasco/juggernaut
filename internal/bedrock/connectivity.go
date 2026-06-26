@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 )
 
 const defaultTimeout = 15 * time.Second
@@ -43,7 +45,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	if err != nil {
 		return &ConnectivityResult{
 			OK:       false,
-			AuthMode: "bedrock-api-key",
+			AuthMode: authmode.BedrockAPIKey,
 			Region:   region,
 			ModelID:  modelID,
 			Message:  fmt.Sprintf("failed to build request body: %v", err),
@@ -55,7 +57,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	if err != nil {
 		return &ConnectivityResult{
 			OK:       false,
-			AuthMode: "bedrock-api-key",
+			AuthMode: authmode.BedrockAPIKey,
 			Region:   region,
 			ModelID:  modelID,
 			Message:  fmt.Sprintf("failed to create request: %v", err),
@@ -70,7 +72,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	if err != nil {
 		return &ConnectivityResult{
 			OK:       false,
-			AuthMode: "bedrock-api-key",
+			AuthMode: authmode.BedrockAPIKey,
 			Region:   region,
 			ModelID:  modelID,
 			Message:  fmt.Sprintf("request failed: %v", err),
@@ -89,7 +91,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return &ConnectivityResult{
 			OK:         true,
-			AuthMode:   "bedrock-api-key",
+			AuthMode:   authmode.BedrockAPIKey,
 			Region:     region,
 			ModelID:    modelID,
 			StatusCode: resp.StatusCode,
@@ -102,7 +104,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	detail := formatResponseError(resp.StatusCode, respBody)
 	return &ConnectivityResult{
 		OK:         false,
-		AuthMode:   "bedrock-api-key",
+		AuthMode:   authmode.BedrockAPIKey,
 		Region:     region,
 		ModelID:    modelID,
 		StatusCode: resp.StatusCode,
