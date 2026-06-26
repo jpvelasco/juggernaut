@@ -4,6 +4,23 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.5] - 2026-06-25
+
+**Patch release.** Restores the Bedrock API key env var for Claude Code v2.1.191+ and adds connectivity diagnostics.
+
+### Fixed
+
+- **`AWS_BEARER_TOKEN_BEDROCK` env var restored.** The Bedrock API key auth path now writes `AWS_BEARER_TOKEN_BEDROCK` into the Juggernaut block's env section alongside `ANTHROPIC_API_KEY`, ensuring both the legacy and current Claude Code versions can read the token. This fixes authentication failures on Claude Code v2.1.191+ where only `ANTHROPIC_API_KEY` was written.
+- **Windows credential prompt.** `juggernaut apply` now uses `huh`'s `EchoModeNone` for the credential prompt on Windows, preventing the prompt from echoing characters in Windows Terminal.
+
+### Added
+
+- **Bedrock connectivity check.** `juggernaut doctor` now includes a Bedrock connectivity diagnostic that validates the configured auth mode can reach the Bedrock API before reporting credentials as healthy.
+
+### Other
+
+- **Codacy instructions.** Removed hardcoded repo/org/provider from Codacy setup instructions for repo-agnostic applicability.
+
 ## [5.1.4] - 2026-06-26
 
 **Patch release.** Fixes Windows console input buffer corruption between `huh` forms.
