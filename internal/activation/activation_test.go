@@ -212,8 +212,8 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 			return "token-value", nil
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "token-value" {
-				t.Fatalf("ANTHROPIC_API_KEY=%q", got)
+			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "token-value" {
+				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK=%q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
@@ -240,8 +240,8 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 			return "", errors.New("keychain should not be read for IAM")
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "" {
-				t.Fatalf("ANTHROPIC_API_KEY should be unset, got %q", got)
+			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "" {
+				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK should be unset, got %q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
@@ -284,15 +284,15 @@ func TestLaunch_BedrockAPIKey_UsesDefaultKeychain(t *testing.T) {
 	}
 }
 
-func TestLaunch_IAM_UnsetsAnthropicAPIKeyIfPreSet(t *testing.T) {
+func TestLaunch_IAM_UnsetsBearerTokenIfPreSet(t *testing.T) {
 	home := t.TempDir()
 	writeSettings(t, home, "iam")
 	realDir := t.TempDir()
 	realClaude := filepath.Join(realDir, platformNames().claude)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
-	// Pre-set ANTHROPIC_API_KEY in the environment to verify unsetEnv runs.
-	t.Setenv("ANTHROPIC_API_KEY", "should-be-removed")
+	// Pre-set AWS_BEARER_TOKEN_BEDROCK in the environment to verify unsetEnv runs.
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "should-be-removed")
 
 	err := LaunchWithOptions(LaunchOptions{
 		Home: home,
@@ -301,8 +301,8 @@ func TestLaunch_IAM_UnsetsAnthropicAPIKeyIfPreSet(t *testing.T) {
 			return "", errors.New("keychain should not be read for IAM")
 		},
 		Runner: func(_ string, _ []string, env []string) error {
-			if got := envValue(env, "ANTHROPIC_API_KEY"); got != "" {
-				t.Fatalf("ANTHROPIC_API_KEY should be unset for IAM mode, got %q", got)
+			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "" {
+				t.Fatalf("AWS_BEARER_TOKEN_BEDROCK should be unset for IAM mode, got %q", got)
 			}
 			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
 				t.Fatalf("CLAUDE_CODE_USE_BEDROCK=%q", got)
