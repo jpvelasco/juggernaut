@@ -4,6 +4,19 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.4] - 2026-06-26
+
+**Patch release.** Fixes Windows console input buffer corruption between `huh` forms.
+
+### Fixed
+
+- **Windows console input buffer.** `juggernaut apply` now flushes the Windows console input buffer before each `huh` form, preventing stale events from the first form from corrupting the credential prompt on PowerShell. A warning is logged to stderr if the flush fails.
+- **`go.mod` indirect annotations.** `github.com/charmbracelet/x/windows` and `golang.org/x/sys` are directly imported — removed stale `// indirect` markers.
+
+### Other
+
+- **Smoke test.** Added no-panic test for `flushConsoleInput()` on Windows.
+
 ## [5.1.3] - 2026-06-25
 
 **Patch release.** Reverts the broken storage backend system and fixes the Bedrock API key env var.
@@ -804,7 +817,9 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.1.4...HEAD
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
