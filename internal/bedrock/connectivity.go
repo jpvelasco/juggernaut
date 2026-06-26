@@ -228,9 +228,11 @@ func (r *ConnectivityResult) IsAuthFailure() bool {
 }
 
 // stripRegionPrefix removes the Bedrock inference profile region prefix
-// (global., us., eu., apac.) so the model ID is valid for direct API calls.
+// (us., eu., apac.) so the model ID is valid for direct API calls.
+// The global. prefix is preserved because global inference profiles
+// are valid for cross-region invocation.
 func stripRegionPrefix(modelID string) string {
-	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
+	for _, prefix := range []string{"us.", "eu.", "apac."} {
 		if strings.HasPrefix(modelID, prefix) {
 			return strings.TrimPrefix(modelID, prefix)
 		}
