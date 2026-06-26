@@ -6,7 +6,8 @@
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "opus": "global.anthropic.claude-opus-4-8",
     "sonnet": "global.anthropic.claude-sonnet-4-6",
-    "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "fable": ""
   },
   "environment_bedrock_auth": {
     "CLAUDE_CODE_USE_BEDROCK": "1"
@@ -60,9 +61,10 @@
   },
   "notes": {
     "fast_model": "Fast/background model defaults to Haiku 4.5 using ANTHROPIC_DEFAULT_HAIKU_MODEL (Anthropic recommendation for cost & speed on subagents, exploration, etc.). ANTHROPIC_SMALL_FAST_MODEL was removed because it is officially deprecated. See: https://code.claude.com/docs/en/model-config",
-    "1m_context": "Opus 4.8, Opus 4.7, and Sonnet 4.6 have native 1M context windows in Amazon Bedrock. Juggernaut appends Claude Code's [1m] suffix to Opus and Sonnet alias environment variables by default so Claude Code uses a 1M context window locally, then strips the suffix before calling Bedrock. Use --no-1m-context to set CLAUDE_CODE_DISABLE_1M_CONTEXT=1 and keep pinned model IDs suffix-free.",
-    "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max. Defaults to high because Sonnet 4.6 does not support xhigh; Claude Code falls back to the highest supported level at or below the requested effort. Use --effort=xhigh for Opus 4.8/4.7 or Fable 5, and --effort=max when you explicitly want the deepest session behavior.",
+    "1m_context": "Opus 4.8, Opus 4.7, and Sonnet 4.6 have native 1M context windows in Amazon Bedrock. Juggernaut appends Claude Code's [1m] suffix to Opus and Sonnet alias environment variables by default, and to the configured Fable alias when it matches Claude Code's Fable ID, so Claude Code can account against 1M context for supported aliases locally, then strips the suffix before calling Bedrock. Use --no-1m-context to set CLAUDE_CODE_DISABLE_1M_CONTEXT=1 and keep pinned model IDs suffix-free.",
+    "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max|auto. Defaults to high because Sonnet 4.6 does not support xhigh; Claude Code falls back to the highest supported level at or below the requested effort. Juggernaut persists fixed levels (low|medium|high|xhigh) as native effortLevel; max and auto are env-only because Claude Code settings do not accept them as persisted effortLevel values. Use --effort=xhigh for Opus 4.8/4.7 or other capable model configurations, --effort=max when you explicitly want the deepest session behavior, or --effort=auto to let Claude Code choose. Ultracode is a separate Claude Code session setting, not a CLAUDE_CODE_EFFORT_LEVEL value or persisted settings.json effortLevel.",
     "subagent_model": "CLAUDE_CODE_SUBAGENT_MODEL controls the model for background subagents independently of ANTHROPIC_DEFAULT_HAIKU_MODEL. Defaults to Haiku for cost efficiency.",
+    "fable_fallback": "Set models.fable or pass --fable-model when you have a Bedrock-accessible Fable model ID. Juggernaut then writes Claude Code Fable alias environment metadata plus native model override aliases. Use --fallback-model to set Claude Code's native fallbackModel chain.",
     "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config",
     "auto_mode": "Auto mode (permissions.defaultMode: auto) enables the agentic safety classifier. On Bedrock it requires BOTH CLAUDE_CODE_ENABLE_AUTO_MODE=1 (Juggernaut sets this when --mode=auto) AND an active session model of Opus 4.7 or 4.8 (Claude Code v2.1.158+). Sonnet/Haiku do not support auto mode on Bedrock, so with Juggernaut's default Sonnet model auto will not appear in the Shift+Tab cycle until the user runs Claude Code on Opus (claude --model opus, or /model opus in session). opusplan does not qualify: its default session model is still Sonnet. Verified against https://code.claude.com/docs/en/permission-modes",
     "nonessential_traffic": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 is the documented aggregate that disables the autoupdater, feedback command, error reporting, and telemetry in one setting. It replaces the individual DISABLE_AUTOUPDATER/DISABLE_FEEDBACK_COMMAND/DISABLE_ERROR_REPORTING/DISABLE_TELEMETRY vars. See: https://code.claude.com/docs/en/env-vars",

@@ -69,17 +69,18 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **Auth-gated Bedrock flag:** `CLAUDE_CODE_USE_BEDROCK=1` only lands in settings.json when `AuthValidated=true`.
 - **Scope:** `--scope=user` (default) vs `--scope=project`.
 - **Re-apply preserves existing auth mode** — if `--auth` is omitted and a block already exists, the existing auth mode is read from the block.
-- **`--model` overrides all three model IDs** (opus, sonnet, haiku) when set; `--opus-model`, `--sonnet-model`, `--haiku-model` override individually.
+- **`--model` overrides all four model IDs** (opus, sonnet, haiku, fable) when set; `--opus-model`, `--sonnet-model`, `--haiku-model`, `--fable-model` override individually. The embedded default config keeps `models.fable` empty until a Bedrock-accessible Fable ID is configured.
 - **Credential storage:** always the OS keychain via `go-keyring`. Service name: `juggernaut-bedrock`.
 - **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
 - **Mantle opt-in:** standard Bedrock preserves inference profile IDs by default; use `--mantle` or `--mantle-url` only when explicitly routing through Mantle.
 - **Opusplan-gated ANTHROPIC_MODEL:** only written when `--opusplan` is active.
 - **`--mode`:** sets `permissions.defaultMode` in settings.json. When `auto`, also writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` in env (required for Bedrock). Auto mode on Bedrock additionally requires the **active session model to be Opus 4.7/4.8** (Claude Code v2.1.158+); Sonnet/Haiku are unsupported and Claude Code hides auto from the Shift+Tab cycle. Because Juggernaut's default model is Sonnet, `apply --mode=auto` prints a warning (via `schema.Block.AutoModeUsable()` / `schema.IsAutoModeCapableModel()`) unless the resolved model is Opus. Users unlock it by running Claude Code on Opus (`claude --model opus` or `/model opus`).
 - **`--always-thinking`:** writes `alwaysThinkingEnabled: true` as a native settings.json key.
+- **`--fallback-model=a,b`:** writes Claude Code native `fallbackModel` as an ordered array. Empty entries are rejected; an empty resolved chain removes the managed key.
 - **`--service-tier`:** writes `ANTHROPIC_BEDROCK_SERVICE_TIER` env var; values: `default`, `flex`, `priority`.
 - **`skipWebFetchPreflight`:** always written as `true` for all Bedrock users (avoids domain safety preflight delays).
-- **`effortLevel`:** written as both `CLAUDE_CODE_EFFORT_LEVEL` env var (legacy) and native `effortLevel` settings.json key (preferred). Five valid levels: `low`, `medium`, `high`, `xhigh` (default), `max`.
-- **Native keys managed by Juggernaut:** `env`, `model`, `modelOverrides`, `effortLevel`, `alwaysThinkingEnabled`, `skipWebFetchPreflight`, `permissions`. All are removed on uninstall.
+- **`effortLevel`:** fixed persisted levels (`low`, `medium`, `high`, `xhigh`) are written as both `CLAUDE_CODE_EFFORT_LEVEL` and native `effortLevel`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` / `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut intentionally rejects it as `--effort`. Juggernaut defaults to `high`.
+- **Native keys managed by Juggernaut:** `env`, `model`, `modelOverrides`, `fallbackModel`, `effortLevel`, `alwaysThinkingEnabled`, `skipWebFetchPreflight`, `permissions`. All are removed on uninstall.
 
 ## Version Management
 

@@ -26,6 +26,7 @@ type ModelSet struct {
 	Opus    string `json:"opus"`
 	Sonnet  string `json:"sonnet"`
 	Haiku   string `json:"haiku"`
+	Fable   string `json:"fable"`
 }
 
 // Defaults holds the default values for region, auth mode, and model.

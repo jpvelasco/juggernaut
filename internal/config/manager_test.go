@@ -96,7 +96,11 @@ func TestMergeJuggernautBlock(t *testing.T) {
 
 	block := map[string]any{"managedBy": "juggernaut"}
 	nativeEnv := map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"}
-	nativeKeys := map[string]any{"effortLevel": "xhigh", "skipWebFetchPreflight": true}
+	nativeKeys := map[string]any{
+		"effortLevel":           "xhigh",
+		"fallbackModel":         []string{"global.anthropic.claude-opus-4-8", "global.anthropic.claude-sonnet-4-6"},
+		"skipWebFetchPreflight": true,
+	}
 
 	if err := m.MergeJuggernautBlock(block, nativeEnv, nativeKeys); err != nil {
 		t.Fatalf("MergeJuggernautBlock() error: %v", err)
@@ -111,6 +115,13 @@ func TestMergeJuggernautBlock(t *testing.T) {
 	}
 	if got["effortLevel"] != "xhigh" {
 		t.Errorf("expected effortLevel=xhigh, got %v", got["effortLevel"])
+	}
+	fallbacks, ok := got["fallbackModel"].([]any)
+	if !ok || len(fallbacks) != 2 {
+		t.Fatalf("expected fallbackModel array with two entries, got %#v", got["fallbackModel"])
+	}
+	if fallbacks[0] != "global.anthropic.claude-opus-4-8" || fallbacks[1] != "global.anthropic.claude-sonnet-4-6" {
+		t.Errorf("unexpected fallbackModel chain: %#v", fallbacks)
 	}
 	if got["skipWebFetchPreflight"] != true {
 		t.Error("expected skipWebFetchPreflight=true")
@@ -134,6 +145,26 @@ func TestMergeJuggernautBlock_NativeKeys_BoolFalseDeletes(t *testing.T) {
 	got, _ := m.Read()
 	if _, ok := got["alwaysThinkingEnabled"]; ok {
 		t.Error("alwaysThinkingEnabled=false should remove the key")
+	}
+}
+
+func TestMergeJuggernautBlock_NativeKeys_EmptySliceDeletes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	_ = m.Write(map[string]any{"fallbackModel": []any{"global.anthropic.claude-opus-4-8"}})
+
+	if err := m.MergeJuggernautBlock(
+		map[string]any{},
+		nil,
+		map[string]any{"fallbackModel": []string{}},
+	); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	if _, ok := got["fallbackModel"]; ok {
+		t.Error("empty fallbackModel slice should remove the key")
 	}
 }
 
@@ -195,6 +226,7 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 		"env":                   map[string]any{"CLAUDE_CODE_USE_BEDROCK": "1"},
 		"model":                 "opusplan",
 		"modelOverrides":        map[string]any{},
+		"fallbackModel":         []any{"global.anthropic.claude-opus-4-8"},
 		"effortLevel":           "xhigh",
 		"alwaysThinkingEnabled": true,
 		"skipWebFetchPreflight": true,
@@ -208,7 +240,7 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 
 	got, _ := m.Read()
 	// permissions had only defaultMode so the whole key should be gone.
-	for _, k := range []string{"juggernaut", "env", "model", "modelOverrides", "effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions"} {
+	for _, k := range []string{"juggernaut", "env", "model", "modelOverrides", "fallbackModel", "effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions"} {
 		if _, ok := got[k]; ok {
 			t.Errorf("key %q should be removed after uninstall", k)
 		}

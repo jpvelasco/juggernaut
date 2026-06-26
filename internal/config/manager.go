@@ -94,6 +94,7 @@ var nativeManagedKeys = []string{
 	"env",
 	"model",
 	"modelOverrides",
+	"fallbackModel",
 	"effortLevel",
 	"alwaysThinkingEnabled",
 	"skipWebFetchPreflight",
@@ -138,10 +139,22 @@ func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[strin
 			} else {
 				delete(existing, k)
 			}
+		case []string:
+			if len(val) > 0 {
+				existing[k] = val
+			} else {
+				delete(existing, k)
+			}
+		case []any:
+			if len(val) > 0 {
+				existing[k] = val
+			} else {
+				delete(existing, k)
+			}
 		case nil:
 			delete(existing, k)
 		default:
-			return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, or map[string]any)", v, k)
+			return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, or map[string]any)", v, k)
 		}
 	}
 	return m.Write(existing)

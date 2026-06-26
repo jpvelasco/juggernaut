@@ -132,6 +132,9 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6[1m]" {
 		t.Errorf("expected Sonnet default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
+	if _, ok := env["ANTHROPIC_DEFAULT_FABLE_MODEL"]; ok {
+		t.Errorf("Fable default model should be omitted unless configured, got %v", env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	}
 
 	bashrcPath := filepath.Join(home, ".bashrc")
 	bashrc, err := safepath.ReadFile(home, bashrcPath)
@@ -272,6 +275,9 @@ func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 	if overrides["haiku"] != customModel {
 		t.Errorf("expected haiku=%s, got %v", customModel, overrides["haiku"])
 	}
+	if overrides["fable"] != customModel {
+		t.Errorf("expected fable=%s, got %v", customModel, overrides["fable"])
+	}
 }
 
 func TestUninstall_RemovesBlock(t *testing.T) {
@@ -282,7 +288,8 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	// Apply with all new flags to ensure they get cleaned up.
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
-		"--mode=auto", "--always-thinking", "--effort=max", "--skip-preflight",
+		"--mode=auto", "--always-thinking", "--effort=max",
+		"--fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -298,7 +305,7 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	}
 
 	for _, k := range []string{
-		"juggernaut", "env", "model", "modelOverrides",
+		"juggernaut", "env", "model", "modelOverrides", "fallbackModel",
 		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions",
 	} {
 		if _, ok := settings[k]; ok {
@@ -515,6 +522,68 @@ func TestApply_PermissionMode_InvalidErrors(t *testing.T) {
 	}
 }
 
+func TestApply_FableAndFallbackWritesNativeKeys(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	const fableModel = "custom.fable.model"
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--fable-model=" + fableModel,
+		"--fallback-model=global.anthropic.claude-opus-4-8, global.anthropic.claude-sonnet-4-6",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	env, _ := settings["env"].(map[string]any)
+	if env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != fableModel {
+		t.Errorf("expected Fable env model override, got %v", env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	}
+	overrides := settings["modelOverrides"].(map[string]any)
+	if overrides["fable"] != fableModel {
+		t.Errorf("expected native fable alias=%s, got %v", fableModel, overrides["fable"])
+	}
+	fallbacks, ok := settings["fallbackModel"].([]any)
+	if !ok || len(fallbacks) != 2 {
+		t.Fatalf("expected fallbackModel array with two entries, got %#v", settings["fallbackModel"])
+	}
+	if fallbacks[0] != "global.anthropic.claude-opus-4-8" || fallbacks[1] != "global.anthropic.claude-sonnet-4-6" {
+		t.Errorf("unexpected fallbackModel chain: %#v", fallbacks)
+	}
+
+	block := settings["juggernaut"].(map[string]any)
+	meta := block["meta"].(map[string]any)
+	metaFallbacks, ok := meta["fallbackModels"].([]any)
+	if !ok || len(metaFallbacks) != 2 {
+		t.Fatalf("expected juggernaut.meta.fallbackModels with two entries, got %#v", meta["fallbackModels"])
+	}
+}
+
+func TestApply_FallbackModelRejectsEmptyEntries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--fallback-model=global.anthropic.claude-opus-4-8,,global.anthropic.claude-sonnet-4-6",
+		"--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected empty --fallback-model entry to error")
+	}
+	if !strings.Contains(err.Error(), "--fallback-model contains an empty model ID") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestApply_ServiceTier_WritesEnvVar(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -601,6 +670,44 @@ func TestApply_MaxEffortUsesEnvOnly(t *testing.T) {
 	env, _ := settings["env"].(map[string]any)
 	if env["CLAUDE_CODE_EFFORT_LEVEL"] != "max" {
 		t.Errorf("expected CLAUDE_CODE_EFFORT_LEVEL=max, got %v", env["CLAUDE_CODE_EFFORT_LEVEL"])
+	}
+}
+
+func TestApply_EffortAutoUsesEnvOnly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--effort=auto", "--skip-preflight"})
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if _, ok := settings["effortLevel"]; ok {
+		t.Errorf("effortLevel should be omitted for auto because Claude Code settings only accept persisted fixed levels, got %v", settings["effortLevel"])
+	}
+	env, _ := settings["env"].(map[string]any)
+	if got := env["CLAUDE_CODE_EFFORT_LEVEL"]; got != "auto" {
+		t.Errorf("expected CLAUDE_CODE_EFFORT_LEVEL=auto, got %v", got)
+	}
+}
+
+func TestApply_EffortUltracodeInvalid(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--effort=ultracode", "--skip-preflight"})
+	if err == nil {
+		t.Fatal("expected unsupported ultracode effort value to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid effort") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

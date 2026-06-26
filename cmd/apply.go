@@ -4,6 +4,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/huh"
@@ -36,6 +37,8 @@ var applyFlags struct {
 	opusModel      string
 	sonnetModel    string
 	haikuModel     string
+	fableModel     string
+	fallbackModel  string
 	effort         string
 	opusplan       bool
 	noOpusplan     bool
@@ -61,7 +64,9 @@ func init() {
 	f.StringVar(&applyFlags.opusModel, "opus-model", "", "override Opus model ID")
 	f.StringVar(&applyFlags.sonnetModel, "sonnet-model", "", "override Sonnet model ID")
 	f.StringVar(&applyFlags.haikuModel, "haiku-model", "", "override Haiku model ID")
-	f.StringVar(&applyFlags.effort, "effort", "high", "effort level: low|medium|high|xhigh|max")
+	f.StringVar(&applyFlags.fableModel, "fable-model", "", "override Fable model ID")
+	f.StringVar(&applyFlags.fallbackModel, "fallback-model", "", "comma-separated fallback model IDs")
+	f.StringVar(&applyFlags.effort, "effort", "high", "effort level: low|medium|high|xhigh|max|auto")
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
 	f.BoolVar(&applyFlags.no1m, "no-1m-context", false, "disable 1M token context")
@@ -110,10 +115,17 @@ func runApply(_ *cobra.Command, _ []string) error {
 	opusModel := applyFlags.opusModel
 	sonnetModel := applyFlags.sonnetModel
 	haikuModel := applyFlags.haikuModel
+	fableModel := applyFlags.fableModel
 	if applyFlags.model != "" {
 		opusModel = applyFlags.model
 		sonnetModel = applyFlags.model
 		haikuModel = applyFlags.model
+		fableModel = applyFlags.model
+	}
+
+	fallbackModels, err := parseFallbackModels(applyFlags.fallbackModel)
+	if err != nil {
+		return err
 	}
 
 	opts := schema.Options{
@@ -125,6 +137,8 @@ func runApply(_ *cobra.Command, _ []string) error {
 		OpusModel:      opusModel,
 		SonnetModel:    sonnetModel,
 		HaikuModel:     haikuModel,
+		FableModel:     fableModel,
+		FallbackModels: fallbackModels,
 		Opusplan:       opusplan,
 		Use1M:          !applyFlags.no1m,
 		UseMantle:      useMantle,
@@ -190,6 +204,7 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	nativeKeys := map[string]any{
 		"model":                 native.Model,
 		"modelOverrides":        modelOverrides,
+		"fallbackModel":         native.FallbackModel,
 		"effortLevel":           native.EffortLevel,
 		"alwaysThinkingEnabled": native.AlwaysThinking,
 		"skipWebFetchPreflight": native.SkipWebFetchPreflight,
@@ -204,6 +219,24 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	fmt.Println("Configuration written successfully.")
 	warnAutoModeModel(block)
 	return nil
+}
+
+func parseFallbackModels(raw string) ([]string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(trimmed, ",")
+	models := make([]string, 0, len(parts))
+	for _, part := range parts {
+		model := strings.TrimSpace(part)
+		if model == "" {
+			return nil, fmt.Errorf("--fallback-model contains an empty model ID")
+		}
+		models = append(models, model)
+	}
+	return models, nil
 }
 
 // warnAutoModeModel alerts the user when --mode=auto was requested but the

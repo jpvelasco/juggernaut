@@ -23,7 +23,9 @@ type Options struct {
 	OpusModel      string
 	SonnetModel    string
 	HaikuModel     string
+	FableModel     string
 	Opusplan       bool
+	FallbackModels []string
 	Use1M          bool
 	UseMantle      bool
 	MantleURL      string
@@ -52,30 +54,33 @@ type ModelOverrides struct {
 	Opus     string `json:"opus"`
 	Sonnet   string `json:"sonnet"`
 	Haiku    string `json:"haiku"`
+	Fable    string `json:"fable,omitempty"`
 	Subagent string `json:"subagent"`
 }
 
 // Meta holds Juggernaut metadata stored in the block.
 type Meta struct {
-	SchemaVersion  int    `json:"schemaVersion"`
-	Version        string `json:"version"`
-	ManagedBy      string `json:"managedBy"`
-	Scope          string `json:"scope"`
-	AppliedAt      string `json:"appliedAt"`
-	Opusplan       bool   `json:"opusplan"`
-	Use1M          bool   `json:"use1mContext"`
-	UseMantle      bool   `json:"useMantle"`
-	MantleURL      string `json:"mantleBaseUrl,omitempty"`
-	Effort         string `json:"effort"`
-	PermissionMode string `json:"permissionMode,omitempty"`
-	AlwaysThinking bool   `json:"alwaysThinkingEnabled,omitempty"`
-	ServiceTier    string `json:"serviceTier,omitempty"`
+	SchemaVersion  int      `json:"schemaVersion"`
+	Version        string   `json:"version"`
+	ManagedBy      string   `json:"managedBy"`
+	Scope          string   `json:"scope"`
+	AppliedAt      string   `json:"appliedAt"`
+	Opusplan       bool     `json:"opusplan"`
+	Use1M          bool     `json:"use1mContext"`
+	UseMantle      bool     `json:"useMantle"`
+	MantleURL      string   `json:"mantleBaseUrl,omitempty"`
+	Effort         string   `json:"effort"`
+	FallbackModels []string `json:"fallbackModels,omitempty"`
+	PermissionMode string   `json:"permissionMode,omitempty"`
+	AlwaysThinking bool     `json:"alwaysThinkingEnabled,omitempty"`
+	ServiceTier    string   `json:"serviceTier,omitempty"`
 }
 
 // NativeKeys are the top-level settings.json keys Claude Code reads directly.
 type NativeKeys struct {
 	Model                 string            `json:"model,omitempty"`
 	ModelOverrides        map[string]string `json:"modelOverrides,omitempty"`
+	FallbackModel         []string          `json:"fallbackModel,omitempty"`
 	Env                   map[string]string `json:"env"`
 	EffortLevel           string            `json:"effortLevel,omitempty"`
 	AlwaysThinking        bool              `json:"alwaysThinkingEnabled,omitempty"`
@@ -84,7 +89,7 @@ type NativeKeys struct {
 }
 
 var validEfforts = map[string]bool{
-	"low": true, "medium": true, "high": true, "xhigh": true, "max": true,
+	"low": true, "medium": true, "high": true, "xhigh": true, "max": true, "auto": true,
 }
 
 var validPermissionModes = map[string]bool{
@@ -102,7 +107,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		return nil, fmt.Errorf("unsupported region %q — run `juggernaut doctor` for supported regions", opts.Region)
 	}
 	if !validEfforts[opts.Effort] {
-		return nil, fmt.Errorf("invalid effort %q — must be one of: low, medium, high, xhigh, max", opts.Effort)
+		return nil, fmt.Errorf("invalid effort %q — must be one of: low, medium, high, xhigh, max, auto", opts.Effort)
 	}
 	if opts.PermissionMode != "" && !validPermissionModes[opts.PermissionMode] {
 		return nil, fmt.Errorf("invalid mode %q — must be one of: default, acceptEdits, plan, auto, dontAsk, bypassPermissions", opts.PermissionMode)
@@ -123,6 +128,14 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if haiku == "" {
 		haiku = cfg.Models.Haiku
 	}
+	fable := opts.FableModel
+	if fable == "" {
+		fable = cfg.Models.Fable
+	}
+	fallbackModels, err := normalizeFallbackModels(opts.FallbackModels)
+	if err != nil {
+		return nil, err
+	}
 
 	// Mantle uses anthropic.* model IDs; Bedrock inference profile IDs are not
 	// valid Mantle targets. Strip profile prefixes only when Mantle is explicit.
@@ -130,6 +143,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		opus = mantleModelID(opus)
 		sonnet = mantleModelID(sonnet)
 		haiku = mantleModelID(haiku)
+		fable = mantleModelID(fable)
 	}
 
 	env := make(map[string]string, len(cfg.Environment))
@@ -143,6 +157,12 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = claudeCodeContextModelID(opus, opts.Use1M)
 	env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = claudeCodeContextModelID(sonnet, opts.Use1M)
 	env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = haiku
+	if fable != "" {
+		env["ANTHROPIC_DEFAULT_FABLE_MODEL"] = claudeCodeContextModelID(fable, opts.Use1M)
+		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME", "Fable 5")
+		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION", "Configured Claude Code Fable alias with adaptive thinking metadata and Opus fallback support")
+		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES", "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking")
+	}
 	env["CLAUDE_CODE_SUBAGENT_MODEL"] = haiku
 	env["CLAUDE_CODE_EFFORT_LEVEL"] = opts.Effort
 
@@ -175,6 +195,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 			Opus:     opus,
 			Sonnet:   sonnet,
 			Haiku:    haiku,
+			Fable:    fable,
 			Subagent: haiku,
 		},
 		Env: env,
@@ -189,6 +210,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 			UseMantle:      opts.UseMantle,
 			MantleURL:      opts.MantleURL,
 			Effort:         opts.Effort,
+			FallbackModels: fallbackModels,
 			PermissionMode: opts.PermissionMode,
 			AlwaysThinking: opts.AlwaysThinking,
 			ServiceTier:    opts.ServiceTier,
@@ -267,6 +289,7 @@ func (b *Block) NativeKeys() NativeKeys {
 	return NativeKeys{
 		Model:                 model,
 		ModelOverrides:        nativeModelOverrides(b.Models, b.Meta.Use1M),
+		FallbackModel:         append([]string(nil), b.Meta.FallbackModels...),
 		Env:                   b.Env,
 		EffortLevel:           persistedEffortLevel(b.Meta.Effort),
 		AlwaysThinking:        b.Meta.AlwaysThinking,
@@ -288,6 +311,11 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 		"claude-haiku-4-5-20251001":   models.Haiku,
 		"anthropic.claude-haiku-4-5-20251001-v1:0": models.Haiku,
 	}
+	if models.Fable != "" {
+		overrides["fable"] = models.Fable
+		overrides["claude-fable-5"] = models.Fable
+		overrides["anthropic.claude-fable-5"] = models.Fable
+	}
 	if use1M {
 		overrides["opus[1m]"] = models.Opus
 		overrides["claude-opus-4-8[1m]"] = models.Opus
@@ -295,13 +323,40 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 		overrides["sonnet[1m]"] = models.Sonnet
 		overrides["claude-sonnet-4-6[1m]"] = models.Sonnet
 		overrides["anthropic.claude-sonnet-4-6[1m]"] = models.Sonnet
+		if models.Fable != "" {
+			overrides["fable[1m]"] = models.Fable
+			overrides["claude-fable-5[1m]"] = models.Fable
+			overrides["anthropic.claude-fable-5[1m]"] = models.Fable
+		}
 	}
 	return overrides
 }
 
 func persistedEffortLevel(effort string) string {
-	if effort == "max" {
+	if effort == "max" || effort == "auto" {
 		return ""
 	}
 	return effort
+}
+
+func normalizeFallbackModels(models []string) ([]string, error) {
+	if len(models) == 0 {
+		return nil, nil
+	}
+
+	out := make([]string, 0, len(models))
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			return nil, fmt.Errorf("fallback model chain contains an empty model ID")
+		}
+		out = append(out, trimmed)
+	}
+	return out, nil
+}
+
+func setDefaultEnv(env map[string]string, key, value string) {
+	if _, ok := env[key]; !ok {
+		env[key] = value
+	}
 }
