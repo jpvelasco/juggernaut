@@ -3,6 +3,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	xwindows "github.com/charmbracelet/x/windows"
 	"golang.org/x/sys/windows"
 )
@@ -12,7 +15,10 @@ import (
 // form's input (Bubble Tea v1.x does not do this automatically).
 func flushConsoleInput() {
 	conin, err := windows.GetStdHandle(windows.STD_INPUT_HANDLE)
-	if err == nil {
-		_ = xwindows.FlushConsoleInputBuffer(conin)
+	if err != nil {
+		return
+	}
+	if err := xwindows.FlushConsoleInputBuffer(conin); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not flush console input buffer: %v\n", err)
 	}
 }
