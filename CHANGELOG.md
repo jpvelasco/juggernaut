@@ -4,11 +4,20 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-06-26
+
+**Minor release.** Extends Bedrock parity with new Claude Code features (Fable aliases, native fallback chains, flexible effort levels) and improves auto mode + telemetry controls for Bedrock users.
+
 ### Added
 
 - **Fable alias support.** `juggernaut apply` now supports `--fable-model`; when a Fable model ID is configured, Juggernaut writes `ANTHROPIC_DEFAULT_FABLE_MODEL`, Fable companion metadata, and Fable model override aliases.
 - **Native fallback chain.** Added `--fallback-model=a,b` to write Claude Code's native `fallbackModel` array and remove it cleanly on uninstall.
 - **Effort defaults.** `--effort=auto` is now accepted through `CLAUDE_CODE_EFFORT_LEVEL` without emitting an invalid persisted `effortLevel` value; `ultracode` is intentionally rejected because Claude Code treats it as a separate session setting, not an effort level.
+
+### Changed
+
+- **Auto mode on Bedrock.** `apply --mode=auto` now warns (unless the active model is an Opus 4.7/4.8) that auto mode is only offered by Claude Code (v2.1.158+) in the Shift+Tab cycle for Opus models under Bedrock. Added `schema.IsAutoModeCapableModel` / `Block.AutoModeUsable()` plus tests and guidance to switch models.
+- **Nonessential traffic suppression.** Emits the documented aggregate `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` by default (covers autoupdater, feedback, errors, telemetry). Previous no-op or stale individual vars are superseded.
 
 ## [5.1.6] - 2026-06-26
 
@@ -852,9 +861,12 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.0
+[5.1.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.6
+[5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.1.4...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.0...HEAD
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2

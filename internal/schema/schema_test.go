@@ -590,7 +590,7 @@ func TestBlock_AutoModeUsable_FalseWhenDefaultModelIsSonnet(t *testing.T) {
 	// Default config: Sonnet-tier active model => auto mode hidden on Bedrock.
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",
-		Scope: "user", Version: "5.1.6", PermissionMode: "auto", AuthValidated: true,
+		Scope: "user", Version: "5.2.0", PermissionMode: "auto", AuthValidated: true,
 	}
 	block, err := schema.Build(testConfig(), opts)
 	if err != nil {
@@ -605,7 +605,7 @@ func TestBlock_AutoModeUsable_TrueWhenSonnetPinnedToOpus(t *testing.T) {
 	// --model opus (or --sonnet-model opus) makes the active alias resolve to Opus.
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",
-		Scope: "user", Version: "5.1.6", PermissionMode: "auto", AuthValidated: true,
+		Scope: "user", Version: "5.2.0", PermissionMode: "auto", AuthValidated: true,
 		SonnetModel: "global.anthropic.claude-opus-4-8",
 	}
 	block, err := schema.Build(testConfig(), opts)
@@ -620,7 +620,7 @@ func TestBlock_AutoModeUsable_TrueWhenSonnetPinnedToOpus(t *testing.T) {
 func TestBlock_AutoModeUsable_FalseWhenModeNotAuto(t *testing.T) {
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",
-		Scope: "user", Version: "5.1.6", PermissionMode: "plan", AuthValidated: true,
+		Scope: "user", Version: "5.2.0", PermissionMode: "plan", AuthValidated: true,
 		SonnetModel: "global.anthropic.claude-opus-4-8",
 	}
 	block, err := schema.Build(testConfig(), opts)
