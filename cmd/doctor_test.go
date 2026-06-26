@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -127,4 +129,130 @@ func writeExecutableStub(t *testing.T, path string) {
 			t.Fatalf("making executable stub runnable: %v", err)
 		}
 	}
+}
+
+func TestDoctor_ActivationFalsePositive_HistoricalOnly(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	// This test verifies that doctor does NOT report activation as healthy
+	// when the current activation block only exists in a non-loaded historical
+	// path (e.g., $HOME/Documents) while the actual OneDrive-redirected profile
+	// contains a legacy launcher block.
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// Real discovered profile (OneDrive) has legacy launcher block
+	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
+		"# BEGIN: Juggernaut Launcher\nfunction claude { juggernaut --launcher @args }\n# END: Juggernaut Launcher",
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// Historical hardcoded profile has the current activation block
+	histProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(histProfile)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(histProfile), histProfile, []byte(activation.Block(activation.ShellPowerShell))); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// Set up mock discovery
+	runner := &mockDoctorCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe": mockPSOutput(realProfile, realProfile),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Check activation using the shared resolver
+	healthy, _, warnings := activation.CheckPowerShellActivation()
+	if healthy {
+		t.Error("doctor should NOT report activation healthy when only historical path has it")
+	}
+	if len(warnings) == 0 {
+		t.Error("expected warnings about legacy block or historical path")
+	}
+}
+
+func TestDoctor_ActivationHealthy_AfterMigration(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
+		"# BEGIN: Juggernaut Launcher\nfunction claude { juggernaut --launcher @args }\n# END: Juggernaut Launcher",
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	runner := &mockDoctorCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe": mockPSOutput(realProfile, realProfile),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Apply migration
+	_, err := activation.InstallPowerShellActivation()
+	if err != nil {
+		t.Fatalf("InstallPowerShellActivation: %v", err)
+	}
+
+	// After migration, should be healthy
+	healthy, path, warnings := activation.CheckPowerShellActivation()
+	if !healthy {
+		t.Error("doctor should report activation healthy after migration")
+	}
+	if path != realProfile {
+		t.Errorf("expected path %s, got %s", realProfile, path)
+	}
+	if len(warnings) > 0 {
+		t.Errorf("expected no warnings after migration, got %v", warnings)
+	}
+}
+
+// mockDoctorCommandRunner implements activation.discoveryCommandRunner for doctor tests.
+type mockDoctorCommandRunner struct {
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (m *mockDoctorCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
+	if err := m.err[exe]; err != nil {
+		return nil, err
+	}
+	return m.output[exe], nil
+}
+
+func mockPSOutput(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
+	return data
 }

@@ -355,12 +355,35 @@ func launchWithExecutable(t *testing.T, home, pathList, self string, opts Launch
 func readTargets(t *testing.T, home string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
-	for _, target := range DefaultTargets(home) {
-		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-		if err != nil {
-			t.Fatalf("reading %s: %v", target.Path, err)
+
+	if runtime.GOOS == "windows" {
+		// On Windows, read from discovered PowerShell paths + POSIX targets.
+		result := ResolvePowerShellProfiles()
+		for _, path := range result.MigrationTargets {
+			data, err := safepath.ReadFile(filepath.Dir(path), path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", path, err)
+			}
+			out[path] = string(data)
 		}
-		out[target.Path] = string(data)
+		for _, target := range DefaultTargets(home) {
+			if target.Shell == ShellPowerShell {
+				continue // handled above
+			}
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", target.Path, err)
+			}
+			out[target.Path] = string(data)
+		}
+	} else {
+		for _, target := range DefaultTargets(home) {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", target.Path, err)
+			}
+			out[target.Path] = string(data)
+		}
 	}
 	return out
 }

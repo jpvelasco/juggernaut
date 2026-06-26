@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -72,11 +73,35 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 
 	checkConnectivity(r, home, token, scopes)
 
-	activationPaths := activation.InstalledTargets(home)
-	if len(activationPaths) > 0 {
-		r.Check("claude activation", doctor.OK, strings.Join(activationPaths, ", "))
+	// Use the shared resolver to check activation on the effective profiles.
+	if runtime.GOOS == "windows" {
+		healthy, path, warnings := activation.CheckPowerShellActivation()
+		if healthy {
+			r.Check("claude activation", doctor.OK, "active in "+path)
+		} else {
+			r.Check("claude activation", doctor.Warn, "not active in discovered profiles — run `juggernaut apply` and restart or source your shell")
+		}
+		for _, w := range warnings {
+			r.Check("activation warning", doctor.Warn, w)
+		}
+		// Report discovery status.
+		psResult := activation.ResolvePowerShellProfiles()
+		if psResult.UsedFallback {
+			r.Check("powershell discovery", doctor.Warn, "used Known Documents fallback")
+		} else {
+			editions := strings.Join(psResult.EditionsDiscovered, ", ")
+			r.Check("powershell discovery", doctor.OK, "editions: "+editions)
+		}
+		for _, w := range psResult.DiscoveryWarnings {
+			r.Check("powershell discovery", doctor.Warn, w)
+		}
 	} else {
-		r.Check("claude activation", doctor.Warn, "not installed — run `juggernaut apply` and restart or source your shell")
+		activationPaths := activation.InstalledTargets(home)
+		if len(activationPaths) > 0 {
+			r.Check("claude activation", doctor.OK, strings.Join(activationPaths, ", "))
+		} else {
+			r.Check("claude activation", doctor.Warn, "not installed — run `juggernaut apply` and restart or source your shell")
+		}
 	}
 	if status, detail := claudeCommandStatus(); status != "" {
 		r.Check("claude binary", status, detail)
