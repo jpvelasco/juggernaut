@@ -4,6 +4,18 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.6] - 2026-06-26
+
+**Patch release.** Fixes doctor connectivity check that was stripping the `global.` prefix from inference profile model IDs, causing false HTTP 400 failures.
+
+### Fixed
+
+- **Doctor connectivity check.** `stripRegionPrefix` in the Bedrock connectivity diagnostic now preserves the `global.` prefix on model IDs. Global inference profile IDs (e.g., `global.anthropic.claude-haiku-4-5-20251001-v1:0`) are valid for cross-region invocation and must not be stripped — the previous behavior produced raw model IDs that Bedrock rejects with HTTP 400 because on-demand invocation isn't supported for those base models.
+
+### Added
+
+- **Connectivity test coverage.** `internal/bedrock/connectivity_test.go` adds comprehensive tests for `stripRegionPrefix`, `ConnectivityResult`, `formatResponseError`, `containsAuthError`, `contains`, and the real-network connectivity functions. Includes a regression test that loads `bedrock-config.json` at test time to verify all configured model IDs survive `stripRegionPrefix` unchanged.
+
 ## [5.1.5] - 2026-06-25
 
 **Patch release.** Restores the Bedrock API key env var for Claude Code v2.1.191+ and adds connectivity diagnostics.
