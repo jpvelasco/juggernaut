@@ -273,6 +273,7 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	}
 
 	permMode := applyFlags.mode
+	flushConsoleInput()
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -329,6 +330,7 @@ func resolveCredential(authMode string) (string, error) {
 		return "", fmt.Errorf("no existing key found in keychain; re-run without --preserve-key to enter one")
 	}
 	var input string
+	flushConsoleInput()
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
