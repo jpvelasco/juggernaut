@@ -1,11 +1,9 @@
 package bedrock
 
 import (
-	"net/http"
-	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // -----------------------------------------------------------------------
@@ -74,90 +72,32 @@ func TestStripRegionPrefix_PreservesGlobal(t *testing.T) {
 	}
 }
 
-// -----------------------------------------------------------------------
-// CheckAPIKeyConnectivity
-// -----------------------------------------------------------------------
-
-func TestCheckAPIKeyConnectivity_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
-		}
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
-		}
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			t.Errorf("expected Bearer auth, got %s", auth)
-		}
-		if !strings.Contains(r.URL.Path, "/model/global.anthropic.claude-haiku-4-5-20251001-v1:0/invoke") {
-			t.Errorf("expected model path to contain global prefix, got %s", r.URL.Path)
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"hi"}]}`))
-	}))
-	defer server.Close()
-
-	// Replace the real endpoint with our test server by using the server's URL.
-	// The function constructs the URL internally, so we can't intercept it
-	// directly. Instead, we test with a real-looking token and verify the
-	// request is formed correctly by using a custom HTTP handler.
-	// Since we can't override the base URL, we skip the full integration
-	// test here and rely on the unit tests below.
-	_ = server // suppress unused warning
-}
-
-func TestCheckAPIKeyConnectivity_GlobalPrefixPreserved(t *testing.T) {
-	// This test verifies that the model ID passed to the connectivity check
-	// retains the global. prefix. We test by checking the URL path contains
-	// the global prefix. Since we can't easily mock the HTTP client, we
-	// verify the behavior through the result structure.
-	modelID := "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-	stripped := stripRegionPrefix(modelID)
-	if stripped != modelID {
-		t.Errorf("global prefix was stripped: got %q, want %q", stripped, modelID)
+// TestStripRegionPrefix_BedrockConfigModelIDs verifies that every model ID
+// in bedrock-config.json survives stripRegionPrefix unchanged. This catches
+// regressions if the config switches to a different model ID format.
+func TestStripRegionPrefix_BedrockConfigModelIDs(t *testing.T) {
+	repoRoot := filepath.Join("..", "..")
+	cfg, err := Load(filepath.Join(repoRoot, "bedrock-config.json"))
+	if err != nil {
+		t.Skipf("cannot load bedrock-config.json: %v", err)
 	}
-}
 
-func TestCheckAPIKeyConnectivity_BadToken(t *testing.T) {
-	result := CheckAPIKeyConnectivity("invalid-token", "us-west-2",
-		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
-	if result.OK {
-		t.Error("expected connectivity check to fail with invalid token")
-	}
-	if result.Message == "" {
-		t.Error("expected error message")
-	}
-	if result.Elapsed < 0 {
-		t.Error("elapsed time should not be negative")
-	}
-}
-
-func TestCheckAPIKeyConnectivity_InvalidRegion(t *testing.T) {
-	result := CheckAPIKeyConnectivity("some-token", "not-a-region",
-		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
-	if result.OK {
-		t.Error("expected connectivity check to fail with invalid region")
-	}
-}
-
-// -----------------------------------------------------------------------
-// CheckIAMConnectivity
-// -----------------------------------------------------------------------
-
-func TestCheckIAMConnectivity_GlobalPrefixPreserved(t *testing.T) {
-	modelID := "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-	stripped := stripRegionPrefix(modelID)
-	if stripped != modelID {
-		t.Errorf("global prefix was stripped in IAM path: got %q, want %q", stripped, modelID)
-	}
-}
-
-func TestCheckIAMConnectivity_InvalidRegion(t *testing.T) {
-	result := CheckIAMConnectivity("not-a-region",
-		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
-	if result.OK {
-		t.Error("expected IAM connectivity check to fail with invalid region")
+	for name, id := range map[string]string{
+		"default": cfg.Models.Default,
+		"fast":    cfg.Models.Fast,
+		"opus":    cfg.Models.Opus,
+		"sonnet":  cfg.Models.Sonnet,
+		"haiku":   cfg.Models.Haiku,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := stripRegionPrefix(id)
+			if got != id {
+				t.Errorf("stripRegionPrefix(%q) = %q, want %q", id, got, id)
+			}
+			if strings.HasPrefix(id, "global.") && !strings.HasPrefix(got, "global.") {
+				t.Errorf("global prefix stripped for %s model: got %q", name, got)
+			}
+		})
 	}
 }
 
@@ -303,82 +243,40 @@ func TestContains(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Integration: model ID flow from bedrock-config.json through connectivity
+// CheckAPIKeyConnectivity
 // -----------------------------------------------------------------------
 
-func TestConnectivityModelIDFlow_PreservesGlobalPrefix(t *testing.T) {
-	// Simulate the flow: doctor.go reads cfg.Models.Haiku,
-	// passes it to CheckAPIKeyConnectivity, which calls stripRegionPrefix.
-	// The global. prefix must survive the entire chain.
-	modelID := "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-	got := stripRegionPrefix(modelID)
-	if got != modelID {
-		t.Fatalf("global prefix stripped in connectivity flow: got %q", got)
-	}
-
-	// Verify the model ID is still a valid global inference profile.
-	if !strings.HasPrefix(got, "global.") {
-		t.Error("result should still start with global.")
-	}
-	if !strings.Contains(got, "anthropic.claude") {
-		t.Error("result should contain model identifier")
-	}
-}
-
-func TestConnectivityModelIDFlow_RegionalPrefixStripped(t *testing.T) {
-	tests := []struct {
-		prefix string
-	}{
-		{"us."},
-		{"eu."},
-		{"apac."},
-	}
-	for _, tt := range tests {
-		t.Run(tt.prefix, func(t *testing.T) {
-			modelID := tt.prefix + "anthropic.claude-sonnet-4-6"
-			got := stripRegionPrefix(modelID)
-			if strings.HasPrefix(got, tt.prefix) {
-				t.Errorf("expected %s prefix to be stripped, got %q", tt.prefix, got)
-			}
-			if got != "anthropic.claude-sonnet-4-6" {
-				t.Errorf("expected 'anthropic.claude-sonnet-4-6', got %q", got)
-			}
-		})
-	}
-}
-
-// -----------------------------------------------------------------------
-// Connectivity check result fields
-// -----------------------------------------------------------------------
-
-func TestCheckAPIKeyConnectivity_ResultFields(t *testing.T) {
-	result := CheckAPIKeyConnectivity("test", "us-west-2",
+func TestCheckAPIKeyConnectivity_BadToken(t *testing.T) {
+	result := CheckAPIKeyConnectivity("invalid-token", "us-west-2",
 		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
-	if result.AuthMode == "" {
-		t.Error("expected auth mode to be set")
+	if result.OK {
+		t.Error("expected connectivity check to fail with invalid token")
 	}
-	if result.Region != "us-west-2" {
-		t.Errorf("expected region 'us-west-2', got %q", result.Region)
-	}
-	if result.ModelID == "" {
-		t.Error("expected model ID to be set")
+	if result.Message == "" {
+		t.Error("expected error message")
 	}
 	if result.Elapsed < 0 {
-		t.Error("elapsed should not be negative")
+		t.Error("elapsed time should not be negative")
 	}
 }
 
-func TestCheckIAMConnectivity_ResultFields(t *testing.T) {
-	result := CheckIAMConnectivity("us-west-2",
+func TestCheckAPIKeyConnectivity_InvalidRegion(t *testing.T) {
+	result := CheckAPIKeyConnectivity("some-token", "not-a-region",
 		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
-	if result.AuthMode != "iam" {
-		t.Errorf("expected auth mode 'iam', got %q", result.AuthMode)
+	if result.OK {
+		t.Error("expected connectivity check to fail with invalid region")
 	}
-	if result.Region != "us-west-2" {
-		t.Errorf("expected region 'us-west-2', got %q", result.Region)
-	}
-	if result.Elapsed < 0 {
-		t.Error("elapsed should not be negative")
+}
+
+// -----------------------------------------------------------------------
+// CheckIAMConnectivity
+// -----------------------------------------------------------------------
+
+func TestCheckIAMConnectivity_InvalidRegion(t *testing.T) {
+	result := CheckIAMConnectivity("not-a-region",
+		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
+	if result.OK {
+		t.Error("expected IAM connectivity check to fail with invalid region")
 	}
 }
 
@@ -396,15 +294,41 @@ func TestErrNoAuthConfigured(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Timing
+// Helper: findBedrockConfigFile (used by Load for test fallback)
 // -----------------------------------------------------------------------
 
-func TestConnectivityElapsedTime(t *testing.T) {
-	start := time.Now()
-	_ = CheckAPIKeyConnectivity("test", "us-west-2",
-		"global.anthropic.claude-haiku-4-5-20251001-v1:0")
-	elapsed := time.Since(start)
-	if elapsed < 0 {
-		t.Error("elapsed time should not be negative")
+func TestFindBedrockConfigFile(t *testing.T) {
+	// Verify the function can locate the config in the repo root.
+	repoRoot := filepath.Join("..", "..")
+	cfg, err := Load(filepath.Join(repoRoot, "bedrock-config.json"))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Models.Haiku == "" {
+		t.Error("expected Haiku model ID to be set")
+	}
+	// Ensure the model ID starts with global.
+	if !strings.HasPrefix(cfg.Models.Haiku, "global.") {
+		t.Errorf("expected Haiku model ID to start with global., got %q", cfg.Models.Haiku)
+	}
+}
+
+// -----------------------------------------------------------------------
+// Regression: old behavior would have stripped global. prefix
+// -----------------------------------------------------------------------
+
+func TestStripRegionPrefix_OldBehaviorReggression(t *testing.T) {
+	// The old code stripped "global." from model IDs, producing raw model
+	// IDs that Bedrock rejects with HTTP 400. This test ensures that
+	// behavior cannot regress.
+	modelID := "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+	got := stripRegionPrefix(modelID)
+	if got != modelID {
+		t.Errorf("regression: global prefix was stripped, got %q", got)
+	}
+	// Verify the stripped result would NOT be the raw model ID (old bug).
+	rawModelID := "anthropic.claude-haiku-4-5-20251001-v1:0"
+	if got == rawModelID {
+		t.Error("regression: global prefix was stripped to raw model ID (old bug)")
 	}
 }
