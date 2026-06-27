@@ -103,7 +103,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	token, err := resolveCredential(authMode)
+	token, err := resolveCredential(authMode, home)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	native := block.NativeKeys()
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
-		if err := keychain.Default().Set(token); err != nil {
+		if err := keychain.Default().SetWithFallback(token, home); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
 		}
 	}
@@ -367,14 +367,14 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	return
 }
 
-func resolveCredential(authMode string) (string, error) {
+func resolveCredential(authMode string, home string) (string, error) {
 	if !authmode.IsBedrockAPIKey(authMode) {
 		return "", nil
 	}
 	if applyFlags.bedrockKey != "" {
 		return applyFlags.bedrockKey, nil
 	}
-	token, err := keychain.Default().Get()
+	token, err := keychain.Default().GetWithFallback(home)
 	if err != nil {
 		if applyFlags.preserveKey {
 			return "", fmt.Errorf("reading existing key: %w", err)

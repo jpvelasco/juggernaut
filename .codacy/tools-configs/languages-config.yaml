@@ -16,6 +16,6 @@ tools:
       extensions: [.js, .jsm, .jsx, .mjs, .pom, .vue, .wsdl, .xml, .xsl]
       files: []
     - name: trivy
-      languages: [Go, JSON, Javascript, TypeScript, XML, YAML]
+      languages: [JSON, Javascript, TypeScript, XML, YAML]
       extensions: [.env, .go, .js, .jsm, .json, .jsx, .mjs, .pom, .ts, .tsx, .vue, .wsdl, .xml, .xsl, .yaml, .yml]
-      files: [.env, .env.dev, .env.development, .env.prod, .env.production, .env.staging, go.mod, package-lock.json, package.json, pnpm-lock.yaml, yarn.lock]
+      files: [.env, .env.dev, .env.development, .env.prod, .env.production, .env.staging, package-lock.json, package.json, pnpm-lock.yaml, yarn.lock]

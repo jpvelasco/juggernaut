@@ -18,13 +18,13 @@ const defaultTimeout = 15 * time.Second
 
 // ConnectivityResult holds the outcome of a Bedrock connectivity check.
 type ConnectivityResult struct {
-	OK          bool
-	AuthMode    string
-	Region      string
-	ModelID     string
-	StatusCode  int
-	Message     string
-	Elapsed     time.Duration
+	OK         bool
+	AuthMode   string
+	Region     string
+	ModelID    string
+	StatusCode int
+	Message    string
+	Elapsed    time.Duration
 }
 
 // CheckAPIKeyConnectivity makes a lightweight InvokeModel call to verify that

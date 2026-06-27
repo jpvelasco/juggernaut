@@ -15,17 +15,33 @@ make build
 # Run all tests
 make test
 
+# Run tests with race detector
+make test-race
+
+# Run tests with coverage
+make test-cover
+
 # Run a single package
 go test ./internal/schema/... -v
 
 # Run a single test
 go test ./cmd/... -run TestApply_WritesSettings_IAM -v
 
+# Full pre-push check (tidy, fmt, vet, lint, test)
+make ci
+
 # Lint
 make lint
 
+# Format + vet
+make fmt vet
+
 # Dry-run apply (preview settings.json write without committing)
 ./bin/juggernaut apply --auth=iam --dry-run
+
+# Install git hooks (pre-commit, conventional commits)
+scripts/setup-hooks.ps1    # Windows
+bash scripts/setup-hooks.sh  # Linux/macOS
 
 # Local Codacy analysis (requires WSL2 with codacy-cli installed)
 make codacy
@@ -96,7 +112,7 @@ Version must stay in sync across **three** locations: `VERSION`, `bedrock-config
 
 ## CI / Release
 
-- CI (`ci.yml`): lint + version sync check → `go test ./... -v` on ubuntu/macos/windows. Actions pinned to full commit SHAs.
+- CI (`ci.yml`): lint + version sync check → `go test ./... -v` on ubuntu/macos/windows → race detector → coverage (52% threshold) → npm tests → shellcheck → gosec. Actions pinned to full commit SHAs. Go module cache is shared across jobs.
 - Release (`release.yml`): triggered on `v*` tags → GoReleaser builds binaries → npm OIDC publish to `juggernaut-bedrock`.
 - GoReleaser requires a clean git tree — never commit build artifacts (`bin/` is gitignored).
 - npm package is in `npm/` — optional platform sub-packages ship prebuilt binaries; `npm/index.js` resolves and execs the matching package.

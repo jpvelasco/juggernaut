@@ -98,8 +98,8 @@ func TestDiscoverPowerShellProfiles_PS7Only(t *testing.T) {
 	if result.InstallTargets[0].Path != allHosts {
 		t.Errorf("expected install target %s, got %s", allHosts, result.InstallTargets[0].Path)
 	}
-	
-	}
+
+}
 
 func TestDiscoverPowerShellProfiles_BothEditions(t *testing.T) {
 	if runtime.GOOS != "windows" {
@@ -975,7 +975,7 @@ func TestValidateAndCanonicalizePath_Unicode(t *testing.T) {
 
 func TestValidateAndCanonicalizePath_Spaces(t *testing.T) {
 	home := t.TempDir()
-	p := validateAndCanonicalizePath("  " + filepath.Join(home, "My Documents", "profile.ps1") + "  ", "")
+	p := validateAndCanonicalizePath("  "+filepath.Join(home, "My Documents", "profile.ps1")+"  ", "")
 	if p == "" {
 		t.Error("path with spaces should be valid")
 	}
@@ -1015,7 +1015,7 @@ func TestValidateAndCanonicalizePath_PathContainment(t *testing.T) {
 }
 
 // Test the OneDrive redirect scenario: install to a redirected profile,
-	// verify doctor reports healthy after install, and idempotency.
+// verify doctor reports healthy after install, and idempotency.
 func TestOneDriveRedirect_FullFlow(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")

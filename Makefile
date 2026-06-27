@@ -1,4 +1,4 @@
-.PHONY: build test lint clean codacy codacy-sync
+.PHONY: build test lint clean codacy codacy-sync fmt vet test-race test-cover tidy ci
 
 build:
 	go build -ldflags "-X github.com/jpvelasco/juggernaut/v5/cmd.Version=$(shell cat VERSION)" -o bin/juggernaut .
@@ -6,8 +6,25 @@ build:
 test:
 	go test ./... -v
 
+test-race:
+	go test -race ./... -v
+
+test-cover:
+	go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out | tail -1
+
 lint:
 	golangci-lint run ./...
+
+fmt:
+	go fmt ./...
+
+vet:
+	go vet ./...
+
+tidy:
+	go mod tidy && go mod verify
+
+ci: tidy fmt vet lint test
 
 # Local Codacy parity check (WSL). Sync rules from server first: make codacy-sync
 codacy:
