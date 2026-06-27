@@ -1,0 +1,5 @@
+rules:
+  - id: codacy.tools-configs.go.lang.correctness.permissions.file_permission.incorrect-default-permission
+    paths:
+      exclude:
+        - "**/*_test.go"
