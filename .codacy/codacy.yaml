@@ -7,3 +7,6 @@ tools:
     - opengrep@1.21.0
     - pmd@6.55.0
     - trivy@0.70.0
+
+exclude_paths:
+    - "internal/keychain/keychain_test.go"
