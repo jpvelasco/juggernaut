@@ -1,0 +1,110 @@
+package cmd
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestHomeDir_PrefersHOME(t *testing.T) {
+	t.Setenv("HOME", "/tmp/home-pref")
+	t.Setenv("USERPROFILE", "/tmp/userprofile")
+	got, err := homeDir()
+	if err != nil {
+		t.Fatalf("homeDir() error: %v", err)
+	}
+	if got != "/tmp/home-pref" {
+		t.Errorf("homeDir() = %q, want HOME value", got)
+	}
+}
+
+func TestHomeDir_FallsBackToUserProfile(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "/tmp/userprofile")
+	got, err := homeDir()
+	if err != nil {
+		t.Fatalf("homeDir() error: %v", err)
+	}
+	if got != "/tmp/userprofile" {
+		t.Errorf("homeDir() = %q, want USERPROFILE value", got)
+	}
+}
+
+func TestSettingsPath_ProjectScope(t *testing.T) {
+	got, err := settingsPath("/ignored/home", "project")
+	if err != nil {
+		t.Fatalf("settingsPath() error: %v", err)
+	}
+	want := filepath.Join(".", ".claude", "settings.json")
+	if got != want {
+		t.Errorf("settingsPath(project) = %q, want %q", got, want)
+	}
+}
+
+func TestSettingsPath_UserScope(t *testing.T) {
+	home := t.TempDir()
+	got, err := settingsPath(home, "user")
+	if err != nil {
+		t.Fatalf("settingsPath() error: %v", err)
+	}
+	want := filepath.Join(home, ".claude", "settings.json")
+	if got != want {
+		t.Errorf("settingsPath(user) = %q, want %q", got, want)
+	}
+}
+
+func TestSetEmbeddedConfig_LoadsBytes(t *testing.T) {
+	// Save and restore the package-level embedded bytes so other tests that
+	// rely on the filesystem fallback are unaffected.
+	orig := embeddedConfigBytes
+	t.Cleanup(func() { embeddedConfigBytes = orig })
+
+	cfgJSON := `{
+		"version": "9.9.9",
+		"defaults": {"region": "us-west-2", "authMode": "iam"},
+		"models": {"opus": "o", "sonnet": "s", "haiku": "h", "fable": ""},
+		"runtime": {}
+	}`
+	SetEmbeddedConfig([]byte(cfgJSON))
+
+	cfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Fatalf("loadBedrockConfig() with embedded bytes error: %v", err)
+	}
+	if cfg.Version != "9.9.9" {
+		t.Errorf("loaded version = %q, want 9.9.9", cfg.Version)
+	}
+}
+
+func TestToMap_RoundTrips(t *testing.T) {
+	in := struct {
+		Name string `json:"name"`
+		N    int    `json:"n"`
+	}{Name: "x", N: 3}
+
+	m, err := toMap(in)
+	if err != nil {
+		t.Fatalf("toMap() error: %v", err)
+	}
+	if m["name"] != "x" {
+		t.Errorf("toMap()[name] = %v, want x", m["name"])
+	}
+	// JSON numbers decode to float64.
+	if m["n"].(float64) != 3 {
+		t.Errorf("toMap()[n] = %v, want 3", m["n"])
+	}
+}
+
+func TestFileExists(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "present")
+	if err := os.WriteFile(existing, []byte("x"), 0o600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if !fileExists(existing) {
+		t.Error("fileExists should report true for an existing file")
+	}
+	if fileExists(filepath.Join(dir, "absent")) {
+		t.Error("fileExists should report false for a missing file")
+	}
+}
