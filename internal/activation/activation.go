@@ -436,7 +436,7 @@ func Launch(home string, args []string) error {
 		Home:        home,
 		Args:        args,
 		Path:        os.Getenv("PATH"),
-		TokenGetter: keychain.Default().Get,
+		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
 		Runner:      runClaudeBinary,
 	})
 }
@@ -450,7 +450,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		opts.Path = os.Getenv("PATH")
 	}
 	if opts.TokenGetter == nil {
-		opts.TokenGetter = keychain.Default().Get
+		opts.TokenGetter = func() (string, error) { return keychain.Default().GetWithFallback(opts.Home) }
 	}
 	if opts.Runner == nil {
 		opts.Runner = runClaudeBinary

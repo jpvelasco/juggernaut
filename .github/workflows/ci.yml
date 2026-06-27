@@ -91,9 +91,9 @@ jobs:
         run: go test ./... -coverprofile=coverage.out
       - name: Check coverage threshold
         run: |
-          TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%' | cut -d. -f1)
           echo "Coverage: ${TOTAL}%"
-          # Compare as integers (truncate decimal) — coverage must be >= 52%
+          # Compare as integers — coverage must be >= 52%
           if [ "${TOTAL}" -lt 52 ]; then
             echo "Coverage below 52% threshold"
             exit 1

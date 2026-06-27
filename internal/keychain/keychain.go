@@ -4,6 +4,7 @@
 package keychain
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -117,23 +118,32 @@ func credentialFilePath(home string) string {
 //
 // When falling back to file storage, any existing keychain entry is cleared
 // so that GetWithFallback does not return a stale token.
+// When the keychain write succeeds, any stale fallback file is removed.
 func (s *Store) SetWithFallback(token, home string) error {
+	filePath := credentialFilePath(home)
+
 	// Skip the keychain write entirely if the token is known to exceed the
 	// Windows limit — avoids a wasted keychain call that will always fail.
 	if IsTooBigForKeychain(token) {
-		_ = s.Delete()
-		return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
+		if err := s.Delete(); err != nil {
+			return fmt.Errorf("clearing keychain before file fallback: %w", err)
+		}
+		return writeCredentialFile(home, filePath, token)
 	}
 
 	// Try the OS keychain first.
 	err := s.Set(token)
 	if err == nil {
+		// Keychain write succeeded — remove any stale fallback file.
+		_ = os.Remove(filePath)
 		return nil
 	}
 	// Fall back to file storage on keychain failure (unavailable, etc.).
 	// Clear any stale keychain entry before falling back.
-	_ = s.Delete()
-	return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
+	if err := s.Delete(); err != nil {
+		return fmt.Errorf("clearing keychain before file fallback: %w", err)
+	}
+	return writeCredentialFile(home, filePath, token)
 }
 
 // GetWithFallback retrieves the token from the OS keychain. If the keychain
@@ -152,6 +162,15 @@ func (s *Store) GetWithFallback(home string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// writeCredentialFile writes the credential to the given path with owner-only
+// permissions. If the file already exists, it is removed first so that a
+// subsequent write creates a new inode with the correct mode rather than
+// preserving a potentially lax mode on the existing file.
+func writeCredentialFile(base, filePath string, token string) error {
+	_ = os.Remove(filePath)
+	return safepath.WriteFile(base, filePath, []byte(token))
 }
 
 // DeleteWithFallback removes the token from both the OS keychain and the
