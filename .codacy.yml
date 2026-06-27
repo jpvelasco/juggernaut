@@ -11,6 +11,3 @@ engines:
       - ".codacy/**"
       - "mcps/**"
       - "npm/**"
-  opengrep:
-    exclude_paths:
-      - "internal/keychain/keychain_test.go"

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 func testStore() *keychain.Store {
@@ -108,10 +109,7 @@ func TestGetWithFallback_ReadsFromFile(t *testing.T) {
 
 	token := "file-fallback-token"
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
-		t.Fatalf("creating dir: %v", err)
-	}
-	if err := os.WriteFile(filePath, []byte(token), 0o600); err != nil {
+	if err := safepath.WriteFile(home, filePath, []byte(token)); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -138,10 +136,7 @@ func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
 	home := t.TempDir()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
-		t.Fatalf("creating dir: %v", err)
-	}
-	if err := os.WriteFile(filePath, []byte("file-token"), 0o600); err != nil {
+	if err := safepath.WriteFile(home, filePath, []byte("file-token")); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -215,10 +210,7 @@ func TestDeleteWithFallback_RemovesFile(t *testing.T) {
 	// Write directly to the file to ensure it exists regardless of platform.
 	token := "to-be-deleted"
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
-		t.Fatalf("creating dir: %v", err)
-	}
-	if err := os.WriteFile(filePath, []byte(token), 0o600); err != nil {
+	if err := safepath.WriteFile(home, filePath, []byte(token)); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
