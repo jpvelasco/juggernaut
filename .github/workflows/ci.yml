@@ -47,14 +47,16 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
         with:
           go-version: "1.26"
+      # Run in bash on every OS so the working directory and tooling are
+      # consistent. Go on the Windows runner writes coverage.out with CRLF line
+      # endings, which Codecov's parser rejects (the upload lands in an ERROR
+      # state and never merges), so strip CR in the same step. tr is identical
+      # on GNU/BSD/Git-bash; the strip is a no-op on Linux/macOS.
       - name: Run tests with coverage
-        run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
-      # Normalize CRLF -> LF. Go on the Windows runner writes coverage.out with
-      # CRLF line endings, which Codecov's parser rejects (the upload lands in
-      # an ERROR state and never merges). A no-op on Linux/macOS.
-      - name: Normalize coverage line endings
         shell: bash
-        run: tr -d '\r' < coverage.out > coverage.tmp && mv coverage.tmp coverage.out
+        run: |
+          go test ./... -v -coverprofile=coverage.out -covermode=atomic
+          tr -d '\r' < coverage.out > coverage.tmp && mv coverage.tmp coverage.out
       # Upload per-OS coverage so Codecov merges all three legs. Much of the
       # PowerShell/launcher/keychain code is Windows-only, so a Linux-only
       # report understates true coverage; merging the OS matrix reflects it.
