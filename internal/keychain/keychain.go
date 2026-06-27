@@ -11,9 +11,6 @@ const defaultService = "juggernaut-bedrock"
 
 const account = "bedrock-credential"
 
-// legacyAccount is the v3 keychain entry name; split to avoid static secret scanners.
-var legacyAccount = "api" + "-" + "key"
-
 // Store wraps go-keyring with a fixed account name and configurable service name.
 type Store struct {
 	service string
@@ -39,14 +36,16 @@ func Default() *Store {
 
 // Set stores the token in the OS keychain.
 func (s *Store) Set(token string) error {
-	if err := keyring.Set(s.service, account, token); err != nil {
-		return err
-	}
-	_ = keyring.Delete(s.service, legacyAccount)
-	return nil
+	return keyring.Set(s.service, account, token)
 }
 
+// legacyAccount is the v3 account name for the Bedrock API key. When
+// upgrading from v3, the saved credential may exist only under this name.
+const legacyAccount = "api-key"
+
 // Get retrieves the token. Returns "" (not an error) if not found.
+// When the new account is not found, it falls back to the legacy v3 account
+// for upgrade compatibility.
 func (s *Store) Get() (string, error) {
 	token, err := keyring.Get(s.service, account)
 	if err == nil {
@@ -55,21 +54,29 @@ func (s *Store) Get() (string, error) {
 	if err != keyring.ErrNotFound {
 		return "", err
 	}
+	// Fallback: try the legacy v3 account name for upgrade compatibility.
 	token, err = keyring.Get(s.service, legacyAccount)
-	if err == keyring.ErrNotFound {
-		return "", nil
+	if err == nil {
+		return token, nil
 	}
-	return token, err
+	if err != keyring.ErrNotFound {
+		return "", err
+	}
+	return "", nil
 }
 
-// Delete removes the token. Silent if not found.
+// Delete removes the token. Also removes the legacy v3 account if present.
+// Silent if not found.
 func (s *Store) Delete() error {
-	if err := keyring.Delete(s.service, account); err != nil && err != keyring.ErrNotFound {
+	err := keyring.Delete(s.service, account)
+	if err != nil && err != keyring.ErrNotFound {
 		return err
 	}
-	err := keyring.Delete(s.service, legacyAccount)
-	if err == keyring.ErrNotFound {
-		return nil
+	// Also clean up the legacy v3 account name so uninstall fully clears
+	// stored credentials.
+	err = keyring.Delete(s.service, legacyAccount)
+	if err != nil && err != keyring.ErrNotFound {
+		return err
 	}
-	return err
+	return nil
 }

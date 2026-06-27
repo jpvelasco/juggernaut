@@ -28,7 +28,7 @@ var uninstallFlags struct {
 func init() {
 	f := uninstallCmd.Flags()
 	f.StringVar(&uninstallFlags.scope, "scope", "", "remove only user or project scope")
-	f.BoolVar(&uninstallFlags.full, "full", false, "also remove shell activation and recover legacy launcher artifacts")
+	f.BoolVar(&uninstallFlags.full, "full", false, "also remove shell activation blocks")
 	f.BoolVarP(&uninstallFlags.force, "force", "f", false, "skip confirmation prompt")
 	f.BoolVar(&uninstallFlags.dryRun, "dry-run", false, "preview without removing")
 	rootCmd.AddCommand(uninstallCmd)
@@ -125,10 +125,9 @@ func removeKeychainToken() {
 }
 
 func uninstallActivationFull(home string) {
-	binDir := activation.DefaultBinDir(home)
 	if uninstallFlags.dryRun {
 		fmt.Println("Would remove Juggernaut Claude activation blocks from shell profiles")
-		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", binDir)
+		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
 		return
 	}
 	removed, err := activation.Uninstall(home)
@@ -138,12 +137,13 @@ func uninstallActivationFull(home string) {
 		fmt.Printf("  ✓ Removed Claude activation from %d shell profile(s)\n", len(removed))
 	}
 
+	binDir := activation.DefaultBinDir(home)
 	actions, err := activation.RecoverLegacyArtifacts(binDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy launcher artifacts: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy artifacts: %v\n", err)
 		return
 	}
-	for _, action := range actions {
-		fmt.Printf("  ✓ %s: %s\n", action.Action, action.Path)
+	for _, a := range actions {
+		fmt.Printf("  ✓ %s: %s\n", a.Action, a.Path)
 	}
 }

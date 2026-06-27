@@ -20,9 +20,22 @@ const (
 	BeginMarker = "# BEGIN: Juggernaut Claude Activation"
 	EndMarker   = "# END: Juggernaut Claude Activation"
 
+	// Legacy markers from older Juggernaut versions.
+	LegacyLauncherBegin = "# BEGIN: Juggernaut Launcher"
+	LegacyLauncherEnd   = "# END: Juggernaut Launcher"
+	LegacyBedrockBegin  = "# BEGIN: Claude Code Bedrock Configuration"
+	LegacyBedrockEnd    = "# END: Claude Code Bedrock Configuration"
+
+	// Legacy v4.2.6 shim content for exact matching after normalization.
 	legacyCmdShimLF   = "@echo off\njuggernaut --launcher %*\n"
 	legacyCmdShimCRLF = "@echo off\r\njuggernaut --launcher %*\r\n"
 )
+
+// LegacyAction describes one v4.2.6 recovery action.
+type LegacyAction struct {
+	Path   string
+	Action string
+}
 
 // Shell identifies the shell syntax used by an activation target.
 type Shell string
@@ -39,10 +52,28 @@ type Target struct {
 	Shell Shell
 }
 
-// LegacyAction describes one v4.2.6 recovery action.
-type LegacyAction struct {
-	Path   string
-	Action string
+// ProfileResolverResult is the shared, authoritative result of PowerShell
+// profile discovery. On Windows it contains dynamically discovered profiles.
+// On other platforms it returns the same targets as DefaultTargets.
+type ProfileResolverResult struct {
+	// ActiveTargets are the discovered profiles that PowerShell actually loads.
+	// This includes both AllHosts and CurrentHost profiles and is used for
+	// health checks and activation scanning.
+	ActiveTargets []Target
+	// InstallTargets are the profiles that should receive the activation
+	// block. This typically contains only AllHosts profiles — CurrentHost
+	// profiles load after AllHosts and can override or retain a stale
+	// duplicate of the global activation.
+	InstallTargets []Target
+	// MigrationTargets are all discovered profiles that should be inspected
+	// for legacy blocks during apply/migration.
+	MigrationTargets []string
+	// DiscoveryWarnings lists warnings about the discovery process.
+	DiscoveryWarnings []string
+	// UsedFallback is true when Known Documents fallback was used.
+	UsedFallback bool
+	// EditionsDiscovered lists which PowerShell editions were found.
+	EditionsDiscovered []string
 }
 
 // LaunchOptions carries injectable dependencies for tests.
@@ -54,44 +85,17 @@ type LaunchOptions struct {
 	Runner      func(path string, args []string, env []string) error
 }
 
-// DefaultBinDir returns the user-local bin directory where broken v4.2.6
-// artifacts may exist.
-func DefaultBinDir(home string) string {
-	if home == "" {
-		home = os.Getenv("HOME")
-	}
-	if home == "" {
-		home = os.Getenv("USERPROFILE")
-	}
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	path, err := safepath.JoinUnder(home, ".local", "bin")
-	if err != nil {
-		return filepath.Join(home, ".local", "bin")
-	}
-	return path
-}
-
 // DefaultTargets returns the shell profile targets Juggernaut updates.
+// PowerShell profiles are NOT included here — they are discovered dynamically
+// via ResolvePowerShellProfiles() on Windows, and via the ProfileResolverResult
+// on other platforms.
 func DefaultTargets(home string) []Target {
-	targets := []Target{
+	return []Target{
 		{Path: filepath.Join(home, ".bashrc"), Shell: ShellPOSIX},
 		{Path: filepath.Join(home, ".zshrc"), Shell: ShellPOSIX},
 		{Path: filepath.Join(home, ".profile"), Shell: ShellPOSIX},
 		{Path: filepath.Join(home, ".config", "fish", "config.fish"), Shell: ShellFish},
 	}
-	if runtime.GOOS == "windows" {
-		targets = append(targets,
-			Target{Path: filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"), Shell: ShellPowerShell},
-			Target{Path: filepath.Join(home, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"), Shell: ShellPowerShell},
-		)
-	} else {
-		targets = append(targets,
-			Target{Path: filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1"), Shell: ShellPowerShell},
-		)
-	}
-	return targets
 }
 
 // Block returns the activation block for a shell.
@@ -124,9 +128,43 @@ func Block(shell Shell) string {
 	}
 }
 
+// InstallOptions carries optional dependencies for Install.
+type InstallOptions struct {
+	// PowerShellResult, when set, is used instead of resolving profiles
+	// dynamically. This is required for tests to avoid touching real profiles.
+	PowerShellResult *ProfileResolverResult
+}
+
 // Install writes or updates Juggernaut activation blocks in shell profiles.
+// On Windows, it uses dynamic PowerShell profile discovery, then installs
+// to POSIX targets as well. On other platforms it uses the default target list.
 func Install(home string) ([]string, error) {
+	return InstallWith(home, InstallOptions{})
+}
+
+// InstallWith is like Install but accepts injectable dependencies.
+func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	var installed []string
+
+	if runtime.GOOS == "windows" {
+		psInstalled, err := InstallPowerShellActivationWith(home, opts.PowerShellResult)
+		if err != nil {
+			return installed, err
+		}
+		installed = append(installed, psInstalled...)
+	} else if opts.PowerShellResult != nil {
+		// On non-Windows, use the injected PowerShell result for profile paths.
+		for _, target := range opts.PowerShellResult.ActiveTargets {
+			changed, err := InstallTarget(target)
+			if err != nil {
+				return installed, err
+			}
+			if changed {
+				installed = append(installed, target.Path)
+			}
+		}
+	}
+
 	for _, target := range DefaultTargets(home) {
 		changed, err := InstallTarget(target)
 		if err != nil {
@@ -158,11 +196,44 @@ func InstallTarget(target Target) (bool, error) {
 	return true, nil
 }
 
+// UninstallOptions carries optional dependencies for Uninstall.
+type UninstallOptions struct {
+	// PowerShellResult, when set, is used instead of resolving profiles
+	// dynamically. This is required for tests to avoid touching real profiles.
+	PowerShellResult *ProfileResolverResult
+}
+
 // Uninstall removes Juggernaut activation blocks from shell profiles.
+// On Windows, it also removes blocks from discovered PowerShell profiles.
 func Uninstall(home string) ([]string, error) {
+	return UninstallWith(home, UninstallOptions{})
+}
+
+// UninstallWith is like Uninstall but accepts injectable dependencies.
+func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
 	var removed []string
+
+	if runtime.GOOS == "windows" {
+		psRemoved, err := UninstallPowerShellActivationWith(home, opts.PowerShellResult)
+		if err != nil {
+			return removed, err
+		}
+		removed = append(removed, psRemoved...)
+	} else if opts.PowerShellResult != nil {
+		// On non-Windows, use the injected PowerShell result for profile paths.
+		for _, target := range opts.PowerShellResult.ActiveTargets {
+			ok, err := RemoveTarget(target.Path)
+			if err != nil {
+				return removed, err
+			}
+			if ok {
+				removed = append(removed, target.Path)
+			}
+		}
+	}
+
 	for _, target := range DefaultTargets(home) {
-		ok, err := RemoveTarget(target.Path)
+		ok, err := RemoveTargetWithLegacy(target.Path)
 		if err != nil {
 			return removed, err
 		}
@@ -193,9 +264,83 @@ func RemoveTarget(path string) (bool, error) {
 	return true, nil
 }
 
+// RemoveTargetWithLegacy removes the activation block AND any legacy launcher
+// or Bedrock blocks from a profile. This is used by full uninstall to ensure
+// no Juggernaut-related blocks remain.
+func RemoveTargetWithLegacy(path string) (bool, error) {
+	base := filepath.Dir(path)
+	data, err := safepath.ReadFile(base, path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("reading %s: %w", path, err)
+	}
+	content := string(data)
+	changed := false
+
+	// Remove current activation block.
+	next, found := removeBlock(content)
+	if found {
+		content = next
+		changed = true
+	}
+
+	// Remove legacy launcher block.
+	next, found = removeLegacyLauncherBlock(content)
+	if found {
+		content = next
+		changed = true
+	}
+
+	// Remove legacy Bedrock block.
+	next, found = removeLegacyBedrockBlock(content)
+	if found {
+		content = next
+		changed = true
+	}
+
+	if !changed {
+		return false, nil
+	}
+	if err := safepath.WriteFile(base, path, []byte(content)); err != nil {
+		return false, fmt.Errorf("writing %s: %w", path, err)
+	}
+	return true, nil
+}
+
 // InstalledTargets returns profile paths currently containing the activation block.
+// On Windows it checks discovered active targets and POSIX targets.
 func InstalledTargets(home string) []string {
+	return InstalledTargetsWith(home, nil)
+}
+
+// InstalledTargetsWith is like InstalledTargets but accepts a pre-resolved
+// ProfileResolverResult to avoid launching PowerShell.
+func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string {
 	var paths []string
+
+	if runtime.GOOS == "windows" {
+		result := psResult
+		if result == nil {
+			r := ResolvePowerShellProfilesScoped(home)
+			result = &r
+		}
+		for _, target := range result.ActiveTargets {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err == nil && HasBlock(string(data)) {
+				paths = append(paths, target.Path)
+			}
+		}
+	} else if psResult != nil {
+		for _, target := range psResult.ActiveTargets {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err == nil && HasBlock(string(data)) {
+				paths = append(paths, target.Path)
+			}
+		}
+	}
+
 	for _, target := range DefaultTargets(home) {
 		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
 		if err == nil && HasBlock(string(data)) {
@@ -210,21 +355,79 @@ func HasBlock(content string) bool {
 	return strings.Contains(content, BeginMarker) && strings.Contains(content, EndMarker)
 }
 
-// RecoverLegacyArtifacts removes or restores only positively identified
-// v4.2.6 launcher artifacts.
-func RecoverLegacyArtifacts(binDir string) ([]LegacyAction, error) {
-	self, _ := os.Executable()
-	actions, err := recoverPlatformArtifacts(binDir, self, platformNames())
-	if err != nil {
-		return actions, err
-	}
-	return actions, nil
+// HasLegacyLauncherBlock reports whether content contains a legacy
+// "# BEGIN: Juggernaut Launcher" block.
+func HasLegacyLauncherBlock(content string) bool {
+	return strings.Contains(content, LegacyLauncherBegin) && strings.Contains(content, LegacyLauncherEnd)
 }
 
-// DetectLegacyArtifacts reports recoverable or removable v4.2.6 artifacts.
-func DetectLegacyArtifacts(binDir string) []LegacyAction {
-	self, _ := os.Executable()
-	return detectPlatformArtifacts(binDir, self, platformNames())
+// HasLegacyBedrockBlock reports whether content contains a legacy
+// "# BEGIN: Claude Code Bedrock Configuration" block.
+func HasLegacyBedrockBlock(content string) bool {
+	return strings.Contains(content, LegacyBedrockBegin) && strings.Contains(content, LegacyBedrockEnd)
+}
+
+// removeLegacyLauncherBlock removes a legacy "# BEGIN: Juggernaut Launcher"
+// block from content. It only removes the block if both the begin and end
+// markers are present; an orphaned begin marker is left untouched.
+func removeLegacyLauncherBlock(content string) (string, bool) {
+	content = normalizeNewlines(content)
+	if !strings.Contains(content, LegacyLauncherEnd) {
+		return content, false
+	}
+	return removeBlockWithMarkers(content, LegacyLauncherBegin, LegacyLauncherEnd)
+}
+
+// removeLegacyBedrockBlock removes a legacy "# BEGIN: Claude Code Bedrock
+// Configuration" block from content. It only removes the block if both the
+// begin and end markers are present; an orphaned begin marker is left untouched.
+func removeLegacyBedrockBlock(content string) (string, bool) {
+	content = normalizeNewlines(content)
+	if !strings.Contains(content, LegacyBedrockEnd) {
+		return content, false
+	}
+	return removeBlockWithMarkers(content, LegacyBedrockBegin, LegacyBedrockEnd)
+}
+
+// removeBlockWithMarkers removes blocks delimited by begin and end markers.
+// It only removes spans whose begin marker has a matching following end marker;
+// orphaned begin markers are left untouched along with all subsequent content.
+func removeBlockWithMarkers(content, begin, end string) (string, bool) {
+	lines := strings.Split(content, "\n")
+
+	// First pass: find all valid begin/end span pairs (indices to remove).
+	// Use a stack so nested or multiple blocks are handled correctly.
+	var stack [][]int // each entry: [beginIndex, endIndex]
+	beginStack := []int{}
+	for i, line := range lines {
+		switch strings.TrimSpace(line) {
+		case begin:
+			beginStack = append(beginStack, i)
+		case end:
+			if len(beginStack) > 0 {
+				bi := beginStack[len(beginStack)-1]
+				beginStack = beginStack[:len(beginStack)-1]
+				stack = append(stack, []int{bi, i})
+			}
+		}
+	}
+
+	// Build a set of line indices to remove.
+	remove := make(map[int]bool, len(lines))
+	for _, span := range stack {
+		for i := span[0]; i <= span[1]; i++ {
+			remove[i] = true
+		}
+	}
+
+	// Second pass: emit lines not in the remove set.
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if !remove[i] {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n"), len(stack) > 0
 }
 
 // Launch runs Claude Code with Juggernaut Bedrock activation.
@@ -289,6 +492,42 @@ func ResolveClaudeBinary(pathList string) (string, error) {
 	return resolveClaudeBinary(pathList, self)
 }
 
+// DefaultBinDir returns the user-local bin directory where broken v4.2.6
+// artifacts may exist.
+func DefaultBinDir(home string) string {
+	if home == "" {
+		home = os.Getenv("HOME")
+	}
+	if home == "" {
+		home = os.Getenv("USERPROFILE")
+	}
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	path, err := safepath.JoinUnder(home, ".local", "bin")
+	if err != nil {
+		return filepath.Join(home, ".local", "bin")
+	}
+	return path
+}
+
+// RecoverLegacyArtifacts removes or restores only positively identified
+// v4.2.6 launcher artifacts.
+func RecoverLegacyArtifacts(binDir string) ([]LegacyAction, error) {
+	self, _ := os.Executable()
+	actions, err := recoverPlatformArtifacts(binDir, self, platformNames())
+	if err != nil {
+		return actions, err
+	}
+	return actions, nil
+}
+
+// DetectLegacyArtifacts reports recoverable or removable v4.2.6 artifacts.
+func DetectLegacyArtifacts(binDir string) []LegacyAction {
+	self, _ := os.Executable()
+	return detectPlatformArtifacts(binDir, self, platformNames())
+}
+
 func upsertBlock(content, block string) string {
 	content = normalizeNewlines(content)
 	without, _ := removeBlock(content)
@@ -325,112 +564,219 @@ func removeBlock(content string) (string, bool) {
 	return strings.Join(out, "\n"), found
 }
 
+// ResolvePowerShellProfiles returns the shared profile resolver result.
+// On Windows it dynamically queries PowerShell. On other platforms it
+// returns the default targets.
+func ResolvePowerShellProfiles() ProfileResolverResult {
+	return ResolvePowerShellProfilesScoped("")
+}
+
+// ResolvePowerShellProfilesScoped is like ResolvePowerShellProfiles but
+// scopes historical candidates to the supplied home directory.
+func ResolvePowerShellProfilesScoped(home string) ProfileResolverResult {
+	if runtime.GOOS != "windows" {
+		return ProfileResolverResult{}
+	}
+	return discoverPowerShellProfilesScoped(home)
+}
+
+// InstallPowerShellActivation installs the activation block in the
+// authoritative PowerShell profile. Returns paths that were modified.
+// The home parameter scopes historical candidates to the supplied directory.
+func InstallPowerShellActivation(home string) ([]string, error) {
+	return InstallPowerShellActivationWith(home, nil)
+}
+
+// InstallPowerShellActivationWith is like InstallPowerShellActivation but
+// accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
+func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResult) ([]string, error) {
+	if runtime.GOOS != "windows" {
+		return nil, nil
+	}
+
+	if psResult == nil {
+		r := ResolvePowerShellProfilesScoped(home)
+		psResult = &r
+	}
+	result := *psResult
+	var installed []string
+
+	// First pass: migrate legacy blocks in all discovered profiles (ActiveTargets
+	// plus MigrationTargets) before installing the current block.
+	for _, p := range result.MigrationTargets {
+		base := filepath.Dir(p)
+		data, err := safepath.ReadFile(base, p)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		changed := false
+		if HasLegacyLauncherBlock(content) {
+			content, _ = removeLegacyLauncherBlock(content)
+			changed = true
+		}
+		if HasLegacyBedrockBlock(content) {
+			content, _ = removeLegacyBedrockBlock(content)
+			changed = true
+		}
+		if changed {
+			if err := safepath.WriteFile(base, p, []byte(content)); err != nil {
+				return installed, fmt.Errorf("migrating legacy block in %s: %w", p, err)
+			}
+		}
+	}
+
+	// Second pass: install the current block into InstallTargets only
+	// (AllHosts profiles — CurrentHost profiles load after AllHosts and
+	// can override or retain a stale duplicate of the global activation).
+	for _, target := range result.InstallTargets {
+		changed, err := InstallTarget(target)
+		if err != nil {
+			return installed, err
+		}
+		if changed {
+			installed = append(installed, target.Path)
+		}
+	}
+
+	return installed, nil
+}
+
+// UninstallPowerShellActivation removes activation blocks from all discovered
+// and historical PowerShell profiles. Returns paths that were modified.
+// The home parameter scopes historical candidates to the supplied directory.
+func UninstallPowerShellActivation(home string) ([]string, error) {
+	return UninstallPowerShellActivationWith(home, nil)
+}
+
+// UninstallPowerShellActivationWith is like UninstallPowerShellActivation but
+// accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
+func UninstallPowerShellActivationWith(home string, psResult *ProfileResolverResult) ([]string, error) {
+	if runtime.GOOS != "windows" {
+		return nil, nil
+	}
+
+	if psResult == nil {
+		r := ResolvePowerShellProfilesScoped(home)
+		psResult = &r
+	}
+	result := *psResult
+	var removed []string
+
+	// Remove activation from all active targets.
+	for _, target := range result.ActiveTargets {
+		ok, err := RemoveTargetWithLegacy(target.Path)
+		if err != nil {
+			return removed, err
+		}
+		if ok {
+			removed = append(removed, target.Path)
+		}
+	}
+
+	// Also remove from historical profiles (MigrationTargets) — when
+	// PowerShell discovers a redirected profile such as a OneDrive path,
+	// old Documents profiles are placed in MigrationTargets but not
+	// ActiveTargets, so iterating only active targets would leave
+	// Juggernaut blocks in those historical files.
+	for _, path := range result.MigrationTargets {
+		if containsTargetPathCI(result.ActiveTargets, path) {
+			continue // already handled above
+		}
+		ok, err := RemoveTargetWithLegacy(path)
+		if err != nil {
+			return removed, err
+		}
+		if ok {
+			removed = append(removed, path)
+		}
+	}
+
+	return removed, nil
+}
+
+// CheckPowerShellActivation checks whether the current activation block is
+// present in an effective (discovered) profile. Returns whether activation is
+// healthy, the path where it was found (if healthy), and any warnings.
+// The home parameter scopes historical candidates to the supplied directory.
+func CheckPowerShellActivation(home string) (healthy bool, path string, warnings []string) {
+	return CheckPowerShellActivationWith(home, nil)
+}
+
+// CheckPowerShellActivationWith is like CheckPowerShellActivation but
+// accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
+func CheckPowerShellActivationWith(home string, psResult *ProfileResolverResult) (healthy bool, path string, warnings []string) {
+	if runtime.GOOS != "windows" {
+		return true, "", nil
+	}
+
+	if psResult == nil {
+		r := ResolvePowerShellProfilesScoped(home)
+		psResult = &r
+	}
+	result := *psResult
+
+	// Check effective profiles for the current block (first match wins).
+	for _, target := range result.ActiveTargets {
+		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+		if err != nil {
+			continue
+		}
+		if HasBlock(string(data)) {
+			path = target.Path
+			break
+		}
+	}
+
+	healthy = path != ""
+
+	// After finding activation, check ALL remaining effective profiles
+	// (especially later-loading CurrentHost profiles) for legacy launcher
+	// or Bedrock blocks that could override the activation.
+	if healthy {
+		for _, target := range result.ActiveTargets {
+			if target.Path == path {
+				continue // already checked
+			}
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err != nil {
+				continue
+			}
+			content := string(data)
+			if HasLegacyLauncherBlock(content) || HasLegacyBedrockBlock(content) {
+				warnings = append(warnings,
+					fmt.Sprintf("legacy block in %s may override activation in %s", target.Path, path),
+				)
+			}
+		}
+	}
+
+	return healthy, path, warnings
+}
+
 func normalizeNewlines(content string) string {
 	return strings.ReplaceAll(content, "\r\n", "\n")
 }
 
-func recoverPlatformArtifacts(binDir, self string, names legacyNames) ([]LegacyAction, error) {
-	var actions []LegacyAction
-	for _, name := range names.legacyLaunchers {
-		path := filepath.Join(binDir, name)
-		if isKnownJuggernautArtifact(path, self) {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return actions, fmt.Errorf("removing %s: %w", path, err)
-			}
-			actions = append(actions, LegacyAction{Path: path, Action: "removed legacy Juggernaut launcher"})
-		}
-	}
-
-	claudePath := filepath.Join(binDir, names.claude)
-	backupPath := filepath.Join(binDir, names.backup)
-	if isKnownJuggernautArtifact(claudePath, self) {
-		if err := os.Remove(claudePath); err != nil && !os.IsNotExist(err) {
-			return actions, fmt.Errorf("removing %s: %w", claudePath, err)
-		}
-		actions = append(actions, LegacyAction{Path: claudePath, Action: "removed legacy Juggernaut claude shim"})
-	}
-	if fileExists(backupPath) && !fileExists(claudePath) {
-		if err := os.Rename(backupPath, claudePath); err != nil {
-			return actions, fmt.Errorf("restoring %s: %w", claudePath, err)
-		}
-		actions = append(actions, LegacyAction{Path: claudePath, Action: "restored Claude Code binary from v4.2.6 backup"})
-	}
-	return actions, nil
-}
-
-func detectPlatformArtifacts(binDir, self string, names legacyNames) []LegacyAction {
-	var actions []LegacyAction
-	for _, name := range names.legacyLaunchers {
-		path := filepath.Join(binDir, name)
-		if isKnownJuggernautArtifact(path, self) {
-			actions = append(actions, LegacyAction{Path: path, Action: "legacy Juggernaut launcher detected"})
-		}
-	}
-
-	claudePath := filepath.Join(binDir, names.claude)
-	backupPath := filepath.Join(binDir, names.backup)
-	if isKnownJuggernautArtifact(claudePath, self) {
-		actions = append(actions, LegacyAction{Path: claudePath, Action: "legacy Juggernaut claude shim detected"})
-	}
-	if fileExists(backupPath) && !fileExists(claudePath) {
-		actions = append(actions, LegacyAction{Path: claudePath, Action: "Claude Code backup can be restored"})
-	}
-	return actions
-}
-
-type legacyNames struct {
-	claude          string
-	backup          string
-	legacyLaunchers []string
-	commandNames    []string
-}
-
-func platformNames() legacyNames {
-	if runtime.GOOS == "windows" {
-		return legacyNames{
-			claude:          "claude.cmd",
-			backup:          "claude.juggernaut-original.cmd",
-			legacyLaunchers: []string{"juggernaut-claude.cmd"},
-			commandNames:    []string{"claude.exe", "claude.cmd", "claude.bat"},
-		}
-	}
-	return legacyNames{
-		claude:          "claude",
-		backup:          "claude.juggernaut-original",
-		legacyLaunchers: []string{"juggernaut-claude"},
-		commandNames:    []string{"claude"},
-	}
-}
-
-func isKnownJuggernautArtifact(path, self string) bool {
-	if runtime.GOOS == "windows" {
-		data, err := os.ReadFile(path) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread
-		if err != nil {
-			return false
-		}
-		content := string(data)
-		return content == legacyCmdShimLF || content == legacyCmdShimCRLF
-	}
-
-	target, err := os.Readlink(path)
-	if err != nil {
-		return false
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(filepath.Dir(path), target)
-	}
-	if self == "" {
-		return false
-	}
-	return samePath(target, self)
-}
-
 func resolveClaudeBinary(pathList, self string) (string, error) {
-	names := platformNames()
+	names := []string{"claude"}
+	if runtime.GOOS == "windows" {
+		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
+	}
 	for _, dir := range filepath.SplitList(pathList) {
-		for _, name := range names.commandNames {
+		for _, name := range names {
 			candidate := filepath.Join(dir, name)
-			if isKnownJuggernautArtifact(candidate, self) || sameExecutable(candidate, self) {
+			if sameExecutable(candidate, self) {
+				continue
+			}
+			// Reject legacy v4.2.6 claude.cmd/claude.bat shims that invoke
+			// the removed juggernaut --launcher path. These shims are not
+			// the same file as the juggernaut binary, so sameExecutable
+			// alone does not catch them.
+			if isKnownJuggernautArtifact(candidate, self) {
 				continue
 			}
 			if isExecutable(candidate) {
@@ -439,6 +785,28 @@ func resolveClaudeBinary(pathList, self string) (string, error) {
 		}
 	}
 	return "", exec.ErrNotFound
+}
+
+// isLegacyClaudeShim returns true if the file at path is a legacy v4.2.6
+// claude.cmd/claude.bat shim that invokes the removed juggernaut --launcher
+// path. These shims must be rejected so they are not selected as the real
+// Claude Code binary.
+//
+//nolint:unused // retained for future v4.2.6 artifact recovery
+func isLegacyClaudeShim(path string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	// Normalize line endings for comparison — legacy shims may have LF or
+	// CRLF endings, and may have trailing whitespace or extra blank lines.
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.TrimSpace(content)
+	return strings.Contains(content, "juggernaut --launcher")
 }
 
 func sameExecutable(candidate, self string) bool {
@@ -538,6 +906,127 @@ func unsetEnv(env []string, key string) []string {
 		}
 	}
 	return out
+}
+
+// containsTargetPathCI checks if a path exists in a []Target,
+// case-insensitive on Windows.
+func containsTargetPathCI(targets []Target, path string) bool {
+	for _, t := range targets {
+		if runtime.GOOS == "windows" {
+			if strings.EqualFold(t.Path, path) {
+				return true
+			}
+		} else if t.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// legacyNames holds platform-specific file names for v4.2.6 artifacts.
+type legacyNames struct {
+	claude          string
+	backup          string
+	legacyLaunchers []string
+	commandNames    []string
+}
+
+func platformNames() legacyNames {
+	if runtime.GOOS == "windows" {
+		return legacyNames{
+			claude:          "claude.cmd",
+			backup:          "claude.juggernaut-original.cmd",
+			legacyLaunchers: []string{"juggernaut-claude.cmd"},
+			commandNames:    []string{"claude.exe", "claude.cmd", "claude.bat"},
+		}
+	}
+	return legacyNames{
+		claude:          "claude",
+		backup:          "claude.juggernaut-original",
+		legacyLaunchers: []string{"juggernaut-claude"},
+		commandNames:    []string{"claude"},
+	}
+}
+
+// isKnownJuggernautArtifact returns true if the file at path is a known
+// v4.2.6 Juggernaut artifact (legacy shim or symlink to the juggernaut binary).
+func isKnownJuggernautArtifact(path, self string) bool {
+	if runtime.GOOS == "windows" {
+		data, err := os.ReadFile(path) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread
+		if err != nil {
+			return false
+		}
+		content := string(data)
+		// Normalize line endings for comparison — legacy shims may have LF or
+		// CRLF endings, and may have trailing whitespace or extra blank lines.
+		content = strings.ReplaceAll(content, "\r\n", "\n")
+		content = strings.TrimSpace(content)
+		// Normalize the constants the same way for a fair comparison.
+		normalizedLF := strings.TrimSpace(strings.ReplaceAll(legacyCmdShimLF, "\r\n", "\n"))
+		normalizedCRLF := strings.TrimSpace(strings.ReplaceAll(legacyCmdShimCRLF, "\r\n", "\n"))
+		return content == normalizedLF || content == normalizedCRLF
+	}
+
+	target, err := os.Readlink(path)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	if self == "" {
+		return false
+	}
+	return samePath(target, self)
+}
+
+func recoverPlatformArtifacts(binDir, self string, names legacyNames) ([]LegacyAction, error) {
+	var actions []LegacyAction
+	for _, name := range names.legacyLaunchers {
+		path := filepath.Join(binDir, name)
+		if isKnownJuggernautArtifact(path, self) {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return actions, fmt.Errorf("removing %s: %w", path, err)
+			}
+			actions = append(actions, LegacyAction{Path: path, Action: "removed legacy Juggernaut launcher"})
+		}
+	}
+
+	claudePath := filepath.Join(binDir, names.claude)
+	backupPath := filepath.Join(binDir, names.backup)
+	if isKnownJuggernautArtifact(claudePath, self) {
+		if err := os.Remove(claudePath); err != nil && !os.IsNotExist(err) {
+			return actions, fmt.Errorf("removing %s: %w", claudePath, err)
+		}
+		actions = append(actions, LegacyAction{Path: claudePath, Action: "removed legacy Juggernaut claude shim"})
+	}
+	if fileExists(backupPath) && !fileExists(claudePath) {
+		if err := os.Rename(backupPath, claudePath); err != nil {
+			return actions, fmt.Errorf("restoring %s: %w", claudePath, err)
+		}
+		actions = append(actions, LegacyAction{Path: claudePath, Action: "restored Claude Code binary from v4.2.6 backup"})
+	}
+	return actions, nil
+}
+
+func detectPlatformArtifacts(binDir, self string, names legacyNames) []LegacyAction {
+	var actions []LegacyAction
+	for _, name := range names.legacyLaunchers {
+		path := filepath.Join(binDir, name)
+		if isKnownJuggernautArtifact(path, self) {
+			actions = append(actions, LegacyAction{Path: path, Action: "legacy Juggernaut launcher detected"})
+		}
+	}
+
+	claudePath := filepath.Join(binDir, names.claude)
+	backupPath := filepath.Join(binDir, names.backup)
+	if isKnownJuggernautArtifact(claudePath, self) {
+		actions = append(actions, LegacyAction{Path: claudePath, Action: "legacy Juggernaut claude shim detected"})
+	}
+	if fileExists(backupPath) && !fileExists(claudePath) {
+		actions = append(actions, LegacyAction{Path: claudePath, Action: "Claude Code backup can be restored"})
+	}
+	return actions
 }
 
 func fileExists(path string) bool {

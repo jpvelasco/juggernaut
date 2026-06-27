@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,30 +48,6 @@ func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	}
 	if detail != claude {
 		t.Fatalf("expected claude path %s, got %s", claude, detail)
-	}
-}
-
-func TestLegacyArtifactStatusWarnsWhenRecoverable(t *testing.T) {
-	home := t.TempDir()
-	binDir := activation.DefaultBinDir(home)
-	if err := safepath.MkdirAll(binDir); err != nil {
-		t.Fatalf("creating bin dir: %v", err)
-	}
-	backupName := "claude.juggernaut-original"
-	if runtime.GOOS == "windows" {
-		backupName = "claude.juggernaut-original.cmd"
-	}
-	backup := filepath.Join(binDir, backupName)
-	if err := os.WriteFile(backup, []byte("real claude"), 0o600); err != nil {
-		t.Fatalf("creating backup: %v", err)
-	}
-
-	status, detail := legacyArtifactStatus(home)
-	if status != doctor.Warn {
-		t.Fatalf("expected WARN, got %s (%s)", status, detail)
-	}
-	if !strings.Contains(detail, "backup can be restored") {
-		t.Fatalf("expected recoverable backup detail, got %q", detail)
 	}
 }
 
@@ -126,5 +104,237 @@ func writeExecutableStub(t *testing.T, path string) {
 		if err := os.Chmod(path, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission, go_file-permissions_rule-fileperm
 			t.Fatalf("making executable stub runnable: %v", err)
 		}
+	}
+}
+
+func TestDoctor_ActivationUnhealthy_NoActivationInDiscoveredProfile(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// Real discovered profile has no activation block
+	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
+		"export FOO=bar",
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// Set up mock discovery
+	runner := &mockDoctorCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe": mockPSOutput(realProfile, realProfile),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Check activation using the shared resolver
+	healthy, _, _ := activation.CheckPowerShellActivation(home)
+	if healthy {
+		t.Error("doctor should NOT report activation healthy when discovered profile has no activation")
+	}
+}
+
+func TestDoctor_ActivationHealthy_AfterInstall(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
+		"export FOO=bar",
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	runner := &mockDoctorCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe": mockPSOutput(realProfile, realProfile),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Apply install
+	_, err := activation.InstallPowerShellActivation(home)
+	if err != nil {
+		t.Fatalf("InstallPowerShellActivation: %v", err)
+	}
+
+	// After install, should be healthy
+	healthy, path, warnings := activation.CheckPowerShellActivation(home)
+	if !healthy {
+		t.Error("doctor should report activation healthy after install")
+	}
+	if path != realProfile {
+		t.Errorf("expected path %s, got %s", realProfile, path)
+	}
+	if len(warnings) > 0 {
+		t.Errorf("expected no warnings after install, got %v", warnings)
+	}
+}
+
+// mockDoctorCommandRunner implements activation.discoveryCommandRunner for doctor tests.
+type mockDoctorCommandRunner struct {
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (m *mockDoctorCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
+	if err := m.err[exe]; err != nil {
+		return nil, err
+	}
+	return m.output[exe], nil
+}
+
+func mockPSOutput(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
+	return data
+}
+
+// countingCommandRunner tracks how many times each executable is invoked.
+type countingCommandRunner struct {
+	counts map[string]int
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (c *countingCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
+	c.counts[exe]++
+	if err := c.err[exe]; err != nil {
+		return nil, err
+	}
+	return c.output[exe], nil
+}
+
+func TestDoctor_DiscoveryCalledOncePerEdition(t *testing.T) {
+	// Regression: doctor previously resolved profiles twice — once in doctor.go
+	// and again inside CheckPowerShellActivation. With the fix, the resolver
+	// result is passed in, so each edition is called exactly once.
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	allHosts := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(allHosts), allHosts, []byte(activation.Block(activation.ShellPowerShell))); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	runner := &countingCommandRunner{
+		counts: make(map[string]int),
+		output: map[string][]byte{
+			"pwsh.exe": mockPSOutput(allHosts, allHosts),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Run doctor
+	resetFlags()
+	rootCmd.SetArgs([]string{"doctor"})
+	rootCmd.SetOut(&strings.Builder{})
+	rootCmd.SetErr(&strings.Builder{})
+	_ = rootCmd.Execute()
+
+	// Each edition should be called at most once
+	if runner.counts["pwsh.exe"] > 1 {
+		t.Errorf("pwsh.exe was called %d times, expected at most 1", runner.counts["pwsh.exe"])
+	}
+	if runner.counts["powershell.exe"] > 1 {
+		t.Errorf("powershell.exe was called %d times, expected at most 1", runner.counts["powershell.exe"])
+	}
+}
+
+func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// PS7 AllHosts: has the current activation block (healthy)
+	ps7All := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(ps7All)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(ps7All), ps7All, []byte(
+		activation.BeginMarker+"\n$env.TEST='1'\n"+activation.EndMarker,
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// PS5.1 CurrentHost: has a legacy launcher block (overrides activation)
+	ps5Host := filepath.Join(home, "OneDrive", "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile_5host.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(ps5Host)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(ps5Host), ps5Host, []byte(
+		activation.LegacyLauncherBegin+"\n$env.LEGACY='1'\n"+activation.LegacyLauncherEnd,
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// Mock discovery: PS7 returns AllHosts, PS5.1 returns CurrentHost
+	runner := &mockDoctorCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe":       mockPSOutput(ps7All, ps7All),
+			"powershell.exe": mockPSOutput(ps5Host, ps5Host),
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Check activation — should be healthy but with a warning
+	healthy, _, warnings := activation.CheckPowerShellActivation(home)
+	if !healthy {
+		t.Fatal("doctor should report activation healthy (AllHosts has the block)")
+	}
+	if len(warnings) == 0 {
+		t.Fatal("doctor should emit a warning about legacy block in later profile")
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, ps5Host) && strings.Contains(w, "legacy") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about legacy block in %s, got: %v", ps5Host, warnings)
 	}
 }

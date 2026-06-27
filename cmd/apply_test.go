@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ func TestApply_StorageFlagUnrecognized(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{
 		"apply", "--storage=profile", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -38,6 +41,7 @@ func TestApply_DryRun_IAM(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{
 		"apply",
@@ -60,6 +64,7 @@ func TestApply_DryRun_BedrockAPIKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{
 		"apply",
@@ -83,6 +88,7 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -150,6 +156,7 @@ func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -182,6 +189,7 @@ func TestApply_DefaultMantleDisabledPreservesInferenceProfiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -216,6 +224,7 @@ func TestApply_MantleFlagStripsInferenceProfilePrefix(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -246,6 +255,7 @@ func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	const customModel = "custom.model.id"
 	if err := ExecuteArgs([]string{
@@ -284,6 +294,7 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	// Apply with all new flags to ensure they get cleaned up.
 	if err := ExecuteArgs([]string{
@@ -318,6 +329,7 @@ func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	bashrc := filepath.Join(home, ".bashrc")
 	if err := safepath.WriteFile(home, bashrc, []byte("export KEEP=1\n")); err != nil {
@@ -346,6 +358,7 @@ func TestApply_ReApply_PermissionMode_Preserved(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	// First apply sets mode=auto.
 	if err := ExecuteArgs([]string{
@@ -383,6 +396,7 @@ func TestApply_ReApply_AlwaysThinkingOff_DeletesKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	// First apply with --always-thinking.
 	if err := ExecuteArgs([]string{
@@ -434,6 +448,7 @@ func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 	store := setupIsolatedKeychain(t)
 
 	// Pre-seed the keychain (simulates post-migration state).
@@ -460,6 +475,7 @@ func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 	store := setupIsolatedKeychain(t)
 	t.Cleanup(func() { _ = store.Delete() })
 
@@ -482,6 +498,7 @@ func TestApply_PermissionMode_AutoSetsBedrockEnvVar(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
@@ -513,6 +530,7 @@ func TestApply_PermissionMode_InvalidErrors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--mode=bogus", "--skip-preflight",
@@ -526,6 +544,7 @@ func TestApply_FableAndFallbackWritesNativeKeys(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	const fableModel = "custom.fable.model"
 	if err := ExecuteArgs([]string{
@@ -570,6 +589,7 @@ func TestApply_FallbackModelRejectsEmptyEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -588,6 +608,7 @@ func TestApply_ServiceTier_WritesEnvVar(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--service-tier=flex", "--skip-preflight",
@@ -610,6 +631,7 @@ func TestApply_AlwaysThinking_WritesNativeKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--always-thinking", "--skip-preflight",
@@ -631,6 +653,7 @@ func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--effort=medium", "--skip-preflight",
@@ -652,6 +675,7 @@ func TestApply_MaxEffortUsesEnvOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--effort=max", "--skip-preflight",
@@ -677,6 +701,7 @@ func TestApply_EffortAutoUsesEnvOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--effort=auto", "--skip-preflight"})
 	if err != nil {
@@ -701,6 +726,7 @@ func TestApply_EffortUltracodeInvalid(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--effort=ultracode", "--skip-preflight"})
 	if err == nil {
@@ -715,6 +741,7 @@ func TestApply_SkipWebFetchPreflight_AlwaysSet(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -784,6 +811,46 @@ func readSettingsJSON(t *testing.T, home string) []byte {
 	return data
 }
 
+// setupMockPSRunner sets a mock PowerShell discovery runner on Windows so
+// that command-level tests never touch real PowerShell profiles.
+// It returns a cleanup function that should be deferred.
+func setupMockPSRunner(t *testing.T, home string) {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return
+	}
+	psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	runner := &mockApplyCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe":       mockApplyPSOutput(psProfile, psProfile),
+			"powershell.exe": mockApplyPSOutput(psProfile, psProfile),
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	t.Cleanup(activation.ResetPSRunnerForTesting)
+}
+
+// mockApplyCommandRunner implements activation.discoveryCommandRunner for apply tests.
+type mockApplyCommandRunner struct {
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (m *mockApplyCommandRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
+	if err := m.err[exe]; err != nil {
+		return nil, err
+	}
+	return m.output[exe], nil
+}
+
+func mockApplyPSOutput(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
+	return data
+}
+
 // captureStdout runs fn while redirecting os.Stdout and returns what was printed.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
@@ -811,6 +878,7 @@ func TestApply_AutoMode_WarnsWhenModelNotOpus(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -829,6 +897,7 @@ func TestApply_AutoMode_NoWarnWhenModelIsOpus(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -848,6 +917,7 @@ func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{

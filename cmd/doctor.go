@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -72,19 +73,39 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 
 	checkConnectivity(r, home, token, scopes)
 
-	activationPaths := activation.InstalledTargets(home)
-	if len(activationPaths) > 0 {
-		r.Check("claude activation", doctor.OK, strings.Join(activationPaths, ", "))
+	// Use the shared resolver to check activation on the effective profiles.
+	if runtime.GOOS == "windows" {
+		psResult := activation.ResolvePowerShellProfiles()
+		healthy, path, warnings := activation.CheckPowerShellActivationWith(home, &psResult)
+		if healthy {
+			r.Check("claude activation", doctor.OK, "active in "+path)
+		} else {
+			r.Check("claude activation", doctor.Warn, "not active in discovered profiles — run `juggernaut apply` and restart or source your shell")
+		}
+		for _, w := range warnings {
+			r.Check("activation warning", doctor.Warn, w)
+		}
+		// Report discovery status (reuse the already-resolved result).
+		// Only emit OK when editions were actually discovered.
+		if len(psResult.EditionsDiscovered) > 0 {
+			editions := strings.Join(psResult.EditionsDiscovered, ", ")
+			r.Check("powershell discovery", doctor.OK, "editions: "+editions)
+		}
+		for _, w := range psResult.DiscoveryWarnings {
+			r.Check("powershell discovery", doctor.Warn, w)
+		}
 	} else {
-		r.Check("claude activation", doctor.Warn, "not installed — run `juggernaut apply` and restart or source your shell")
+		activationPaths := activation.InstalledTargets(home)
+		if len(activationPaths) > 0 {
+			r.Check("claude activation", doctor.OK, strings.Join(activationPaths, ", "))
+		} else {
+			r.Check("claude activation", doctor.Warn, "not installed — run `juggernaut apply` and restart or source your shell")
+		}
 	}
 	if status, detail := claudeCommandStatus(); status != "" {
 		r.Check("claude binary", status, detail)
 	}
-	if status, detail := legacyArtifactStatus(home); status != "" {
-		r.Check("v4.2.6 artifacts", status, detail)
-	}
-
+	legacyArtifactStatus(home, r)
 	if doctorFlags.jsonOut {
 		out, err := r.JSON()
 		if err != nil {
@@ -109,16 +130,12 @@ func claudeCommandStatus() (doctor.Status, string) {
 	return doctor.OK, found
 }
 
-func legacyArtifactStatus(home string) (doctor.Status, string) {
-	actions := activation.DetectLegacyArtifacts(activation.DefaultBinDir(home))
-	if len(actions) == 0 {
-		return doctor.OK, "no broken v4.2.6 artifacts detected"
+func legacyArtifactStatus(home string, r *doctor.Report) {
+	binDir := activation.DefaultBinDir(home)
+	artifacts := activation.DetectLegacyArtifacts(binDir)
+	for _, a := range artifacts {
+		r.Check("v4.2.6 artifact", doctor.Warn, fmt.Sprintf("%s: %s", a.Action, a.Path))
 	}
-	parts := make([]string, 0, len(actions))
-	for _, action := range actions {
-		parts = append(parts, action.Action+": "+action.Path)
-	}
-	return doctor.Warn, strings.Join(parts, "; ") + " — run `juggernaut apply` to recover"
 }
 
 func checkConnectivity(r *doctor.Report, home, token string, scopes []string) {

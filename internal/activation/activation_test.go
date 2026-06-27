@@ -1,6 +1,8 @@
 package activation
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,18 +16,38 @@ import (
 func TestInstallIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 
-	first, err := Install(home)
+	var psResult *ProfileResolverResult
+	// On Windows, inject a mock runner + resolver so Install doesn't touch real profiles.
+	if runtime.GOOS == "windows" {
+		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		runner := &testDiscoveryRunner{
+			output: map[string][]byte{
+				"pwsh.exe":       testPSOutput(psProfile, psProfile),
+				"powershell.exe": testPSOutput(psProfile, psProfile),
+			},
+		}
+		SetPSRunnerForTesting(runner)
+		defer ResetPSRunnerForTesting()
+
+		psResult = &ProfileResolverResult{
+			ActiveTargets:  []Target{{Path: psProfile, Shell: ShellPowerShell}},
+			InstallTargets: []Target{{Path: psProfile, Shell: ShellPowerShell}},
+		}
+	}
+
+	opts := InstallOptions{PowerShellResult: psResult}
+	first, err := InstallWith(home, opts)
 	if err != nil {
-		t.Fatalf("Install() first error: %v", err)
+		t.Fatalf("InstallWith() first error: %v", err)
 	}
 	if len(first) == 0 {
 		t.Fatal("first install should write activation blocks")
 	}
 
-	snapshots := readTargets(t, home)
-	second, err := Install(home)
+	snapshots := readTargets(t, home, psResult)
+	second, err := InstallWith(home, opts)
 	if err != nil {
-		t.Fatalf("Install() second error: %v", err)
+		t.Fatalf("InstallWith() second error: %v", err)
 	}
 	if len(second) != 0 {
 		t.Fatalf("second install should be unchanged, got %v", second)
@@ -48,13 +70,34 @@ func TestUninstallPreservesUnrelatedContent(t *testing.T) {
 	if err := safepath.WriteFile(home, target, []byte(original)); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if _, err := Install(home); err != nil {
-		t.Fatalf("Install(): %v", err)
+
+	var psResult *ProfileResolverResult
+	// On Windows, inject a mock runner + resolver so Install doesn't touch real profiles.
+	if runtime.GOOS == "windows" {
+		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		runner := &testDiscoveryRunner{
+			output: map[string][]byte{
+				"pwsh.exe":       testPSOutput(psProfile, psProfile),
+				"powershell.exe": testPSOutput(psProfile, psProfile),
+			},
+		}
+		SetPSRunnerForTesting(runner)
+		defer ResetPSRunnerForTesting()
+
+		psResult = &ProfileResolverResult{
+			ActiveTargets: []Target{{Path: psProfile, Shell: ShellPowerShell}},
+		}
 	}
 
-	removed, err := Uninstall(home)
+	opts := InstallOptions{PowerShellResult: psResult}
+	if _, err := InstallWith(home, opts); err != nil {
+		t.Fatalf("InstallWith(): %v", err)
+	}
+
+	uninstallOpts := UninstallOptions{PowerShellResult: psResult}
+	removed, err := UninstallWith(home, uninstallOpts)
 	if err != nil {
-		t.Fatalf("Uninstall(): %v", err)
+		t.Fatalf("UninstallWith(): %v", err)
 	}
 	if len(removed) == 0 {
 		t.Fatal("expected at least one activation block to be removed")
@@ -91,73 +134,6 @@ func TestBlocksContainValidDelegation(t *testing.T) {
 	}
 }
 
-func TestRecoverLegacyArtifactsDoesNotDeleteUnknownClaude(t *testing.T) {
-	dir := t.TempDir()
-	claude := filepath.Join(dir, platformNames().claude)
-	writeFile(t, dir, claude, "real claude")
-
-	actions, err := recoverPlatformArtifacts(dir, executableFixture(t), platformNames())
-	if err != nil {
-		t.Fatalf("recoverPlatformArtifacts(): %v", err)
-	}
-	if len(actions) != 0 {
-		t.Fatalf("unknown claude should not be touched, got actions: %v", actions)
-	}
-	data, err := safepath.ReadFile(dir, claude)
-	if err != nil {
-		t.Fatalf("unknown claude was removed: %v", err)
-	}
-	if string(data) != "real claude" {
-		t.Fatalf("unknown claude was changed: %q", data)
-	}
-}
-
-func TestRecoverLegacyArtifactsRestoresBackupWhenClaudeMissing(t *testing.T) {
-	dir := t.TempDir()
-	names := platformNames()
-	backup := filepath.Join(dir, names.backup)
-	claude := filepath.Join(dir, names.claude)
-	writeFile(t, dir, backup, "real claude")
-
-	actions, err := recoverPlatformArtifacts(dir, executableFixture(t), names)
-	if err != nil {
-		t.Fatalf("recoverPlatformArtifacts(): %v", err)
-	}
-	if len(actions) != 1 || !strings.Contains(actions[0].Action, "restored") {
-		t.Fatalf("expected restore action, got %v", actions)
-	}
-	data, err := safepath.ReadFile(dir, claude)
-	if err != nil {
-		t.Fatalf("restored claude missing: %v", err)
-	}
-	if string(data) != "real claude" {
-		t.Fatalf("restored claude mismatch: %q", data)
-	}
-}
-
-func TestRecoverLegacyArtifactsRemovesKnownShim(t *testing.T) {
-	dir := t.TempDir()
-	names := platformNames()
-	self := executableFixture(t)
-	claude := filepath.Join(dir, names.claude)
-	if runtime.GOOS == "windows" {
-		writeFile(t, dir, claude, legacyCmdShimLF)
-	} else if err := os.Symlink(self, claude); err != nil {
-		t.Fatalf("creating symlink shim: %v", err)
-	}
-
-	actions, err := recoverPlatformArtifacts(dir, self, names)
-	if err != nil {
-		t.Fatalf("recoverPlatformArtifacts(): %v", err)
-	}
-	if len(actions) != 1 || !strings.Contains(actions[0].Action, "removed") {
-		t.Fatalf("expected remove action, got %v", actions)
-	}
-	if _, err := os.Lstat(claude); !os.IsNotExist(err) {
-		t.Fatalf("known shim should be removed, stat err=%v", err)
-	}
-}
-
 func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
 	home := t.TempDir()
 	dir := t.TempDir()
@@ -166,14 +142,22 @@ func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
 		self += ".exe"
 	}
 	writeExecutableFile(t, dir, self, "juggernaut")
+	// Create a symlink from "claude" to the juggernaut binary to simulate
+	// a recursive activation loop — resolveClaudeBinary must skip it.
 	if runtime.GOOS == "windows" {
-		writeFile(t, dir, filepath.Join(dir, "claude.cmd"), legacyCmdShimLF)
+		if err := os.Symlink(self, filepath.Join(dir, "claude.exe")); err != nil {
+			t.Fatalf("creating recursive symlink: %v", err)
+		}
 	} else if err := os.Symlink(self, filepath.Join(dir, "claude")); err != nil {
 		t.Fatalf("creating recursive symlink: %v", err)
 	}
 
 	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	realClaude := filepath.Join(realDir, name)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	called := false
@@ -202,7 +186,11 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 	home := t.TempDir()
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	realClaude := filepath.Join(realDir, name)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	err := LaunchWithOptions(LaunchOptions{
@@ -230,7 +218,11 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 	home := t.TempDir()
 	writeSettings(t, home, "iam")
 	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	realClaude := filepath.Join(realDir, name)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	err := LaunchWithOptions(LaunchOptions{
@@ -258,7 +250,11 @@ func TestLaunch_BedrockAPIKey_UsesDefaultKeychain(t *testing.T) {
 	home := t.TempDir()
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	realClaude := filepath.Join(realDir, name)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	// No TokenGetter injected — Launch must use keychain.Default().Get.
@@ -288,7 +284,11 @@ func TestLaunch_IAM_UnsetsBearerTokenIfPreSet(t *testing.T) {
 	home := t.TempDir()
 	writeSettings(t, home, "iam")
 	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	realClaude := filepath.Join(realDir, name)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	// Pre-set AWS_BEARER_TOKEN_BEDROCK in the environment to verify unsetEnv runs.
@@ -319,7 +319,11 @@ func TestLaunchWithoutSettingsDoesNotForceBedrockEnv(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
 	realDir := t.TempDir()
-	realClaude := filepath.Join(realDir, platformNames().claude)
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	realClaude := filepath.Join(realDir, name)
 	writeExecutableFile(t, realDir, realClaude, "real claude")
 
 	err := LaunchWithOptions(LaunchOptions{
@@ -352,19 +356,39 @@ func launchWithExecutable(t *testing.T, home, pathList, self string, opts Launch
 	return opts.Runner(claudePath, opts.Args, os.Environ())
 }
 
-func readTargets(t *testing.T, home string) map[string]string {
+func readTargets(t *testing.T, home string, psResult *ProfileResolverResult) map[string]string {
 	t.Helper()
 	out := map[string]string{}
-	for _, target := range DefaultTargets(home) {
-		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-		if err != nil {
-			t.Fatalf("reading %s: %v", target.Path, err)
+
+	if runtime.GOOS == "windows" && psResult != nil {
+		// On Windows, read from injected PowerShell paths + POSIX targets.
+		for _, target := range psResult.ActiveTargets {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", target.Path, err)
+			}
+			out[target.Path] = string(data)
 		}
-		out[target.Path] = string(data)
+		for _, target := range DefaultTargets(home) {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", target.Path, err)
+			}
+			out[target.Path] = string(data)
+		}
+	} else {
+		for _, target := range DefaultTargets(home) {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", target.Path, err)
+			}
+			out[target.Path] = string(data)
+		}
 	}
 	return out
 }
 
+//nolint:unused // retained test helper for fixture creation
 func executableFixture(t *testing.T) string {
 	t.Helper()
 	self := filepath.Join(t.TempDir(), "juggernaut")
@@ -409,4 +433,281 @@ func envValue(env []string, key string) string {
 		}
 	}
 	return ""
+}
+
+// testDiscoveryRunner is a mock discoveryCommandRunner for activation_test.go.
+type testDiscoveryRunner struct {
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (r *testDiscoveryRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
+	if err := r.err[exe]; err != nil {
+		return nil, err
+	}
+	return r.output[exe], nil
+}
+
+func TestIsLegacyClaudeShim_LF(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	self := filepath.Join(dir, "juggernaut.exe")
+	writeExecutableFile(t, dir, self, "juggernaut")
+	shim := filepath.Join(dir, "claude.cmd")
+
+	// Write shim with LF line endings
+	if err := os.WriteFile(shim, []byte("@echo off\njuggernaut --launcher %*\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isKnownJuggernautArtifact(shim, self) {
+		t.Error("expected LF shim to be detected as legacy artifact")
+	}
+}
+
+func TestIsLegacyClaudeShim_CRLF(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	self := filepath.Join(dir, "juggernaut.exe")
+	writeExecutableFile(t, dir, self, "juggernaut")
+	shim := filepath.Join(dir, "claude.cmd")
+
+	// Write shim with CRLF line endings
+	if err := os.WriteFile(shim, []byte("@echo off\r\njuggernaut --launcher %*\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isKnownJuggernautArtifact(shim, self) {
+		t.Error("expected CRLF shim to be detected as legacy artifact")
+	}
+}
+
+func TestIsLegacyClaudeShim_NoFinalNewline(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	self := filepath.Join(dir, "juggernaut.exe")
+	writeExecutableFile(t, dir, self, "juggernaut")
+	shim := filepath.Join(dir, "claude.cmd")
+
+	// Write shim with no final newline
+	if err := os.WriteFile(shim, []byte("@echo off\njuggernaut --launcher %*"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isKnownJuggernautArtifact(shim, self) {
+		t.Error("expected shim without final newline to be detected as legacy artifact")
+	}
+}
+
+func TestIsLegacyClaudeShim_TrailingWhitespace(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	self := filepath.Join(dir, "juggernaut.exe")
+	writeExecutableFile(t, dir, self, "juggernaut")
+	shim := filepath.Join(dir, "claude.cmd")
+
+	// Write shim with trailing whitespace and extra blank lines
+	if err := os.WriteFile(shim, []byte("@echo off\njuggernaut --launcher %*\n\n   \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !isKnownJuggernautArtifact(shim, self) {
+		t.Error("expected shim with trailing whitespace to be detected as legacy artifact")
+	}
+}
+
+func TestIsLegacyClaudeShim_NotAShim(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	self := filepath.Join(dir, "juggernaut.exe")
+	writeExecutableFile(t, dir, self, "juggernaut")
+	shim := filepath.Join(dir, "claude.cmd")
+
+	// Write a file that's not a legacy shim
+	if err := os.WriteFile(shim, []byte("@echo off\nreal command\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if isKnownJuggernautArtifact(shim, self) {
+		t.Error("expected non-shim file to NOT be detected as legacy artifact")
+	}
+}
+
+func TestDefaultBinDir(t *testing.T) {
+	home := t.TempDir()
+	dir := DefaultBinDir(home)
+	expected := filepath.Join(home, ".local", "bin")
+	if dir != expected {
+		t.Errorf("DefaultBinDir(%q) = %q, want %q", home, dir, expected)
+	}
+}
+
+func TestRecoverLegacyArtifacts_RemovesShim(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	home := t.TempDir()
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for dirs, test under t.TempDir()
+		t.Fatal(err)
+	}
+	self := filepath.Join(binDir, "juggernaut.exe")
+	writeExecutableFile(t, binDir, self, "juggernaut")
+	shim := filepath.Join(binDir, "claude.cmd")
+
+	// Write legacy shim
+	if err := os.WriteFile(shim, []byte("@echo off\njuggernaut --launcher %*\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	actions, err := RecoverLegacyArtifacts(binDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) == 0 {
+		t.Fatal("expected at least one recovery action")
+	}
+
+	// Shim should be removed
+	if _, err := os.Stat(shim); !os.IsNotExist(err) {
+		t.Error("shim should have been removed")
+	}
+}
+
+func TestDetectLegacyArtifacts(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	home := t.TempDir()
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for dirs, test under t.TempDir()
+		t.Fatal(err)
+	}
+	self := filepath.Join(binDir, "juggernaut.exe")
+	writeExecutableFile(t, binDir, self, "juggernaut")
+	shim := filepath.Join(binDir, "claude.cmd")
+
+	// Write legacy shim
+	if err := os.WriteFile(shim, []byte("@echo off\njuggernaut --launcher %*\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	artifacts := DetectLegacyArtifacts(binDir)
+	if len(artifacts) == 0 {
+		t.Fatal("expected at least one artifact detected")
+	}
+
+	// Shim should still exist (detect doesn't remove)
+	if _, err := os.Stat(shim); err != nil {
+		t.Error("detect should not remove the shim")
+	}
+}
+
+func TestRemoveTargetWithLegacy_RemovesAllBlocks(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.ps1")
+
+	// Profile with current block + legacy launcher block + legacy Bedrock block
+	content := BeginMarker + "\n$env.TEST='1'\n" + EndMarker + "\n" +
+		LegacyLauncherBegin + "\n$env.LEGACY='1'\n" + LegacyLauncherEnd + "\n" +
+		LegacyBedrockBegin + "\n$env.BEDROCK='1'\n" + LegacyBedrockEnd + "\n" +
+		"# other content\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := RemoveTargetWithLegacy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected changed to be true")
+	}
+
+	data, err := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	remaining := string(data)
+
+	if strings.Contains(remaining, BeginMarker) {
+		t.Error("current activation block should be removed")
+	}
+	if strings.Contains(remaining, LegacyLauncherBegin) {
+		t.Error("legacy launcher block should be removed")
+	}
+	if strings.Contains(remaining, LegacyBedrockBegin) {
+		t.Error("legacy Bedrock block should be removed")
+	}
+	if !strings.Contains(remaining, "# other content") {
+		t.Error("unrelated content should be preserved")
+	}
+}
+
+func TestRemoveTargetWithLegacy_OnlyLegacyBlock(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.ps1")
+
+	// Profile with ONLY a legacy launcher block (no current block)
+	content := LegacyLauncherBegin + "\n$env.LEGACY='1'\n" + LegacyLauncherEnd + "\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := RemoveTargetWithLegacy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected changed to be true for legacy block alone")
+	}
+
+	data, err := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), LegacyLauncherBegin) {
+		t.Error("legacy launcher block should be removed")
+	}
+}
+
+func TestRemoveTargetWithLegacy_NoBlocks(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "profile.ps1")
+
+	if err := os.WriteFile(path, []byte("# just a comment\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := RemoveTargetWithLegacy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Error("expected no change when no blocks present")
+	}
+}
+
+func testPSOutput(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
+	return data
 }

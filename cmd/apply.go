@@ -214,8 +214,8 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 		return err
 	}
 
-	reportLegacyRecovery(home)
 	installActivation(home)
+	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
 	warnAutoModeModel(block)
 	return nil
@@ -255,17 +255,6 @@ func warnAutoModeModel(block *schema.Block) {
 	fmt.Println("  or switch with `/model opus` inside a session (your opus alias is pinned to Opus 4.8).")
 }
 
-func reportLegacyRecovery(home string) {
-	actions, err := activation.RecoverLegacyArtifacts(activation.DefaultBinDir(home))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy launcher artifacts: %v\n", err)
-		return
-	}
-	for _, action := range actions {
-		fmt.Printf("  ✓ %s: %s\n", action.Action, action.Path)
-	}
-}
-
 func installActivation(home string) {
 	paths, err := activation.Install(home)
 	if err != nil {
@@ -277,6 +266,18 @@ func installActivation(home string) {
 		return
 	}
 	fmt.Printf("  ✓ Installed Claude activation in %d shell profile(s)\n", len(paths))
+}
+
+func reportLegacyRecovery(home string) {
+	binDir := activation.DefaultBinDir(home)
+	actions, err := activation.RecoverLegacyArtifacts(binDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy artifacts: %v\n", err)
+		return
+	}
+	for _, a := range actions {
+		fmt.Printf("  ✓ %s: %s\n", a.Action, a.Path)
+	}
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
