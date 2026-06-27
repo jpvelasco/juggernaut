@@ -122,7 +122,7 @@ func TestGetWithFallback_ReadsFromFile(t *testing.T) {
 	}
 }
 
-func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
+func TestGetWithFallback_FileWinsOverKeychain(t *testing.T) {
 	s := testStore()
 	skipIfUnavailable(t, s)
 	defer func() { _ = s.Delete() }()
@@ -144,8 +144,8 @@ func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWithFallback() error: %v", err)
 	}
-	if got != "keychain-token" {
-		t.Errorf("expected keychain-token (keychain should win), got %q", got)
+	if got != "file-token" {
+		t.Errorf("expected file-token (fallback file should win), got %q", got)
 	}
 }
 
@@ -246,5 +246,37 @@ func TestIsTooBigForKeychain(t *testing.T) {
 	}
 	if !keychain.IsTooBigForKeychain(strings.Repeat("a", 3000)) {
 		t.Error("expected true for long token on Windows")
+	}
+}
+
+// TestSetWithFallback_FailsWhenCredentialPathCannotBeRemoved proves that
+// writeCredentialFile does not silently continue after a failed os.Remove.
+// If removal fails, the subsequent os.WriteFile could overwrite the credential
+// while retaining permissive file permissions — this regression test ensures
+// that scenario is rejected.
+func TestSetWithFallback_FailsWhenCredentialPathCannotBeRemoved(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+
+	// Make the credential path a non-empty directory so os.Remove fails
+	// (directory with content cannot be removed).
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := os.MkdirAll(filePath, 0o700); err != nil {
+		t.Fatalf("creating directory: %v", err)
+	}
+	// Put something inside so the directory is non-empty and cannot be removed.
+	if err := os.WriteFile(filepath.Join(filePath, "blocker"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("writing blocker: %v", err)
+	}
+
+	// Use a short token so the keychain path is tried first; on non-Windows
+	// the keychain will likely succeed and the test is meaningless. On
+	// Windows with a working keychain, the keychain write succeeds and we
+	// don't reach the file fallback. To force the file fallback on all
+	// platforms, use an oversized token.
+	token := strings.Repeat("x", 2600)
+	if err := s.SetWithFallback(token, home); err == nil {
+		t.Fatal("expected SetWithFallback to fail when credential path cannot be removed")
 	}
 }
