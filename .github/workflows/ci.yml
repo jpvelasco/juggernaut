@@ -48,6 +48,12 @@ jobs:
           go-version: "1.26"
       - name: Run tests with coverage
         run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
+      # Normalize CRLF -> LF. Go on the Windows runner writes coverage.out with
+      # CRLF line endings, which Codecov's parser rejects (the upload lands in
+      # an ERROR state and never merges). A no-op on Linux/macOS.
+      - name: Normalize coverage line endings
+        shell: bash
+        run: sed -i 's/\r$//' coverage.out
       # Upload per-OS coverage so Codecov merges all three legs. Much of the
       # PowerShell/launcher/keychain code is Windows-only, so a Linux-only
       # report understates true coverage; merging the OS matrix reflects it.
