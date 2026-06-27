@@ -1,6 +1,6 @@
 module github.com/jpvelasco/juggernaut/v5
 
-go 1.26
+go 1.26.4
 
 require (
 	github.com/charmbracelet/huh v1.0.0
