@@ -46,7 +46,7 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 
 	uninstallSettingsBlocks(home)
 	if !uninstallFlags.dryRun {
-		removeKeychainToken()
+		removeKeychainToken(home)
 	}
 	if uninstallFlags.full {
 		uninstallActivationFull(home)
@@ -116,8 +116,8 @@ func uninstallSettingsBlock(home, scope string) {
 	fmt.Printf("  ✓ Removed juggernaut block from %s settings.json\n", scope)
 }
 
-func removeKeychainToken() {
-	if err := keychain.Default().Delete(); err != nil {
+func removeKeychainToken(home string) {
+	if err := keychain.Default().DeleteWithFallback(home); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove keychain entry: %v\n", err)
 		return
 	}

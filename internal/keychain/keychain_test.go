@@ -2,6 +2,9 @@ package keychain_test
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
@@ -71,5 +74,95 @@ func TestDelete(t *testing.T) {
 	got, _ := s.Get()
 	if got != "" {
 		t.Error("expected empty after delete")
+	}
+}
+
+func TestSetWithFallback_FallsBackToFile(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+
+	// Use a token longer than the Windows keychain limit (2560 bytes) to
+	// force the file fallback path.
+	token := strings.Repeat("x", 2600)
+	if err := s.SetWithFallback(token, home); err != nil {
+		t.Fatalf("SetWithFallback() error: %v", err)
+	}
+
+	// Read it back via the fallback getter.
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != token {
+		t.Errorf("expected token of length %d, got %d", len(token), len(got))
+	}
+
+	// Verify the file exists and has the right content.
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("reading fallback file: %v", err)
+	}
+	if string(data) != token {
+		t.Errorf("file content mismatch: expected length %d, got %d", len(token), len(data))
+	}
+}
+
+func TestGetWithFallback_ReturnsEmptyWhenNothingStored(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty string, got length %d", len(got))
+	}
+}
+
+func TestDeleteWithFallback_RemovesFile(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+
+	// Force file fallback with a long token.
+	token := strings.Repeat("y", 2600)
+	if err := s.SetWithFallback(token, home); err != nil {
+		t.Fatalf("SetWithFallback() error: %v", err)
+	}
+
+	if err := s.DeleteWithFallback(home); err != nil {
+		t.Fatalf("DeleteWithFallback() error: %v", err)
+	}
+
+	// File should be gone.
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty after delete, got length %d", len(got))
+	}
+}
+
+func TestIsTooBigForKeychain(t *testing.T) {
+	// On non-Windows, always false regardless of size.
+	if runtime.GOOS != "windows" {
+		if keychain.IsTooBigForKeychain("short") {
+			t.Error("expected false for short token on non-Windows")
+		}
+		if keychain.IsTooBigForKeychain(strings.Repeat("a", 3000)) {
+			t.Error("expected false for long token on non-Windows")
+		}
+		return
+	}
+
+	// On Windows, short tokens are fine, long ones are rejected.
+	if keychain.IsTooBigForKeychain("short") {
+		t.Error("expected false for short token on Windows")
+	}
+	if !keychain.IsTooBigForKeychain(strings.Repeat("a", 3000)) {
+		t.Error("expected true for long token on Windows")
 	}
 }

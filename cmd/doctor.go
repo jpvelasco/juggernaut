@@ -61,7 +61,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	token, err := keychain.Default().Get()
+	token, err := keychain.Default().GetWithFallback(home)
 	switch {
 	case err != nil:
 		r.Check("keychain", doctor.Warn, "error reading: "+err.Error())

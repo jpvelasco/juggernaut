@@ -1,15 +1,29 @@
-// Package keychain provides cross-platform credential storage via go-keyring.
+// Package keychain provides cross-platform credential storage via go-keyring,
+// with a file-based fallback for tokens that exceed the Windows Credential
+// Manager 2560-byte limit.
 package keychain
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	keyring "github.com/zalando/go-keyring"
 )
 
 const defaultService = "juggernaut-bedrock"
 
 const account = "bedrock-credential"
+
+// MaxWindowsKeychainSize is the hard limit enforced by go-keyring on Windows
+// (CRED_MAX_CREDENTIAL_BLOB_SIZE). Tokens longer than this cannot be stored
+// in the OS keychain and must use the file fallback.
+const MaxWindowsKeychainSize = 2560
+
+// credentialFile is the filename used for the file-based fallback storage
+// inside ~/.claude/.
+const credentialFile = "juggernaut-credential"
 
 // Store wraps go-keyring with a fixed account name and configurable service name.
 type Store struct {
@@ -78,5 +92,60 @@ func (s *Store) Delete() error {
 	if err != nil && err != keyring.ErrNotFound {
 		return err
 	}
+	return nil
+}
+
+// IsTooBigForKeychain reports whether the token exceeds the Windows keychain
+// limit. On non-Windows platforms this always returns false.
+func IsTooBigForKeychain(token string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	return len(token) > MaxWindowsKeychainSize
+}
+
+// credentialFilePath returns the path to the file-based fallback credential
+// store under ~/.claude/.
+func credentialFilePath(home string) string {
+	return filepath.Join(home, ".claude", credentialFile)
+}
+
+// SetWithFallback stores the token in the OS keychain. If the token is too
+// large for the keychain (Windows 2560-byte limit), or if the keychain is
+// unavailable, it falls back to a file at ~/.claude/juggernaut-credential
+// with owner-only permissions.
+func (s *Store) SetWithFallback(token, home string) error {
+	// Try the OS keychain first.
+	err := s.Set(token)
+	if err == nil {
+		return nil
+	}
+	// Fall back to file storage on keychain failure (too big, unavailable, etc.).
+	return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
+}
+
+// GetWithFallback retrieves the token from the OS keychain. If the keychain
+// has no entry, it falls back to the file at ~/.claude/juggernaut-credential.
+func (s *Store) GetWithFallback(home string) (string, error) {
+	token, err := s.Get()
+	if err == nil && token != "" {
+		return token, nil
+	}
+	// Fall back to file storage.
+	data, err := safepath.ReadFile(home, credentialFilePath(home))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
+// DeleteWithFallback removes the token from both the OS keychain and the
+// file-based fallback. Silent if neither exists.
+func (s *Store) DeleteWithFallback(home string) error {
+	_ = s.Delete()
+	_ = os.Remove(credentialFilePath(home))
 	return nil
 }
