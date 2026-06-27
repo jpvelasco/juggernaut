@@ -1,0 +1,45 @@
+# Codecov configuration. See https://docs.codecov.com/docs/codecov-yaml
+#
+# Coverage is uploaded from the test-coverage CI job via OIDC (no stored
+# CODECOV_TOKEN). Both gates below block PRs:
+#   - project: overall coverage may not drop more than the threshold
+#   - patch:   new/changed lines in a PR must meet the target
+coverage:
+  status:
+    project:
+      default:
+        target: auto       # compare against the base commit's coverage
+        threshold: 1%       # tolerate <=1% drift before failing
+    patch:
+      default:
+        target: 80%         # new/changed lines must be >=80% covered
+
+# Virtual coverage groupings by path — no upload changes required. Breaks the
+# dashboard and PR comment down by architectural layer (cmd vs internal).
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        threshold: 1%
+  individual_components:
+    - component_id: cmd
+      name: cmd (CLI layer)
+      paths:
+        - cmd/**
+    - component_id: internal
+      name: internal (core packages)
+      paths:
+        - internal/**
+
+comment:
+  layout: "reach, diff, flags, components, files"
+  behavior: default
+  require_changes: false
+
+# Paths excluded from coverage math.
+ignore:
+  - "**/*_test.go"
+  - "main.go"          # thin //go:embed + Execute() entry point
+  - "npm/**"           # JS shim, not part of Go coverage
+  - "scripts/**"
