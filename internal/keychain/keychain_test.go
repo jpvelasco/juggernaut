@@ -83,7 +83,9 @@ func TestSetWithFallback_FallsBackToFile(t *testing.T) {
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
 	// Use a token longer than the Windows keychain limit (2560 bytes) to
-	// force the file fallback path.
+	// force the file fallback path on Windows. On non-Windows the keychain
+	// has no such limit, so the token may land in the keychain — the
+	// GetWithFallback path still proves round-trip correctness.
 	token := strings.Repeat("x", 2600)
 	if err := s.SetWithFallback(token, home); err != nil {
 		t.Fatalf("SetWithFallback() error: %v", err)
@@ -97,15 +99,58 @@ func TestSetWithFallback_FallsBackToFile(t *testing.T) {
 	if got != token {
 		t.Errorf("expected token of length %d, got %d", len(token), len(got))
 	}
+}
 
-	// Verify the file exists and has the right content.
+func TestGetWithFallback_ReadsFromFile(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+
+	token := "file-fallback-token"
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		t.Fatalf("reading fallback file: %v", err)
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
+		t.Fatalf("creating dir: %v", err)
 	}
-	if string(data) != token {
-		t.Errorf("file content mismatch: expected length %d, got %d", len(token), len(data))
+	if err := os.WriteFile(filePath, []byte(token), 0o600); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != token {
+		t.Errorf("expected %q, got %q", token, got)
+	}
+}
+
+func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
+	s := testStore()
+	skipIfUnavailable(t, s)
+	defer func() { _ = s.Delete() }()
+
+	// Write a short token to the keychain.
+	if err := s.Set("keychain-token"); err != nil {
+		t.Fatalf("Set() error: %v", err)
+	}
+
+	// Write a different token to the file.
+	home := t.TempDir()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := os.WriteFile(filePath, []byte("file-token"), 0o600); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "keychain-token" {
+		t.Errorf("expected keychain-token (keychain should win), got %q", got)
 	}
 }
 
@@ -122,14 +167,58 @@ func TestGetWithFallback_ReturnsEmptyWhenNothingStored(t *testing.T) {
 	}
 }
 
+func TestSetWithFallback_ClearsStaleKeychainOnFallback(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only test: requires 2560-byte keychain limit")
+	}
+
+	s := testStore()
+	skipIfUnavailable(t, s)
+	home := t.TempDir()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+
+	// Store a short token in the keychain.
+	if err := s.Set("old-short-token"); err != nil {
+		t.Fatalf("Set() error: %v", err)
+	}
+
+	// Now store a long token — should fall back to file and clear the keychain.
+	longToken := strings.Repeat("z", 2600)
+	if err := s.SetWithFallback(longToken, home); err != nil {
+		t.Fatalf("SetWithFallback() error: %v", err)
+	}
+
+	// Verify the keychain entry was cleared.
+	old, err := s.Get()
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	if old != "" {
+		t.Errorf("expected stale keychain entry to be cleared, got %q", old)
+	}
+
+	// Verify the new token is readable via the file fallback.
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != longToken {
+		t.Errorf("expected long token, got length %d", len(got))
+	}
+}
+
 func TestDeleteWithFallback_RemovesFile(t *testing.T) {
 	home := t.TempDir()
 	s := testStore()
 
-	// Force file fallback with a long token.
-	token := strings.Repeat("y", 2600)
-	if err := s.SetWithFallback(token, home); err != nil {
-		t.Fatalf("SetWithFallback() error: %v", err)
+	// Write directly to the file to ensure it exists regardless of platform.
+	token := "to-be-deleted"
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := os.WriteFile(filePath, []byte(token), 0o600); err != nil {
+		t.Fatalf("writing file: %v", err)
 	}
 
 	if err := s.DeleteWithFallback(home); err != nil {

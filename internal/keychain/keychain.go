@@ -114,13 +114,25 @@ func credentialFilePath(home string) string {
 // large for the keychain (Windows 2560-byte limit), or if the keychain is
 // unavailable, it falls back to a file at ~/.claude/juggernaut-credential
 // with owner-only permissions.
+//
+// When falling back to file storage, any existing keychain entry is cleared
+// so that GetWithFallback does not return a stale token.
 func (s *Store) SetWithFallback(token, home string) error {
+	// Skip the keychain write entirely if the token is known to exceed the
+	// Windows limit — avoids a wasted keychain call that will always fail.
+	if IsTooBigForKeychain(token) {
+		_ = s.Delete()
+		return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
+	}
+
 	// Try the OS keychain first.
 	err := s.Set(token)
 	if err == nil {
 		return nil
 	}
-	// Fall back to file storage on keychain failure (too big, unavailable, etc.).
+	// Fall back to file storage on keychain failure (unavailable, etc.).
+	// Clear any stale keychain entry before falling back.
+	_ = s.Delete()
 	return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
 }
 
@@ -143,9 +155,11 @@ func (s *Store) GetWithFallback(home string) (string, error) {
 }
 
 // DeleteWithFallback removes the token from both the OS keychain and the
-// file-based fallback. Silent if neither exists.
+// file-based fallback. Returns the last error if both fail.
 func (s *Store) DeleteWithFallback(home string) error {
-	_ = s.Delete()
-	_ = os.Remove(credentialFilePath(home))
-	return nil
+	err := s.Delete()
+	if rmErr := os.Remove(credentialFilePath(home)); rmErr != nil && !os.IsNotExist(rmErr) {
+		return rmErr
+	}
+	return err
 }
