@@ -481,3 +481,72 @@ func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
 		t.Errorf("expected versioned token, got mismatch")
 	}
 }
+
+// The tests below exercise the file-fallback layer without requiring an OS
+// keychain backend, so they run on headless CI (Linux) where the backend is
+// unavailable and other keychain tests skip.
+
+func TestDeleteWithFallback_RemovesFileNoBackend(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+
+	// Seed an authoritative versioned fallback file directly (no backend needed).
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\nsecret")); err != nil {
+		t.Fatalf("seeding fallback file: %v", err)
+	}
+
+	// Sanity: the file is read back via GetWithFallback (versioned path, no backend).
+	if got, err := s.GetWithFallback(home); err != nil || got != "secret" {
+		t.Fatalf("GetWithFallback() = %q, %v; want \"secret\", nil", got, err)
+	}
+
+	// DeleteWithFallback removes the file even if the OS keychain backend is
+	// unavailable (it returns the backend error but still deletes the file).
+	// We assert the file removal, not the backend result.
+	_ = s.DeleteWithFallback(home)
+
+	// The fallback file must be gone regardless of backend availability.
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Errorf("expected fallback file removed, stat err = %v", err)
+	}
+}
+
+func TestGetWithFallback_VersionedFileNoBackend(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	token := "versioned-authoritative"
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\n"+token)); err != nil {
+		t.Fatalf("seeding file: %v", err)
+	}
+
+	// A versioned file is authoritative and returns without touching the backend.
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != token {
+		t.Errorf("GetWithFallback() = %q, want %q", got, token)
+	}
+}
+
+func TestGetWithFallback_EmptyVersionedFile(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+
+	// Versioned envelope with an empty token body.
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\n")); err != nil {
+		t.Fatalf("seeding file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty token from empty versioned file, got %q", got)
+	}
+}
