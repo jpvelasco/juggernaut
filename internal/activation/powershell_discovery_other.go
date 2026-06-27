@@ -3,22 +3,19 @@
 package activation
 
 import (
-	"fmt"
 	"path/filepath"
-	"runtime"
 )
 
 // ProfileResolverResult is the shared, authoritative result of profile
 // discovery. On non-Windows platforms it returns the same targets as
 // DefaultTargets (no dynamic discovery is needed).
 type ProfileResolverResult struct {
-	ActiveTargets        []Target
-	InstallTarget        Target
-	MigrationTargets     []string
-	HistoricalCandidates []string
-	DiscoveryWarnings    []string
-	UsedFallback         bool
-	EditionsDiscovered   []string
+	ActiveTargets      []Target
+	InstallTarget      Target
+	MigrationTargets   []string
+	DiscoveryWarnings  []string
+	UsedFallback       bool
+	EditionsDiscovered []string
 }
 
 // discoverPowerShellProfiles is a no-op on non-Windows; it returns the same
@@ -51,16 +48,6 @@ func historicalPowerShellTargetsScoped(home string) []string {
 // discoverPowerShellProfilesScoped is a no-op on non-Windows.
 func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 	return discoverPowerShellProfiles()
-}
-
-// fallbackKnownDocumentsPowerShell returns "" on non-Windows.
-func fallbackKnownDocumentsPowerShell() string {
-	return ""
-}
-
-// getKnownDocumentsPath is not available on non-Windows.
-func getKnownDocumentsPath() (string, error) {
-	return "", fmt.Errorf("known documents folder not available on %s", runtime.GOOS)
 }
 
 // containsPathCI checks if a path exists in a list.

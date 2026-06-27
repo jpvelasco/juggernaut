@@ -78,9 +78,7 @@ func TestDiscoverPowerShellProfiles_PS7Only(t *testing.T) {
 	if !containsPathCI(result.MigrationTargets, allHosts) {
 		t.Error("expected allHosts in migration targets")
 	}
-	if !containsPathCI(result.HistoricalCandidates, filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")) {
-		t.Error("expected historical candidate in list")
-	}
+	
 }
 
 func TestDiscoverPowerShellProfiles_BothEditions(t *testing.T) {
@@ -242,9 +240,12 @@ func TestDiscoverPowerShellProfiles_MalformedJSON(t *testing.T) {
 
 	result := discoverPowerShellProfiles()
 
-	// Should fall back to Known Documents or return empty active targets.
+	// Should report discovery failure for malformed JSON.
 	if len(result.DiscoveryWarnings) == 0 {
 		t.Error("expected discovery warnings for malformed JSON")
+	}
+	if len(result.ActiveTargets) != 0 {
+		t.Errorf("expected 0 active targets on malformed JSON, got %d", len(result.ActiveTargets))
 	}
 }
 
@@ -267,9 +268,9 @@ func TestDiscoverPowerShellProfiles_DiscoveryTimeout(t *testing.T) {
 
 	result := discoverPowerShellProfiles()
 
-	// Fallback to Known Documents should provide active targets even when discovery fails.
-	if !result.UsedFallback {
-		t.Error("expected fallback to be used on timeout")
+	// No active targets when both editions time out.
+	if len(result.ActiveTargets) != 0 {
+		t.Errorf("expected 0 active targets on timeout, got %d", len(result.ActiveTargets))
 	}
 	if len(result.DiscoveryWarnings) < 2 {
 		t.Errorf("expected at least 2 discovery warnings, got %d", len(result.DiscoveryWarnings))
@@ -294,9 +295,12 @@ func TestDiscoverPowerShellProfiles_BothMissing(t *testing.T) {
 
 	result := discoverPowerShellProfiles()
 
-	// Fallback to Known Documents should provide active targets even when both executables missing.
-	if !result.UsedFallback {
-		t.Error("expected fallback to be used when both executables missing")
+	// No active targets when both executables missing.
+	if len(result.ActiveTargets) != 0 {
+		t.Errorf("expected 0 active targets, got %d", len(result.ActiveTargets))
+	}
+	if len(result.DiscoveryWarnings) == 0 {
+		t.Error("expected discovery warnings when both executables missing")
 	}
 }
 
@@ -337,7 +341,7 @@ func TestDiscoverPowerShellProfiles_CaseInsensitiveDedup(t *testing.T) {
 	}
 }
 
-func TestDiscoverPowerShellProfiles_FallbackKnownDocuments(t *testing.T) {
+func TestDiscoverPowerShellProfiles_NoExecutable_DiscoveryFailure(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
@@ -355,12 +359,15 @@ func TestDiscoverPowerShellProfiles_FallbackKnownDocuments(t *testing.T) {
 
 	result := discoverPowerShellProfiles()
 
-	// Should use Known Documents fallback
-	if !result.UsedFallback {
-		t.Error("expected fallback to be used when no executables found")
+	// No active targets, no fallback — discovery failure is reported.
+	if len(result.ActiveTargets) != 0 {
+		t.Errorf("expected 0 active targets, got %d", len(result.ActiveTargets))
 	}
 	if len(result.DiscoveryWarnings) == 0 {
-		t.Error("expected discovery warnings when using fallback")
+		t.Error("expected discovery warnings when no executables found")
+	}
+	if len(result.EditionsDiscovered) != 0 {
+		t.Errorf("expected 0 editions discovered, got %d", len(result.EditionsDiscovered))
 	}
 }
 
@@ -479,6 +486,31 @@ func TestLegacyMarkers_Removal(t *testing.T) {
 			name:    "CRLF legacy block",
 			content: "before\r\n# BEGIN: Juggernaut Launcher\r\nold stuff\r\n# END: Juggernaut Launcher\r\nafter",
 			want:    "before\nafter",
+		},
+		{
+			name: "valid pair followed by orphan begin preserves trailing content",
+			content: "before\n# BEGIN: Juggernaut Launcher\nold stuff\n# END: Juggernaut Launcher\n# BEGIN: Juggernaut Launcher\nafter orphan",
+			want:    "before\n# BEGIN: Juggernaut Launcher\nafter orphan",
+		},
+		{
+			name: "end before begin does not enter deletion mode",
+			content: "before\n# END: Juggernaut Launcher\n# BEGIN: Juggernaut Launcher\nstuff\n# END: Juggernaut Launcher\nafter",
+			want:    "before\n# END: Juggernaut Launcher\nafter",
+		},
+		{
+			name: "multiple complete blocks removed",
+			content: "a\n# BEGIN: Juggernaut Launcher\nx\n# END: Juggernaut Launcher\nb\n# BEGIN: Juggernaut Launcher\ny\n# END: Juggernaut Launcher\nc",
+			want:    "a\nb\nc",
+		},
+		{
+			name: "orphan begin with no matching end is preserved",
+			content: "before\n# BEGIN: Juggernaut Launcher\norphan begin only\nafter",
+			want:    "before\n# BEGIN: Juggernaut Launcher\norphan begin only\nafter",
+		},
+		{
+			name: "nested-like markers: first begin matches first end",
+			content: "# BEGIN: Juggernaut Launcher\n# BEGIN: Juggernaut Launcher\ninner\n# END: Juggernaut Launcher\n# END: Juggernaut Launcher\nafter",
+			want:    "after",
 		},
 	}
 	for _, tt := range tests {
@@ -655,28 +687,19 @@ func TestCheckPowerShellActivation_Unhealthy_LegacyInEffective(t *testing.T) {
 	}
 }
 
-func TestCheckPowerShellActivation_FalsePositive_HistoricalOnly(t *testing.T) {
+func TestCheckPowerShellActivation_NoActivation_DiscoveredProfileOnly(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
 	home := t.TempDir()
 	makeHome(t, home)
 
-	// The real discovered profile (OneDrive) has NO activation
+	// The real discovered profile has NO activation
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
 		t.Fatalf("creating dir: %v", err)
 	}
 	if err := safepath.WriteFile(filepath.Dir(allHosts), allHosts, []byte("export FOO=bar")); err != nil {
-		t.Fatalf("writing file: %v", err)
-	}
-
-	// The historical hardcoded path HAS the activation (but PowerShell doesn't load it)
-	histPath := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	if err := safepath.MkdirAll(filepath.Dir(histPath)); err != nil {
-		t.Fatalf("creating dir: %v", err)
-	}
-	if err := safepath.WriteFile(filepath.Dir(histPath), histPath, []byte(Block(ShellPowerShell))); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -693,10 +716,53 @@ func TestCheckPowerShellActivation_FalsePositive_HistoricalOnly(t *testing.T) {
 
 	healthy, _, warnings := CheckPowerShellActivation(home)
 	if healthy {
-		t.Error("expected activation to be unhealthy when only historical path has it")
+		t.Error("expected activation to be unhealthy when discovered profile has no activation")
 	}
-	if len(warnings) == 0 {
-		t.Error("expected warning about historical path containing activation")
+	// No warnings about historical paths — hardcoded paths are removed.
+	if len(warnings) > 0 {
+		t.Errorf("expected no warnings about historical paths, got %v", warnings)
+	}
+}
+
+func TestCheckPowerShellActivation_NoFalseWarning_DiscoveredPathMatchesHistorical(t *testing.T) {
+	// Regression: previously, doctor checked every guessed historical path
+	// and warned whenever it contained activation, without excluding paths
+	// also present in ActiveTargets. On a standard non-OneDrive setup, the
+	// discovered profile can equal a historical candidate, producing a false
+	// warning that PowerShell does not load it. With hardcoded paths removed,
+	// only the dynamically discovered profile is checked.
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+	home := t.TempDir()
+	makeHome(t, home)
+
+	// Use the standard non-OneDrive path that used to be both "active" and "historical"
+	allHosts := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(allHosts), allHosts, []byte(Block(ShellPowerShell))); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	runner := &mockCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe": makePSOutput(allHosts, allHosts),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	SetPSRunnerForTesting(runner)
+	defer ResetPSRunnerForTesting()
+
+	healthy, _, warnings := CheckPowerShellActivation(home)
+	if !healthy {
+		t.Error("expected activation to be healthy — the discovered profile has a valid block")
+	}
+	if len(warnings) > 0 {
+		t.Errorf("expected no warnings, got %v", warnings)
 	}
 }
 
@@ -743,7 +809,7 @@ func TestDeduplicatePathsCI(t *testing.T) {
 	}
 }
 
-func TestHistoricalPowerShellTargets(t *testing.T) {
+func TestHistoricalPowerShellTargets_ReturnsNil(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
@@ -753,14 +819,9 @@ func TestHistoricalPowerShellTargets(t *testing.T) {
 
 	candidates := historicalPowerShellTargets()
 
-	if len(candidates) != 2 {
-		t.Fatalf("expected 2 historical candidates, got %d", len(candidates))
-	}
-	if !strings.Contains(candidates[0], "PowerShell") {
-		t.Errorf("first candidate should contain PowerShell: %s", candidates[0])
-	}
-	if !strings.Contains(candidates[1], "WindowsPowerShell") {
-		t.Errorf("second candidate should contain WindowsPowerShell: %s", candidates[1])
+	// Hardcoded historical paths have been removed.
+	if candidates != nil {
+		t.Fatalf("expected nil, got %d candidates", len(candidates))
 	}
 }
 
@@ -1021,16 +1082,16 @@ func TestDiscoveryTimeout_WithMock(t *testing.T) {
 
 	result := discoverPowerShellProfiles()
 
-	// Fallback to Known Documents should provide active targets even when discovery times out.
-	if !result.UsedFallback {
-		t.Error("expected fallback to be used when discovery times out")
-	}
-	if len(result.ActiveTargets) == 0 {
-		t.Error("expected fallback to provide active targets")
+	// No active targets when both editions time out — no fallback.
+	if len(result.ActiveTargets) != 0 {
+		t.Errorf("expected 0 active targets on timeout, got %d", len(result.ActiveTargets))
 	}
 	// No editions should be listed as discovered because both timed out.
 	if len(result.EditionsDiscovered) != 0 {
 		t.Errorf("expected 0 editions discovered, got %d", len(result.EditionsDiscovered))
+	}
+	if len(result.DiscoveryWarnings) == 0 {
+		t.Error("expected discovery warnings when both time out")
 	}
 }
 
@@ -1095,21 +1156,10 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 		t.Fatalf("creating dir: %v", err)
 	}
 
-	// Historical hardcoded profile (non-loaded)
-	histProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	if err := safepath.MkdirAll(filepath.Dir(histProfile)); err != nil {
-		t.Fatalf("creating dir: %v", err)
-	}
-
 	// Real profile has the legacy launcher block
 	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
 		"export FOO=bar\n# BEGIN: Juggernaut Launcher\nfunction claude { juggernaut --launcher @args }\n# END: Juggernaut Launcher\nalias x='y'",
 	)); err != nil {
-		t.Fatalf("writing file: %v", err)
-	}
-
-	// Historical profile has the current activation block
-	if err := safepath.WriteFile(filepath.Dir(histProfile), histProfile, []byte(Block(ShellPowerShell))); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -1173,11 +1223,6 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 	if len(warnings) > 0 {
 		t.Errorf("expected no warnings after apply, got %v", warnings)
 	}
-
-	// Historical profile should have had its current block cleaned (it's a cleanup candidate)
-	// Actually, migrateLegacyOnly only removes legacy blocks, not current ones.
-	// The historical profile's current block should remain — it's not a legacy block.
-	// This is correct: we don't delete current blocks from historical paths.
 
 	// Idempotent: second apply should not change anything
 	_, err = InstallPowerShellActivation(home)

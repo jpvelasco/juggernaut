@@ -16,7 +16,8 @@ import (
 func TestInstallIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 
-	// On Windows, inject a mock runner so Install doesn't touch real profiles.
+	var psResult *ProfileResolverResult
+	// On Windows, inject a mock runner + resolver so Install doesn't touch real profiles.
 	if runtime.GOOS == "windows" {
 		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 		runner := &testDiscoveryRunner{
@@ -27,20 +28,27 @@ func TestInstallIsIdempotent(t *testing.T) {
 		}
 		SetPSRunnerForTesting(runner)
 		defer ResetPSRunnerForTesting()
+
+		psResult = &ProfileResolverResult{
+			ActiveTargets:  []Target{{Path: psProfile, Shell: ShellPowerShell}},
+			InstallTarget:  Target{Path: psProfile, Shell: ShellPowerShell},
+			MigrationTargets: []string{psProfile},
+		}
 	}
 
-	first, err := Install(home)
+	opts := InstallOptions{PowerShellResult: psResult}
+	first, err := InstallWith(home, opts)
 	if err != nil {
-		t.Fatalf("Install() first error: %v", err)
+		t.Fatalf("InstallWith() first error: %v", err)
 	}
 	if len(first) == 0 {
 		t.Fatal("first install should write activation blocks")
 	}
 
-	snapshots := readTargets(t, home)
-	second, err := Install(home)
+	snapshots := readTargets(t, home, psResult)
+	second, err := InstallWith(home, opts)
 	if err != nil {
-		t.Fatalf("Install() second error: %v", err)
+		t.Fatalf("InstallWith() second error: %v", err)
 	}
 	if len(second) != 0 {
 		t.Fatalf("second install should be unchanged, got %v", second)
@@ -64,7 +72,8 @@ func TestUninstallPreservesUnrelatedContent(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	// On Windows, inject a mock runner so Install doesn't touch real profiles.
+	var psResult *ProfileResolverResult
+	// On Windows, inject a mock runner + resolver so Install doesn't touch real profiles.
 	if runtime.GOOS == "windows" {
 		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 		runner := &testDiscoveryRunner{
@@ -75,15 +84,23 @@ func TestUninstallPreservesUnrelatedContent(t *testing.T) {
 		}
 		SetPSRunnerForTesting(runner)
 		defer ResetPSRunnerForTesting()
+
+		psResult = &ProfileResolverResult{
+			ActiveTargets:  []Target{{Path: psProfile, Shell: ShellPowerShell}},
+			InstallTarget:  Target{Path: psProfile, Shell: ShellPowerShell},
+			MigrationTargets: []string{psProfile},
+		}
 	}
 
-	if _, err := Install(home); err != nil {
-		t.Fatalf("Install(): %v", err)
+	opts := InstallOptions{PowerShellResult: psResult}
+	if _, err := InstallWith(home, opts); err != nil {
+		t.Fatalf("InstallWith(): %v", err)
 	}
 
-	removed, err := Uninstall(home)
+	uninstallOpts := UninstallOptions{PowerShellResult: psResult}
+	removed, err := UninstallWith(home, uninstallOpts)
 	if err != nil {
-		t.Fatalf("Uninstall(): %v", err)
+		t.Fatalf("UninstallWith(): %v", err)
 	}
 	if len(removed) == 0 {
 		t.Fatal("expected at least one activation block to be removed")
@@ -381,14 +398,13 @@ func launchWithExecutable(t *testing.T, home, pathList, self string, opts Launch
 	return opts.Runner(claudePath, opts.Args, os.Environ())
 }
 
-func readTargets(t *testing.T, home string) map[string]string {
+func readTargets(t *testing.T, home string, psResult *ProfileResolverResult) map[string]string {
 	t.Helper()
 	out := map[string]string{}
 
-	if runtime.GOOS == "windows" {
-		// On Windows, read from discovered PowerShell paths + POSIX targets.
-		result := ResolvePowerShellProfiles()
-		for _, path := range result.MigrationTargets {
+	if runtime.GOOS == "windows" && psResult != nil {
+		// On Windows, read from injected PowerShell paths + POSIX targets.
+		for _, path := range psResult.MigrationTargets {
 			data, err := safepath.ReadFile(filepath.Dir(path), path)
 			if err != nil {
 				t.Fatalf("reading %s: %v", path, err)
@@ -396,9 +412,6 @@ func readTargets(t *testing.T, home string) map[string]string {
 			out[path] = string(data)
 		}
 		for _, target := range DefaultTargets(home) {
-			if target.Shell == ShellPowerShell {
-				continue // handled above
-			}
 			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
 			if err != nil {
 				t.Fatalf("reading %s: %v", target.Path, err)

@@ -12,9 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 // psEdition identifies a PowerShell edition and its executable name.
@@ -39,8 +36,7 @@ type psDiscoveryResult struct {
 }
 
 // ProfileResolverResult is the shared, authoritative result of PowerShell
-// profile discovery. It separates active installation targets from historical
-// cleanup candidates.
+// profile discovery.
 type ProfileResolverResult struct {
 	// ActiveTargets are the discovered profiles that PowerShell actually loads.
 	ActiveTargets []Target
@@ -50,9 +46,6 @@ type ProfileResolverResult struct {
 	// MigrationTargets are all discovered profiles that should be inspected
 	// for legacy blocks during apply/migration.
 	MigrationTargets []string
-	// HistoricalCandidates are hardcoded paths from older Juggernaut versions
-	// that PowerShell may no longer load. These are cleanup-only targets.
-	HistoricalCandidates []string
 	// DiscoveryWarnings lists warnings about the discovery process.
 	DiscoveryWarnings []string
 	// UsedFallback is true when Known Documents fallback was used.
@@ -157,27 +150,11 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 		}
 	}
 
-	// Add historical hardcoded paths as cleanup candidates.
-	result.HistoricalCandidates = historicalPowerShellTargetsScoped(home)
-
-	// If no active targets found, fall back to Known Documents folder.
+	// If no active targets found, report a discovery failure.
 	if len(result.ActiveTargets) == 0 {
-		fallbackPS := fallbackKnownDocumentsPowerShell()
-		fallbackPS5 := fallbackKnownDocumentsWindowsPowerShell()
-		if fallbackPS != "" {
-			result.InstallTarget = Target{Path: fallbackPS, Shell: ShellPowerShell}
-			result.ActiveTargets = append(result.ActiveTargets, Target{Path: fallbackPS, Shell: ShellPowerShell})
-			result.MigrationTargets = append(result.MigrationTargets, fallbackPS)
-			result.UsedFallback = true
-			result.DiscoveryWarnings = append(result.DiscoveryWarnings,
-				"PowerShell profile discovery failed; using Known Documents fallback",
-			)
-		}
-		if fallbackPS5 != "" && !containsTargetPathCI(result.ActiveTargets, fallbackPS5) {
-			result.ActiveTargets = append(result.ActiveTargets, Target{Path: fallbackPS5, Shell: ShellPowerShell})
-			result.MigrationTargets = append(result.MigrationTargets, fallbackPS5)
-			result.UsedFallback = true
-		}
+		result.DiscoveryWarnings = append(result.DiscoveryWarnings,
+			"PowerShell profile discovery failed; no PowerShell editions found",
+		)
 	}
 
 	return result
@@ -231,74 +208,16 @@ func resolveHomeDir() string {
 	return home
 }
 
-// historicalPowerShellTargets returns the hardcoded PowerShell profile paths
-// used by older Juggernaut versions. These are cleanup candidates only.
-// It resolves the home directory from the environment.
+// historicalPowerShellTargets returns nil. Hardcoded historical paths have
+// been removed — PowerShell profile locations are discovered dynamically.
 func historicalPowerShellTargets() []string {
-	return historicalPowerShellTargetsScoped(resolveHomeDir())
+	return nil
 }
 
-// historicalPowerShellTargetsScoped returns the same paths but uses the
-// supplied home directory instead of resolving it from the environment.
-// This allows tests to scope historical candidates to a temporary directory.
+// historicalPowerShellTargetsScoped returns nil. Hardcoded historical paths
+// have been removed — PowerShell profile locations are discovered dynamically.
 func historicalPowerShellTargetsScoped(home string) []string {
-	if home == "" {
-		return nil
-	}
-	return []string{
-		filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"),
-		filepath.Join(home, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"),
-	}
-}
-
-// fallbackKnownDocumentsPowerShell returns the PowerShell profile path using
-// the Windows Known Documents folder API (SHGetKnownFolderPath).
-func fallbackKnownDocumentsPowerShell() string {
-	documentsPath, err := getKnownDocumentsPath()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(documentsPath, "PowerShell", "Microsoft.PowerShell_profile.ps1")
-}
-
-// fallbackKnownDocumentsWindowsPowerShell returns the Windows PowerShell 5.1
-// profile path using the Known Documents folder.
-func fallbackKnownDocumentsWindowsPowerShell() string {
-	documentsPath, err := getKnownDocumentsPath()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(documentsPath, "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1")
-}
-
-// getKnownDocumentsPath uses the Windows Known Folder API to resolve the
-// actual Documents folder, which handles OneDrive redirection correctly.
-func getKnownDocumentsPath() (string, error) {
-	// FOLDERID_Documents = {FDD39AD0-238F-46AF-ADB4-6C85480369C7}
-	var folderID windows.GUID = windows.GUID{
-		Data1: 0xFDD39AD0,
-		Data2: 0x238F,
-		Data3: 0x46AF,
-		Data4: [8]byte{0xAD, 0xB4, 0x6C, 0x85, 0x48, 0x03, 0x69, 0xC7},
-	}
-
-	shell32 := windows.MustLoadDLL("shell32.dll")
-	proc := shell32.MustFindProc("SHGetKnownFolderPath")
-
-	var pathPtr *uint16
-	ret, _, _ := proc.Call(
-		uintptr(unsafe.Pointer(&folderID)),
-		0, // KNOWN_FOLDER_FLAG
-		0, // hToken
-		uintptr(unsafe.Pointer(&pathPtr)),
-	)
-	if ret != 0 {
-		return "", fmt.Errorf("SHGetKnownFolderPath failed with code 0x%x", ret)
-	}
-	defer windows.CoTaskMemFree(unsafe.Pointer(pathPtr))
-
-	path := windows.UTF16PtrToString(pathPtr)
-	return path, nil
+	return nil
 }
 
 // containsPathCI checks if a path exists in a list, case-insensitive on Windows.

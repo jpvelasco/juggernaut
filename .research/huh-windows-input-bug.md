@@ -106,9 +106,9 @@ We are on `huh` v1.0.0 + `bubbletea` v1.3.6 which DOES NOT include the fix.
 
 ## Files of Interest in Dependencies
 
-- `C:\Users\jpvel\go\pkg\mod\github.com\charmbracelet\bubbletea@v1.3.6\inputreader_windows.go` — **NO** `FlushConsoleInputBuffer`
-- `C:\Users\jpvel\go\pkg\mod\github.com\charmbracelet\ultraviolet@v0.0.0-20251205161215-1948445e3318\cancelreader_windows.go` — **HAS** `FlushConsoleInputBuffer` at line 48
-- `C:\Users\jpvel\go\pkg\mod\charm.land\bubbletea\v2@v2.0.2\input.go` — uses `ultraviolet` package
+- `bubbletea@v1.3.6/inputreader_windows.go` — **NO** `FlushConsoleInputBuffer`
+- `ultraviolet@v0.0.0-20251205161215-1948445e3318/cancelreader_windows.go` — **HAS** `FlushConsoleInputBuffer` at line 48
+- `charm.land/bubbletea/v2@v2.0.2/input.go` — uses `ultraviolet` package
 
 ---
 

@@ -131,21 +131,16 @@ func writeExecutableStub(t *testing.T, path string) {
 	}
 }
 
-func TestDoctor_ActivationFalsePositive_HistoricalOnly(t *testing.T) {
+func TestDoctor_ActivationUnhealthy_LegacyInDiscoveredProfile(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-
-	// This test verifies that doctor does NOT report activation as healthy
-	// when the current activation block only exists in a non-loaded historical
-	// path (e.g., $HOME/Documents) while the actual OneDrive-redirected profile
-	// contains a legacy launcher block.
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	// Real discovered profile (OneDrive) has legacy launcher block
+	// Real discovered profile has legacy launcher block
 	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
 		t.Fatalf("creating dir: %v", err)
@@ -153,15 +148,6 @@ func TestDoctor_ActivationFalsePositive_HistoricalOnly(t *testing.T) {
 	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
 		"# BEGIN: Juggernaut Launcher\nfunction claude { juggernaut --launcher @args }\n# END: Juggernaut Launcher",
 	)); err != nil {
-		t.Fatalf("writing file: %v", err)
-	}
-
-	// Historical hardcoded profile has the current activation block
-	histProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	if err := safepath.MkdirAll(filepath.Dir(histProfile)); err != nil {
-		t.Fatalf("creating dir: %v", err)
-	}
-	if err := safepath.WriteFile(filepath.Dir(histProfile), histProfile, []byte(activation.Block(activation.ShellPowerShell))); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -180,10 +166,10 @@ func TestDoctor_ActivationFalsePositive_HistoricalOnly(t *testing.T) {
 	// Check activation using the shared resolver
 	healthy, _, warnings := activation.CheckPowerShellActivation(home)
 	if healthy {
-		t.Error("doctor should NOT report activation healthy when only historical path has it")
+		t.Error("doctor should NOT report activation healthy when discovered profile has legacy block")
 	}
 	if len(warnings) == 0 {
-		t.Error("expected warnings about legacy block or historical path")
+		t.Error("expected warnings about legacy block")
 	}
 }
 
@@ -255,4 +241,67 @@ func mockPSOutput(allHosts, currentHost string) []byte {
 		"CurrentUserCurrentHost": currentHost,
 	})
 	return data
+}
+
+// countingCommandRunner tracks how many times each executable is invoked.
+type countingCommandRunner struct {
+	counts map[string]int
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (c *countingCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
+	c.counts[exe]++
+	if err := c.err[exe]; err != nil {
+		return nil, err
+	}
+	return c.output[exe], nil
+}
+
+func TestDoctor_DiscoveryCalledOncePerEdition(t *testing.T) {
+	// Regression: doctor previously resolved profiles twice — once in doctor.go
+	// and again inside CheckPowerShellActivation. With the fix, the resolver
+	// result is passed in, so each edition is called exactly once.
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	allHosts := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(allHosts), allHosts, []byte(activation.Block(activation.ShellPowerShell))); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	runner := &countingCommandRunner{
+		counts: make(map[string]int),
+		output: map[string][]byte{
+			"pwsh.exe": mockPSOutput(allHosts, allHosts),
+		},
+		err: map[string]error{
+			"powershell.exe": os.ErrNotExist,
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Run doctor
+	resetFlags()
+	rootCmd.SetArgs([]string{"doctor"})
+	rootCmd.SetOut(&strings.Builder{})
+	rootCmd.SetErr(&strings.Builder{})
+	_ = rootCmd.Execute()
+
+	// Each edition should be called at most once
+	if runner.counts["pwsh.exe"] > 1 {
+		t.Errorf("pwsh.exe was called %d times, expected at most 1", runner.counts["pwsh.exe"])
+	}
+	if runner.counts["powershell.exe"] > 1 {
+		t.Errorf("powershell.exe was called %d times, expected at most 1", runner.counts["powershell.exe"])
+	}
 }

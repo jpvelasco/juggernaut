@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ func TestApply_StorageFlagUnrecognized(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
 
 	err := ExecuteArgs([]string{
 		"apply", "--storage=profile", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -781,6 +784,46 @@ func readSettingsJSON(t *testing.T, home string) []byte {
 	if err != nil {
 		t.Fatalf("reading settings.json: %v", err)
 	}
+	return data
+}
+
+// setupMockPSRunner sets a mock PowerShell discovery runner on Windows so
+// that command-level tests never touch real PowerShell profiles.
+// It returns a cleanup function that should be deferred.
+func setupMockPSRunner(t *testing.T, home string) {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return
+	}
+	psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	runner := &mockApplyCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe":       mockApplyPSOutput(psProfile, psProfile),
+			"powershell.exe": mockApplyPSOutput(psProfile, psProfile),
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	t.Cleanup(activation.ResetPSRunnerForTesting)
+}
+
+// mockApplyCommandRunner implements activation.discoveryCommandRunner for apply tests.
+type mockApplyCommandRunner struct {
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (m *mockApplyCommandRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
+	if err := m.err[exe]; err != nil {
+		return nil, err
+	}
+	return m.output[exe], nil
+}
+
+func mockApplyPSOutput(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
 	return data
 }
 

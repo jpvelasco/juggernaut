@@ -76,7 +76,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	// Use the shared resolver to check activation on the effective profiles.
 	if runtime.GOOS == "windows" {
 		psResult := activation.ResolvePowerShellProfiles()
-		healthy, path, warnings := activation.CheckPowerShellActivation(home)
+		healthy, path, warnings := activation.CheckPowerShellActivationWith(home, &psResult)
 		if healthy {
 			r.Check("claude activation", doctor.OK, "active in "+path)
 		} else {

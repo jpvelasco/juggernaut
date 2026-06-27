@@ -80,24 +80,16 @@ func DefaultBinDir(home string) string {
 }
 
 // DefaultTargets returns the shell profile targets Juggernaut updates.
+// PowerShell profiles are NOT included here — they are discovered dynamically
+// via ResolvePowerShellProfiles() on Windows, and via the ProfileResolverResult
+// on other platforms.
 func DefaultTargets(home string) []Target {
-	targets := []Target{
+	return []Target{
 		{Path: filepath.Join(home, ".bashrc"), Shell: ShellPOSIX},
 		{Path: filepath.Join(home, ".zshrc"), Shell: ShellPOSIX},
 		{Path: filepath.Join(home, ".profile"), Shell: ShellPOSIX},
 		{Path: filepath.Join(home, ".config", "fish", "config.fish"), Shell: ShellFish},
 	}
-	if runtime.GOOS == "windows" {
-		targets = append(targets,
-			Target{Path: filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1"), Shell: ShellPowerShell},
-			Target{Path: filepath.Join(home, "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"), Shell: ShellPowerShell},
-		)
-	} else {
-		targets = append(targets,
-			Target{Path: filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1"), Shell: ShellPowerShell},
-		)
-	}
-	return targets
 }
 
 // Block returns the activation block for a shell.
@@ -130,26 +122,45 @@ func Block(shell Shell) string {
 	}
 }
 
+// InstallOptions carries optional dependencies for Install.
+type InstallOptions struct {
+	// PowerShellResult, when set, is used instead of resolving profiles
+	// dynamically. This is required for tests to avoid touching real profiles.
+	PowerShellResult *ProfileResolverResult
+}
+
 // Install writes or updates Juggernaut activation blocks in shell profiles.
 // On Windows, it uses dynamic PowerShell profile discovery and migrates
 // legacy blocks, then installs to POSIX targets as well. On other platforms
 // it uses the default target list.
 func Install(home string) ([]string, error) {
+	return InstallWith(home, InstallOptions{})
+}
+
+// InstallWith is like Install but accepts injectable dependencies.
+func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	var installed []string
 
 	if runtime.GOOS == "windows" {
-		psInstalled, err := InstallPowerShellActivation(home)
+		psInstalled, err := InstallPowerShellActivationWith(home, opts.PowerShellResult)
 		if err != nil {
 			return installed, err
 		}
 		installed = append(installed, psInstalled...)
+	} else if opts.PowerShellResult != nil {
+		// On non-Windows, use the injected PowerShell result for profile paths.
+		for _, target := range opts.PowerShellResult.ActiveTargets {
+			changed, err := InstallTarget(target)
+			if err != nil {
+				return installed, err
+			}
+			if changed {
+				installed = append(installed, target.Path)
+			}
+		}
 	}
 
 	for _, target := range DefaultTargets(home) {
-		// On Windows, skip PowerShell targets (handled by InstallPowerShellActivation).
-		if runtime.GOOS == "windows" && target.Shell == ShellPowerShell {
-			continue
-		}
 		changed, err := InstallTarget(target)
 		if err != nil {
 			return installed, err
@@ -180,24 +191,43 @@ func InstallTarget(target Target) (bool, error) {
 	return true, nil
 }
 
+// UninstallOptions carries optional dependencies for Uninstall.
+type UninstallOptions struct {
+	// PowerShellResult, when set, is used instead of resolving profiles
+	// dynamically. This is required for tests to avoid touching real profiles.
+	PowerShellResult *ProfileResolverResult
+}
+
 // Uninstall removes Juggernaut activation blocks from shell profiles.
 // On Windows, it also removes legacy blocks from discovered and historical paths.
 func Uninstall(home string) ([]string, error) {
+	return UninstallWith(home, UninstallOptions{})
+}
+
+// UninstallWith is like Uninstall but accepts injectable dependencies.
+func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
 	var removed []string
 
 	if runtime.GOOS == "windows" {
-		psRemoved, err := UninstallPowerShellActivation(home)
+		psRemoved, err := UninstallPowerShellActivationWith(home, opts.PowerShellResult)
 		if err != nil {
 			return removed, err
 		}
 		removed = append(removed, psRemoved...)
+	} else if opts.PowerShellResult != nil {
+		// On non-Windows, use the injected PowerShell result for profile paths.
+		for _, target := range opts.PowerShellResult.ActiveTargets {
+			ok, err := RemoveTarget(target.Path)
+			if err != nil {
+				return removed, err
+			}
+			if ok {
+				removed = append(removed, target.Path)
+			}
+		}
 	}
 
 	for _, target := range DefaultTargets(home) {
-		// On Windows, skip PowerShell targets (handled by UninstallPowerShellActivation).
-		if runtime.GOOS == "windows" && target.Shell == ShellPowerShell {
-			continue
-		}
 		ok, err := RemoveTarget(target.Path)
 		if err != nil {
 			return removed, err
@@ -233,26 +263,36 @@ func RemoveTarget(path string) (bool, error) {
 // On Windows it checks both discovered active targets, historical candidates,
 // and POSIX targets.
 func InstalledTargets(home string) []string {
+	return InstalledTargetsWith(home, nil)
+}
+
+// InstalledTargetsWith is like InstalledTargets but accepts a pre-resolved
+// ProfileResolverResult to avoid launching PowerShell.
+func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string {
 	var paths []string
 
 	if runtime.GOOS == "windows" {
-		result := ResolvePowerShellProfiles()
-		allPaths := make([]string, 0, len(result.MigrationTargets)+len(historicalPowerShellTargetsScoped(home)))
-		allPaths = append(allPaths, result.MigrationTargets...)
-		allPaths = append(allPaths, historicalPowerShellTargetsScoped(home)...)
-		for _, path := range allPaths {
+		result := psResult
+		if result == nil {
+			r := ResolvePowerShellProfiles()
+			result = &r
+		}
+		for _, path := range result.MigrationTargets {
 			data, err := safepath.ReadFile(filepath.Dir(path), path)
 			if err == nil && HasBlock(string(data)) {
 				paths = append(paths, path)
 			}
 		}
+	} else if psResult != nil {
+		for _, target := range psResult.ActiveTargets {
+			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
+			if err == nil && HasBlock(string(data)) {
+				paths = append(paths, target.Path)
+			}
+		}
 	}
 
 	for _, target := range DefaultTargets(home) {
-		// On Windows, skip PowerShell targets (handled above via discovered paths).
-		if runtime.GOOS == "windows" && target.Shell == ShellPowerShell {
-			continue
-		}
 		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
 		if err == nil && HasBlock(string(data)) {
 			paths = append(paths, target.Path)
@@ -402,65 +442,88 @@ func HasAnyLegacyBlock(content string) bool {
 // removeLegacyLauncherBlock removes a legacy "# BEGIN: Juggernaut Launcher"
 // block from content. It only removes the block if both the begin and end
 // markers are present; an orphaned begin marker is left untouched.
+// It identifies each complete begin/end pair before removing that span, so
+// a valid pair followed by an orphan begin marker does not discard trailing
+// content.
 func removeLegacyLauncherBlock(content string) (string, bool) {
 	content = normalizeNewlines(content)
 	if !strings.Contains(content, LegacyLauncherEnd) {
 		return content, false
 	}
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines))
-	inBlock := false
-	found := false
+	return removeBlockWithMarkers(content, LegacyLauncherBegin, LegacyLauncherEnd)
+}
 
-	for _, line := range lines {
+// removeBlockWithMarkers removes a block delimited by the given begin/end
+// markers. It identifies each complete begin/end pair before removing that
+// span, so a valid pair followed by an orphan begin marker does not discard
+// trailing content, and an end marker before a begin marker is ignored.
+func removeBlockWithMarkers(content, begin, end string) (string, bool) {
+	lines := strings.Split(content, "\n")
+
+	// Find all begin and end line indices.
+	var begins []int
+	var ends []int
+	for i, line := range lines {
 		switch strings.TrimSpace(line) {
-		case LegacyLauncherBegin:
-			inBlock = true
-			found = true
-			continue
-		case LegacyLauncherEnd:
-			if inBlock {
-				inBlock = false
-				continue
+		case begin:
+			begins = append(begins, i)
+		case end:
+			ends = append(ends, i)
+		}
+	}
+
+	// If no begin marker, nothing to remove.
+	if len(begins) == 0 {
+		return content, false
+	}
+
+	// Match each begin to the next available end after it.
+	type blockSpan struct{ start, end int }
+	var spans []blockSpan
+	usedEnds := make(map[int]bool)
+	for _, b := range begins {
+		for _, e := range ends {
+			if e > b && !usedEnds[e] {
+				spans = append(spans, blockSpan{b, e})
+				usedEnds[e] = true
+				break
 			}
 		}
-		if !inBlock {
+	}
+
+	if len(spans) == 0 {
+		return content, false
+	}
+
+	// Collect line indices to remove.
+	remove := make(map[int]bool)
+	for _, s := range spans {
+		for i := s.start; i <= s.end; i++ {
+			remove[i] = true
+		}
+	}
+
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if !remove[i] {
 			out = append(out, line)
 		}
 	}
-	return strings.Join(out, "\n"), found
+	return strings.Join(out, "\n"), true
 }
 
 // removeLegacyBedrockBlock removes a legacy "# BEGIN: Claude Code Bedrock
 // Configuration" block from content. It only removes the block if both the
 // begin and end markers are present; an orphaned begin marker is left untouched.
+// It identifies each complete begin/end pair before removing that span, so
+// a valid pair followed by an orphan begin marker does not discard trailing
+// content.
 func removeLegacyBedrockBlock(content string) (string, bool) {
 	content = normalizeNewlines(content)
 	if !strings.Contains(content, LegacyBedrockEnd) {
 		return content, false
 	}
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines))
-	inBlock := false
-	found := false
-
-	for _, line := range lines {
-		switch strings.TrimSpace(line) {
-		case LegacyBedrockBegin:
-			inBlock = true
-			found = true
-			continue
-		case LegacyBedrockEnd:
-			if inBlock {
-				inBlock = false
-				continue
-			}
-		}
-		if !inBlock {
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, "\n"), found
+	return removeBlockWithMarkers(content, LegacyBedrockBegin, LegacyBedrockEnd)
 }
 
 // removeLegacyBlocks removes all positively identified legacy Juggernaut
@@ -505,14 +568,24 @@ func ResolvePowerShellProfilesScoped(home string) ProfileResolverResult {
 // discovered profiles. Returns paths that were modified.
 // The home parameter scopes historical candidates to the supplied directory.
 func InstallPowerShellActivation(home string) ([]string, error) {
+	return InstallPowerShellActivationWith(home, nil)
+}
+
+// InstallPowerShellActivationWith is like InstallPowerShellActivation but
+// accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
+func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResult) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
 
-	result := ResolvePowerShellProfiles()
+	if psResult == nil {
+		r := ResolvePowerShellProfiles()
+		psResult = &r
+	}
+	result := *psResult
 	var installed []string
 
-	// First pass: migrate legacy blocks from all discovered profiles.
+	// Migrate legacy blocks from all discovered profiles.
 	for _, path := range result.MigrationTargets {
 		modified, err := migrateLegacyAndInstall(path)
 		if err != nil {
@@ -523,19 +596,7 @@ func InstallPowerShellActivation(home string) ([]string, error) {
 		}
 	}
 
-	// Also check historical candidates for legacy block cleanup and
-	// remove stale current blocks from paths not in ActiveTargets.
-	for _, path := range historicalPowerShellTargetsScoped(home) {
-		modified, err := migrateLegacyAndRemoveStale(path, result.ActiveTargets)
-		if err != nil {
-			return installed, err
-		}
-		if modified {
-			installed = append(installed, path)
-		}
-	}
-
-	// Second pass: ensure every active target has the current block.
+	// Ensure every active target has the current block.
 	for _, target := range result.ActiveTargets {
 		changed, err := InstallTarget(target)
 		if err != nil {
@@ -579,39 +640,6 @@ func migrateLegacyAndInstall(path string) (bool, error) {
 	return true, safepath.WriteFile(base, path, []byte(content))
 }
 
-// migrateLegacyAndRemoveStale removes legacy blocks and, if the path is not
-// in the list of active targets, also removes the current activation block
-// (stale artifact from an old Juggernaut installation). Returns true if the
-// file was modified.
-func migrateLegacyAndRemoveStale(path string, activeTargets []Target) (bool, error) {
-	base := filepath.Dir(path)
-	data, err := safepath.ReadFile(base, path)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("reading %s: %w", path, err)
-	}
-
-	content := string(data)
-	original := content
-
-	// Remove legacy blocks.
-	content, _ = removeLegacyBlocks(content)
-
-	// If this path is NOT an active target, also remove the current block
-	// (stale artifact from an old installation).
-	if !containsTargetPathCI(activeTargets, path) && HasBlock(content) {
-		content, _ = removeBlock(content)
-	}
-
-	if content == original {
-		return false, nil
-	}
-
-	return true, safepath.WriteFile(base, path, []byte(content))
-}
-
 // migrateLegacyOnly removes legacy blocks without installing the current block.
 // Used for historical cleanup candidates. Returns true if the file was modified.
 func migrateLegacyOnly(path string) (bool, error) {
@@ -641,18 +669,24 @@ func migrateLegacyOnly(path string) (bool, error) {
 // and historical PowerShell profiles. Returns paths that were modified.
 // The home parameter scopes historical candidates to the supplied directory.
 func UninstallPowerShellActivation(home string) ([]string, error) {
+	return UninstallPowerShellActivationWith(home, nil)
+}
+
+// UninstallPowerShellActivationWith is like UninstallPowerShellActivation but
+// accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
+func UninstallPowerShellActivationWith(home string, psResult *ProfileResolverResult) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
 
-	result := ResolvePowerShellProfiles()
+	if psResult == nil {
+		r := ResolvePowerShellProfiles()
+		psResult = &r
+	}
+	result := *psResult
 	var removed []string
 
-	allPaths := make([]string, 0, len(result.MigrationTargets)+len(historicalPowerShellTargetsScoped(home)))
-	allPaths = append(allPaths, result.MigrationTargets...)
-	allPaths = append(allPaths, historicalPowerShellTargetsScoped(home)...)
-
-	for _, path := range allPaths {
+	for _, path := range result.MigrationTargets {
 		ok, err := removeActivationAndLegacy(path)
 		if err != nil {
 			return removed, err
@@ -698,11 +732,21 @@ func removeActivationAndLegacy(path string) (bool, error) {
 // healthy, the path where it was found (if healthy), and any warnings.
 // The home parameter scopes historical candidates to the supplied directory.
 func CheckPowerShellActivation(home string) (healthy bool, path string, warnings []string) {
+	return CheckPowerShellActivationWith(home, nil)
+}
+
+// CheckPowerShellActivationWith is like CheckPowerShellActivation but
+// accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
+func CheckPowerShellActivationWith(home string, psResult *ProfileResolverResult) (healthy bool, path string, warnings []string) {
 	if runtime.GOOS != "windows" {
 		return true, "", nil
 	}
 
-	result := ResolvePowerShellProfiles()
+	if psResult == nil {
+		r := ResolvePowerShellProfiles()
+		psResult = &r
+	}
+	result := *psResult
 
 	// Check effective profiles for the current block.
 	for _, target := range result.ActiveTargets {
@@ -724,18 +768,6 @@ func CheckPowerShellActivation(home string) (healthy bool, path string, warnings
 		if HasAnyLegacyBlock(string(data)) {
 			warnings = append(warnings,
 				fmt.Sprintf("legacy Juggernaut launcher block found in effective profile %s", target.Path))
-		}
-	}
-
-	// Check if activation exists only in a historical (non-loaded) path.
-	for _, histPath := range historicalPowerShellTargetsScoped(home) {
-		data, err := safepath.ReadFile(filepath.Dir(histPath), histPath)
-		if err != nil {
-			continue
-		}
-		if HasBlock(string(data)) {
-			warnings = append(warnings,
-				fmt.Sprintf("activation block found in non-loaded historical path %s — PowerShell does not load this profile", histPath))
 		}
 	}
 
