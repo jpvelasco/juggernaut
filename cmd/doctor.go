@@ -86,9 +86,8 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 			r.Check("activation warning", doctor.Warn, w)
 		}
 		// Report discovery status (reuse the already-resolved result).
-		if psResult.UsedFallback {
-			r.Check("powershell discovery", doctor.Warn, "used Known Documents fallback")
-		} else {
+		// Only emit OK when editions were actually discovered.
+		if len(psResult.EditionsDiscovered) > 0 {
 			editions := strings.Join(psResult.EditionsDiscovered, ", ")
 			r.Check("powershell discovery", doctor.OK, "editions: "+editions)
 		}
@@ -106,10 +105,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	if status, detail := claudeCommandStatus(); status != "" {
 		r.Check("claude binary", status, detail)
 	}
-	if status, detail := legacyArtifactStatus(home); status != "" {
-		r.Check("v4.2.6 artifacts", status, detail)
-	}
-
+	legacyArtifactStatus(home, r)
 	if doctorFlags.jsonOut {
 		out, err := r.JSON()
 		if err != nil {
@@ -134,16 +130,12 @@ func claudeCommandStatus() (doctor.Status, string) {
 	return doctor.OK, found
 }
 
-func legacyArtifactStatus(home string) (doctor.Status, string) {
-	actions := activation.DetectLegacyArtifacts(activation.DefaultBinDir(home))
-	if len(actions) == 0 {
-		return doctor.OK, "no broken v4.2.6 artifacts detected"
+func legacyArtifactStatus(home string, r *doctor.Report) {
+	binDir := activation.DefaultBinDir(home)
+	artifacts := activation.DetectLegacyArtifacts(binDir)
+	for _, a := range artifacts {
+		r.Check("v4.2.6 artifact", doctor.Warn, fmt.Sprintf("%s: %s", a.Action, a.Path))
 	}
-	parts := make([]string, 0, len(actions))
-	for _, action := range actions {
-		parts = append(parts, action.Action+": "+action.Path)
-	}
-	return doctor.Warn, strings.Join(parts, "; ") + " — run `juggernaut apply` to recover"
 }
 
 func checkConnectivity(r *doctor.Report, home, token string, scopes []string) {

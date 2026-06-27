@@ -87,3 +87,6 @@ docs/superpowers/
 agent-tools/
 mcps/
 terminals/
+
+# Research working docs
+.research/

@@ -11,7 +11,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // psEdition identifies a PowerShell edition and its executable name.
@@ -28,30 +31,10 @@ type psProfilePaths struct {
 
 // psDiscoveryResult holds the result of profile discovery for one edition.
 type psDiscoveryResult struct {
-	Edition      string
-	AllHosts     string
-	CurrentHost  string
-	DiscoveryOK  bool
-	UsedFallback bool
-}
-
-// ProfileResolverResult is the shared, authoritative result of PowerShell
-// profile discovery.
-type ProfileResolverResult struct {
-	// ActiveTargets are the discovered profiles that PowerShell actually loads.
-	ActiveTargets []Target
-	// InstallTarget is the authoritative profile for installing the new
-	// activation block. Typically the first AllHosts path.
-	InstallTarget Target
-	// MigrationTargets are all discovered profiles that should be inspected
-	// for legacy blocks during apply/migration.
-	MigrationTargets []string
-	// DiscoveryWarnings lists warnings about the discovery process.
-	DiscoveryWarnings []string
-	// UsedFallback is true when Known Documents fallback was used.
-	UsedFallback bool
-	// EditionsDiscovered lists which PowerShell editions were found.
-	EditionsDiscovered []string
+	Edition     string
+	AllHosts    string
+	CurrentHost string
+	DiscoveryOK bool
 }
 
 // discoveryCommandRunner is the injectable interface for running PowerShell
@@ -65,7 +48,9 @@ type discoveryCommandRunner interface {
 type realCommandRunner struct{}
 
 func (r *realCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, exe, args...)
+	// exe is a fixed, internally-defined PowerShell binary name ("pwsh.exe"
+	// or "powershell.exe") — not user-controlled input.
+	cmd := exec.CommandContext(ctx, exe, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
 	data, err := cmd.CombinedOutput()
 	return data, err
 }
@@ -83,13 +68,20 @@ $profiles | ConvertTo-Json -Compress
 // defaultPSRunner is the default command runner used in production.
 var defaultPSRunner discoveryCommandRunner = &realCommandRunner{}
 
+// psRunnerMu protects defaultPSRunner from concurrent access during tests.
+var psRunnerMu sync.Mutex
+
 // SetPSRunnerForTesting replaces the default runner (for tests only).
 func SetPSRunnerForTesting(r discoveryCommandRunner) {
+	psRunnerMu.Lock()
+	defer psRunnerMu.Unlock()
 	defaultPSRunner = r
 }
 
 // ResetPSRunnerForTesting restores the default runner.
 func ResetPSRunnerForTesting() {
+	psRunnerMu.Lock()
+	defer psRunnerMu.Unlock()
 	defaultPSRunner = &realCommandRunner{}
 }
 
@@ -108,6 +100,28 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 	}
 	result := ProfileResolverResult{}
 
+	// Resolve the base directory for path containment validation.
+	// This prevents PowerShell from returning paths that escape the
+	// user's home directory (e.g. UNC paths, symlink escapes).
+	// Use the Known Documents folder when available (it may be under
+	// OneDrive or another redirected location); fall back to $HOME.
+	baseDir := home
+	docs, err := resolveDocumentsFolder()
+	if err == nil {
+		// Ensure the Documents folder is under $HOME; if it is, use it
+		// as the tighter containment boundary.
+		rel, relErr := filepath.Rel(home, docs)
+		if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			baseDir = docs
+		}
+	}
+
+	// Historical candidates: hardcoded paths that may still contain a
+	// Juggernaut block even after the user's Documents folder moved to
+	// OneDrive. These are always included for uninstall/doctor scanning
+	// and legacy-block migration.
+	historical := historicalPowerShellTargetsScoped(home)
+
 	editions := []psEdition{
 		{Name: "PowerShell 7", Exe: "pwsh.exe"},
 		{Name: "Windows PowerShell 5.1", Exe: "powershell.exe"},
@@ -118,30 +132,32 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 
 		if dr.DiscoveryOK {
 			result.EditionsDiscovered = append(result.EditionsDiscovered, ed.Name)
-			allHosts := validateAndCanonicalizePath(dr.AllHosts)
-			currentHost := validateAndCanonicalizePath(dr.CurrentHost)
+			allHosts := validateAndCanonicalizePath(dr.AllHosts, baseDir)
+			currentHost := validateAndCanonicalizePath(dr.CurrentHost, baseDir)
 
-			if allHosts != "" {
+			if allHosts != "" && !containsTargetPathCI(result.ActiveTargets, allHosts) {
 				result.ActiveTargets = append(result.ActiveTargets,
+					Target{Path: allHosts, Shell: ShellPowerShell},
+				)
+				result.InstallTargets = append(result.InstallTargets,
 					Target{Path: allHosts, Shell: ShellPowerShell},
 				)
 				if !containsPathCI(result.MigrationTargets, allHosts) {
 					result.MigrationTargets = append(result.MigrationTargets, allHosts)
 				}
 			}
-			// Add currentHost to ActiveTargets when it differs from allHosts.
-			// This is the host-specific profile that PowerShell loads after the
-			// all-hosts profile, and activation may exist only there.
+			// Add currentHost to ActiveTargets for health checks and to
+			// MigrationTargets for legacy-block scanning. It is deliberately
+			// NOT added to InstallTargets — the host-specific profile loads
+			// after the all-hosts profile and can override or retain a stale
+			// duplicate of the global activation.
+			if currentHost != "" && !containsTargetPathCI(result.ActiveTargets, currentHost) {
+				result.ActiveTargets = append(result.ActiveTargets,
+					Target{Path: currentHost, Shell: ShellPowerShell},
+				)
+			}
 			if currentHost != "" && !containsPathCI(result.MigrationTargets, currentHost) {
 				result.MigrationTargets = append(result.MigrationTargets, currentHost)
-				if !containsTargetPathCI(result.ActiveTargets, currentHost) {
-					result.ActiveTargets = append(result.ActiveTargets,
-						Target{Path: currentHost, Shell: ShellPowerShell},
-					)
-				}
-			}
-			if result.InstallTarget.Path == "" && allHosts != "" {
-				result.InstallTarget = Target{Path: allHosts, Shell: ShellPowerShell}
 			}
 		} else {
 			result.DiscoveryWarnings = append(result.DiscoveryWarnings,
@@ -150,11 +166,32 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 		}
 	}
 
-	// If no active targets found, report a discovery failure.
+	// If no active targets found, fall back to Known Documents paths.
+	// This ensures installation can still proceed when PowerShell is
+	// missing, timed out, or failed to launch.
 	if len(result.ActiveTargets) == 0 {
+		result.UsedFallback = true
+		for _, p := range historical {
+			if !containsTargetPathCI(result.ActiveTargets, p) {
+				result.ActiveTargets = append(result.ActiveTargets,
+					Target{Path: p, Shell: ShellPowerShell},
+				)
+				result.InstallTargets = append(result.InstallTargets,
+					Target{Path: p, Shell: ShellPowerShell},
+				)
+			}
+		}
 		result.DiscoveryWarnings = append(result.DiscoveryWarnings,
-			"PowerShell profile discovery failed; no PowerShell editions found",
+			"PowerShell profile discovery failed; using Known Documents fallback",
 		)
+	}
+
+	// Merge historical candidates into MigrationTargets (for doctor,
+	// uninstall, and legacy-block migration).
+	for _, p := range historical {
+		if !containsPathCI(result.MigrationTargets, p) {
+			result.MigrationTargets = append(result.MigrationTargets, p)
+		}
 	}
 
 	return result
@@ -168,11 +205,16 @@ func discoverEdition(ed psEdition, runner discoveryCommandRunner) psDiscoveryRes
 		"-NoLogo", "-NoProfile", "-NonInteractive",
 		"-Command", psDiscoveryScriptSimple,
 	})
-	if err != nil {
-		return psDiscoveryResult{Edition: ed.Name}
+	// Even when PowerShell exits non-zero, it may have produced valid JSON
+	// before the error. Try parsing the output first; fall back to error only
+	// if parsing also fails.
+	if err == nil {
+		return parseDiscoveryOutput(ed.Name, output)
 	}
-
-	return parseDiscoveryOutput(ed.Name, output)
+	if dr := parseDiscoveryOutput(ed.Name, output); dr.DiscoveryOK {
+		return dr
+	}
+	return psDiscoveryResult{Edition: ed.Name}
 }
 
 func parseDiscoveryOutput(edition string, output []byte) psDiscoveryResult {
@@ -196,6 +238,74 @@ func parseDiscoveryOutput(edition string, output []byte) psDiscoveryResult {
 	}
 }
 
+// historicalPowerShellTargets returns the profile paths resolved via the
+// Windows Known Folder API (FOLDERID_Documents). These paths may still
+// contain a Juggernaut block even after the user's Documents folder moved
+// to OneDrive. These are used for uninstall/doctor scanning and
+// legacy-block migration.
+func historicalPowerShellTargets() []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	docs, err := resolveDocumentsFolder()
+	if err != nil {
+		return nil
+	}
+	return resolveHistoricalTargets(docs)
+}
+
+// historicalPowerShellTargetsScoped returns the profile paths resolved via
+// the Windows Known Folder API, scoped to the given home directory as a
+// fallback when the Known Folder API is unavailable. These are used for
+// uninstall/doctor scanning and legacy-block migration.
+func historicalPowerShellTargetsScoped(home string) []string {
+	if home == "" {
+		return nil
+	}
+	docs, err := resolveDocumentsFolder()
+	if err != nil {
+		// Fall back to $HOME/Documents when Known Folders is unavailable.
+		docs = filepath.Join(home, "Documents")
+	}
+	paths := resolveHistoricalTargets(docs)
+
+	if runtime.GOOS != "windows" {
+		paths = append(paths,
+			filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1"),
+		)
+	}
+	return paths
+}
+
+// resolveDocumentsFolder uses the Windows Known Folder API (FOLDERID_Documents)
+// to resolve the actual Documents path, which correctly handles OneDrive
+// redirection and other custom folder locations.
+var resolveDocumentsFolder = func() (string, error) {
+	return windows.KnownFolderPath(windows.FOLDERID_Documents, windows.KF_FLAG_DEFAULT)
+}
+
+// SetResolveDocumentsFolderForTesting replaces the Documents folder resolver
+// (for tests only).
+func SetResolveDocumentsFolderForTesting(fn func() (string, error)) {
+	resolveDocumentsFolder = fn
+}
+
+// ResetResolveDocumentsFolderForTesting restores the default resolver.
+func ResetResolveDocumentsFolderForTesting() {
+	resolveDocumentsFolder = func() (string, error) {
+		return windows.KnownFolderPath(windows.FOLDERID_Documents, windows.KF_FLAG_DEFAULT)
+	}
+}
+
+// resolveHistoricalTargets builds the well-known PowerShell profile paths
+// under the given Documents folder.
+func resolveHistoricalTargets(docs string) []string {
+	return []string{
+		filepath.Join(docs, "PowerShell", "Microsoft.PowerShell_profile.ps1"),
+		filepath.Join(docs, "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"),
+	}
+}
+
 // resolveHomeDir returns the user's home directory from environment or OS.
 func resolveHomeDir() string {
 	home := os.Getenv("HOME")
@@ -206,18 +316,6 @@ func resolveHomeDir() string {
 		home, _ = os.UserHomeDir()
 	}
 	return home
-}
-
-// historicalPowerShellTargets returns nil. Hardcoded historical paths have
-// been removed — PowerShell profile locations are discovered dynamically.
-func historicalPowerShellTargets() []string {
-	return nil
-}
-
-// historicalPowerShellTargetsScoped returns nil. Hardcoded historical paths
-// have been removed — PowerShell profile locations are discovered dynamically.
-func historicalPowerShellTargetsScoped(home string) []string {
-	return nil
 }
 
 // containsPathCI checks if a path exists in a list, case-insensitive on Windows.
@@ -252,15 +350,23 @@ func deduplicatePathsCI(paths []string) []string {
 }
 
 // validateAndCanonicalizePath trims and cleans a path, returning empty string
-// for invalid paths.
-func validateAndCanonicalizePath(p string) string {
+// for invalid paths. If baseDir is non-empty, the path must be under baseDir
+// (checked via filepath.Rel) to prevent path traversal attacks from a
+// compromised PowerShell output.
+func validateAndCanonicalizePath(p, baseDir string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
 		return ""
 	}
 	p = filepath.Clean(p)
-	if p == "." || p == "\"\"" {
+	if p == "." {
 		return ""
+	}
+	if baseDir != "" {
+		rel, err := filepath.Rel(baseDir, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return ""
+		}
 	}
 	return p
 }

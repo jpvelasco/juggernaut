@@ -51,30 +51,6 @@ func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	}
 }
 
-func TestLegacyArtifactStatusWarnsWhenRecoverable(t *testing.T) {
-	home := t.TempDir()
-	binDir := activation.DefaultBinDir(home)
-	if err := safepath.MkdirAll(binDir); err != nil {
-		t.Fatalf("creating bin dir: %v", err)
-	}
-	backupName := "claude.juggernaut-original"
-	if runtime.GOOS == "windows" {
-		backupName = "claude.juggernaut-original.cmd"
-	}
-	backup := filepath.Join(binDir, backupName)
-	if err := os.WriteFile(backup, []byte("real claude"), 0o600); err != nil {
-		t.Fatalf("creating backup: %v", err)
-	}
-
-	status, detail := legacyArtifactStatus(home)
-	if status != doctor.Warn {
-		t.Fatalf("expected WARN, got %s (%s)", status, detail)
-	}
-	if !strings.Contains(detail, "backup can be restored") {
-		t.Fatalf("expected recoverable backup detail, got %q", detail)
-	}
-}
-
 func TestCheckSettingsScope_DefaultProjectMissingIsOK(t *testing.T) {
 	home := t.TempDir()
 
@@ -131,7 +107,7 @@ func writeExecutableStub(t *testing.T, path string) {
 	}
 }
 
-func TestDoctor_ActivationUnhealthy_LegacyInDiscoveredProfile(t *testing.T) {
+func TestDoctor_ActivationUnhealthy_NoActivationInDiscoveredProfile(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
@@ -140,13 +116,13 @@ func TestDoctor_ActivationUnhealthy_LegacyInDiscoveredProfile(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	// Real discovered profile has legacy launcher block
+	// Real discovered profile has no activation block
 	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
 		t.Fatalf("creating dir: %v", err)
 	}
 	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
-		"# BEGIN: Juggernaut Launcher\nfunction claude { juggernaut --launcher @args }\n# END: Juggernaut Launcher",
+		"export FOO=bar",
 	)); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
@@ -164,16 +140,13 @@ func TestDoctor_ActivationUnhealthy_LegacyInDiscoveredProfile(t *testing.T) {
 	defer activation.ResetPSRunnerForTesting()
 
 	// Check activation using the shared resolver
-	healthy, _, warnings := activation.CheckPowerShellActivation(home)
+	healthy, _, _ := activation.CheckPowerShellActivation(home)
 	if healthy {
-		t.Error("doctor should NOT report activation healthy when discovered profile has legacy block")
-	}
-	if len(warnings) == 0 {
-		t.Error("expected warnings about legacy block")
+		t.Error("doctor should NOT report activation healthy when discovered profile has no activation")
 	}
 }
 
-func TestDoctor_ActivationHealthy_AfterMigration(t *testing.T) {
+func TestDoctor_ActivationHealthy_AfterInstall(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
@@ -187,7 +160,7 @@ func TestDoctor_ActivationHealthy_AfterMigration(t *testing.T) {
 		t.Fatalf("creating dir: %v", err)
 	}
 	if err := safepath.WriteFile(filepath.Dir(realProfile), realProfile, []byte(
-		"# BEGIN: Juggernaut Launcher\nfunction claude { juggernaut --launcher @args }\n# END: Juggernaut Launcher",
+		"export FOO=bar",
 	)); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
@@ -203,22 +176,22 @@ func TestDoctor_ActivationHealthy_AfterMigration(t *testing.T) {
 	activation.SetPSRunnerForTesting(runner)
 	defer activation.ResetPSRunnerForTesting()
 
-	// Apply migration
+	// Apply install
 	_, err := activation.InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("InstallPowerShellActivation: %v", err)
 	}
 
-	// After migration, should be healthy
+	// After install, should be healthy
 	healthy, path, warnings := activation.CheckPowerShellActivation(home)
 	if !healthy {
-		t.Error("doctor should report activation healthy after migration")
+		t.Error("doctor should report activation healthy after install")
 	}
 	if path != realProfile {
 		t.Errorf("expected path %s, got %s", realProfile, path)
 	}
 	if len(warnings) > 0 {
-		t.Errorf("expected no warnings after migration, got %v", warnings)
+		t.Errorf("expected no warnings after install, got %v", warnings)
 	}
 }
 
@@ -303,5 +276,65 @@ func TestDoctor_DiscoveryCalledOncePerEdition(t *testing.T) {
 	}
 	if runner.counts["powershell.exe"] > 1 {
 		t.Errorf("powershell.exe was called %d times, expected at most 1", runner.counts["powershell.exe"])
+	}
+}
+
+func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows only")
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	// PS7 AllHosts: has the current activation block (healthy)
+	ps7All := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(ps7All)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(ps7All), ps7All, []byte(
+		activation.BeginMarker+"\n$env.TEST='1'\n"+activation.EndMarker,
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// PS5.1 CurrentHost: has a legacy launcher block (overrides activation)
+	ps5Host := filepath.Join(home, "OneDrive", "Documents", "WindowsPowerShell", "Microsoft.PowerShell_profile_5host.ps1")
+	if err := safepath.MkdirAll(filepath.Dir(ps5Host)); err != nil {
+		t.Fatalf("creating dir: %v", err)
+	}
+	if err := safepath.WriteFile(filepath.Dir(ps5Host), ps5Host, []byte(
+		activation.LegacyLauncherBegin+"\n$env.LEGACY='1'\n"+activation.LegacyLauncherEnd,
+	)); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// Mock discovery: PS7 returns AllHosts, PS5.1 returns CurrentHost
+	runner := &mockDoctorCommandRunner{
+		output: map[string][]byte{
+			"pwsh.exe":       mockPSOutput(ps7All, ps7All),
+			"powershell.exe": mockPSOutput(ps5Host, ps5Host),
+		},
+	}
+	activation.SetPSRunnerForTesting(runner)
+	defer activation.ResetPSRunnerForTesting()
+
+	// Check activation — should be healthy but with a warning
+	healthy, _, warnings := activation.CheckPowerShellActivation(home)
+	if !healthy {
+		t.Fatal("doctor should report activation healthy (AllHosts has the block)")
+	}
+	if len(warnings) == 0 {
+		t.Fatal("doctor should emit a warning about legacy block in later profile")
+	}
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, ps5Host) && strings.Contains(w, "legacy") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about legacy block in %s, got: %v", ps5Host, warnings)
 	}
 }

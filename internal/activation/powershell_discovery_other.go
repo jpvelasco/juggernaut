@@ -3,46 +3,23 @@
 package activation
 
 import (
+	"os"
 	"path/filepath"
 )
-
-// ProfileResolverResult is the shared, authoritative result of profile
-// discovery. On non-Windows platforms it returns the same targets as
-// DefaultTargets (no dynamic discovery is needed).
-type ProfileResolverResult struct {
-	ActiveTargets      []Target
-	InstallTarget      Target
-	MigrationTargets   []string
-	DiscoveryWarnings  []string
-	UsedFallback       bool
-	EditionsDiscovered []string
-}
 
 // discoverPowerShellProfiles is a no-op on non-Windows; it returns the same
 // targets as DefaultTargets.
 func discoverPowerShellProfiles() ProfileResolverResult {
-	targets := DefaultTargets("")
+	home := os.Getenv("HOME")
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	targets := DefaultTargets(home)
 	result := ProfileResolverResult{
 		ActiveTargets: targets,
 	}
-	if len(targets) > 0 {
-		result.InstallTarget = targets[0]
-		for _, t := range targets {
-			result.MigrationTargets = append(result.MigrationTargets, t.Path)
-		}
-	}
 	result.EditionsDiscovered = []string{"non-windows"}
 	return result
-}
-
-// historicalPowerShellTargets returns nil on non-Windows.
-func historicalPowerShellTargets() []string {
-	return nil
-}
-
-// historicalPowerShellTargetsScoped returns nil on non-Windows.
-func historicalPowerShellTargetsScoped(home string) []string {
-	return nil
 }
 
 // discoverPowerShellProfilesScoped is a no-op on non-Windows.
@@ -74,9 +51,9 @@ func deduplicatePathsCI(paths []string) []string {
 }
 
 // validateAndCanonicalizePath trims and cleans a path.
-func validateAndCanonicalizePath(p string) string {
+func validateAndCanonicalizePath(p, baseDir string) string {
 	p = filepath.Clean(p)
-	if p == "." || p == "\"\"" {
+	if p == "." {
 		return ""
 	}
 	return p
