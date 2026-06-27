@@ -787,6 +787,28 @@ func resolveClaudeBinary(pathList, self string) (string, error) {
 	return "", exec.ErrNotFound
 }
 
+// isLegacyClaudeShim returns true if the file at path is a legacy v4.2.6
+// claude.cmd/claude.bat shim that invokes the removed juggernaut --launcher
+// path. These shims must be rejected so they are not selected as the real
+// Claude Code binary.
+//
+//nolint:unused // retained for future v4.2.6 artifact recovery
+func isLegacyClaudeShim(path string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	// Normalize line endings for comparison — legacy shims may have LF or
+	// CRLF endings, and may have trailing whitespace or extra blank lines.
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.TrimSpace(content)
+	return strings.Contains(content, "juggernaut --launcher")
+}
+
 func sameExecutable(candidate, self string) bool {
 	if self == "" {
 		return false

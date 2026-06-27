@@ -388,6 +388,17 @@ func readTargets(t *testing.T, home string, psResult *ProfileResolverResult) map
 	return out
 }
 
+//nolint:unused // retained test helper for fixture creation
+func executableFixture(t *testing.T) string {
+	t.Helper()
+	self := filepath.Join(t.TempDir(), "juggernaut")
+	if runtime.GOOS == "windows" {
+		self += ".exe"
+	}
+	writeExecutableFile(t, filepath.Dir(self), self, "juggernaut")
+	return self
+}
+
 func writeFile(t *testing.T, base, path, content string) {
 	t.Helper()
 	if err := safepath.WriteFile(base, path, []byte(content)); err != nil {
