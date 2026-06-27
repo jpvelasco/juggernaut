@@ -24,12 +24,28 @@ builds:
 archives:
   - id: juggernaut
     name_template: "juggernaut_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - src: LICENSE*
+      - src: README.md
 
 checksum:
   name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
 
 release:
   github:
     owner: jpvelasco
     name: juggernaut
   name_template: "v{{.Version}}"
+  draft: true
