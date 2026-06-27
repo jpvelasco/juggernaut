@@ -419,8 +419,13 @@ func TestSetWithFallback_KeychainSuccessRemovesFallback(t *testing.T) {
 
 // TestSetWithFallback_WritesVersionedCredential verifies that
 // SetWithFallback writes a versioned envelope to the fallback file, not a
-// raw token.
+// raw token. This is Windows-only because only Windows enforces the 2560-byte
+// keychain limit that forces the file fallback.
 func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only: requires 2560-byte keychain limit to force file fallback")
+	}
+
 	home := t.TempDir()
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
