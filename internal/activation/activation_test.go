@@ -1,6 +1,8 @@
 package activation
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,6 +15,19 @@ import (
 
 func TestInstallIsIdempotent(t *testing.T) {
 	home := t.TempDir()
+
+	// On Windows, inject a mock runner so Install doesn't touch real profiles.
+	if runtime.GOOS == "windows" {
+		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		runner := &testDiscoveryRunner{
+			output: map[string][]byte{
+				"pwsh.exe":       testPSOutput(psProfile, psProfile),
+				"powershell.exe": testPSOutput(psProfile, psProfile),
+			},
+		}
+		SetPSRunnerForTesting(runner)
+		defer ResetPSRunnerForTesting()
+	}
 
 	first, err := Install(home)
 	if err != nil {
@@ -48,6 +63,20 @@ func TestUninstallPreservesUnrelatedContent(t *testing.T) {
 	if err := safepath.WriteFile(home, target, []byte(original)); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
+
+	// On Windows, inject a mock runner so Install doesn't touch real profiles.
+	if runtime.GOOS == "windows" {
+		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		runner := &testDiscoveryRunner{
+			output: map[string][]byte{
+				"pwsh.exe":       testPSOutput(psProfile, psProfile),
+				"powershell.exe": testPSOutput(psProfile, psProfile),
+			},
+		}
+		SetPSRunnerForTesting(runner)
+		defer ResetPSRunnerForTesting()
+	}
+
 	if _, err := Install(home); err != nil {
 		t.Fatalf("Install(): %v", err)
 	}
@@ -432,4 +461,25 @@ func envValue(env []string, key string) string {
 		}
 	}
 	return ""
+}
+
+// testDiscoveryRunner is a mock discoveryCommandRunner for activation_test.go.
+type testDiscoveryRunner struct {
+	output map[string][]byte
+	err    map[string]error
+}
+
+func (r *testDiscoveryRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
+	if err := r.err[exe]; err != nil {
+		return nil, err
+	}
+	return r.output[exe], nil
+}
+
+func testPSOutput(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
+	return data
 }

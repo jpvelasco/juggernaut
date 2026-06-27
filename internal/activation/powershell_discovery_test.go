@@ -365,16 +365,17 @@ func TestDiscoverPowerShellProfiles_FallbackKnownDocuments(t *testing.T) {
 }
 
 func TestParseDiscoveryOutput_Valid(t *testing.T) {
-	output := makePSOutput("C:\\Users\\test\\OneDrive\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1",
-		"C:\\Users\\test\\OneDrive\\Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1")
+	home := t.TempDir()
+	allHosts := filepath.Join(home, "redirected", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	output := makePSOutput(allHosts, allHosts)
 
 	result := parseDiscoveryOutput("PowerShell 7", output)
 
 	if !result.DiscoveryOK {
 		t.Fatal("expected discovery to succeed")
 	}
-	if !strings.Contains(result.AllHosts, "OneDrive") {
-		t.Errorf("expected OneDrive in path, got %s", result.AllHosts)
+	if result.AllHosts != allHosts {
+		t.Errorf("expected %s, got %s", allHosts, result.AllHosts)
 	}
 }
 
@@ -392,7 +393,9 @@ func TestParseDiscoveryOutput_EmptyPaths(t *testing.T) {
 }
 
 func TestParseDiscoveryOutput_BOM(t *testing.T) {
-	output := makePSOutput("C:\\Users\\test\\profile.ps1", "C:\\Users\\test\\profile.ps1")
+	home := t.TempDir()
+	allHosts := filepath.Join(home, "profile.ps1")
+	output := makePSOutput(allHosts, allHosts)
 	output = append([]byte("\xef\xbb\xbf"), output...) // prepend UTF-8 BOM
 
 	result := parseDiscoveryOutput("PowerShell 7", output)
@@ -400,7 +403,7 @@ func TestParseDiscoveryOutput_BOM(t *testing.T) {
 	if !result.DiscoveryOK {
 		t.Fatal("expected discovery to succeed with BOM")
 	}
-	if result.AllHosts != "C:\\Users\\test\\profile.ps1" {
+	if result.AllHosts != allHosts {
 		t.Errorf("expected clean path, got %q", result.AllHosts)
 	}
 }
@@ -603,7 +606,7 @@ func TestCheckPowerShellActivation_Healthy(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	healthy, path, warnings := CheckPowerShellActivation()
+	healthy, path, warnings := CheckPowerShellActivation(home)
 	if !healthy {
 		t.Error("expected activation to be healthy")
 	}
@@ -643,7 +646,7 @@ func TestCheckPowerShellActivation_Unhealthy_LegacyInEffective(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	healthy, _, warnings := CheckPowerShellActivation()
+	healthy, _, warnings := CheckPowerShellActivation(home)
 	if healthy {
 		t.Error("expected activation to be unhealthy with legacy block")
 	}
@@ -688,7 +691,7 @@ func TestCheckPowerShellActivation_FalsePositive_HistoricalOnly(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	healthy, _, warnings := CheckPowerShellActivation()
+	healthy, _, warnings := CheckPowerShellActivation(home)
 	if healthy {
 		t.Error("expected activation to be unhealthy when only historical path has it")
 	}
@@ -698,17 +701,21 @@ func TestCheckPowerShellActivation_FalsePositive_HistoricalOnly(t *testing.T) {
 }
 
 func TestValidateAndCanonicalizePath(t *testing.T) {
+	home := t.TempDir()
+	validPath := filepath.Join(home, "profile.ps1")
+	validSpaces := filepath.Join(home, "My Documents", "profile.ps1")
+
 	tests := []struct {
 		name string
 		in   string
 		want string
 	}{
-		{"valid path", `C:\Users\test\profile.ps1`, `C:\Users\test\profile.ps1`},
+		{"valid path", validPath, validPath},
 		{"empty", "", ""},
 		{"whitespace", "  ", ""},
 		{"dot", ".", ""},
 		{"quotes", `""`, ""},
-		{"with spaces", `C:\My Documents\profile.ps1`, `C:\My Documents\profile.ps1`},
+		{"with spaces", validSpaces, validSpaces},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -721,10 +728,14 @@ func TestValidateAndCanonicalizePath(t *testing.T) {
 }
 
 func TestDeduplicatePathsCI(t *testing.T) {
+	home := t.TempDir()
+	path1 := filepath.Join(home, "profile.ps1")
+	path2 := filepath.Join(home, "other.ps1")
+
 	paths := []string{
-		`C:\Users\test\profile.ps1`,
-		`C:\USERS\TEST\PROFILE.PS1`,
-		`C:\Users\test\other.ps1`,
+		path1,
+		strings.ToUpper(path1),
+		path2,
 	}
 	deduped := deduplicatePathsCI(paths)
 	if len(deduped) != 2 {
@@ -781,7 +792,7 @@ func TestInstallPowerShellActivation_LegacyMigration(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	installed, err := InstallPowerShellActivation()
+	installed, err := InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("InstallPowerShellActivation: %v", err)
 	}
@@ -832,14 +843,14 @@ func TestInstallPowerShellActivation_Idempotent(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	_, err := InstallPowerShellActivation()
+	_, err := InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 
 	data1, _ := safepath.ReadFile(filepath.Dir(allHosts), allHosts)
 
-	_, err = InstallPowerShellActivation()
+	_, err = InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("second install: %v", err)
 	}
@@ -879,7 +890,7 @@ func TestUninstallPowerShellActivation(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	removed, err := UninstallPowerShellActivation()
+	removed, err := UninstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("UninstallPowerShellActivation: %v", err)
 	}
@@ -968,7 +979,7 @@ func TestInstallPowerShellActivation_HostSpecificOverride(t *testing.T) {
 	SetPSRunnerForTesting(runner)
 	defer ResetPSRunnerForTesting()
 
-	installed, err := InstallPowerShellActivation()
+	installed, err := InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("InstallPowerShellActivation: %v", err)
 	}
@@ -1017,8 +1028,9 @@ func TestDiscoveryTimeout_WithMock(t *testing.T) {
 	if len(result.ActiveTargets) == 0 {
 		t.Error("expected fallback to provide active targets")
 	}
-	if len(result.EditionsDiscovered) != 2 {
-		t.Errorf("expected 2 editions discovered, got %d", len(result.EditionsDiscovered))
+	// No editions should be listed as discovered because both timed out.
+	if len(result.EditionsDiscovered) != 0 {
+		t.Errorf("expected 0 editions discovered, got %d", len(result.EditionsDiscovered))
 	}
 }
 
@@ -1053,15 +1065,17 @@ func TestOneExecutableMissing(t *testing.T) {
 }
 
 func TestValidateAndCanonicalizePath_Unicode(t *testing.T) {
+	home := t.TempDir()
 	// Paths with Unicode characters should work
-	p := validateAndCanonicalizePath(`C:\Users\über\Documents\PowerShell\profile.ps1`)
+	p := validateAndCanonicalizePath(filepath.Join(home, "über", "profile.ps1"))
 	if p == "" {
 		t.Error("Unicode path should be valid")
 	}
 }
 
 func TestValidateAndCanonicalizePath_Spaces(t *testing.T) {
-	p := validateAndCanonicalizePath(`  C:\My Documents\PowerShell\profile.ps1  `)
+	home := t.TempDir()
+	p := validateAndCanonicalizePath("  " + filepath.Join(home, "My Documents", "profile.ps1") + "  ")
 	if p == "" {
 		t.Error("path with spaces should be valid")
 	}
@@ -1075,8 +1089,8 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 	home := t.TempDir()
 	makeHome(t, home)
 
-	// Actual discovered PowerShell profile (OneDrive)
-	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	// Actual discovered PowerShell profile (redirected Documents)
+	realProfile := filepath.Join(home, "redirected-documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
 		t.Fatalf("creating dir: %v", err)
 	}
@@ -1111,7 +1125,7 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 	defer ResetPSRunnerForTesting()
 
 	// Before apply: doctor should NOT report activation as healthy.
-	healthy, _, warnings := CheckPowerShellActivation()
+	healthy, _, warnings := CheckPowerShellActivation(home)
 	if healthy {
 		t.Error("doctor should NOT report activation healthy before apply")
 	}
@@ -1120,7 +1134,7 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 	}
 
 	// Apply
-	installed, err := InstallPowerShellActivation()
+	installed, err := InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("InstallPowerShellActivation: %v", err)
 	}
@@ -1149,7 +1163,7 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 	}
 
 	// After apply: doctor should report activation healthy
-	healthy, foundPath, warnings := CheckPowerShellActivation()
+	healthy, foundPath, warnings := CheckPowerShellActivation(home)
 	if !healthy {
 		t.Error("doctor should report activation healthy after apply")
 	}
@@ -1166,7 +1180,7 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 	// This is correct: we don't delete current blocks from historical paths.
 
 	// Idempotent: second apply should not change anything
-	_, err = InstallPowerShellActivation()
+	_, err = InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("second install: %v", err)
 	}
@@ -1178,9 +1192,11 @@ func TestRegression_OneDriveRedirectedWithLegacyBlock(t *testing.T) {
 
 // Test that the mockCommandRunner respects the context timeout.
 func TestMockCommandRunner_WithTimeout(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "profile.ps1")
 	runner := &mockCommandRunner{
 		output: map[string][]byte{
-			"pwsh.exe": makePSOutput("C:\\test\\profile.ps1", "C:\\test\\profile.ps1"),
+			"pwsh.exe": makePSOutput(path, path),
 		},
 	}
 

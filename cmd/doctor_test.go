@@ -178,7 +178,7 @@ func TestDoctor_ActivationFalsePositive_HistoricalOnly(t *testing.T) {
 	defer activation.ResetPSRunnerForTesting()
 
 	// Check activation using the shared resolver
-	healthy, _, warnings := activation.CheckPowerShellActivation()
+	healthy, _, warnings := activation.CheckPowerShellActivation(home)
 	if healthy {
 		t.Error("doctor should NOT report activation healthy when only historical path has it")
 	}
@@ -218,13 +218,13 @@ func TestDoctor_ActivationHealthy_AfterMigration(t *testing.T) {
 	defer activation.ResetPSRunnerForTesting()
 
 	// Apply migration
-	_, err := activation.InstallPowerShellActivation()
+	_, err := activation.InstallPowerShellActivation(home)
 	if err != nil {
 		t.Fatalf("InstallPowerShellActivation: %v", err)
 	}
 
 	// After migration, should be healthy
-	healthy, path, warnings := activation.CheckPowerShellActivation()
+	healthy, path, warnings := activation.CheckPowerShellActivation(home)
 	if !healthy {
 		t.Error("doctor should report activation healthy after migration")
 	}

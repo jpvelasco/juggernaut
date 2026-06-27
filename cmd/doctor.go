@@ -75,7 +75,8 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 
 	// Use the shared resolver to check activation on the effective profiles.
 	if runtime.GOOS == "windows" {
-		healthy, path, warnings := activation.CheckPowerShellActivation()
+		psResult := activation.ResolvePowerShellProfiles()
+		healthy, path, warnings := activation.CheckPowerShellActivation(home)
 		if healthy {
 			r.Check("claude activation", doctor.OK, "active in "+path)
 		} else {
@@ -84,8 +85,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		for _, w := range warnings {
 			r.Check("activation warning", doctor.Warn, w)
 		}
-		// Report discovery status.
-		psResult := activation.ResolvePowerShellProfiles()
+		// Report discovery status (reuse the already-resolved result).
 		if psResult.UsedFallback {
 			r.Check("powershell discovery", doctor.Warn, "used Known Documents fallback")
 		} else {

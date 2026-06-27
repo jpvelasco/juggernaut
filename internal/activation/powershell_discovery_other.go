@@ -43,6 +43,16 @@ func historicalPowerShellTargets() []string {
 	return nil
 }
 
+// historicalPowerShellTargetsScoped returns nil on non-Windows.
+func historicalPowerShellTargetsScoped(home string) []string {
+	return nil
+}
+
+// discoverPowerShellProfilesScoped is a no-op on non-Windows.
+func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
+	return discoverPowerShellProfiles()
+}
+
 // fallbackKnownDocumentsPowerShell returns "" on non-Windows.
 func fallbackKnownDocumentsPowerShell() string {
 	return ""
@@ -85,8 +95,9 @@ func validateAndCanonicalizePath(p string) string {
 	return p
 }
 
-// setPSRunnerForTesting and resetPSRunnerForTesting are no-ops on non-Windows.
-func setPSRunnerForTesting(r interface{}) {
+// SetPSRunnerForTesting and ResetPSRunnerForTesting are no-ops on non-Windows.
+func SetPSRunnerForTesting(r interface{}) {
 }
-func resetPSRunnerForTesting() {
+
+func ResetPSRunnerForTesting() {
 }

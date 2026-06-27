@@ -138,7 +138,7 @@ func Install(home string) ([]string, error) {
 	var installed []string
 
 	if runtime.GOOS == "windows" {
-		psInstalled, err := InstallPowerShellActivation()
+		psInstalled, err := InstallPowerShellActivation(home)
 		if err != nil {
 			return installed, err
 		}
@@ -186,7 +186,7 @@ func Uninstall(home string) ([]string, error) {
 	var removed []string
 
 	if runtime.GOOS == "windows" {
-		psRemoved, err := UninstallPowerShellActivation()
+		psRemoved, err := UninstallPowerShellActivation(home)
 		if err != nil {
 			return removed, err
 		}
@@ -237,9 +237,9 @@ func InstalledTargets(home string) []string {
 
 	if runtime.GOOS == "windows" {
 		result := ResolvePowerShellProfiles()
-		allPaths := make([]string, 0, len(result.MigrationTargets)+len(result.HistoricalCandidates))
+		allPaths := make([]string, 0, len(result.MigrationTargets)+len(historicalPowerShellTargetsScoped(home)))
 		allPaths = append(allPaths, result.MigrationTargets...)
-		allPaths = append(allPaths, result.HistoricalCandidates...)
+		allPaths = append(allPaths, historicalPowerShellTargetsScoped(home)...)
 		for _, path := range allPaths {
 			data, err := safepath.ReadFile(filepath.Dir(path), path)
 			if err == nil && HasBlock(string(data)) {
@@ -400,9 +400,13 @@ func HasAnyLegacyBlock(content string) bool {
 }
 
 // removeLegacyLauncherBlock removes a legacy "# BEGIN: Juggernaut Launcher"
-// block from content.
+// block from content. It only removes the block if both the begin and end
+// markers are present; an orphaned begin marker is left untouched.
 func removeLegacyLauncherBlock(content string) (string, bool) {
 	content = normalizeNewlines(content)
+	if !strings.Contains(content, LegacyLauncherEnd) {
+		return content, false
+	}
 	lines := strings.Split(content, "\n")
 	out := make([]string, 0, len(lines))
 	inBlock := false
@@ -428,9 +432,13 @@ func removeLegacyLauncherBlock(content string) (string, bool) {
 }
 
 // removeLegacyBedrockBlock removes a legacy "# BEGIN: Claude Code Bedrock
-// Configuration" block from content.
+// Configuration" block from content. It only removes the block if both the
+// begin and end markers are present; an orphaned begin marker is left untouched.
 func removeLegacyBedrockBlock(content string) (string, bool) {
 	content = normalizeNewlines(content)
+	if !strings.Contains(content, LegacyBedrockEnd) {
+		return content, false
+	}
 	lines := strings.Split(content, "\n")
 	out := make([]string, 0, len(lines))
 	inBlock := false
@@ -480,16 +488,23 @@ func removeLegacyBlocks(content string) (string, []string) {
 // On Windows it dynamically queries PowerShell. On other platforms it
 // returns the default targets.
 func ResolvePowerShellProfiles() ProfileResolverResult {
+	return ResolvePowerShellProfilesScoped("")
+}
+
+// ResolvePowerShellProfilesScoped is like ResolvePowerShellProfiles but
+// scopes historical candidates to the supplied home directory.
+func ResolvePowerShellProfilesScoped(home string) ProfileResolverResult {
 	if runtime.GOOS != "windows" {
 		return ProfileResolverResult{}
 	}
-	return discoverPowerShellProfiles()
+	return discoverPowerShellProfilesScoped(home)
 }
 
 // InstallPowerShellActivation installs the activation block in the
 // authoritative PowerShell profile and migrates any legacy blocks from
 // discovered profiles. Returns paths that were modified.
-func InstallPowerShellActivation() ([]string, error) {
+// The home parameter scopes historical candidates to the supplied directory.
+func InstallPowerShellActivation(home string) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
@@ -508,9 +523,10 @@ func InstallPowerShellActivation() ([]string, error) {
 		}
 	}
 
-	// Also check historical candidates for legacy block cleanup.
-	for _, path := range result.HistoricalCandidates {
-		modified, err := migrateLegacyOnly(path)
+	// Also check historical candidates for legacy block cleanup and
+	// remove stale current blocks from paths not in ActiveTargets.
+	for _, path := range historicalPowerShellTargetsScoped(home) {
+		modified, err := migrateLegacyAndRemoveStale(path, result.ActiveTargets)
 		if err != nil {
 			return installed, err
 		}
@@ -519,14 +535,14 @@ func InstallPowerShellActivation() ([]string, error) {
 		}
 	}
 
-	// Second pass: ensure the install target has the current block.
-	if result.InstallTarget.Path != "" {
-		changed, err := InstallTarget(result.InstallTarget)
+	// Second pass: ensure every active target has the current block.
+	for _, target := range result.ActiveTargets {
+		changed, err := InstallTarget(target)
 		if err != nil {
 			return installed, err
 		}
 		if changed {
-			installed = append(installed, result.InstallTarget.Path)
+			installed = append(installed, target.Path)
 		}
 	}
 
@@ -563,6 +579,39 @@ func migrateLegacyAndInstall(path string) (bool, error) {
 	return true, safepath.WriteFile(base, path, []byte(content))
 }
 
+// migrateLegacyAndRemoveStale removes legacy blocks and, if the path is not
+// in the list of active targets, also removes the current activation block
+// (stale artifact from an old Juggernaut installation). Returns true if the
+// file was modified.
+func migrateLegacyAndRemoveStale(path string, activeTargets []Target) (bool, error) {
+	base := filepath.Dir(path)
+	data, err := safepath.ReadFile(base, path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	content := string(data)
+	original := content
+
+	// Remove legacy blocks.
+	content, _ = removeLegacyBlocks(content)
+
+	// If this path is NOT an active target, also remove the current block
+	// (stale artifact from an old installation).
+	if !containsTargetPathCI(activeTargets, path) && HasBlock(content) {
+		content, _ = removeBlock(content)
+	}
+
+	if content == original {
+		return false, nil
+	}
+
+	return true, safepath.WriteFile(base, path, []byte(content))
+}
+
 // migrateLegacyOnly removes legacy blocks without installing the current block.
 // Used for historical cleanup candidates. Returns true if the file was modified.
 func migrateLegacyOnly(path string) (bool, error) {
@@ -590,7 +639,8 @@ func migrateLegacyOnly(path string) (bool, error) {
 
 // UninstallPowerShellActivation removes activation blocks from all discovered
 // and historical PowerShell profiles. Returns paths that were modified.
-func UninstallPowerShellActivation() ([]string, error) {
+// The home parameter scopes historical candidates to the supplied directory.
+func UninstallPowerShellActivation(home string) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
@@ -598,9 +648,9 @@ func UninstallPowerShellActivation() ([]string, error) {
 	result := ResolvePowerShellProfiles()
 	var removed []string
 
-	allPaths := make([]string, 0, len(result.MigrationTargets)+len(result.HistoricalCandidates))
+	allPaths := make([]string, 0, len(result.MigrationTargets)+len(historicalPowerShellTargetsScoped(home)))
 	allPaths = append(allPaths, result.MigrationTargets...)
-	allPaths = append(allPaths, result.HistoricalCandidates...)
+	allPaths = append(allPaths, historicalPowerShellTargetsScoped(home)...)
 
 	for _, path := range allPaths {
 		ok, err := removeActivationAndLegacy(path)
@@ -646,7 +696,8 @@ func removeActivationAndLegacy(path string) (bool, error) {
 // CheckPowerShellActivation checks whether the current activation block is
 // present in an effective (discovered) profile. Returns whether activation is
 // healthy, the path where it was found (if healthy), and any warnings.
-func CheckPowerShellActivation() (healthy bool, path string, warnings []string) {
+// The home parameter scopes historical candidates to the supplied directory.
+func CheckPowerShellActivation(home string) (healthy bool, path string, warnings []string) {
 	if runtime.GOOS != "windows" {
 		return true, "", nil
 	}
@@ -660,7 +711,7 @@ func CheckPowerShellActivation() (healthy bool, path string, warnings []string) 
 			continue
 		}
 		if HasBlock(string(data)) {
-			return true, target.Path, nil
+			path = target.Path
 		}
 	}
 
@@ -677,14 +728,14 @@ func CheckPowerShellActivation() (healthy bool, path string, warnings []string) 
 	}
 
 	// Check if activation exists only in a historical (non-loaded) path.
-	for _, path := range result.HistoricalCandidates {
-		data, err := safepath.ReadFile(filepath.Dir(path), path)
+	for _, histPath := range historicalPowerShellTargetsScoped(home) {
+		data, err := safepath.ReadFile(filepath.Dir(histPath), histPath)
 		if err != nil {
 			continue
 		}
 		if HasBlock(string(data)) {
 			warnings = append(warnings,
-				fmt.Sprintf("activation block found in non-loaded historical path %s — PowerShell does not load this profile", path))
+				fmt.Sprintf("activation block found in non-loaded historical path %s — PowerShell does not load this profile", histPath))
 		}
 	}
 
@@ -692,19 +743,20 @@ func CheckPowerShellActivation() (healthy bool, path string, warnings []string) 
 	if len(result.ActiveTargets) > 1 {
 		// Multiple discovered profiles — check if a later-loading host-specific
 		// profile has a legacy block that could override the all-hosts activation.
-		for _, path := range result.MigrationTargets {
-			data, err := safepath.ReadFile(filepath.Dir(path), path)
+		for _, histPath := range result.MigrationTargets {
+			data, err := safepath.ReadFile(filepath.Dir(histPath), histPath)
 			if err != nil {
 				continue
 			}
 			if HasLegacyLauncherBlock(string(data)) {
 				warnings = append(warnings,
-					fmt.Sprintf("host-specific profile %s contains legacy launcher that may override all-hosts activation", path))
+					fmt.Sprintf("host-specific profile %s contains legacy launcher that may override all-hosts activation", histPath))
 			}
 		}
 	}
 
-	return false, "", warnings
+	healthy = path != "" && len(warnings) == 0
+	return healthy, path, warnings
 }
 
 func normalizeNewlines(content string) string {
@@ -920,6 +972,21 @@ func unsetEnv(env []string, key string) []string {
 		}
 	}
 	return out
+}
+
+// containsTargetPathCI checks if a path exists in a []Target,
+// case-insensitive on Windows.
+func containsTargetPathCI(targets []Target, path string) bool {
+	for _, t := range targets {
+		if runtime.GOOS == "windows" {
+			if strings.EqualFold(t.Path, path) {
+				return true
+			}
+		} else if t.Path == path {
+			return true
+		}
+	}
+	return false
 }
 
 func fileExists(path string) bool {

@@ -103,6 +103,16 @@ func ResetPSRunnerForTesting() {
 // discoverPowerShellProfiles queries installed PowerShell editions for their
 // profile paths and returns a ProfileResolverResult.
 func discoverPowerShellProfiles() ProfileResolverResult {
+	return discoverPowerShellProfilesScoped("")
+}
+
+// discoverPowerShellProfilesScoped is like discoverPowerShellProfiles but
+// uses the supplied home directory for historical candidates. If home is
+// empty, it resolves from the environment.
+func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
+	if home == "" {
+		home = resolveHomeDir()
+	}
 	result := ProfileResolverResult{}
 
 	editions := []psEdition{
@@ -112,9 +122,9 @@ func discoverPowerShellProfiles() ProfileResolverResult {
 
 	for _, ed := range editions {
 		dr := discoverEdition(ed, defaultPSRunner)
-		result.EditionsDiscovered = append(result.EditionsDiscovered, ed.Name)
 
 		if dr.DiscoveryOK {
+			result.EditionsDiscovered = append(result.EditionsDiscovered, ed.Name)
 			allHosts := validateAndCanonicalizePath(dr.AllHosts)
 			currentHost := validateAndCanonicalizePath(dr.CurrentHost)
 
@@ -126,8 +136,16 @@ func discoverPowerShellProfiles() ProfileResolverResult {
 					result.MigrationTargets = append(result.MigrationTargets, allHosts)
 				}
 			}
+			// Add currentHost to ActiveTargets when it differs from allHosts.
+			// This is the host-specific profile that PowerShell loads after the
+			// all-hosts profile, and activation may exist only there.
 			if currentHost != "" && !containsPathCI(result.MigrationTargets, currentHost) {
 				result.MigrationTargets = append(result.MigrationTargets, currentHost)
+				if !containsTargetPathCI(result.ActiveTargets, currentHost) {
+					result.ActiveTargets = append(result.ActiveTargets,
+						Target{Path: currentHost, Shell: ShellPowerShell},
+					)
+				}
 			}
 			if result.InstallTarget.Path == "" && allHosts != "" {
 				result.InstallTarget = Target{Path: allHosts, Shell: ShellPowerShell}
@@ -140,19 +158,25 @@ func discoverPowerShellProfiles() ProfileResolverResult {
 	}
 
 	// Add historical hardcoded paths as cleanup candidates.
-	result.HistoricalCandidates = historicalPowerShellTargets()
+	result.HistoricalCandidates = historicalPowerShellTargetsScoped(home)
 
 	// If no active targets found, fall back to Known Documents folder.
 	if len(result.ActiveTargets) == 0 {
-		fallback := fallbackKnownDocumentsPowerShell()
-		if fallback != "" {
-			result.InstallTarget = Target{Path: fallback, Shell: ShellPowerShell}
-			result.ActiveTargets = append(result.ActiveTargets, Target{Path: fallback, Shell: ShellPowerShell})
-			result.MigrationTargets = append(result.MigrationTargets, fallback)
+		fallbackPS := fallbackKnownDocumentsPowerShell()
+		fallbackPS5 := fallbackKnownDocumentsWindowsPowerShell()
+		if fallbackPS != "" {
+			result.InstallTarget = Target{Path: fallbackPS, Shell: ShellPowerShell}
+			result.ActiveTargets = append(result.ActiveTargets, Target{Path: fallbackPS, Shell: ShellPowerShell})
+			result.MigrationTargets = append(result.MigrationTargets, fallbackPS)
 			result.UsedFallback = true
 			result.DiscoveryWarnings = append(result.DiscoveryWarnings,
 				"PowerShell profile discovery failed; using Known Documents fallback",
 			)
+		}
+		if fallbackPS5 != "" && !containsTargetPathCI(result.ActiveTargets, fallbackPS5) {
+			result.ActiveTargets = append(result.ActiveTargets, Target{Path: fallbackPS5, Shell: ShellPowerShell})
+			result.MigrationTargets = append(result.MigrationTargets, fallbackPS5)
+			result.UsedFallback = true
 		}
 	}
 
@@ -195,9 +219,8 @@ func parseDiscoveryOutput(edition string, output []byte) psDiscoveryResult {
 	}
 }
 
-// historicalPowerShellTargets returns the hardcoded PowerShell profile paths
-// used by older Juggernaut versions. These are cleanup candidates only.
-func historicalPowerShellTargets() []string {
+// resolveHomeDir returns the user's home directory from environment or OS.
+func resolveHomeDir() string {
 	home := os.Getenv("HOME")
 	if home == "" {
 		home = os.Getenv("USERPROFILE")
@@ -205,6 +228,20 @@ func historicalPowerShellTargets() []string {
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	}
+	return home
+}
+
+// historicalPowerShellTargets returns the hardcoded PowerShell profile paths
+// used by older Juggernaut versions. These are cleanup candidates only.
+// It resolves the home directory from the environment.
+func historicalPowerShellTargets() []string {
+	return historicalPowerShellTargetsScoped(resolveHomeDir())
+}
+
+// historicalPowerShellTargetsScoped returns the same paths but uses the
+// supplied home directory instead of resolving it from the environment.
+// This allows tests to scope historical candidates to a temporary directory.
+func historicalPowerShellTargetsScoped(home string) []string {
 	if home == "" {
 		return nil
 	}
@@ -222,6 +259,16 @@ func fallbackKnownDocumentsPowerShell() string {
 		return ""
 	}
 	return filepath.Join(documentsPath, "PowerShell", "Microsoft.PowerShell_profile.ps1")
+}
+
+// fallbackKnownDocumentsWindowsPowerShell returns the Windows PowerShell 5.1
+// profile path using the Known Documents folder.
+func fallbackKnownDocumentsWindowsPowerShell() string {
+	documentsPath, err := getKnownDocumentsPath()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(documentsPath, "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1")
 }
 
 // getKnownDocumentsPath uses the Windows Known Folder API to resolve the
