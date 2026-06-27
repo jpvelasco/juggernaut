@@ -4,6 +4,14 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.1] - 2026-06-27
+
+**Patch release.** Fixes PowerShell profile discovery on Windows so activation blocks are written to the correct profile paths.
+
+### Fixed
+
+- **PowerShell profile discovery on Windows.** `juggernaut apply` now discovers PowerShell profile paths dynamically at runtime using PowerShell's `$PROFILE` variables instead of hardcoded paths, ensuring activation blocks are written to the correct profile regardless of profile location or OneDrive redirects.
+
 ## [5.2.0] - 2026-06-26
 
 **Minor release.** Extends Bedrock parity with new Claude Code features (Fable aliases, native fallback chains, flexible effort levels) and improves auto mode + telemetry controls for Bedrock users.
@@ -861,12 +869,13 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 
 - **Backwards compatible** — existing v1 profile blocks continue to work. Use `juggernaut migrate` to upgrade.
 
+[5.2.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.1
 [5.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.0
 [5.1.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.6
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.1...HEAD
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
