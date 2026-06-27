@@ -20,6 +20,33 @@ func testStore() *keychain.Store {
 	return keychain.NewStore(svc)
 }
 
+func TestDefault_UsesEnvServiceOverride(t *testing.T) {
+	// With the override set, Default() must return a usable store. We can't
+	// inspect the private service field, so assert behaviour: a Get on a clean
+	// isolated service returns empty without error.
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-default-test")
+	s := keychain.Default()
+	if s == nil {
+		t.Fatal("Default() returned nil")
+	}
+	skipIfUnavailable(t, s)
+	_ = s.Delete()
+	got, err := s.Get()
+	if err != nil {
+		t.Fatalf("Get() on clean isolated store: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty token on clean store, got %q", got)
+	}
+}
+
+func TestDefault_NoOverrideReturnsStore(t *testing.T) {
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "")
+	if keychain.Default() == nil {
+		t.Fatal("Default() with no override returned nil")
+	}
+}
+
 // skipIfUnavailable skips the test if the keychain backend is not available.
 // On headless Linux CI (no Secret Service daemon), all keychain ops fail.
 func skipIfUnavailable(t *testing.T, s *keychain.Store) {
