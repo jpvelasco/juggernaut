@@ -1,6 +1,7 @@
 package keychain_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -102,14 +103,14 @@ func TestSetWithFallback_FallsBackToFile(t *testing.T) {
 	}
 }
 
-func TestGetWithFallback_ReadsFromFile(t *testing.T) {
+func TestGetWithFallback_ReadsVersionedFile(t *testing.T) {
 	home := t.TempDir()
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
 	token := "file-fallback-token"
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	if err := safepath.WriteFile(home, filePath, []byte(token)); err != nil {
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\n"+token)); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -122,7 +123,7 @@ func TestGetWithFallback_ReadsFromFile(t *testing.T) {
 	}
 }
 
-func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
+func TestGetWithFallback_VersionedFileWinsOverKeychain(t *testing.T) {
 	s := testStore()
 	skipIfUnavailable(t, s)
 	defer func() { _ = s.Delete() }()
@@ -132,11 +133,11 @@ func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
 		t.Fatalf("Set() error: %v", err)
 	}
 
-	// Write a different token to the file.
+	// Write a different token to the file with the versioned envelope.
 	home := t.TempDir()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	if err := safepath.WriteFile(home, filePath, []byte("file-token")); err != nil {
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\nfile-token")); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 
@@ -144,8 +145,8 @@ func TestGetWithFallback_KeychainWinsOverFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWithFallback() error: %v", err)
 	}
-	if got != "keychain-token" {
-		t.Errorf("expected keychain-token (keychain should win), got %q", got)
+	if got != "file-token" {
+		t.Errorf("expected file-token (versioned fallback file should win), got %q", got)
 	}
 }
 
@@ -246,5 +247,210 @@ func TestIsTooBigForKeychain(t *testing.T) {
 	}
 	if !keychain.IsTooBigForKeychain(strings.Repeat("a", 3000)) {
 		t.Error("expected true for long token on Windows")
+	}
+}
+
+// TestSetWithFallback_FailsWhenCredentialPathCannotBeRemoved proves that
+// writeCredentialFile does not silently continue after a failed os.Remove.
+// If removal fails, the subsequent os.WriteFile could overwrite the credential
+// while retaining permissive file permissions — this regression test ensures
+// that scenario is rejected.
+func TestSetWithFallback_FailsWhenCredentialPathCannotBeRemoved(t *testing.T) {
+	home := t.TempDir()
+	s := testStore()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+
+	// Make the credential path a non-empty directory so os.Remove fails
+	// (directory with content cannot be removed).
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.MkdirAll(filePath); err != nil {
+		t.Fatalf("creating directory: %v", err)
+	}
+	// Put something inside so the directory is non-empty and cannot be removed.
+	if err := os.WriteFile(filepath.Join(filePath, "blocker"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("writing blocker: %v", err)
+	}
+
+	// Use a short token so the keychain path is tried first; on non-Windows
+	// the keychain will likely succeed and the test is meaningless. On
+	// Windows with a working keychain, the keychain write succeeds and we
+	// don't reach the file fallback. To force the file fallback on all
+	// platforms, use an oversized token.
+	token := strings.Repeat("x", 2600)
+	if err := s.SetWithFallback(token, home); err == nil {
+		t.Fatal("expected SetWithFallback to fail when credential path cannot be removed")
+	}
+}
+
+// TestGetWithFallback_LegacyFilePlusKeychain_ReturnsKeychainToken verifies the
+// migration scenario: a user upgrading from v5.2.2 has a stale unversioned
+// fallback file (token A) and a newer token B in the keychain. The keychain
+// token B should be returned and the legacy file removed.
+func TestGetWithFallback_LegacyFilePlusKeychain_ReturnsKeychainToken(t *testing.T) {
+	s := testStore()
+	skipIfUnavailable(t, s)
+	defer func() { _ = s.Delete() }()
+
+	// Write token B to the keychain.
+	if err := s.Set("keychain-token-B"); err != nil {
+		t.Fatalf("Set() error: %v", err)
+	}
+
+	// Write legacy unversioned token A to the file.
+	home := t.TempDir()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.WriteFile(home, filePath, []byte("legacy-token-A")); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "keychain-token-B" {
+		t.Errorf("expected keychain-token-B, got %q", got)
+	}
+
+	// The stale legacy file should have been removed.
+	_, err = safepath.ReadFile(home, filePath)
+	if !os.IsNotExist(err) {
+		t.Errorf("expected legacy file to be removed after keychain token returned")
+	}
+}
+
+// TestGetWithFallback_VersionedFilePlusKeychain_ReturnsFileVersion verifies
+// that a versioned fallback file is authoritative even when the keychain has
+// a different token.
+func TestGetWithFallback_VersionedFilePlusKeychain_ReturnsFileVersion(t *testing.T) {
+	s := testStore()
+	skipIfUnavailable(t, s)
+	defer func() { _ = s.Delete() }()
+
+	// Write a different token to the keychain.
+	if err := s.Set("keychain-token-B"); err != nil {
+		t.Fatalf("Set() error: %v", err)
+	}
+
+	// Write versioned token A to the file.
+	home := t.TempDir()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\nversioned-token-A")); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "versioned-token-A" {
+		t.Errorf("expected versioned-token-A, got %q", got)
+	}
+}
+
+// TestGetWithFallback_LegacyFilePlusEmptyKeychain_ReturnsLegacyFile verifies
+// that when the keychain is empty, the legacy unversioned file is used as a
+// fallback.
+func TestGetWithFallback_LegacyFilePlusEmptyKeychain_ReturnsLegacyFile(t *testing.T) {
+	s := testStore()
+	skipIfUnavailable(t, s)
+	defer func() { _ = s.Delete() }()
+
+	// Ensure keychain is empty.
+	if err := s.Delete(); err != nil {
+		t.Fatalf("Delete() error: %v", err)
+	}
+
+	// Write legacy unversioned token to the file.
+	home := t.TempDir()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.WriteFile(home, filePath, []byte("legacy-token-A")); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "legacy-token-A" {
+		t.Errorf("expected legacy-token-A, got %q", got)
+	}
+}
+
+// TestSetWithFallback_KeychainSuccessRemovesFallback verifies that a
+// successful keychain write removes any existing fallback file, preventing
+// stale credential rotation.
+func TestSetWithFallback_KeychainSuccessRemovesFallback(t *testing.T) {
+	s := testStore()
+	skipIfUnavailable(t, s)
+	defer func() { _ = s.Delete() }()
+
+	home := t.TempDir()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+
+	// Write a legacy file first.
+	if err := safepath.WriteFile(home, filePath, []byte("legacy-token")); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	// Write a short token to the keychain — should succeed and remove the file.
+	if err := s.SetWithFallback("new-keychain-token", home); err != nil {
+		t.Fatalf("SetWithFallback() error: %v", err)
+	}
+
+	// File should be gone.
+	_, err := safepath.ReadFile(home, filePath)
+	if !os.IsNotExist(err) {
+		t.Errorf("expected fallback file to be removed after keychain write")
+	}
+
+	// Keychain should have the new token.
+	got, err := s.Get()
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	if got != "new-keychain-token" {
+		t.Errorf("expected new-keychain-token, got %q", got)
+	}
+}
+
+// TestSetWithFallback_WritesVersionedCredential verifies that
+// SetWithFallback writes a versioned envelope to the fallback file, not a
+// raw token. This is Windows-only because only Windows enforces the 2560-byte
+// keychain limit that forces the file fallback.
+func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only: requires 2560-byte keychain limit to force file fallback")
+	}
+
+	home := t.TempDir()
+	s := testStore()
+	defer func() { _ = s.DeleteWithFallback(home) }()
+
+	// Force file fallback with an oversized token.
+	token := strings.Repeat("x", 2600)
+	if err := s.SetWithFallback(token, home); err != nil {
+		t.Fatalf("SetWithFallback() error: %v", err)
+	}
+
+	// Read the raw file contents.
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	data, err := safepath.ReadFile(home, filePath)
+	if err != nil {
+		t.Fatalf("reading file: %v", err)
+	}
+
+	// File should start with the version prefix.
+	if !bytes.HasPrefix(data, []byte("juggernaut-credential-v1\n")) {
+		t.Errorf("expected versioned credential file, got raw data starting with %q", string(data[:min(20, len(data))]))
+	}
+
+	// The token after the prefix should match.
+	expected := "juggernaut-credential-v1\n" + token
+	if string(data) != expected {
+		t.Errorf("expected versioned token, got mismatch")
 	}
 }

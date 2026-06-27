@@ -4,6 +4,9 @@
 package keychain
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +27,12 @@ const MaxWindowsKeychainSize = 2560
 // credentialFile is the filename used for the file-based fallback storage
 // inside ~/.claude/.
 const credentialFile = "juggernaut-credential"
+
+// credentialVersionPrefix is the line prefix that marks a fallback credential
+// file as versioned and authoritative. Files without this prefix are treated as
+// legacy raw fallback files (e.g., from v5.2.2) and may be stale compared to a
+// keychain entry.
+const credentialVersionPrefix = "juggernaut-credential-v1\n"
 
 // Store wraps go-keyring with a fixed account name and configurable service name.
 type Store struct {
@@ -116,42 +125,118 @@ func credentialFilePath(home string) string {
 // with owner-only permissions.
 //
 // When falling back to file storage, any existing keychain entry is cleared
-// so that GetWithFallback does not return a stale token.
+// when possible. The fallback file is authoritative while it exists, so a
+// keychain backend outage cannot prevent storing or reading the new token.
+// When the keychain write succeeds, any stale fallback file is removed.
 func (s *Store) SetWithFallback(token, home string) error {
+	filePath := credentialFilePath(home)
+
 	// Skip the keychain write entirely if the token is known to exceed the
 	// Windows limit — avoids a wasted keychain call that will always fail.
 	if IsTooBigForKeychain(token) {
-		_ = s.Delete()
-		return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
+		deleteErr := s.Delete()
+		return writeCredentialFallback(home, filePath, token, deleteErr)
 	}
 
 	// Try the OS keychain first.
 	err := s.Set(token)
 	if err == nil {
+		// Keychain write succeeded — remove any stale fallback file.
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing stale credential fallback: %w", err)
+		}
 		return nil
 	}
 	// Fall back to file storage on keychain failure (unavailable, etc.).
-	// Clear any stale keychain entry before falling back.
-	_ = s.Delete()
-	return safepath.WriteFile(home, credentialFilePath(home), []byte(token))
+	// Clear any stale keychain entry when the backend permits it. A failed
+	// delete must not prevent the advertised file fallback.
+	deleteErr := s.Delete()
+	return writeCredentialFallback(home, filePath, token, deleteErr)
 }
 
-// GetWithFallback retrieves the token from the OS keychain. If the keychain
-// has no entry, it falls back to the file at ~/.claude/juggernaut-credential.
+// GetWithFallback retrieves the token using the following precedence:
+//
+//  1. Versioned fallback file: return its token immediately (authoritative).
+//  2. Legacy unversioned fallback file + keychain has token: return the
+//     keychain token and remove the stale legacy file.
+//  3. Legacy unversioned fallback file + keychain empty/unavailable: return
+//     the file token.
+//  4. No file: return the keychain token (or empty string).
 func (s *Store) GetWithFallback(home string) (string, error) {
-	token, err := s.Get()
-	if err == nil && token != "" {
-		return token, nil
-	}
-	// Fall back to file storage.
-	data, err := safepath.ReadFile(home, credentialFilePath(home))
+	filePath := credentialFilePath(home)
+	data, err := safepath.ReadFile(home, filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		// No file at all — use keychain.
+		token, err := s.Get()
+		if err != nil {
 			return "", nil
 		}
-		return "", err
+		return token, nil
 	}
+
+	// File exists — check if it's versioned (authoritative).
+	if isVersionedCredential(data) {
+		return extractTokenFromVersionedCredential(data), nil
+	}
+
+	// Legacy unversioned file: keychain may have a newer token.
+	token, err := s.Get()
+	if err != nil {
+		// Keychain error (not ErrNotFound) — treat as unavailable, fall back to file.
+		if !errors.Is(err, keyring.ErrNotFound) {
+			return string(data), nil
+		}
+		// Keychain empty — no newer token available.
+		return string(data), nil
+	}
+	if token != "" {
+		// Keychain has a newer token — remove the stale legacy file.
+		_ = os.Remove(filePath)
+		return token, nil
+	}
+
+	// Keychain exists but is empty; fall back to file.
 	return string(data), nil
+}
+
+// writeCredentialFile writes the credential to the given path with owner-only
+// permissions, using a versioned envelope. If the file already exists, it is
+// removed first so that a subsequent write creates a new inode with the
+// correct mode rather than preserving a potentially lax mode on the existing
+// file.
+func writeCredentialFile(base, filePath string, token string) error {
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing existing credential file: %w", err)
+	}
+	return safepath.WriteFile(base, filePath, []byte(credentialVersionPrefix+token))
+}
+
+// isVersionedCredential reports whether the file data starts with the
+// credential version prefix.
+func isVersionedCredential(data []byte) bool {
+	return bytes.HasPrefix(data, []byte(credentialVersionPrefix))
+}
+
+// extractTokenFromVersionedCredential strips the version prefix from the
+// credential data and returns the raw token.
+func extractTokenFromVersionedCredential(data []byte) string {
+	return string(bytes.TrimPrefix(data, []byte(credentialVersionPrefix)))
+}
+
+// writeCredentialFallback writes the authoritative fallback token. Failure to
+// clear the keychain is reported only if the fallback itself cannot be stored;
+// an unavailable keychain backend is the reason this path exists.
+func writeCredentialFallback(base, filePath, token string, deleteErr error) error {
+	if err := writeCredentialFile(base, filePath, token); err != nil {
+		if deleteErr != nil {
+			return fmt.Errorf("writing credential fallback: %w (keychain cleanup also failed: %v)", err, deleteErr)
+		}
+		return fmt.Errorf("writing credential fallback: %w", err)
+	}
+	return nil
 }
 
 // DeleteWithFallback removes the token from both the OS keychain and the
