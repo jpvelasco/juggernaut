@@ -263,7 +263,7 @@ func TestSetWithFallback_FailsWhenCredentialPathCannotBeRemoved(t *testing.T) {
 	// Make the credential path a non-empty directory so os.Remove fails
 	// (directory with content cannot be removed).
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	if err := os.MkdirAll(filePath, 0o700); err != nil {
+	if err := safepath.MkdirAll(filePath); err != nil {
 		t.Fatalf("creating directory: %v", err)
 	}
 	// Put something inside so the directory is non-empty and cannot be removed.
@@ -438,7 +438,7 @@ func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
 
 	// Read the raw file contents.
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
-	data, err := os.ReadFile(filePath)
+	data, err := safepath.ReadFile(home, filePath)
 	if err != nil {
 		t.Fatalf("reading file: %v", err)
 	}
