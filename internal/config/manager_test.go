@@ -21,6 +21,34 @@ func TestReadMissing(t *testing.T) {
 	}
 }
 
+func TestReadEmptyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
+		t.Fatalf("writing empty file: %v", err)
+	}
+	data, err := config.NewManager(path).Read()
+	if err != nil {
+		t.Fatalf("Read() on empty file error: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected empty map for empty file, got %v", data)
+	}
+}
+
+func TestReadInvalidJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatalf("writing invalid file: %v", err)
+	}
+	_, err := config.NewManager(path).Read()
+	if err == nil {
+		t.Fatal("expected parse error for invalid JSON")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("parsing")) {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestWriteAndRead(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
