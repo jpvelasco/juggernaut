@@ -210,6 +210,7 @@ func TestSetWithFallback_ClearsStaleKeychainOnFallback(t *testing.T) {
 func TestDeleteWithFallback_RemovesFile(t *testing.T) {
 	home := t.TempDir()
 	s := testStore()
+	skipIfUnavailable(t, s)
 
 	// Write directly to the file to ensure it exists regardless of platform.
 	token := "to-be-deleted"
