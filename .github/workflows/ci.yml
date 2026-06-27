@@ -35,6 +35,7 @@ jobs:
 
   test:
     strategy:
+      fail-fast: false  # one leg failing must not cancel the others' coverage uploads
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -53,7 +54,7 @@ jobs:
       # an ERROR state and never merges). A no-op on Linux/macOS.
       - name: Normalize coverage line endings
         shell: bash
-        run: sed -i 's/\r$//' coverage.out
+        run: tr -d '\r' < coverage.out > coverage.tmp && mv coverage.tmp coverage.out
       # Upload per-OS coverage so Codecov merges all three legs. Much of the
       # PowerShell/launcher/keychain code is Windows-only, so a Linux-only
       # report understates true coverage; merging the OS matrix reflects it.
