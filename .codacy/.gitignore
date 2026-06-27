@@ -1,3 +1,5 @@
+# Codacy CLI
+tools-configs/
+.gitignore
+cli-config.yaml
 logs/
-*.sarif
-server-issues.json

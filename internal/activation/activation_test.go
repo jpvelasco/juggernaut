@@ -552,7 +552,7 @@ func TestRecoverLegacyArtifacts_RemovesShim(t *testing.T) {
 	}
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for dirs, test under t.TempDir()
 		t.Fatal(err)
 	}
 	self := filepath.Join(binDir, "juggernaut.exe")
@@ -584,7 +584,7 @@ func TestDetectLegacyArtifacts(t *testing.T) {
 	}
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for dirs, test under t.TempDir()
 		t.Fatal(err)
 	}
 	self := filepath.Join(binDir, "juggernaut.exe")
@@ -632,7 +632,7 @@ func TestRemoveTargetWithLegacy_RemovesAllBlocks(t *testing.T) {
 		t.Fatal("expected changed to be true")
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func TestRemoveTargetWithLegacy_OnlyLegacyBlock(t *testing.T) {
 		t.Fatal("expected changed to be true for legacy block alone")
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
 	if err != nil {
 		t.Fatal(err)
 	}
