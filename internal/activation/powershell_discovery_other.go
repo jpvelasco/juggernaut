@@ -4,7 +4,6 @@ package activation
 
 import (
 	"os"
-	"path/filepath"
 )
 
 // discoverPowerShellProfiles is a no-op on non-Windows; it returns the same
