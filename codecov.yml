@@ -32,13 +32,6 @@ component_management:
       paths:
         - internal/**
 
-# Per-OS upload flags. Coverage is uploaded from all three matrix legs
-# (ubuntu/macos/windows) and merged, so Windows-only code (PowerShell
-# discovery, launcher shims, the Windows keychain size limit) is counted.
-flag_management:
-  default_rules:
-    carryforward: true
-
 comment:
   layout: "reach, diff, flags, components, files"
   behavior: default

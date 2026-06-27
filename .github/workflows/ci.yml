@@ -57,7 +57,6 @@ jobs:
         with:
           use_oidc: true
           files: ./coverage.out
-          flags: ${{ matrix.os }}
           fail_ci_if_error: true
 
   test-race:
