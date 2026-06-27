@@ -4,6 +4,26 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.2] - 2026-06-27
+
+**Patch release.** Adds a file fallback for API keys that exceed the Windows keychain size limit, and overhauls the CI pipeline with golangci-lint, gosec, and Codacy integration.
+
+### Fixed
+
+- **Windows keychain size limit.** API keys that exceed the Windows Credential Manager size limit now fall back to file-based storage via the keychain's file fallback, preventing credential storage failures on long Bedrock API keys.
+- **Stale keychain on file fallback.** When falling back to file storage, stale keychain entries are now cleared and `DeleteWithFallback` correctly returns errors.
+
+### Changed
+
+- **CI pipeline overhaul.** Added golangci-lint, gosec (pinned v2.27.1), and Codacy local analysis to the CI pipeline. Coverage checks are now portable (no `grep -oP`, no `bc` dependency).
+- **Go module hygiene.** Removed `golangci-lint` and `gosec` as direct `go.mod` dependencies (they are dev tools, not library deps). Bumped to Go 1.26.4 to resolve Trivy stdlib CVE findings.
+- **Codacy configuration.** Added Codacy tools-configs, excluded Go stdlib from Trivy scans, and added targeted exclusions for opengrep false positives on `0o700` in test files.
+
+### Other
+
+- **Git hooks.** Added `scripts/setup-hooks.ps1` and `scripts/setup-hooks.sh` for pre-commit hook installation.
+- **Release workflow.** GoReleaser now includes checksums and proper platform sub-packages.
+
 ## [5.2.1] - 2026-06-27
 
 **Patch release.** Fixes PowerShell profile discovery on Windows so activation blocks are written to the correct profile paths.
@@ -875,7 +895,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.1...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.2...HEAD
+[5.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.2
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
 [5.0.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.2
