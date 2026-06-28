@@ -153,7 +153,7 @@ func checkKeyExpiry(r *doctor.Report, token string) {
 	case !now.Before(exp):
 		r.Check("api key expiry", doctor.Warn,
 			"short-term key expired at "+exp.Format(time.RFC3339)+
-				" — regenerate it and run `juggernaut apply --auth=bedrock-api-key`")
+				" — regenerate it and run `juggernaut apply --auth="+authmode.BedrockAPIKey+"`")
 	case exp.Sub(now) < time.Hour:
 		r.Check("api key expiry", doctor.Warn,
 			"short-term key expires soon ("+exp.Format(time.RFC3339)+

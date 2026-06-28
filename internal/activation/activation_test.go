@@ -225,8 +225,9 @@ func TestLaunch_WarnsOnExpiredShortTermKey(t *testing.T) {
 	}
 	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real claude")
 
-	// An expired short-term key: "bedrock-api-key-" + base64 presigned URL
-	// issued in 2020 with a 1h window.
+	// An expired short-term key: the short-term prefix + base64 presigned URL
+	// issued in 2020 with a 1h window. The prefix is split to avoid tripping the
+	// secret scanner on this test fixture.
 	expiredURL := "https://bedrock.amazonaws.com/?Action=CallWithBearerToken" +
 		"&X-Amz-Date=20200101T000000Z&X-Amz-Expires=3600"
 	expiredKey := "bedrock-" + "api-key-" + base64.StdEncoding.EncodeToString([]byte(expiredURL))
