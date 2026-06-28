@@ -65,6 +65,31 @@ func TestParseAPIKeyExpiry_Garbage(t *testing.T) {
 	}
 }
 
+// TestParseAPIKeyExpiry_BareQueryNoURL covers the extractQuery branch where the
+// decoded body is already a bare query string (no scheme/path, no '?').
+func TestParseAPIKeyExpiry_BareQuery(t *testing.T) {
+	bareQuery := "X-Amz-Date=20260628T025149Z&X-Amz-Expires=43200&X-Amz-SignedHeaders=host"
+	key := shortTermPrefix + base64.StdEncoding.EncodeToString([]byte(bareQuery))
+
+	exp, ok := bedrock.ParseAPIKeyExpiry(key)
+	if !ok {
+		t.Fatal("expected expiry from a bare-query short-term key body")
+	}
+	want := time.Date(2026, 6, 28, 14, 51, 49, 0, time.UTC)
+	if !exp.Equal(want) {
+		t.Errorf("expiry = %s, want %s", exp.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+}
+
+func TestParseAPIKeyExpiry_MissingFields(t *testing.T) {
+	// Has X-Amz-Date but no X-Amz-Expires → not parseable.
+	body := "X-Amz-Date=20260628T025149Z&X-Amz-Algorithm=AWS4-HMAC-SHA256"
+	key := shortTermPrefix + base64.StdEncoding.EncodeToString([]byte(body))
+	if _, ok := bedrock.ParseAPIKeyExpiry(key); ok {
+		t.Error("expected no expiry when X-Amz-Expires is absent")
+	}
+}
+
 func TestIsAPIKeyExpired(t *testing.T) {
 	past := makeShortTermKey("20200101T000000Z", 3600)    // long expired
 	future := makeShortTermKey("20990101T000000Z", 43200) // far future

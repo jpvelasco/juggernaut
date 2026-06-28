@@ -80,3 +80,52 @@ func TestSetGetWithFallback_RoundTripBigKey(t *testing.T) {
 		t.Errorf("round-trip mismatch: got %d bytes, want %d", len(got), len(bigKey))
 	}
 }
+
+// TestGetWithFallback_V2DecodeFailureYieldsEmpty covers the v2 envelope path
+// where the base64/DPAPI payload can't be decoded — GetWithFallback must return
+// empty (treat as no usable credential) rather than leaking ciphertext. This is
+// cross-platform: a malformed v2 body fails base64 decode on every OS.
+func TestGetWithFallback_V2DecodeFailureYieldsEmpty(t *testing.T) {
+	home := t.TempDir()
+	s := keychain.NewStore("jug-hardening-v2bad")
+
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	// v2 prefix + invalid base64 body.
+	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v2\n!!!not-base64!!!")); err != nil {
+		t.Fatalf("seeding bad v2 file: %v", err)
+	}
+
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("a v2 file with undecodable body must yield empty, got %q", got)
+	}
+}
+
+// TestEncodeDecodeCredential_NonWindowsV1 documents that on non-Windows the
+// envelope is v1 plaintext and round-trips. On Windows it is v2-encrypted
+// (covered by TestSetWithFallback_WritesVersionedCredential).
+func TestGetWithFallback_LegacyFileNoBackend(t *testing.T) {
+	home := t.TempDir()
+	s := keychain.NewStore("jug-hardening-legacy")
+
+	// A legacy (unversioned) fallback file with no keychain entry must return
+	// its contents. Backend-free path on headless CI.
+	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	if err := safepath.WriteFile(home, filePath, []byte("raw-legacy-token")); err != nil {
+		t.Fatalf("seeding legacy file: %v", err)
+	}
+	got, err := s.GetWithFallback(home)
+	// On a backend-available host this still returns the file token (keychain
+	// empty); on headless it returns the file token too. Either way: the token.
+	if err != nil {
+		// A broken backend surfaces an error now (v5.2.4); the legacy-file branch
+		// only runs after a successful keychain probe, so tolerate skip on error.
+		t.Skipf("keychain backend unavailable for legacy-file path: %v", err)
+	}
+	if got != "raw-legacy-token" {
+		t.Errorf("legacy file should return its raw token, got %q", got)
+	}
+}
