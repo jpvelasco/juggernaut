@@ -75,6 +75,14 @@ func (s *Store) Set(token string) error {
 // upgrading from v3, the saved credential may exist only under this name.
 const legacyAccount = "api-key"
 
+// SetLegacyForTesting stores a token under the legacy v3 account name. It exists
+// so tests can simulate a v3 user's keychain state (credential present only
+// under the old account) and verify the upgrade fallback in Get. Not for
+// production use.
+func (s *Store) SetLegacyForTesting(token string) error {
+	return keyring.Set(s.service, legacyAccount, token)
+}
+
 // Get retrieves the token. Returns "" (not an error) if not found.
 // When the new account is not found, it falls back to the legacy v3 account
 // for upgrade compatibility.
@@ -143,8 +151,7 @@ func (s *Store) SetWithFallback(token, home string) error {
 	// Skip the keychain write entirely if the token is known to exceed the
 	// Windows limit — avoids a wasted keychain call that will always fail.
 	if IsTooBigForKeychain(token) {
-		deleteErr := s.Delete()
-		return writeCredentialFallback(home, filePath, token, deleteErr)
+		return s.writeFallbackThenClearKeychain(home, filePath, token)
 	}
 
 	// Try the OS keychain first.
@@ -156,11 +163,25 @@ func (s *Store) SetWithFallback(token, home string) error {
 		}
 		return nil
 	}
-	// Fall back to file storage on keychain failure (unavailable, etc.).
-	// Clear any stale keychain entry when the backend permits it. A failed
-	// delete must not prevent the advertised file fallback.
-	deleteErr := s.Delete()
-	return writeCredentialFallback(home, filePath, token, deleteErr)
+	// Keychain write failed (unavailable, too big, etc.): fall back to file.
+	return s.writeFallbackThenClearKeychain(home, filePath, token)
+}
+
+// writeFallbackThenClearKeychain persists the token to the file fallback FIRST,
+// and only clears any stale keychain entry once the file write has succeeded.
+// This ordering guarantees there is never a window where the credential is gone
+// from both stores: if the file write fails, the previous keychain entry (if
+// any) is left intact and the error is surfaced, so a transient failure can
+// never wipe a working credential.
+func (s *Store) writeFallbackThenClearKeychain(base, filePath, token string) error {
+	if err := writeCredentialFile(base, filePath, token); err != nil {
+		return fmt.Errorf("writing credential fallback: %w", err)
+	}
+	// File is now authoritative; clearing the keychain is best-effort. A failed
+	// delete must not fail the operation — the file already holds the token, and
+	// GetWithFallback treats a versioned file as authoritative over the keychain.
+	_ = s.Delete()
+	return nil
 }
 
 // GetWithFallback retrieves the token using the following precedence:
@@ -281,19 +302,6 @@ func extractTokenFromVersionedCredential(data []byte) string {
 		return string(plaintext)
 	}
 	return string(bytes.TrimPrefix(data, []byte(credentialVersionPrefix)))
-}
-
-// writeCredentialFallback writes the authoritative fallback token. Failure to
-// clear the keychain is reported only if the fallback itself cannot be stored;
-// an unavailable keychain backend is the reason this path exists.
-func writeCredentialFallback(base, filePath, token string, deleteErr error) error {
-	if err := writeCredentialFile(base, filePath, token); err != nil {
-		if deleteErr != nil {
-			return fmt.Errorf("writing credential fallback: %w (keychain cleanup also failed: %v)", err, deleteErr)
-		}
-		return fmt.Errorf("writing credential fallback: %w", err)
-	}
-	return nil
 }
 
 // DeleteWithFallback removes the token from both the OS keychain and the
