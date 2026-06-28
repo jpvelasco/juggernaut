@@ -69,6 +69,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("keychain", doctor.OK, "no bearer token (IAM auth)")
 	default:
 		r.Check("keychain", doctor.OK, "bearer token found")
+		checkKeyExpiry(r, token)
 	}
 
 	checkConnectivity(r, home, token, scopes)
@@ -135,6 +136,32 @@ func legacyArtifactStatus(home string, r *doctor.Report) {
 	artifacts := activation.DetectLegacyArtifacts(binDir)
 	for _, a := range artifacts {
 		r.Check("v4.2.6 artifact", doctor.Warn, fmt.Sprintf("%s: %s", a.Action, a.Path))
+	}
+}
+
+// checkKeyExpiry warns when a short-term Bedrock API key is expired or close to
+// expiring. Long-term keys carry no embedded expiry and are silently skipped.
+// Short-term keys cannot be refreshed by Juggernaut (it holds no AWS creds), so
+// the guidance is to regenerate and re-apply.
+func checkKeyExpiry(r *doctor.Report, token string) {
+	exp, ok := bedrock.ParseAPIKeyExpiry(token)
+	if !ok {
+		return // long-term or unrecognised — no expiry to report
+	}
+	now := time.Now().UTC()
+	switch {
+	case !now.Before(exp):
+		r.Check("api key expiry", doctor.Warn,
+			"short-term key expired at "+exp.Format(time.RFC3339)+
+				" — regenerate it and run `juggernaut apply --auth="+authmode.BedrockAPIKey+"`")
+	case exp.Sub(now) < time.Hour:
+		r.Check("api key expiry", doctor.Warn,
+			"short-term key expires soon ("+exp.Format(time.RFC3339)+
+				") — regenerate it before it lapses")
+	default:
+		r.Check("api key expiry", doctor.OK,
+			"short-term key valid until at most "+exp.Format(time.RFC3339)+
+				" (may expire sooner if the generating AWS session ends first)")
 	}
 }
 

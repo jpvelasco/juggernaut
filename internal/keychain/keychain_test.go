@@ -180,6 +180,12 @@ func TestGetWithFallback_VersionedFileWinsOverKeychain(t *testing.T) {
 func TestGetWithFallback_ReturnsEmptyWhenNothingStored(t *testing.T) {
 	home := t.TempDir()
 	s := testStore()
+	// With no fallback file and nothing stored, GetWithFallback consults the
+	// keychain. As of v5.2.4 a broken keychain backend (e.g. headless Linux with
+	// no Secret Service) surfaces as an error rather than being silently
+	// swallowed — that is the intended behavior, so skip when unavailable and
+	// assert the clean "nothing stored" case only when the backend works.
+	skipIfUnavailable(t, s)
 
 	got, err := s.GetWithFallback(home)
 	if err != nil {
@@ -470,15 +476,23 @@ func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
 		t.Fatalf("reading file: %v", err)
 	}
 
-	// File should start with the version prefix.
-	if !bytes.HasPrefix(data, []byte("juggernaut-credential-v1\n")) {
-		t.Errorf("expected versioned credential file, got raw data starting with %q", string(data[:min(20, len(data))]))
+	// On Windows the fallback file is now a v2 (DPAPI-encrypted) envelope.
+	if !bytes.HasPrefix(data, []byte("juggernaut-credential-v2\n")) {
+		t.Errorf("expected v2 encrypted credential file, got raw data starting with %q", string(data[:min(25, len(data))]))
 	}
 
-	// The token after the prefix should match.
-	expected := "juggernaut-credential-v1\n" + token
-	if string(data) != expected {
-		t.Errorf("expected versioned token, got mismatch")
+	// The plaintext token must NOT appear on disk (it is DPAPI-encrypted).
+	if bytes.Contains(data, []byte(token)) {
+		t.Error("plaintext token must not be present in the v2 credential file")
+	}
+
+	// And it must round-trip back to the original token via the read path.
+	got, err := s.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != token {
+		t.Errorf("round-trip mismatch: got %d bytes, want %d", len(got), len(token))
 	}
 }
 

@@ -4,6 +4,36 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.4] - 2026-06-27
+
+**Patch release — credential hardening for Bedrock API keys (follow-up to 5.2.3).**
+
+### Added
+
+- **Short-term API key expiry awareness.** Short-term Bedrock API keys embed a
+  SigV4 validity window and expire in ≤12h. `doctor` now reports the expiry (and
+  warns when expired or expiring within the hour), and `launch` prints a
+  non-fatal warning when injecting an expired key, with guidance to regenerate
+  and re-`apply`. Long-term keys carry no expiry and are unaffected. (Juggernaut
+  cannot auto-refresh short-term keys — it holds no AWS credentials.)
+
+### Changed
+
+- **Windows file fallback is now encrypted (DPAPI).** Keys that exceed the
+  Windows Credential Manager size limit (e.g. ~5 KB short-term keys) are stored
+  in a file fallback. That file was previously plaintext (owner-only perms); it
+  is now encrypted with Windows DPAPI (`CryptProtectData`, scoped to the current
+  user) in a new `-v2` envelope. Existing `-v1` plaintext files remain readable
+  and migrate to `-v2` on the next write. Non-Windows behavior is unchanged.
+
+### Fixed
+
+- **Keychain backend errors are no longer swallowed.** `GetWithFallback`
+  previously converted any keychain read error to an empty result, so a broken
+  backend looked identical to "no credential stored". Real backend failures now
+  surface so `launch`/`doctor` can report them distinctly (a missing credential
+  still returns empty, not an error).
+
 ## [5.2.3] - 2026-06-27
 
 **Patch release — fixes a launch-time credential read bug that broke short-term Bedrock API keys on Windows.**
