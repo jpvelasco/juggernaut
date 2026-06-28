@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
-	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 )
 
 // readJuggernautAuthMode returns the persisted auth.mode from the user-scope
@@ -37,8 +36,12 @@ func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-apply-flag-test")
 	setupMockPSRunner(t, home)
+	// commitApply calls SetWithFallback, which reaches the real OS keychain on
+	// macOS (security(1) can hang). Use the probed/isolated store so the test
+	// skips gracefully when the backend is unavailable rather than timing out.
+	store := setupIsolatedKeychain(t)
+	t.Cleanup(func() { _ = store.DeleteWithFallback(home) })
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -50,8 +53,7 @@ func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
 		t.Fatalf("apply --bedrock-key error: %v", err)
 	}
 
-	// The key must be retrievable via the fallback layer regardless of backend.
-	store := keychain.Default()
+	// The key must be retrievable via the fallback layer.
 	got, err := store.GetWithFallback(home)
 	if err != nil {
 		t.Fatalf("GetWithFallback() error: %v", err)
@@ -59,7 +61,6 @@ func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
 	if got != "flag-provided-key" {
 		t.Errorf("stored key = %q, want %q", got, "flag-provided-key")
 	}
-	t.Cleanup(func() { _ = store.DeleteWithFallback(home) })
 
 	// And settings.json should carry the API-key auth mode.
 	if mode := readJuggernautAuthMode(t, home); mode != authmode.BedrockAPIKey {
