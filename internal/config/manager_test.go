@@ -384,3 +384,69 @@ func TestBackupRotation(t *testing.T) {
 		t.Errorf("expected ≤5 backups, got %d", len(matches))
 	}
 }
+
+func TestMergeJuggernautBlock_PopulatedMapAndAnySlice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	// map[string]any (permissions populated) and []any native values exercise
+	// the populated-map and []any branches of the merge switch.
+	block := map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}}
+	nativeKeys := map[string]any{
+		"permissions":    map[string]any{"defaultMode": "auto"},
+		"modelOverrides": map[string]any{"sonnet": "model-x"},
+		"fallbackModel":  []any{"a", "b"},
+	}
+	if err := m.MergeJuggernautBlock(block, nil, nativeKeys); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	perms, ok := got["permissions"].(map[string]any)
+	if !ok || perms["defaultMode"] != "auto" {
+		t.Errorf("expected permissions.defaultMode=auto, got %#v", got["permissions"])
+	}
+	overrides, ok := got["modelOverrides"].(map[string]any)
+	if !ok || overrides["sonnet"] != "model-x" {
+		t.Errorf("expected modelOverrides populated, got %#v", got["modelOverrides"])
+	}
+	fb, ok := got["fallbackModel"].([]any)
+	if !ok || len(fb) != 2 {
+		t.Errorf("expected fallbackModel []any of len 2, got %#v", got["fallbackModel"])
+	}
+}
+
+func TestMergeJuggernautBlock_EmptyMapDeletes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+	_ = m.Write(map[string]any{"modelOverrides": map[string]any{"sonnet": "old"}})
+
+	// An empty map[string]any value deletes the key.
+	if err := m.MergeJuggernautBlock(
+		map[string]any{},
+		nil,
+		map[string]any{"modelOverrides": map[string]any{}},
+	); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+	got, _ := m.Read()
+	if _, ok := got["modelOverrides"]; ok {
+		t.Error("empty map should delete modelOverrides")
+	}
+}
+
+func TestWrite_CreatesNestedDir(t *testing.T) {
+	// Write must create the settings directory if it does not exist.
+	path := filepath.Join(t.TempDir(), "nested", "deeper", "settings.json")
+	m := config.NewManager(path)
+	if err := m.Write(map[string]any{"k": "v"}); err != nil {
+		t.Fatalf("Write() into nested dir error: %v", err)
+	}
+	got, err := m.Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if got["k"] != "v" {
+		t.Errorf("expected k=v, got %v", got["k"])
+	}
+}
