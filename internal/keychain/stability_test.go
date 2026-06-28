@@ -16,6 +16,14 @@ import (
 // keychain credential must NOT be wiped. Previously the keychain was deleted
 // before the (failing) file write, leaving the user with no credential at all.
 func TestSetWithFallback_PreservesKeychainWhenFileWriteFails(t *testing.T) {
+	// Only Windows enforces a keychain size limit, so only there does an
+	// oversized token deterministically route to the file fallback (the path
+	// this guarantee protects). On macOS/Linux the keychain has no size limit,
+	// so a big token is stored directly in the keychain and the fallback path
+	// is never taken — the guarantee is vacuously true and unobservable there.
+	if runtime.GOOS != "windows" {
+		t.Skip("file-fallback path is Windows-only (no keychain size limit elsewhere)")
+	}
 	home := t.TempDir()
 	s := keychain.NewStore("jug-stability-preserve")
 	skipIfUnavailableStab(t, s)
@@ -28,7 +36,7 @@ func TestSetWithFallback_PreservesKeychainWhenFileWriteFails(t *testing.T) {
 
 	// Force the file-fallback write to fail by making the credential path an
 	// un-removable non-empty directory, then store an oversized token (which
-	// always routes to the file fallback).
+	// routes to the file fallback on Windows).
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	if err := safepath.MkdirAll(filePath); err != nil {
 		t.Fatalf("creating blocking dir: %v", err)
