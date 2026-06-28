@@ -59,13 +59,20 @@ func copyBlob(b *windows.DataBlob) []byte {
 		return []byte{}
 	}
 	out := make([]byte, b.Size)
-	copy(out, unsafe.Slice(b.Data, b.Size))
+	// DPAPI returns a C-allocated buffer as (*byte, Size); reading it requires
+	// unsafe.Slice. This is the same idiom golang.org/x/sys/windows and the
+	// wincred dependency use — there is no unsafe-free way to consume the blob.
+	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block,go_unsafe_rule-unsafe
+	copy(out, unsafe.Slice(b.Data, b.Size)) //nolint:gosec // required to read the CryptProtectData/CryptUnprotectData DATA_BLOB
 	return out
 }
 
 // freeBlob releases the buffer DPAPI allocated for an output DATA_BLOB.
 func freeBlob(b *windows.DataBlob) {
 	if b.Data != nil {
-		_, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(b.Data)))
+		// LocalFree needs the buffer address as a Handle; the only way to obtain
+		// it from the *byte DPAPI returned is unsafe.Pointer. Standard Win32 idiom.
+		// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block,go_unsafe_rule-unsafe
+		_, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(b.Data))) //nolint:gosec // required to free the DPAPI-allocated DATA_BLOB
 	}
 }
