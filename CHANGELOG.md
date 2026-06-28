@@ -4,6 +4,14 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.3] - 2026-06-27
+
+**Patch release — fixes a launch-time credential read bug that broke short-term Bedrock API keys on Windows.**
+
+### Fixed
+
+- **`launch` now reads the file fallback, not just the keychain.** v5.2.2 added a file-based credential fallback for keys that exceed the Windows Credential Manager size limit, but the `launch` command still read credentials from the keychain only. Short-term Bedrock API keys (~5 KB, from the AWS token generator) exceed the 2560-byte Windows keychain limit, so they were stored in the file fallback and then reported as "bedrock API key not found in keychain" at launch. `launch` now resolves credentials via the same keychain-then-file fallback path used elsewhere, so both short-term and long-term keys work on Windows.
+
 ## [5.2.2] - 2026-06-27
 
 **Patch release.** Adds a file fallback for API keys that exceed the Windows keychain size limit, and overhauls the CI pipeline with golangci-lint, gosec, and Codacy integration.
