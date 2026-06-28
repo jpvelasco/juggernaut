@@ -17,12 +17,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
         with:
           go-version: "1.26"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
       - name: Verify version sync
         run: |
           FILE_VERSION=$(cat VERSION)
@@ -41,22 +35,38 @@ jobs:
 
   test:
     strategy:
+      fail-fast: false  # one leg failing must not cancel the others' coverage uploads
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write  # OIDC; lets each leg mint the Codecov upload token
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
         with:
           go-version: "1.26"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      # Run in bash on every OS so the working directory and tooling are
+      # consistent. Go on the Windows runner writes coverage.out with CRLF line
+      # endings, which Codecov's parser rejects (the upload lands in an ERROR
+      # state and never merges), so strip CR in the same step. tr is identical
+      # on GNU/BSD/Git-bash; the strip is a no-op on Linux/macOS.
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          go test ./... -v -coverprofile=coverage.out -covermode=atomic
+          tr -d '\r' < coverage.out > coverage.tmp && mv coverage.tmp coverage.out
+      # Upload per-OS coverage so Codecov merges all three legs. Much of the
+      # PowerShell/launcher/keychain code is Windows-only, so a Linux-only
+      # report understates true coverage; merging the OS matrix reflects it.
+      - name: Upload coverage to Codecov
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v7.0.0
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Run tests
-        run: go test ./... -v
+          use_oidc: true
+          files: ./coverage.out
+          fail_ci_if_error: true
 
   test-race:
     runs-on: ubuntu-latest
@@ -65,39 +75,44 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
         with:
           go-version: "1.26"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
       - name: Run tests with race detector
         run: go test -race ./... -v
 
   test-coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # OIDC; lets the job mint the Codecov upload token
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
         with:
           go-version: "1.26"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@v1.13.0
       - name: Run tests with coverage
-        run: go test ./... -coverprofile=coverage.out
+        run: |
+          gotestsum --junitfile junit.xml --format pkgname -- \
+            -coverprofile=coverage.out -covermode=atomic ./...
       - name: Check coverage threshold
         run: |
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%' | cut -d. -f1)
           echo "Coverage: ${TOTAL}%"
-          # Compare as integers — coverage must be >= 52%
-          if [ "${TOTAL}" -lt 52 ]; then
-            echo "Coverage below 52% threshold"
+          # Compare as integers — Linux-only floor (Windows-only code is not
+          # exercised here, so this sits below the merged Codecov total, which
+          # is the real coverage gate). Currently ~69% on Linux.
+          if [ "${TOTAL}" -lt 60 ]; then
+            echo "Coverage below 60% threshold"
             exit 1
           fi
+      # Coverage uploads come from the OS matrix (test job); this job only
+      # enforces the local Linux floor and uploads JUnit for Test Analytics.
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3  # v1.2.1
+        with:
+          use_oidc: true
+          files: ./junit.xml
 
   npm-test:
     runs-on: ubuntu-latest
@@ -131,11 +146,5 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6
         with:
           go-version: "1.26"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
       - name: Run gosec
         run: go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -exclude=G204,G304,G702,G703 ./...

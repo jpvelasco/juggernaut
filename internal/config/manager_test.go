@@ -21,6 +21,34 @@ func TestReadMissing(t *testing.T) {
 	}
 }
 
+func TestReadEmptyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
+		t.Fatalf("writing empty file: %v", err)
+	}
+	data, err := config.NewManager(path).Read()
+	if err != nil {
+		t.Fatalf("Read() on empty file error: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected empty map for empty file, got %v", data)
+	}
+}
+
+func TestReadInvalidJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatalf("writing invalid file: %v", err)
+	}
+	_, err := config.NewManager(path).Read()
+	if err == nil {
+		t.Fatal("expected parse error for invalid JSON")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("parsing")) {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestWriteAndRead(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
@@ -354,5 +382,71 @@ func TestBackupRotation(t *testing.T) {
 	matches, _ := filepath.Glob(pattern)
 	if len(matches) > 5 {
 		t.Errorf("expected ≤5 backups, got %d", len(matches))
+	}
+}
+
+func TestMergeJuggernautBlock_PopulatedMapAndAnySlice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+
+	// map[string]any (permissions populated) and []any native values exercise
+	// the populated-map and []any branches of the merge switch.
+	block := map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}}
+	nativeKeys := map[string]any{
+		"permissions":    map[string]any{"defaultMode": "auto"},
+		"modelOverrides": map[string]any{"sonnet": "model-x"},
+		"fallbackModel":  []any{"a", "b"},
+	}
+	if err := m.MergeJuggernautBlock(block, nil, nativeKeys); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+
+	got, _ := m.Read()
+	perms, ok := got["permissions"].(map[string]any)
+	if !ok || perms["defaultMode"] != "auto" {
+		t.Errorf("expected permissions.defaultMode=auto, got %#v", got["permissions"])
+	}
+	overrides, ok := got["modelOverrides"].(map[string]any)
+	if !ok || overrides["sonnet"] != "model-x" {
+		t.Errorf("expected modelOverrides populated, got %#v", got["modelOverrides"])
+	}
+	fb, ok := got["fallbackModel"].([]any)
+	if !ok || len(fb) != 2 {
+		t.Errorf("expected fallbackModel []any of len 2, got %#v", got["fallbackModel"])
+	}
+}
+
+func TestMergeJuggernautBlock_EmptyMapDeletes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := config.NewManager(path)
+	_ = m.Write(map[string]any{"modelOverrides": map[string]any{"sonnet": "old"}})
+
+	// An empty map[string]any value deletes the key.
+	if err := m.MergeJuggernautBlock(
+		map[string]any{},
+		nil,
+		map[string]any{"modelOverrides": map[string]any{}},
+	); err != nil {
+		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}
+	got, _ := m.Read()
+	if _, ok := got["modelOverrides"]; ok {
+		t.Error("empty map should delete modelOverrides")
+	}
+}
+
+func TestWrite_CreatesNestedDir(t *testing.T) {
+	// Write must create the settings directory if it does not exist.
+	path := filepath.Join(t.TempDir(), "nested", "deeper", "settings.json")
+	m := config.NewManager(path)
+	if err := m.Write(map[string]any{"k": "v"}); err != nil {
+		t.Fatalf("Write() into nested dir error: %v", err)
+	}
+	got, err := m.Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if got["k"] != "v" {
+		t.Errorf("expected k=v, got %v", got["k"])
 	}
 }

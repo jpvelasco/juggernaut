@@ -16,6 +16,16 @@ import (
 
 const defaultTimeout = 15 * time.Second
 
+// httpClient is the client used for connectivity probes. It is a package var so
+// tests can substitute a client pointed at an httptest server.
+var httpClient = &http.Client{Timeout: defaultTimeout}
+
+// bedrockEndpoint builds the InvokeModel URL for a region/model. It is a var so
+// tests can redirect probes to a local httptest server.
+var bedrockEndpoint = func(region, modelID string) string {
+	return fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke", region, modelID)
+}
+
 // ConnectivityResult holds the outcome of a Bedrock connectivity check.
 type ConnectivityResult struct {
 	OK         bool
@@ -35,7 +45,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	start := time.Now()
 
 	modelID = stripRegionPrefix(modelID)
-	url := fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke", region, modelID)
+	url := bedrockEndpoint(region, modelID)
 
 	body, err := json.Marshal(map[string]any{
 		"messages":          []map[string]string{{"role": "user", "content": "hi"}},
@@ -67,8 +77,7 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{Timeout: defaultTimeout}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return &ConnectivityResult{
 			OK:       false,
@@ -123,7 +132,7 @@ func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
 	start := time.Now()
 
 	modelID = stripRegionPrefix(modelID)
-	url := fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke", region, modelID)
+	url := bedrockEndpoint(region, modelID)
 
 	body, err := json.Marshal(map[string]any{
 		"messages":          []map[string]string{{"role": "user", "content": "hi"}},
@@ -154,8 +163,7 @@ func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: defaultTimeout}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return &ConnectivityResult{
 			OK:       false,
