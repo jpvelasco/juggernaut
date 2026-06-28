@@ -5,6 +5,7 @@ package keychain
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -28,11 +29,19 @@ const MaxWindowsKeychainSize = 2560
 // inside ~/.claude/.
 const credentialFile = "juggernaut-credential"
 
-// credentialVersionPrefix is the line prefix that marks a fallback credential
-// file as versioned and authoritative. Files without this prefix are treated as
-// legacy raw fallback files (e.g., from v5.2.2) and may be stale compared to a
-// keychain entry.
+// credentialVersionPrefix is the line prefix that marks a v1 fallback credential
+// file as versioned and authoritative. The token body is stored verbatim
+// (plaintext, owner-only file perms). Files without any versioned prefix are
+// treated as legacy raw fallback files (e.g., from v5.2.2) and may be stale
+// compared to a keychain entry.
 const credentialVersionPrefix = "juggernaut-credential-v1\n"
+
+// credentialVersionPrefixV2 marks a v2 fallback credential file whose token body
+// is DPAPI-encrypted (Windows) and base64-encoded. This protects large keys
+// (e.g. short-term Bedrock keys that exceed the Windows keychain size limit)
+// that would otherwise sit in a plaintext file. v1 files remain readable and are
+// transparently migrated to v2 on the next write.
+const credentialVersionPrefixV2 = "juggernaut-credential-v2\n"
 
 // Store wraps go-keyring with a fixed account name and configurable service name.
 type Store struct {
@@ -169,12 +178,11 @@ func (s *Store) GetWithFallback(home string) (string, error) {
 		if !os.IsNotExist(err) {
 			return "", err
 		}
-		// No file at all — use keychain.
-		token, err := s.Get()
-		if err != nil {
-			return "", nil
-		}
-		return token, nil
+		// No file at all — use keychain. Surface real backend errors so callers
+		// can distinguish "no credential stored" (empty, nil) from "keychain
+		// backend is broken" (non-nil error). s.Get already maps ErrNotFound to
+		// ("", nil), so any error here is a genuine backend failure.
+		return s.Get()
 	}
 
 	// File exists — check if it's versioned (authoritative).
@@ -207,22 +215,56 @@ func (s *Store) GetWithFallback(home string) (string, error) {
 // removed first so that a subsequent write creates a new inode with the
 // correct mode rather than preserving a potentially lax mode on the existing
 // file.
+//
+// When DPAPI is available (Windows), the token is encrypted to the current user
+// account and stored as a v2 envelope, so large keys that bypass the OS keychain
+// are still encrypted at rest. Otherwise it falls back to the v1 plaintext
+// envelope (owner-only perms; the OS keychain already covers small keys).
 func writeCredentialFile(base, filePath string, token string) error {
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing existing credential file: %w", err)
 	}
-	return safepath.WriteFile(base, filePath, []byte(credentialVersionPrefix+token))
+	payload := encodeCredential(token)
+	return safepath.WriteFile(base, filePath, payload)
 }
 
-// isVersionedCredential reports whether the file data starts with the
-// credential version prefix.
+// encodeCredential builds the on-disk envelope for a token, preferring the
+// encrypted v2 form when DPAPI is available and falling back to v1 plaintext.
+func encodeCredential(token string) []byte {
+	if dpapiAvailable() {
+		if ciphertext, err := encryptForUser([]byte(token)); err == nil {
+			enc := base64.StdEncoding.EncodeToString(ciphertext)
+			return []byte(credentialVersionPrefixV2 + enc)
+		}
+		// If encryption unexpectedly fails, fall through to v1 so the user is
+		// never locked out — the file is still owner-only.
+	}
+	return []byte(credentialVersionPrefix + token)
+}
+
+// isVersionedCredential reports whether the file data starts with a recognised
+// versioned-credential prefix (v1 plaintext or v2 encrypted).
 func isVersionedCredential(data []byte) bool {
-	return bytes.HasPrefix(data, []byte(credentialVersionPrefix))
+	return bytes.HasPrefix(data, []byte(credentialVersionPrefixV2)) ||
+		bytes.HasPrefix(data, []byte(credentialVersionPrefix))
 }
 
 // extractTokenFromVersionedCredential strips the version prefix from the
-// credential data and returns the raw token.
+// credential data and returns the raw token, decrypting a v2 (DPAPI) envelope.
+// A v2 envelope that cannot be decoded/decrypted yields an empty token so the
+// caller treats it as "no usable credential" rather than returning ciphertext.
 func extractTokenFromVersionedCredential(data []byte) string {
+	if body, ok := bytes.CutPrefix(data, []byte(credentialVersionPrefixV2)); ok {
+		ciphertext, err := base64.StdEncoding.DecodeString(string(body))
+		if err != nil {
+			return ""
+		}
+		plaintext, err := decryptForUser(ciphertext)
+		if err != nil {
+			return ""
+		}
+		return string(plaintext)
+	}
 	return string(bytes.TrimPrefix(data, []byte(credentialVersionPrefix)))
 }
 
