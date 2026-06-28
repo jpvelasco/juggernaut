@@ -82,13 +82,20 @@ func TestGet_FallsBackToLegacyV3Account(t *testing.T) {
 	}
 }
 
-// TestSetWithFallback_V1FileMigratesOnWrite verifies the v1->v2 migration: a
-// user upgrading from v5.2.2/5.2.3 has a v1 plaintext fallback file; writing a
-// new credential must produce a v2 (encrypted) envelope on Windows, and a v1
-// envelope on non-Windows, round-tripping correctly either way.
+// TestSetWithFallback_V1FileMigratesOnWrite verifies that a user upgrading from
+// v5.2.2/5.2.3 with a v1 plaintext fallback file migrates cleanly on the next
+// write. The destination differs by platform: on Windows (keychain size limit)
+// the big token re-lands in the file as an encrypted v2 envelope; on
+// macOS/Linux (no size limit) it migrates INTO the keychain and the stale v1
+// file is removed. Either way the new token must round-trip via GetWithFallback
+// and no plaintext copy of it may remain on disk.
 func TestSetWithFallback_V1FileMigratesOnWrite(t *testing.T) {
 	home := t.TempDir()
 	s := keychain.NewStore("jug-stability-migrate")
+	if runtime.GOOS != "windows" {
+		// macOS/Linux store the big token in the keychain — needs a backend.
+		skipIfUnavailableStab(t, s)
+	}
 	t.Cleanup(func() { _ = s.DeleteWithFallback(home) })
 
 	// Seed a v1 plaintext file (simulates a v5.2.2/5.2.3 large-key state).
@@ -97,17 +104,17 @@ func TestSetWithFallback_V1FileMigratesOnWrite(t *testing.T) {
 		t.Fatalf("seeding v1 file: %v", err)
 	}
 
-	// Write a new oversized token (routes to the file fallback on every OS).
 	newToken := strings.Repeat("y", 2600)
 	if err := s.SetWithFallback(newToken, home); err != nil {
 		t.Fatalf("SetWithFallback() error: %v", err)
 	}
 
-	raw, err := safepath.ReadFile(home, filePath)
-	if err != nil {
-		t.Fatalf("reading migrated file: %v", err)
-	}
 	if runtime.GOOS == "windows" {
+		// Windows: big token re-lands in the file as an encrypted v2 envelope.
+		raw, err := safepath.ReadFile(home, filePath)
+		if err != nil {
+			t.Fatalf("reading migrated file: %v", err)
+		}
 		if !strings.HasPrefix(string(raw), "juggernaut-credential-v2\n") {
 			t.Errorf("on Windows the file should migrate to a v2 envelope, got prefix %q", first25(raw))
 		}
@@ -115,8 +122,9 @@ func TestSetWithFallback_V1FileMigratesOnWrite(t *testing.T) {
 			t.Error("on Windows the token must not be present in plaintext after migration")
 		}
 	} else {
-		if !strings.HasPrefix(string(raw), "juggernaut-credential-v1\n") {
-			t.Errorf("on non-Windows the file should be a v1 envelope, got prefix %q", first25(raw))
+		// macOS/Linux: token migrates into the keychain; the stale v1 file is gone.
+		if _, err := safepath.ReadFile(home, filePath); !os.IsNotExist(err) {
+			t.Errorf("on non-Windows the stale v1 file should be removed after migration, stat err = %v", err)
 		}
 	}
 
@@ -126,7 +134,7 @@ func TestSetWithFallback_V1FileMigratesOnWrite(t *testing.T) {
 		t.Fatalf("GetWithFallback() error: %v", err)
 	}
 	if got != newToken {
-		t.Errorf("migrated file did not round-trip: got %d bytes, want %d", len(got), len(newToken))
+		t.Errorf("migrated credential did not round-trip: got %d bytes, want %d", len(got), len(newToken))
 	}
 }
 
