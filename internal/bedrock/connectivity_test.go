@@ -216,32 +216,6 @@ func TestContainsAuthError(t *testing.T) {
 // contains (lowercase helper)
 // -----------------------------------------------------------------------
 
-func TestContains(t *testing.T) {
-	tests := []struct {
-		name, s, substr string
-		want            bool
-	}{
-		{"found", "hello world", "world", true},
-		{"not found", "hello world", "xyz", false},
-		{"empty string", "", "a", false},
-		{"empty substr", "hello", "", true},
-		{"case insensitive (source uppercased)", "Hello World", "hello", true},
-		{"source lowercased but search not", "hello world", "HELLO", false},
-		{"exact match", "abc", "abc", true},
-		{"prefix match", "abcdef", "abc", true},
-		{"suffix match", "abcdef", "def", true},
-		{"middle match", "abcdef", "bcd", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := contains(tt.s, tt.substr)
-			if got != tt.want {
-				t.Errorf("contains(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
-			}
-		})
-	}
-}
-
 // -----------------------------------------------------------------------
 // CheckAPIKeyConnectivity
 // -----------------------------------------------------------------------

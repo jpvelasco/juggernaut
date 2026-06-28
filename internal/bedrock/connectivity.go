@@ -241,8 +241,8 @@ func (r *ConnectivityResult) IsAuthFailure() bool {
 // are valid for cross-region invocation.
 func stripRegionPrefix(modelID string) string {
 	for _, prefix := range []string{"us.", "eu.", "apac."} {
-		if strings.HasPrefix(modelID, prefix) {
-			return strings.TrimPrefix(modelID, prefix)
+		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
+			return rest
 		}
 	}
 	return modelID
@@ -271,7 +271,7 @@ func formatResponseError(status int, body []byte) string {
 }
 
 func containsAuthError(body string) bool {
-	lower := body
+	lower := strings.ToLower(body)
 	for _, s := range []string{
 		"authorization",
 		"credential",
@@ -280,27 +280,7 @@ func containsAuthError(body string) bool {
 		"forbidden",
 		"access denied",
 	} {
-		if contains(lower, s) {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			c := s[i+j]
-			if c >= 'A' && c <= 'Z' {
-				c += 'a' - 'A'
-			}
-			if c != substr[j] {
-				match = false
-				break
-			}
-		}
-		if match {
+		if strings.Contains(lower, s) {
 			return true
 		}
 	}

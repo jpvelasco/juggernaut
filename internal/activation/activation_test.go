@@ -2,6 +2,7 @@ package activation
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -211,6 +212,76 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+}
+
+func TestLaunch_WarnsOnExpiredShortTermKey(t *testing.T) {
+	home := t.TempDir()
+	writeSettings(t, home, "bedrock-api-key")
+	realDir := t.TempDir()
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real claude")
+
+	// An expired short-term key: "bedrock-api-key-" + base64 presigned URL
+	// issued in 2020 with a 1h window.
+	expiredURL := "https://bedrock.amazonaws.com/?Action=CallWithBearerToken" +
+		"&X-Amz-Date=20200101T000000Z&X-Amz-Expires=3600"
+	expiredKey := "bedrock-" + "api-key-" + base64.StdEncoding.EncodeToString([]byte(expiredURL))
+
+	var warnings []string
+	ran := false
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Path:        realDir,
+		TokenGetter: func() (string, error) { return expiredKey, nil },
+		Warner:      func(msg string) { warnings = append(warnings, msg) },
+		Runner: func(_ string, _ []string, env []string) error {
+			ran = true
+			// Token is still injected despite being expired.
+			if envValue(env, "AWS_BEARER_TOKEN_BEDROCK") != expiredKey {
+				t.Error("expired token should still be injected")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+	if !ran {
+		t.Fatal("runner should still execute with an expired key (non-fatal warning)")
+	}
+	if len(warnings) == 0 || !strings.Contains(warnings[0], "expired") {
+		t.Errorf("expected an expiry warning, got %v", warnings)
+	}
+}
+
+func TestLaunch_NoExpiryWarningForLongTermKey(t *testing.T) {
+	home := t.TempDir()
+	writeSettings(t, home, "bedrock-api-key")
+	realDir := t.TempDir()
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real claude")
+
+	longTerm := "ABSK" + base64.StdEncoding.EncodeToString([]byte("BedrockAPIKey-x-at-1:secret"))
+	var warnings []string
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Path:        realDir,
+		TokenGetter: func() (string, error) { return longTerm, nil },
+		Warner:      func(msg string) { warnings = append(warnings, msg) },
+		Runner:      func(_ string, _ []string, _ []string) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("long-term key should not produce an expiry warning, got %v", warnings)
 	}
 }
 

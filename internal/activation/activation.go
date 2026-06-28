@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -83,6 +85,9 @@ type LaunchOptions struct {
 	Path        string
 	TokenGetter func() (string, error)
 	Runner      func(path string, args []string, env []string) error
+	// Warner receives non-fatal warnings (e.g. an expired short-term API key).
+	// Defaults to printing to stderr.
+	Warner func(msg string)
 }
 
 // DefaultTargets returns the shell profile targets Juggernaut updates.
@@ -455,6 +460,9 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	if opts.Runner == nil {
 		opts.Runner = runClaudeBinary
 	}
+	if opts.Warner == nil {
+		opts.Warner = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+	}
 
 	env := os.Environ()
 	modes, err := authModes(opts.Home)
@@ -472,6 +480,13 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		}
 		if token == "" {
 			return fmt.Errorf("bedrock API key not found in keychain; run `juggernaut apply --auth=%s`", authmode.BedrockAPIKey)
+		}
+		// Warn (non-fatally) if a short-term key has already expired — the token
+		// is still injected, but Bedrock will reject it, so surface why up front.
+		// Juggernaut can't refresh short-term keys (it holds no AWS creds).
+		if bedrock.IsAPIKeyExpired(token, time.Now().UTC()) {
+			opts.Warner("Warning: your short-term Bedrock API key has expired; regenerate it and run " +
+				"`juggernaut apply --auth=" + authmode.BedrockAPIKey + "` (Claude Code will fail to authenticate until then)")
 		}
 		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
 	} else if len(modes) > 0 {
