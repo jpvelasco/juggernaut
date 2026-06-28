@@ -99,9 +99,10 @@ jobs:
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%' | cut -d. -f1)
           echo "Coverage: ${TOTAL}%"
           # Compare as integers — Linux-only floor (Windows-only code is not
-          # exercised here; the merged Codecov gate is the real coverage check).
-          if [ "${TOTAL}" -lt 52 ]; then
-            echo "Coverage below 52% threshold"
+          # exercised here, so this sits below the merged Codecov total, which
+          # is the real coverage gate). Currently ~69% on Linux.
+          if [ "${TOTAL}" -lt 60 ]; then
+            echo "Coverage below 60% threshold"
             exit 1
           fi
       # Coverage uploads come from the OS matrix (test job); this job only
