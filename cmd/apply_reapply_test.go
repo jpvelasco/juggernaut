@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 )
 
 // readJuggernautAuthMode returns the persisted auth.mode from the user-scope
@@ -25,6 +26,45 @@ func readJuggernautAuthMode(t *testing.T, home string) string {
 	}
 	mode, _ := auth["mode"].(string)
 	return mode
+}
+
+// TestApply_BedrockKey_FlagStoresViaFallback runs a real (non-dry-run) apply
+// with --bedrock-key. This needs no keychain backend: resolveCredential returns
+// the flag value directly, and commitApply's SetWithFallback writes the file
+// fallback when the OS keychain is unavailable (as on headless CI). It covers
+// the resolveCredential flag path and commitApply's API-key storage branch.
+func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-apply-flag-test")
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=flag-provided-key",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --bedrock-key error: %v", err)
+	}
+
+	// The key must be retrievable via the fallback layer regardless of backend.
+	store := keychain.Default()
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("GetWithFallback() error: %v", err)
+	}
+	if got != "flag-provided-key" {
+		t.Errorf("stored key = %q, want %q", got, "flag-provided-key")
+	}
+	t.Cleanup(func() { _ = store.DeleteWithFallback(home) })
+
+	// And settings.json should carry the API-key auth mode.
+	if mode := readJuggernautAuthMode(t, home); mode != authmode.BedrockAPIKey {
+		t.Errorf("auth mode = %q, want %q", mode, authmode.BedrockAPIKey)
+	}
 }
 
 // TestApply_ReapplyWithoutAuth_PreservesExistingMode verifies the documented
