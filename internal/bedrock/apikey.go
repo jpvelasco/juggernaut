@@ -17,9 +17,17 @@ const shortTermKeyPrefix = "bedrock-" + "api-key-"
 // amzDateLayout is the SigV4 X-Amz-Date format (ISO 8601 basic, UTC).
 const amzDateLayout = "20060102T150405Z"
 
-// ParseAPIKeyExpiry returns the expiry time embedded in a short-term Bedrock
-// API key, or ok=false if the key is not a short-term key or has no parseable
-// expiry (e.g. long-term "ABSK" keys). Expiry = X-Amz-Date + X-Amz-Expires.
+// ParseAPIKeyExpiry returns the embedded expiry of a short-term Bedrock API key
+// (X-Amz-Date + X-Amz-Expires), or ok=false for long-term "ABSK" keys and
+// unrecognised formats.
+//
+// This is an UPPER BOUND, not a definitive validity time. AWS documents a
+// short-term key's lifetime as the shorter of the requested X-Amz-Expires and
+// the generating IAM session's own expiry, so a key can stop working before the
+// returned time if the originating session expires first. Callers should treat
+// it as "valid until at most" — useful for warning when clearly expired, but
+// never a guarantee the key is still valid.
+// See https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-generate.html
 func ParseAPIKeyExpiry(key string) (time.Time, bool) {
 	body, ok := strings.CutPrefix(key, shortTermKeyPrefix)
 	if !ok {

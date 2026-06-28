@@ -221,25 +221,40 @@ func (s *Store) GetWithFallback(home string) (string, error) {
 // are still encrypted at rest. Otherwise it falls back to the v1 plaintext
 // envelope (owner-only perms; the OS keychain already covers small keys).
 func writeCredentialFile(base, filePath string, token string) error {
+	payload, err := encodeCredential(token)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("removing existing credential file: %w", err)
 	}
-	payload := encodeCredential(token)
 	return safepath.WriteFile(base, filePath, payload)
 }
 
-// encodeCredential builds the on-disk envelope for a token, preferring the
-// encrypted v2 form when DPAPI is available and falling back to v1 plaintext.
-func encodeCredential(token string) []byte {
-	if dpapiAvailable() {
-		if ciphertext, err := encryptForUser([]byte(token)); err == nil {
-			enc := base64.StdEncoding.EncodeToString(ciphertext)
-			return []byte(credentialVersionPrefixV2 + enc)
+// Indirection seams so tests can exercise the fail-closed path without a real
+// DPAPI backend. Default to the build-tagged platform implementations.
+var (
+	dpapiAvailableFn = dpapiAvailable
+	encryptFn        = encryptForUser
+)
+
+// encodeCredential builds the on-disk envelope for a token. On platforms where
+// DPAPI is available (Windows) it MUST encrypt — it fails closed rather than
+// downgrading to the v1 plaintext envelope, so a CryptProtectData failure can
+// never reintroduce plaintext-at-rest storage of the bearer token. On platforms
+// without DPAPI it uses the v1 plaintext envelope (owner-only perms; the OS
+// keychain already covers small keys, and large-key file fallback is the
+// documented behavior there).
+func encodeCredential(token string) ([]byte, error) {
+	if dpapiAvailableFn() {
+		ciphertext, err := encryptFn([]byte(token))
+		if err != nil {
+			return nil, fmt.Errorf("encrypting credential for file fallback: %w", err)
 		}
-		// If encryption unexpectedly fails, fall through to v1 so the user is
-		// never locked out — the file is still owner-only.
+		enc := base64.StdEncoding.EncodeToString(ciphertext)
+		return []byte(credentialVersionPrefixV2 + enc), nil
 	}
-	return []byte(credentialVersionPrefix + token)
+	return []byte(credentialVersionPrefix + token), nil
 }
 
 // isVersionedCredential reports whether the file data starts with a recognised

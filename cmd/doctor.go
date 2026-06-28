@@ -159,7 +159,9 @@ func checkKeyExpiry(r *doctor.Report, token string) {
 			"short-term key expires soon ("+exp.Format(time.RFC3339)+
 				") — regenerate it before it lapses")
 	default:
-		r.Check("api key expiry", doctor.OK, "short-term key valid until "+exp.Format(time.RFC3339))
+		r.Check("api key expiry", doctor.OK,
+			"short-term key valid until at most "+exp.Format(time.RFC3339)+
+				" (may expire sooner if the generating AWS session ends first)")
 	}
 }
 
