@@ -6,7 +6,8 @@
     "juggernaut": "./index.js"
   },
   "scripts": {
-    "test": "node --test index.test.js"
+    "preinstall": "node preinstall.js",
+    "test": "node --test"
   },
   "optionalDependencies": {
     "juggernaut-bedrock-linux-x64": "0.0.0",
