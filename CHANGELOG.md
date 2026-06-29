@@ -4,6 +4,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release pipeline hardening (follow-up to #226).** CI now fails if `.goreleaser.yml` sets `draft: true`, and `release.yml` verifies the GitHub release is published with assets before npm publish — so a draft-only GoReleaser config cannot silently ship npm while GitHub releases stay hidden.
+
 ## [5.2.6] - 2026-06-28
 
 **Patch release — clean npm install output: drop the redundant `preinstall` script.**

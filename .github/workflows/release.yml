@@ -28,6 +28,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify GitHub release is published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          DRAFT=$(gh release view "$TAG" --json isDraft -q .isDraft)
+          if [ "$DRAFT" != "false" ]; then
+            echo "ERROR: release $TAG is still a draft — aborting before npm publish"
+            exit 1
+          fi
+          ASSETS=$(gh release view "$TAG" --json assets -q '.assets | length')
+          if [ "$ASSETS" -lt 6 ]; then
+            echo "ERROR: release $TAG has $ASSETS assets, expected at least 6 (5 archives + checksums.txt)"
+            exit 1
+          fi
+          echo "GitHub release $TAG is published with $ASSETS assets"
+
       - name: Copy platform binaries into npm sub-packages
         run: bash scripts/copy-npm-binaries.sh
 

@@ -27,6 +27,13 @@ jobs:
             exit 1
           fi
           echo "Version sync OK: $FILE_VERSION"
+      - name: Verify GoReleaser auto-publishes releases
+        run: |
+          if grep -qE '^\s*draft:\s*true' .goreleaser.yml; then
+            echo "ERROR: .goreleaser.yml has draft: true; .github/workflows/release.yml does not un-draft releases"
+            exit 1
+          fi
+          echo "GoReleaser draft check OK"
       - name: golangci-lint
         uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee  # v9
         with:
