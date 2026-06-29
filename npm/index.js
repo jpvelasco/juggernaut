@@ -86,6 +86,32 @@ function safeForwardArgs(args) {
   return forwarded;
 }
 
+
+/**
+ * @param {*} rootVersion
+ * @param {*} binVersion
+ * @returns {boolean} true to allow exec, false to block on confirmed skew
+ */
+function versionsMatch(rootVersion, binVersion) {
+  // Fail open: if either version is unreadable/non-string, do not block.
+  if (typeof rootVersion !== "string" || typeof binVersion !== "string") {
+    return true;
+  }
+  return rootVersion === binVersion;
+}
+
+/**
+ * @param {string} pkgJsonPath
+ * @returns {string|void} the version field, or undefined on any failure
+ */
+function readPkgVersion(pkgJsonPath) {
+  try {
+    var raw = fs.readFileSync(pkgJsonPath, "utf8"); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+    return JSON.parse(raw).version;
+  } catch (_) {
+    return void 0;
+  }
+}
 if (require.main === module) {
   var pkg = getPlatformPackage(process.platform, process.arch);
   if (!pkg) {
@@ -107,6 +133,26 @@ if (require.main === module) {
   }
 
   var bin = safeResolveBin(binRaw);
+  var rootVersion = readPkgVersion(path.join(__dirname, "package.json"));
+  // Read the version from the package that owns the binary we just validated,
+  // not by re-resolving `pkg` independently — so the skew check compares the
+  // version of the exact binary we are about to execute. `bin` was realpath'd
+  // and asserted to be contained under __dirname by safeResolveBin above, so
+  // binPkgDir is derived from an already-validated path (the path-join finding
+  // below is a false positive on that basis).
+  var binPkgDir = path.dirname(path.dirname(bin));
+  var binVersion = readPkgVersion(path.join(binPkgDir, "package.json")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  if (!versionsMatch(rootVersion, binVersion)) {
+    process.stderr.write(
+      "juggernaut-bedrock is in a broken or partially-updated state " +
+      "(launcher v" + rootVersion + ", binary v" + binVersion + ").\n" +
+      "This usually happens when the package was updated while a Claude Code " +
+      "session was running.\n" +
+      "Close all `claude` sessions and terminals, then re-run:\n" +
+      "  npm install -g juggernaut-bedrock\n"
+    );
+    process.exit(1);
+  }
   var args = safeForwardArgs(process.argv.slice(2));
   var result = childProcess.spawnSync(bin, args, {
     stdio: "inherit",
@@ -120,5 +166,6 @@ if (require.main === module) {
 module.exports = {
   getPlatformPackage: getPlatformPackage,
   getBinaryPath: getBinaryPath,
-  safeForwardArgs: safeForwardArgs
+  safeForwardArgs: safeForwardArgs,
+  versionsMatch: versionsMatch
 };
