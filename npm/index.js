@@ -134,7 +134,14 @@ if (require.main === module) {
 
   var bin = safeResolveBin(binRaw);
   var rootVersion = readPkgVersion(path.join(__dirname, "package.json"));
-  var binVersion = readPkgVersion(path.join(resolvePkgDir(pkg), "package.json")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  // Read the version from the package that owns the binary we just validated,
+  // not by re-resolving `pkg` independently — so the skew check compares the
+  // version of the exact binary we are about to execute. `bin` was realpath'd
+  // and asserted to be contained under __dirname by safeResolveBin above, so
+  // binPkgDir is derived from an already-validated path (the path-join finding
+  // below is a false positive on that basis).
+  var binPkgDir = path.dirname(path.dirname(bin));
+  var binVersion = readPkgVersion(path.join(binPkgDir, "package.json")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   if (!versionsMatch(rootVersion, binVersion)) {
     process.stderr.write(
       "juggernaut-bedrock is in a broken or partially-updated state " +
