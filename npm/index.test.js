@@ -76,3 +76,33 @@ describe("safeForwardArgs", function() {
   });
   return void 0;
 });
+
+var versionsMatch = index.versionsMatch;
+
+describe("versionsMatch", function() {
+  it("allows when versions are equal", function() {
+    assert.strictEqual(versionsMatch("5.2.4", "5.2.4"), true);
+    return void 0;
+  });
+  it("blocks when versions differ", function() {
+    assert.strictEqual(versionsMatch("5.2.4", "5.2.2"), false);
+    return void 0;
+  });
+  it("allows the dev 0.0.0 / 0.0.0 case", function() {
+    assert.strictEqual(versionsMatch("0.0.0", "0.0.0"), true);
+    return void 0;
+  });
+  it("fails open when root version is missing", function() {
+    assert.strictEqual(versionsMatch(undefined, "5.2.4"), true);
+    return void 0;
+  });
+  it("fails open when binary version is missing", function() {
+    assert.strictEqual(versionsMatch("5.2.4", undefined), true);
+    return void 0;
+  });
+  it("fails open when a version is not a string", function() {
+    assert.strictEqual(versionsMatch("5.2.4", 524), true);
+    return void 0;
+  });
+  return void 0;
+});

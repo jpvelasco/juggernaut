@@ -86,6 +86,32 @@ function safeForwardArgs(args) {
   return forwarded;
 }
 
+
+/**
+ * @param {*} rootVersion
+ * @param {*} binVersion
+ * @returns {boolean} true to allow exec, false to block on confirmed skew
+ */
+function versionsMatch(rootVersion, binVersion) {
+  // Fail open: if either version is unreadable/non-string, do not block.
+  if (typeof rootVersion !== "string" || typeof binVersion !== "string") {
+    return true;
+  }
+  return rootVersion === binVersion;
+}
+
+/**
+ * @param {string} pkgJsonPath
+ * @returns {string|void} the version field, or undefined on any failure
+ */
+function readPkgVersion(pkgJsonPath) {
+  try {
+    var raw = fs.readFileSync(pkgJsonPath, "utf8"); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+    return JSON.parse(raw).version;
+  } catch (_) {
+    return void 0;
+  }
+}
 if (require.main === module) {
   var pkg = getPlatformPackage(process.platform, process.arch);
   if (!pkg) {
@@ -107,6 +133,19 @@ if (require.main === module) {
   }
 
   var bin = safeResolveBin(binRaw);
+  var rootVersion = readPkgVersion(path.join(__dirname, "package.json"));
+  var binVersion = readPkgVersion(path.join(resolvePkgDir(pkg), "package.json"));
+  if (!versionsMatch(rootVersion, binVersion)) {
+    process.stderr.write(
+      "juggernaut-bedrock is in a broken or partially-updated state " +
+      "(launcher v" + rootVersion + ", binary v" + binVersion + ").\n" +
+      "This usually happens when the package was updated while a Claude Code " +
+      "session was running.\n" +
+      "Close all `claude` sessions and terminals, then re-run:\n" +
+      "  npm install -g juggernaut-bedrock\n"
+    );
+    process.exit(1);
+  }
   var args = safeForwardArgs(process.argv.slice(2));
   var result = childProcess.spawnSync(bin, args, {
     stdio: "inherit",
@@ -120,5 +159,6 @@ if (require.main === module) {
 module.exports = {
   getPlatformPackage: getPlatformPackage,
   getBinaryPath: getBinaryPath,
-  safeForwardArgs: safeForwardArgs
+  safeForwardArgs: safeForwardArgs,
+  versionsMatch: versionsMatch
 };
