@@ -9,7 +9,7 @@ import (
 )
 
 // Version is set at build time via -ldflags. Dev builds use the fallback.
-var Version = "5.2.6"
+var Version = "5.2.7"
 
 var rootCmd = &cobra.Command{
 	Use:   "juggernaut",

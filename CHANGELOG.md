@@ -4,9 +4,15 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.7] - 2026-06-29
+
+**Patch release — restore fully automatic GitHub releases and harden the release pipeline.**
+
 ### Fixed
 
-- **Release pipeline hardening (follow-up to #226).** CI now fails if `.goreleaser.yml` sets `draft: true`, and `release.yml` verifies the GitHub release is published with assets before npm publish — so a draft-only GoReleaser config cannot silently ship npm while GitHub releases stay hidden.
+- **GitHub releases publish automatically on tag push.** GoReleaser was left at `draft: true` since #212, uploading assets to unpublished drafts while npm still published — every release required manual `gh release edit --draft=false`. Restored `draft: false` so a tag push fully publishes the GitHub release with no manual step.
+
+- **Release pipeline hardening.** CI now fails if `.goreleaser.yml` sets `draft: true`, and `release.yml` verifies the GitHub release is published with assets before npm publish — so a draft-only GoReleaser config cannot silently ship npm while GitHub releases stay hidden.
 
 ## [5.2.6] - 2026-06-28
 
@@ -978,7 +984,9 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.5...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.7...HEAD
+[5.2.7]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.7
+[5.2.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.6
 [5.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.5
 [5.2.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.4
 [5.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.3
