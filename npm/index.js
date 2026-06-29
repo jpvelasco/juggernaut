@@ -40,13 +40,21 @@ function containsPackage(pkgName) {
 }
 
 /**
+ * Resolves the directory of a platform package. Self-defending: it rejects any
+ * name not in the VALID_PACKAGES allowlist before building a path, so the
+ * fallback path.join below can only ever join a known constant package name
+ * (no separators, no "..") under __dirname and cannot be made to escape it.
  * @param {string} pkgName
  * @returns {string}
  */
 function resolvePkgDir(pkgName) {
+  if (!containsPackage(pkgName)) {
+    throw new Error("unexpected package name: " + pkgName);
+  }
   try {
     return path.dirname(require.resolve(pkgName + "/package.json"));
   } catch (_) {
+    // pkgName is allowlist-validated above, so this join stays under __dirname.
     return path.join(__dirname, "packages", pkgName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   }
 }
@@ -56,6 +64,8 @@ function getBinaryPath(pkgName, platform) {
     throw new Error("unexpected package name: " + pkgName);
   }
   var binaryName = platform === "win32" ? "juggernaut.exe" : "juggernaut";
+  // pkgName validated above and again inside resolvePkgDir; binaryName is a
+  // local constant. The joined path therefore cannot escape the package dir.
   return path.join(resolvePkgDir(pkgName), "bin", binaryName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
@@ -166,6 +176,7 @@ if (require.main === module) {
 module.exports = {
   getPlatformPackage: getPlatformPackage,
   getBinaryPath: getBinaryPath,
+  resolvePkgDir: resolvePkgDir,
   safeForwardArgs: safeForwardArgs,
   versionsMatch: versionsMatch
 };
