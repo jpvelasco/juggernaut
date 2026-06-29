@@ -9,6 +9,7 @@ var assert = require("assert");
 var index = require("./index");
 var getPlatformPackage = index.getPlatformPackage;
 var getBinaryPath = index.getBinaryPath;
+var resolvePkgDir = index.resolvePkgDir;
 var safeForwardArgs = index.safeForwardArgs;
 
 describe("getPlatformPackage", function() {
@@ -57,6 +58,27 @@ describe("getBinaryPath", function() {
   it("path is under npm/packages/", function() {
     var result = getBinaryPath("juggernaut-bedrock-darwin-arm64", "darwin");
     assert.ok(result.includes(path.join("packages", "juggernaut-bedrock-darwin-arm64")));
+    return void 0;
+  });
+  it("rejects an unknown package name", function() {
+    assert.throws(function() {
+      getBinaryPath("../../etc/passwd", "linux");
+    }, /unexpected package name/);
+    return void 0;
+  });
+  return void 0;
+});
+
+describe("resolvePkgDir", function() {
+  it("resolves a known package name", function() {
+    var result = resolvePkgDir("juggernaut-bedrock-linux-x64");
+    assert.ok(result.includes("juggernaut-bedrock-linux-x64"));
+    return void 0;
+  });
+  it("rejects an unknown package name (self-defending, not just via getBinaryPath)", function() {
+    assert.throws(function() {
+      resolvePkgDir("../../etc/passwd");
+    }, /unexpected package name/);
     return void 0;
   });
   return void 0;
