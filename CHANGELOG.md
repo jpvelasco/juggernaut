@@ -4,6 +4,28 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.5] - 2026-06-28
+
+**Patch release — npm install integrity: fail loud on a partial install instead of running a stale binary.**
+
+### Fixed
+
+- **Partial npm installs no longer run a stale binary silently.** On Windows,
+  running `npm install -g juggernaut-bedrock` while a `claude` session held the
+  binary open could leave a partially-updated install, after which the launcher
+  could exec an older binary and fail with a misleading "bedrock API key not
+  found in keychain" — a problem repeatedly misattributed to the API key. The
+  launcher now compares its own version against the version of the binary it is
+  about to run and refuses to launch a version-skewed (partial) install,
+  printing an actionable "close your sessions and reinstall" message. A
+  best-effort Windows `preinstall` check also warns up front when a running
+  session is detected. (npm runs `preinstall` after extracting packages, so the
+  runtime version-skew guard — not the preinstall check — is the reliable net.)
+
+- **Hardened npm package-path resolution.** `resolvePkgDir` now validates the
+  package name against an allowlist before building any filesystem path, so its
+  path construction is self-defending rather than relying on a caller's check.
+
 ## [5.2.4] - 2026-06-27
 
 **Patch release — credential hardening for Bedrock API keys (follow-up to 5.2.3).**
@@ -933,7 +955,10 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.2...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.5...HEAD
+[5.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.5
+[5.2.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.4
+[5.2.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.3
 [5.2.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.2
 [5.0.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.4
 [5.0.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.0.3
