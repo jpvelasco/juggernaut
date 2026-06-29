@@ -6,7 +6,6 @@
     "juggernaut": "./index.js"
   },
   "scripts": {
-    "preinstall": "node preinstall.js",
     "test": "node --test"
   },
   "optionalDependencies": {

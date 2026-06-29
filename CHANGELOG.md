@@ -4,6 +4,25 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.6] - 2026-06-28
+
+**Patch release — clean npm install output: drop the redundant `preinstall` script.**
+
+### Removed
+
+- **Removed the npm `preinstall` script.** It was a best-effort, Windows-only
+  heads-up that ran a `tasklist` probe and no-opped on every other platform.
+  npm 11 refuses to run install scripts by default and prints a loud
+  `allow-scripts` warning for every package that declares one — and its
+  suggested remediation command (`npm install -g --allow-scripts=<pkg>`)
+  drops the package name, so users who follow it hit a confusing
+  `ENOENT ... package.json` error against their current directory. The
+  preinstall check was self-admittedly unreliable (npm runs `preinstall`
+  after extracting packages) and fully redundant with the runtime
+  version-skew guard in `index.js`, which still refuses to launch a
+  partially-updated install with an actionable message. Net effect: a clean
+  install with no scary warnings, and no loss of partial-install protection.
+
 ## [5.2.5] - 2026-06-28
 
 **Patch release — npm install integrity: fail loud on a partial install instead of running a stale binary.**
