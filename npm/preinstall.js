@@ -1,6 +1,21 @@
 #!/usr/bin/env node
 "use strict";
 
+// Best-effort install-time guard (NOT a guarantee).
+//
+// npm runs this `preinstall` script only AFTER it reifies the dependency
+// tree — including extracting the optional platform package that ships
+// juggernaut.exe. So in the exact scenario this warns about (a running
+// session holding a lock on juggernaut.exe under Windows), npm may already
+// have hit EPERM overwriting that binary before this script ever runs. When
+// that happens this gate cannot prevent the partial install.
+//
+// The reliable safety net is the runtime version-skew guard in index.js,
+// which refuses to launch a partially-updated install. This script is an
+// early, friendly heads-up for the cases where it does run first (e.g. a
+// repeat install once npm has already aborted, or non-reifying flows); it is
+// not the thing that makes a partial install safe.
+
 var childProcess = require("node:child_process");
 
 /**
@@ -9,8 +24,8 @@ var childProcess = require("node:child_process");
 function buildBlockMessage() {
   return (
     "juggernaut-bedrock: a Claude Code / Juggernaut session is currently " +
-    "running and is locking the Juggernaut binary.\n" +
-    "Installing now would leave the package in a broken state.\n" +
+    "running and is holding a lock on the Juggernaut binary.\n" +
+    "Installing now may leave the package in a partially-updated state.\n" +
     "Close all `claude` sessions and terminals, then re-run:\n" +
     "  npm install -g juggernaut-bedrock\n"
   );
