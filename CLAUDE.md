@@ -113,7 +113,7 @@ Version must stay in sync across **three** locations: `VERSION`, `bedrock-config
 ## CI / Release
 
 - CI (`ci.yml`): lint + version sync check → `go test ./... -v` on ubuntu/macos/windows → race detector → coverage (52% threshold) → npm tests → shellcheck → gosec. Actions pinned to full commit SHAs. Go module cache is shared across jobs.
-- Release (`release.yml`): triggered on `v*` tags → GoReleaser builds binaries → npm OIDC publish to `juggernaut-bedrock`.
+- Release (`release.yml`): triggered on `v*` tags → GoReleaser builds and **publishes** the GitHub release (`draft: false` in `.goreleaser.yml`; CI fails on `draft: true`) → verifies the release is non-draft with assets before npm → npm OIDC publish to `juggernaut-bedrock`.
 - GoReleaser requires a clean git tree — never commit build artifacts (`bin/` is gitignored).
 - npm package is in `npm/` — optional platform sub-packages ship prebuilt binaries; `npm/index.js` resolves and execs the matching package.
 

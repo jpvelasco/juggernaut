@@ -48,10 +48,6 @@ release:
     owner: jpvelasco
     name: juggernaut
   name_template: "v{{.Version}}"
-  # Publish the GitHub release immediately on tag push. With draft: true,
-  # GoReleaser uploads assets but leaves the release unpublished, and nothing
-  # in release.yml un-drafts it — so every release since #212 required a manual
-  # `gh release edit --draft=false`. The npm publish steps run regardless, which
-  # masked the broken GitHub-release half. Keep this false so a tag push fully
-  # publishes with no manual step.
+  # Must stay false: .github/workflows/release.yml has no un-draft step; draft:true
+  # left GitHub releases unpublished while npm still published (since #212).
   draft: false
