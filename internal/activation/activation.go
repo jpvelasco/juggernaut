@@ -554,29 +554,10 @@ func upsertBlock(content, block string) string {
 }
 
 func removeBlock(content string) (string, bool) {
-	content = normalizeNewlines(content)
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines))
-	inBlock := false
-	found := false
-
-	for _, line := range lines {
-		switch strings.TrimSpace(line) {
-		case BeginMarker:
-			inBlock = true
-			found = true
-			continue
-		case EndMarker:
-			if inBlock {
-				inBlock = false
-				continue
-			}
-		}
-		if !inBlock {
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, "\n"), found
+	// Delegate to the shared matched-span remover so an orphaned begin marker
+	// (a BEGIN with no following END) leaves all subsequent content untouched
+	// instead of silently deleting it.
+	return removeBlockWithMarkers(normalizeNewlines(content), BeginMarker, EndMarker)
 }
 
 // ResolvePowerShellProfiles returns the shared profile resolver result.
