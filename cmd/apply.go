@@ -318,6 +318,17 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 					}
 				}
 			}
+			// Also adopt a permission mode set outside Juggernaut (e.g. Claude
+			// Code's Shift+Tab writes native permissions.defaultMode without
+			// touching our meta block). Without this, a re-apply with no --mode
+			// would wipe the user's externally-chosen mode.
+			if applyFlags.mode == "" {
+				if perms, ok := existing["permissions"].(map[string]any); ok {
+					if dmode, ok := perms["defaultMode"].(string); ok && dmode != "" {
+						applyFlags.mode = dmode
+					}
+				}
+			}
 		}
 		if authMode == "" {
 			authMode = bCfg.Defaults.AuthMode
