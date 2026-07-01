@@ -48,7 +48,6 @@ var applyFlags struct {
 	mantleURL      string
 	scope          string
 	dryRun         bool
-	skipPreflight  bool
 	mode           string
 	alwaysThinking bool
 	serviceTier    string
@@ -79,7 +78,11 @@ func init() {
 	f.StringVar(&applyFlags.mantleURL, "mantle-url", "", "custom Mantle base URL")
 	f.StringVar(&applyFlags.scope, "scope", "user", "settings scope: user or project")
 	f.BoolVar(&applyFlags.dryRun, "dry-run", false, "preview without writing")
-	f.BoolVar(&applyFlags.skipPreflight, "skip-preflight", false, "skip dependency checks")
+	// Deprecated: --skip-preflight never gated any check and is now a no-op.
+	// Kept hidden for script compatibility.
+	var deprecatedSkipPreflight bool
+	f.BoolVar(&deprecatedSkipPreflight, "skip-preflight", false, "")
+	_ = f.MarkHidden("skip-preflight")
 	f.StringVar(&applyFlags.mode, "mode", "", "permission mode: default|acceptEdits|plan|auto|dontAsk|bypassPermissions")
 	f.BoolVar(&applyFlags.alwaysThinking, "always-thinking", false, "enable extended thinking by default")
 	f.StringVar(&applyFlags.serviceTier, "service-tier", "", "Bedrock service tier: default|flex|priority")
@@ -95,6 +98,10 @@ func runApply(_ *cobra.Command, _ []string) error {
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
+		return err
+	}
+
+	if err := resolveOpusplanConflict(); err != nil {
 		return err
 	}
 
@@ -165,6 +172,13 @@ func resolveMantle() (bool, error) {
 		return false, fmt.Errorf("--no-mantle cannot be combined with --mantle or --mantle-url")
 	}
 	return applyFlags.mantle || applyFlags.mantleURL != "", nil
+}
+
+func resolveOpusplanConflict() error {
+	if applyFlags.noOpusplan && applyFlags.opusplan {
+		return fmt.Errorf("--no-opusplan cannot be combined with --opusplan")
+	}
+	return nil
 }
 
 func printApplyDryRun(home string) error {
