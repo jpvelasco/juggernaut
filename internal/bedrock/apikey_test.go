@@ -90,6 +90,55 @@ func TestParseAPIKeyExpiry_MissingFields(t *testing.T) {
 	}
 }
 
+// TestParseAPIKeyExpiry_MalformedDate covers the time.Parse failure branch:
+// both fields present, but X-Amz-Date is not in the expected AWS layout.
+func TestParseAPIKeyExpiry_MalformedDate(t *testing.T) {
+	for _, badDate := range []string{
+		"2026-06-28T02:51:49Z", // RFC3339, not the compact AWS layout
+		"not-a-date",
+		"20260628",       // date only, no time
+		"20261332T9999Z", // impossible month/day/time
+	} {
+		body := "X-Amz-Date=" + badDate + "&X-Amz-Expires=43200&X-Amz-SignedHeaders=host"
+		key := shortTermPrefix + base64.StdEncoding.EncodeToString([]byte(body))
+		if _, ok := bedrock.ParseAPIKeyExpiry(key); ok {
+			t.Errorf("malformed date %q should not yield an expiry", badDate)
+		}
+	}
+}
+
+// TestParseAPIKeyExpiry_NonIntegerExpires covers the strconv.Atoi failure
+// branch: X-Amz-Expires present but not a valid integer.
+func TestParseAPIKeyExpiry_NonIntegerExpires(t *testing.T) {
+	for _, badExpires := range []string{"abc", "12.5", "", "1e3"} {
+		body := "X-Amz-Date=20260628T025149Z&X-Amz-Expires=" + badExpires + "&X-Amz-SignedHeaders=host"
+		key := shortTermPrefix + base64.StdEncoding.EncodeToString([]byte(body))
+		if _, ok := bedrock.ParseAPIKeyExpiry(key); ok {
+			t.Errorf("non-integer expires %q should not yield an expiry", badExpires)
+		}
+	}
+}
+
+// TestParseAPIKeyExpiry_NegativeExpires documents that a negative expiry parses
+// (Atoi accepts it) and yields a time BEFORE the issue date — so such a key is
+// always treated as already expired.
+func TestParseAPIKeyExpiry_NegativeExpires(t *testing.T) {
+	body := "X-Amz-Date=20260628T025149Z&X-Amz-Expires=-3600&X-Amz-SignedHeaders=host"
+	key := shortTermPrefix + base64.StdEncoding.EncodeToString([]byte(body))
+	exp, ok := bedrock.ParseAPIKeyExpiry(key)
+	if !ok {
+		t.Fatal("a negative expires is still numerically parseable")
+	}
+	issued := time.Date(2026, 6, 28, 2, 51, 49, 0, time.UTC)
+	if !exp.Before(issued) {
+		t.Errorf("negative expires should produce a time before issue (%s), got %s", issued, exp)
+	}
+	// And such a key must be reported expired at the issue instant.
+	if !bedrock.IsAPIKeyExpired(key, issued) {
+		t.Error("a key with negative expiry must be treated as expired")
+	}
+}
+
 func TestIsAPIKeyExpired(t *testing.T) {
 	past := makeShortTermKey("20200101T000000Z", 3600)    // long expired
 	future := makeShortTermKey("20990101T000000Z", 43200) // far future
