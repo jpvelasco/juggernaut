@@ -32,9 +32,9 @@ func TestResolveClaudeBinary_SkipsNonExecutable(t *testing.T) {
 	dirA := t.TempDir()
 	dirB := t.TempDir()
 
-	// Non-executable claude in dirA (mode 0o644).
+	// Non-executable claude in dirA (mode 0o600 — readable/writable, no +x).
 	nonExec := filepath.Join(dirA, "claude")
-	if err := os.WriteFile(nonExec, []byte("#!/bin/sh\necho hi\n"), 0o644); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+	if err := os.WriteFile(nonExec, []byte("#!/bin/sh\necho hi\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Executable claude in dirB.
