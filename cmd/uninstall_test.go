@@ -177,6 +177,47 @@ func TestUninstall_ConfirmAbort(t *testing.T) {
 	}
 }
 
+// TestUninstall_EOFAborts verifies that closing stdin without input (e.g. Ctrl+D
+// or a closed pipe) is treated as a decline: the uninstall aborts and the block
+// survives. Covers the scanner.Scan()==false EOF branch of confirmUninstallAborted.
+func TestUninstall_EOFAborts(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	var out string
+	withStdin(t, "", func() { // empty input -> EOF on first Scan
+		out = captureStdout(t, func() {
+			if err := ExecuteArgs([]string{"uninstall"}); err != nil {
+				t.Fatalf("uninstall error: %v", err)
+			}
+		})
+	})
+
+	if !strings.Contains(out, "Aborted") {
+		t.Errorf("EOF on the prompt should abort, got:\n%s", out)
+	}
+	if strings.Contains(out, "Uninstall complete") {
+		t.Errorf("EOF-aborted uninstall must not complete, got:\n%s", out)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if _, ok := settings["juggernaut"]; !ok {
+		t.Error("EOF-aborted uninstall should preserve the juggernaut block")
+	}
+}
+
 // TestUninstall_NothingInstalled is a clean no-op: uninstall on a fresh home
 // should succeed and still print completion without errors.
 func TestUninstall_NothingInstalled(t *testing.T) {

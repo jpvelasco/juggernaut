@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +28,27 @@ func TestHomeDir_FallsBackToUserProfile(t *testing.T) {
 	}
 	if got != "/tmp/userprofile" {
 		t.Errorf("homeDir() = %q, want USERPROFILE value", got)
+	}
+}
+
+// TestHomeDir_FallsBackToUserHomeDir covers the branch where neither HOME nor
+// USERPROFILE is set: homeDir falls through to os.UserHomeDir(). On both
+// platforms os.UserHomeDir() consults the same now-empty variable ($HOME /
+// %USERPROFILE%), so it returns an error — exercising the error branch. Either
+// a non-empty path or a descriptive error is acceptable; a silent empty string
+// is not.
+func TestHomeDir_FallsBackToUserHomeDir(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	got, err := homeDir()
+	if err != nil {
+		if !strings.Contains(err.Error(), "could not determine home directory") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+		return
+	}
+	if got == "" {
+		t.Error("homeDir() returned empty path and no error")
 	}
 }
 
