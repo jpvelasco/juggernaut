@@ -4,6 +4,26 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.8] - 2026-07-01
+
+**Patch release — fix shell-profile data loss, dry-run side effects, and GovCloud model handling.**
+
+### Fixed
+
+- **Shell-profile content is no longer lost after an orphaned activation marker.** If a shell profile contained a `# BEGIN: Juggernaut Claude Activation` marker with no matching `# END:` (from a crash mid-write, a truncated block, or manual editing), `apply` and `uninstall` silently deleted every line from that marker to end of file. Block removal now uses matched begin/end spans, so an orphaned marker and all content after it are preserved.
+
+- **`apply --dry-run` no longer prompts for a Bedrock API key.** With `--auth=bedrock-api-key` and no `--bedrock-key` or stored credential, a dry-run would block on an interactive key-entry prompt — violating the no-side-effects contract. Dry-run now skips credential resolution entirely.
+
+- **Externally-set permission mode survives re-apply.** A permission mode enabled outside Juggernaut (e.g. Claude Code's Shift+Tab, which writes the native `permissions.defaultMode` without touching Juggernaut's metadata) was wiped by a routine `apply` that omitted `--mode` — silently disabling auto mode. Re-apply now adopts an existing native `defaultMode` when `--mode` is not supplied.
+
+- **GovCloud model IDs are normalized consistently.** The `us-gov.` cross-region inference prefix was stripped for auto-mode detection but not for Mantle routing or 1M-context detection, so a `us-gov.`-prefixed model override behaved inconsistently. All model-ID normalization now shares one prefix list.
+
+- **`--no-opusplan` and `--skip-preflight` are honest.** `--no-opusplan` now errors when combined with `--opusplan` (mirroring `--no-mantle`) instead of being silently ignored; `--skip-preflight`, which never gated any check, is now a hidden no-op kept for script compatibility.
+
+### Other
+
+- **Substantially expanded test coverage** across activation artifact recovery, path containment, credential parsing, API-key expiry, and doctor diagnostics — hardening the safety-critical launcher-resolution and settings-merge paths against regressions.
+
 ## [5.2.7] - 2026-06-29
 
 **Patch release — restore fully automatic GitHub releases and harden the release pipeline.**
@@ -984,7 +1004,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.7...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.8...HEAD
+[5.2.8]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.8
 [5.2.7]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.7
 [5.2.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.6
 [5.2.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.5
