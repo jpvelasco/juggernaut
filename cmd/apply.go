@@ -110,9 +110,15 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	token, err := resolveCredential(authMode, home)
-	if err != nil {
-		return err
+	// Skip credential resolution in dry-run mode: it can prompt interactively
+	// for a Bedrock API key, and a dry-run must have no side effects. The token
+	// is only consumed by commitApply, which dry-run never reaches.
+	var token string
+	if !applyFlags.dryRun {
+		token, err = resolveCredential(authMode, home)
+		if err != nil {
+			return err
+		}
 	}
 	useMantle, err := resolveMantle()
 	if err != nil {

@@ -224,7 +224,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 // See https://code.claude.com/docs/en/permission-modes.
 func IsAutoModeCapableModel(modelID string) bool {
 	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
+	for _, prefix := range regionalInferencePrefixes {
 		normalized = strings.TrimPrefix(normalized, prefix)
 	}
 	return strings.Contains(normalized, "claude-opus-4-8") ||
@@ -240,10 +240,16 @@ func (b *Block) AutoModeUsable() bool {
 	return b.Meta.PermissionMode == "auto" && IsAutoModeCapableModel(b.Models.Sonnet)
 }
 
+// regionalInferencePrefixes are the Bedrock cross-region inference profile
+// prefixes stripped to recover the bare provider model ID. Keep this the single
+// source of truth so mantleModelID, supportsClaudeCode1M, and
+// IsAutoModeCapableModel all normalize identically.
+var regionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
+
 func mantleModelID(model string) string {
-	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
-		if strings.HasPrefix(model, prefix) {
-			return strings.TrimPrefix(model, prefix)
+	for _, prefix := range regionalInferencePrefixes {
+		if rest, ok := strings.CutPrefix(model, prefix); ok {
+			return rest
 		}
 	}
 	return model
@@ -258,7 +264,7 @@ func claudeCodeContextModelID(model string, use1M bool) string {
 
 func supportsClaudeCode1M(model string) bool {
 	normalized := strings.TrimSuffix(model, "[1m]")
-	for _, prefix := range []string{"global.", "us.", "eu.", "apac."} {
+	for _, prefix := range regionalInferencePrefixes {
 		normalized = strings.TrimPrefix(normalized, prefix)
 	}
 	return normalized == "opusplan" ||

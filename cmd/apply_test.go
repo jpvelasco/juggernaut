@@ -84,6 +84,36 @@ func TestApply_DryRun_BedrockAPIKey(t *testing.T) {
 	}
 }
 
+// TestApply_DryRun_BedrockAPIKey_NoPromptWithoutKey verifies dry-run is
+// non-interactive: with bedrock-api-key auth but NO --bedrock-key and no stored
+// credential, a dry-run must not trigger the interactive key prompt. We feed a
+// closed stdin (EOF); if the prompt fired it would error, and a dry-run must
+// never prompt at all. The command must succeed and write nothing.
+func TestApply_DryRun_BedrockAPIKey_NoPromptWithoutKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	var err error
+	withStdin(t, "", func() { // closed stdin: a prompt here would fail, not hang
+		err = ExecuteArgs([]string{
+			"apply",
+			"--auth=" + authmode.BedrockAPIKey,
+			"--region=us-west-2",
+			"--dry-run",
+			"--skip-preflight",
+		})
+	})
+	if err != nil {
+		t.Fatalf("dry-run must not prompt for a key; got error: %v", err)
+	}
+
+	if _, statErr := os.Stat(filepath.Join(home, ".claude", "settings.json")); !os.IsNotExist(statErr) {
+		t.Error("dry-run should not create settings.json")
+	}
+}
+
 func TestApply_WritesSettings_IAM(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
