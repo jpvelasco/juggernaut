@@ -51,6 +51,20 @@ func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	}
 }
 
+// TestClaudeCommandStatus_WarnWhenMissing covers the not-found branch: an empty
+// PATH yields a Warn with guidance instead of a path.
+func TestClaudeCommandStatus_WarnWhenMissing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // a dir containing no claude binary
+
+	status, detail := claudeCommandStatus()
+	if status != doctor.Warn {
+		t.Fatalf("expected Warn when no claude on PATH, got %s (%s)", status, detail)
+	}
+	if !strings.Contains(detail, "not found on PATH") {
+		t.Errorf("expected 'not found on PATH' guidance, got %q", detail)
+	}
+}
+
 func TestCheckSettingsScope_DefaultProjectMissingIsOK(t *testing.T) {
 	home := t.TempDir()
 

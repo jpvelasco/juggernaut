@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"encoding/base64"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 )
@@ -41,6 +43,26 @@ func TestCheckKeyExpiry_ExpiringSoon(t *testing.T) {
 	}
 	if !strings.Contains(r.String(), "valid until") {
 		t.Errorf("expected 'valid until' in report, got:\n%s", r.String())
+	}
+}
+
+// TestCheckKeyExpiry_ExpiresWithinTheHour covers the "expires soon" branch
+// (0 < remaining < 1h). It anchors the key's SigV4 window to real now so the
+// computed expiry lands ~30 minutes out regardless of when the test runs.
+func TestCheckKeyExpiry_ExpiresWithinTheHour(t *testing.T) {
+	const amzLayout = "20060102T150405Z"
+	// Issued 30 minutes ago, valid for 60 minutes => expires ~30 min from now.
+	issued := time.Now().UTC().Add(-30 * time.Minute)
+	key := shortTermKey(issued.Format(amzLayout), strconv.Itoa(3600))
+
+	r := doctor.NewReport()
+	checkKeyExpiry(r, key)
+
+	if !r.HasWarnings() {
+		t.Fatalf("a key expiring within the hour should warn, got:\n%s", r.String())
+	}
+	if !strings.Contains(r.String(), "expires soon") {
+		t.Errorf("expected 'expires soon' in report, got:\n%s", r.String())
 	}
 }
 
