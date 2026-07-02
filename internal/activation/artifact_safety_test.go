@@ -94,7 +94,7 @@ func TestRecoverLegacyArtifacts_KeepsExistingClaudeOverBackup(t *testing.T) {
 		t.Fatalf("RecoverLegacyArtifacts() error: %v", err)
 	}
 
-	data, err := os.ReadFile(claude)
+	data, err := os.ReadFile(claude) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
 	if err != nil {
 		t.Fatalf("reading claude: %v", err)
 	}
