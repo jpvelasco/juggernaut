@@ -46,6 +46,26 @@ func TestReadWriteFileWithinBase(t *testing.T) {
 	}
 }
 
+// TestJoinUnder_RejectsImmediateParent covers the exact rel == ".." branch of
+// withinBase (going up exactly one level to the immediate parent), distinct from
+// the "../"-prefixed multi-level escape.
+func TestJoinUnder_RejectsImmediateParent(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "child")
+	if _, err := safepath.JoinUnder(base, ".."); err == nil {
+		t.Fatal("expected immediate-parent escape to be rejected")
+	}
+}
+
+// TestReadFile_RejectsAbsoluteOutsideBase covers withinBase rejecting an
+// absolute target that lives entirely outside base.
+func TestWriteFile_RejectsOutsideBase(t *testing.T) {
+	base := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "evil.txt")
+	if err := safepath.WriteFile(base, outside, []byte("x")); err == nil {
+		t.Fatal("expected write outside base to fail")
+	}
+}
+
 func TestReadFile_RejectsOutsideBase(t *testing.T) {
 	base := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside.txt")
