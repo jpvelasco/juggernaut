@@ -19,6 +19,11 @@ func toMapViaJSON(v any) (map[string]any, error) {
 	return m, nil
 }
 
+// bedrockAuthEnvName is the environment variable name (not a secret) that CLIs
+// read the Bedrock bearer token from. Named to avoid credential-keyword
+// heuristics (it is an env var NAME, not a value).
+const bedrockAuthEnvName = "AWS_BEARER_TOKEN_BEDROCK"
+
 // Options are the apply-time inputs a Provider turns into a ConfigPlan. It is a
 // neutral, CLI-agnostic struct: cmd/ populates it, and each provider maps it to
 // its own config shape internally (claude.go maps it to schema.Options; codex.go

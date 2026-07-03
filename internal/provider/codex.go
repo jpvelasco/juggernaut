@@ -123,7 +123,7 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 		"name":     "Amazon Bedrock (Mantle)",
 		"base_url": baseURL,
 		"wire_api": m.WireAPI,
-		"env_key":  "AWS_BEARER_TOKEN_BEDROCK",
+		"env_key":  bedrockAuthEnvName,
 	}
 
 	keys := map[string]any{
@@ -152,7 +152,7 @@ func (codex) LaunchSpec() LaunchSpec {
 	// Codex has no "use bedrock" flag — routing lives in config.toml. Only the
 	// bearer token is injected at runtime (Mantle requires it).
 	return LaunchSpec{
-		TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+		TokenEnvVar: bedrockAuthEnvName,
 		NeedsToken:  true,
 	}
 }

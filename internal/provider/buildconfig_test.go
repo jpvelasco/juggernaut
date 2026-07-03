@@ -148,6 +148,48 @@ func TestCodex_BuildConfig_MantleBlock(t *testing.T) {
 	}
 }
 
+// TestCodex_BuildConfig_UnknownModel errors on an unlisted model.
+func TestCodex_BuildConfig_UnknownModel(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Model = "gpt-nonesuch"
+	if _, err := p.BuildConfig(testConfig(), opts); err == nil {
+		t.Error("expected error for unknown Codex model")
+	}
+}
+
+// TestCodex_BuildConfig_RegionWarning warns when the model isn't confirmed in
+// the requested region (gpt-5.5 is us-east-1/2 only).
+func TestCodex_BuildConfig_RegionWarning(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Model = "gpt-5.5"
+	opts.Region = "eu-west-1" // not in gpt-5.5's known regions
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if len(plan.Warnings) == 0 {
+		t.Error("expected a region-availability warning for gpt-5.5 in eu-west-1")
+	}
+}
+
+// TestCodex_BuildConfig_ExplicitGptOss selects the /v1 + chat path.
+func TestCodex_BuildConfig_ExplicitGptOss(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Model = "gpt-oss-120b"
+	plan, _ := p.BuildConfig(testConfig(), opts)
+	mp := plan.Keys["model_providers"].(map[string]any)
+	bm := mp["bedrock-mantle"].(map[string]any)
+	if bm["wire_api"] != "chat" {
+		t.Errorf("gpt-oss wire_api = %v, want chat", bm["wire_api"])
+	}
+	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-west-2.api.aws/v1" {
+		t.Errorf("gpt-oss base_url = %q, want .../v1", got)
+	}
+}
+
 // TestCodex_BuildConfig_Region uses the requested region in the base_url.
 func TestCodex_BuildConfig_Region(t *testing.T) {
 	p, _ := Get("codex")

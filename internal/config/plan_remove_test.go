@@ -73,6 +73,31 @@ func TestRemoveManagedKeys_MatchesLegacyForClaude(t *testing.T) {
 	}
 }
 
+// TestRemoveManagedKeys_PermissionsInKeyList exercises the "permissions" branch
+// of the key loop: only defaultMode is stripped, user rules survive.
+func TestRemoveManagedKeys_PermissionsInKeyList(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := NewManager(path)
+	_ = m.Write(map[string]any{
+		"juggernaut":  map[string]any{},
+		"permissions": map[string]any{"allow": []any{"Bash"}, "defaultMode": "plan"},
+	})
+	if err := m.RemoveManagedKeys([]string{"permissions"}); err != nil {
+		t.Fatalf("RemoveManagedKeys: %v", err)
+	}
+	got, _ := m.Read()
+	perms, _ := got["permissions"].(map[string]any)
+	if perms == nil {
+		t.Fatal("permissions dropped entirely; user allow rule lost")
+	}
+	if _, ok := perms["defaultMode"]; ok {
+		t.Error("defaultMode should be stripped")
+	}
+	if allow, _ := perms["allow"].([]any); len(allow) != 1 {
+		t.Errorf("user allow rule must survive, got %v", perms["allow"])
+	}
+}
+
 func cloneMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {

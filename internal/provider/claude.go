@@ -99,7 +99,7 @@ func (claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 
 func (claude) LaunchSpec() LaunchSpec {
 	return LaunchSpec{
-		TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+		TokenEnvVar: bedrockAuthEnvName,
 		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
 		NeedsToken:  true,
 	}

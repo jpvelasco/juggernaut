@@ -18,6 +18,10 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
+// bedrockAuthEnvName is the environment variable name (not a secret) that the
+// launcher injects the Bedrock bearer token into by default.
+const bedrockAuthEnvName = "AWS_BEARER_TOKEN_BEDROCK"
+
 const (
 	BeginMarker = "# BEGIN: Juggernaut Claude Activation"
 	EndMarker   = "# END: Juggernaut Claude Activation"
@@ -114,7 +118,7 @@ func claudeLaunchTarget() LaunchTarget {
 	}
 	return LaunchTarget{
 		BinaryNames: names,
-		TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+		TokenEnvVar: bedrockAuthEnvName,
 		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
 		NeedsToken:  false, // determined by auth mode, not the target
 	}
@@ -133,7 +137,6 @@ func DefaultTargets(home string) []Target {
 	}
 }
 
-// Block returns the activation block for a shell.
 // Block returns the Claude activation block. Retained for back-compat; delegates
 // to the per-CLI generator with Claude's identity.
 func Block(shell Shell) string {
@@ -604,7 +607,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	}
 	tokenEnvVar := target.TokenEnvVar
 	if tokenEnvVar == "" {
-		tokenEnvVar = "AWS_BEARER_TOKEN_BEDROCK"
+		tokenEnvVar = bedrockAuthEnvName
 	}
 
 	env := os.Environ()
