@@ -1,0 +1,101 @@
+{
+  "effortLevel": "high",
+  "env": {
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable Claude model - 1M context, 128K output, high-res vision, adaptive thinking via effort level (max/xhigh/high/medium/low). Only adaptive thinking supported; effort level controls thinking depth.",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.8 (Most capable - 1M context, max-effort capable)",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Recommended)",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
+    "AWS_REGION": "us-west-2",
+    "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_EFFORT_LEVEL": "high",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "ENABLE_PROMPT_CACHING_1H": "1",
+    "MAX_THINKING_TOKENS": "65536"
+  },
+  "fallbackModel": [
+    "a",
+    "b"
+  ],
+  "juggernaut": {
+    "auth": {
+      "mode": "iam",
+      "region": "us-west-2"
+    },
+    "env": {
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8[1m]",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable Claude model - 1M context, 128K output, high-res vision, adaptive thinking via effort level (max/xhigh/high/medium/low). Only adaptive thinking supported; effort level controls thinking depth.",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.8 (Most capable - 1M context, max-effort capable)",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6[1m]",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 4.6 (Recommended)",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
+      "AWS_REGION": "us-west-2",
+      "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+      "CLAUDE_CODE_EFFORT_LEVEL": "high",
+      "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
+      "CLAUDE_CODE_SUBAGENT_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "CLAUDE_CODE_USE_BEDROCK": "1",
+      "ENABLE_PROMPT_CACHING_1H": "1",
+      "MAX_THINKING_TOKENS": "65536"
+    },
+    "meta": {
+      "appliedAt":"<NORMALIZED>",
+      "effort": "high",
+      "fallbackModels": [
+        "a",
+        "b"
+      ],
+      "managedBy": "juggernaut",
+      "opusplan": false,
+      "permissionMode": "plan",
+      "schemaVersion": 2,
+      "scope": "user",
+      "use1mContext": true,
+      "useMantle": false,
+      "version": "5.2.9"
+    },
+    "modelOverrides": {
+      "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "opus": "global.anthropic.claude-opus-4-8",
+      "sonnet": "global.anthropic.claude-sonnet-4-6",
+      "subagent": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
+  },
+  "modelOverrides": {
+    "anthropic.claude-haiku-4-5-20251001-v1:0": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "anthropic.claude-opus-4-8": "global.anthropic.claude-opus-4-8",
+    "anthropic.claude-opus-4-8[1m]": "global.anthropic.claude-opus-4-8",
+    "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
+    "anthropic.claude-sonnet-4-6[1m]": "global.anthropic.claude-sonnet-4-6",
+    "claude-haiku-4-5": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "claude-haiku-4-5-20251001": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "claude-opus-4-8": "global.anthropic.claude-opus-4-8",
+    "claude-opus-4-8[1m]": "global.anthropic.claude-opus-4-8",
+    "claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
+    "claude-sonnet-4-6[1m]": "global.anthropic.claude-sonnet-4-6",
+    "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "opus": "global.anthropic.claude-opus-4-8",
+    "opus[1m]": "global.anthropic.claude-opus-4-8",
+    "sonnet": "global.anthropic.claude-sonnet-4-6",
+    "sonnet[1m]": "global.anthropic.claude-sonnet-4-6"
+  },
+  "permissions": {
+    "defaultMode": "plan"
+  },
+  "skipWebFetchPreflight": true
+}
