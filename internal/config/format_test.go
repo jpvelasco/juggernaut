@@ -47,6 +47,23 @@ func TestJSONFormat_Name(t *testing.T) {
 	}
 }
 
+// TestNewManagerWithFormat_NilFormatPanics verifies a nil ConfigFormat is
+// rejected at construction with a clear message, rather than deferring to an
+// opaque nil-pointer panic inside Read/Write. NewManagerWithFormat is exported
+// and future CLIs (TOML) will call it, so guard the invariant at the boundary.
+func TestNewManagerWithFormat_NilFormatPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for nil format")
+		}
+		if s, ok := r.(string); !ok || !strings.Contains(s, "format") {
+			t.Errorf("panic should mention nil format, got: %v", r)
+		}
+	}()
+	NewManagerWithFormat(t.TempDir()+"/settings.json", nil)
+}
+
 // TestNewManager_DefaultsToJSON verifies existing callers get JSON behavior unchanged.
 func TestNewManager_DefaultsToJSON(t *testing.T) {
 	dir := t.TempDir()

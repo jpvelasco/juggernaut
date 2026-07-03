@@ -2,11 +2,12 @@ package provider
 
 import "runtime"
 
-// claude is the Claude Code provider. Every value here is transcribed verbatim
-// from the pre-abstraction hardcoded sites (internal/config/manager.go's
-// nativeManagedKeys, internal/activation/activation.go's markers and binary
-// names, and the CLAUDE_CODE_USE_BEDROCK launch env var) so behavior is
-// byte-identical. The provider_test.go pins guard against drift.
+// claude is the Claude Code provider. Every value here is transcribed from the
+// pre-abstraction sources so behavior is byte-identical: NativeManagedKeys from
+// internal/config/manager.go's nativeManagedKeys slice, the markers and binary
+// names from internal/activation/activation.go, and the Bedrock env var
+// (CLAUDE_CODE_USE_BEDROCK=1) from the literal set inside activation.Launch.
+// The provider_test.go pins guard against drift.
 type claude struct{}
 
 func (claude) Name() string { return "claude" }
