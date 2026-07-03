@@ -139,6 +139,19 @@ func TestLaunchTargetFor_Claude(t *testing.T) {
 	}
 }
 
+// TestLaunchTargetFor_Claude_IAM_NeedsNoStaticToken is the regression guard for
+// the Claude+IAM launch bug: the Claude LaunchTarget must NOT statically force a
+// bearer token (NeedsToken=false). IAM auth uses SigV4, has no keychain token,
+// and the launcher decides token-need from authModes. If NeedsToken were true,
+// every Claude+IAM launch would fail with "bedrock API key not found".
+func TestLaunchTargetFor_Claude_IAM_NeedsNoStaticToken(t *testing.T) {
+	p, _ := provider.Get("claude")
+	tgt := launchTargetFor(p)
+	if tgt.NeedsToken {
+		t.Error("Claude LaunchTarget.NeedsToken must be false — token need is auth-mode-dependent (IAM needs none), decided at launch by authModes")
+	}
+}
+
 // TestLaunchTargetFor_Codex maps the Codex provider: codex binary, bearer token,
 // and NO static enable flag (routes via config).
 func TestLaunchTargetFor_Codex(t *testing.T) {

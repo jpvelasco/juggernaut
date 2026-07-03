@@ -72,8 +72,11 @@ func TestClaude_LaunchSpec(t *testing.T) {
 	if ls.TokenEnvVar != "AWS_BEARER_TOKEN_BEDROCK" {
 		t.Errorf("TokenEnvVar = %q, want AWS_BEARER_TOKEN_BEDROCK", ls.TokenEnvVar)
 	}
-	if !ls.NeedsToken {
-		t.Error("Claude on Bedrock needs a token")
+	// NeedsToken MUST be false for Claude: its token requirement is
+	// auth-mode-dependent (IAM/SSO need none), decided at launch via
+	// needsBearerToken(authModes). Forcing true breaks Claude+IAM launches.
+	if ls.NeedsToken {
+		t.Error("Claude LaunchSpec.NeedsToken must be false (auth-mode-dependent, not static)")
 	}
 }
 

@@ -102,7 +102,8 @@ func runApply(_ *cobra.Command, _ []string) error {
 	// Resolve and validate the target CLI. Defaults to Claude Code, so callers
 	// that pass no --cli are unaffected. An unknown name errors here before any
 	// work is done.
-	if _, err := provider.Get(applyFlags.cli); err != nil {
+	prov, err := provider.Get(applyFlags.cli)
+	if err != nil {
 		return err
 	}
 
@@ -178,13 +179,9 @@ func runApply(_ *cobra.Command, _ []string) error {
 	}
 
 	if applyFlags.dryRun {
-		return printApplyDryRun(home, block)
+		return printApplyDryRun(home, block, prov)
 	}
 
-	prov, err := provider.Get(applyFlags.cli)
-	if err != nil {
-		return err
-	}
 	provOpts := toProviderOptions(opts)
 	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
 	// not one of Claude's per-tier IDs. Thread the raw flag through so the
@@ -232,16 +229,22 @@ func resolveOpusplanConflict() error {
 	return nil
 }
 
-func printApplyDryRun(home string, block *schema.Block) error {
+func printApplyDryRun(home string, block *schema.Block, prov provider.Provider) error {
 	fmt.Println("Dry run — no changes written.")
-	path, err := settingsPath(home, applyFlags.scope)
+	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Would write juggernaut block to %s\n", path)
-	fmt.Println("Would install Juggernaut Claude activation blocks in shell profiles")
-	fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
-	warnMantleTradeoffs(block)
+	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names
+	fmt.Printf("Would write juggernaut config to %s\n", path)
+	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
+	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
+	if prov.Name() == "claude" {
+		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
+	}
+	if prov.Supports(provider.CapThinking) {
+		warnMantleTradeoffs(block)
+	}
 	return nil
 }
 

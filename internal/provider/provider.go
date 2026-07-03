@@ -42,13 +42,6 @@ type Provider interface {
 	// CLI's managed shell-activation block.
 	ActivationMarkers() (begin, end string)
 
-	// BedrockEnvVar is the env var (key,value) the launcher sets to route this
-	// CLI through Bedrock.
-	//
-	// Deprecated: superseded by LaunchSpec().StaticEnv. Retained during the
-	// interface migration; removed once cmd/activation consume LaunchSpec.
-	BedrockEnvVar() (key, value string)
-
 	// BuildConfig turns apply-time Options (plus the embedded Bedrock config, a
 	// genuine input to config-building) into the config the Provider persists.
 	BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)

@@ -13,10 +13,9 @@ import (
 //
 // Codex routes to Bedrock via a custom [model_providers.<id>] block with a
 // base_url + env_key + wire_api (verified from openai/codex's
-// model-provider-info Rust struct). Unlike Claude Code it has NO
-// "use bedrock" env var — routing lives entirely in the config file — so
-// BedrockEnvVar returns empty and the launcher relies on the config + the
-// injected bearer token (env_key).
+// model-provider-info Rust struct). Unlike Claude Code it has NO "use bedrock"
+// env var — routing lives entirely in the config file, so its LaunchSpec has an
+// empty StaticEnv and relies on the config plus the injected bearer token.
 type codex struct{}
 
 func (codex) Name() string { return "codex" }
@@ -50,10 +49,6 @@ func (codex) NativeManagedKeys() []string {
 func (codex) ActivationMarkers() (begin, end string) {
 	return "# BEGIN: Juggernaut Codex Activation", "# END: Juggernaut Codex Activation"
 }
-
-// BedrockEnvVar is empty for Codex: it has no "use bedrock" toggle; the provider
-// block in config.toml plus the injected env_key bearer token do the routing.
-func (codex) BedrockEnvVar() (key, value string) { return "", "" }
 
 // codexMantleModel describes one OpenAI-family model reachable through Bedrock
 // Mantle from Codex. Base path AND wire_api are PER-MODEL — this is the core

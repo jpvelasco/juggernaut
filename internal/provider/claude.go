@@ -53,10 +53,6 @@ func (claude) ActivationMarkers() (begin, end string) {
 	return "# BEGIN: Juggernaut Claude Activation", "# END: Juggernaut Claude Activation"
 }
 
-func (claude) BedrockEnvVar() (key, value string) {
-	return "CLAUDE_CODE_USE_BEDROCK", "1"
-}
-
 // BuildConfig wraps the existing schema.Build so Claude's persisted config is
 // byte-identical to the pre-abstraction cmd/apply path: it packs the juggernaut
 // block plus every native top-level key exactly as commitApply assembled them.
@@ -101,7 +97,11 @@ func (claude) LaunchSpec() LaunchSpec {
 	return LaunchSpec{
 		TokenEnvVar: bedrockAuthEnvName,
 		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
-		NeedsToken:  true,
+		// NeedsToken is false: Claude's token requirement is auth-mode-dependent
+		// (IAM/SSO use SigV4 and need NO bearer token; only bedrock-api-key does).
+		// The launcher decides via needsBearerToken(authModes). Forcing true here
+		// would break every Claude+IAM launch with "API key not found".
+		NeedsToken: false,
 	}
 }
 
