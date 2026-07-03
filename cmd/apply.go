@@ -238,6 +238,7 @@ func commitApply(home, authMode, token string, block *schema.Block) error {
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
 	warnAutoModeModel(block)
+	warnMantleTradeoffs(block)
 	return nil
 }
 
@@ -273,6 +274,25 @@ func warnAutoModeModel(block *schema.Block) {
 	fmt.Println("  not support for auto mode, so auto will not appear in the Shift+Tab cycle.")
 	fmt.Println("  Run Claude Code on Opus to unlock it — launch with `claude --model opus`")
 	fmt.Println("  or switch with `/model opus` inside a session (your opus alias is pinned to Opus 4.8).")
+}
+
+// warnMantleTradeoffs alerts the user that routing through Mantle disables
+// features that native bedrock-runtime provides. Verified against AWS docs:
+// prompt caching is unavailable on the Mantle endpoints (the caching page lists
+// only Converse/InvokeModel/Prompt Management/cross-region inference), and
+// Claude reaches Mantle solely via the Anthropic Messages API, which supports
+// current-generation models only (older Opus/Sonnet remain runtime-only).
+func warnMantleTradeoffs(block *schema.Block) {
+	if !block.Meta.UseMantle {
+		return
+	}
+	fmt.Println()
+	fmt.Println("⚠ Mantle routing is enabled. Compared with native Bedrock (bedrock-runtime):")
+	fmt.Println("  • prompt caching is unavailable on Mantle — repeated context is re-read")
+	fmt.Println("    every turn, which costs more and adds latency for large codebases.")
+	fmt.Println("  • only current-generation Claude models are reachable (Sonnet 5, Opus 4.7/4.8,")
+	fmt.Println("    Haiku 4.5, Fable 5); older models stay on bedrock-runtime.")
+	fmt.Println("  Leave Mantle off unless you specifically need it (e.g. non-Anthropic models).")
 }
 
 func installActivation(home string) {
