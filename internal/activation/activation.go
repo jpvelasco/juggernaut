@@ -228,8 +228,28 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	return installed, nil
 }
 
-// InstallTarget writes or updates the activation block for one profile.
+// CLISpec identifies a CLI's activation block: its shell-function name and the
+// begin/end markers delimiting its block. cmd/ builds this from a Provider.
+type CLISpec struct {
+	Name  string
+	Begin string
+	End   string
+}
+
+// claudeCLISpec is the default (back-compat).
+func claudeCLISpec() CLISpec {
+	return CLISpec{Name: "claude", Begin: BeginMarker, End: EndMarker}
+}
+
+// InstallTarget writes or updates the Claude activation block for one profile.
 func InstallTarget(target Target) (bool, error) {
+	return InstallTargetFor(target, claudeCLISpec())
+}
+
+// InstallTargetFor writes or updates one CLI's activation block in a profile,
+// leaving other CLIs' blocks (matched by their own markers) untouched so they
+// coexist.
+func InstallTargetFor(target Target, spec CLISpec) (bool, error) {
 	base := filepath.Dir(target.Path)
 	data, err := safepath.ReadFile(base, target.Path)
 	if os.IsNotExist(err) {
@@ -237,7 +257,8 @@ func InstallTarget(target Target) (bool, error) {
 	} else if err != nil {
 		return false, fmt.Errorf("reading %s: %w", target.Path, err)
 	}
-	next := upsertBlock(string(data), Block(target.Shell))
+	block := blockFor(target.Shell, spec.Name, spec.Begin, spec.End)
+	next := upsertBlockWithMarkers(string(data), block, spec.Begin, spec.End)
 	if string(data) == next {
 		return false, nil
 	}
@@ -483,12 +504,20 @@ func removeBlockWithMarkers(content, begin, end string) (string, bool) {
 
 // Launch runs Claude Code with Juggernaut Bedrock activation.
 func Launch(home string, args []string) error {
+	return LaunchCLI(home, args, LaunchTarget{})
+}
+
+// LaunchCLI runs the CLI described by target (a zero target defaults to Claude),
+// injecting Bedrock env from the keychain. It is the target-aware entry point
+// used by `juggernaut launch [cli] -- ...`.
+func LaunchCLI(home string, args []string, target LaunchTarget) error {
 	return LaunchWithOptions(LaunchOptions{
 		Home:        home,
 		Args:        args,
 		Path:        os.Getenv("PATH"),
 		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
-		Runner:      runClaudeBinary,
+		Runner:      runBinary,
+		Target:      target,
 	})
 }
 
@@ -504,7 +533,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		opts.TokenGetter = func() (string, error) { return keychain.Default().GetWithFallback(opts.Home) }
 	}
 	if opts.Runner == nil {
-		opts.Runner = runClaudeBinary
+		opts.Runner = runBinary
 	}
 	if opts.Warner == nil {
 		opts.Warner = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
@@ -945,7 +974,7 @@ func authModes(home string) ([]string, error) {
 	return modes, nil
 }
 
-func runClaudeBinary(path string, args []string, env []string) error {
+func runBinary(path string, args []string, env []string) error {
 	// path is the resolved real Claude Code executable from ResolveClaudeBinary;
 	// exec.Command is intentionally used without a shell to preserve arguments.
 	cmd := exec.Command(path, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
