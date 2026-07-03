@@ -274,8 +274,15 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	installActivation(home, prov)
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
-	warnAutoModeModel(block)
-	warnMantleTradeoffs(block)
+	// Auto-mode and the Mantle prompt-caching tradeoff are Claude-specific
+	// concerns; gate their warnings on provider capability so other CLIs don't
+	// print nonsensical Claude guidance.
+	if prov.Supports(provider.CapAutoMode) {
+		warnAutoModeModel(block)
+	}
+	if prov.Supports(provider.CapThinking) {
+		warnMantleTradeoffs(block)
+	}
 	return nil
 }
 

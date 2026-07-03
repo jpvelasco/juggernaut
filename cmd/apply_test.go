@@ -1043,6 +1043,26 @@ func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
 	}
 }
 
+func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=codex", "--auth=iam", "--region=us-east-1",
+			"--mode=auto", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+	})
+	// The Claude auto-mode warning is nonsensical for Codex and must not appear.
+	if strings.Contains(out, "Auto mode on Bedrock requires Opus") {
+		t.Errorf("Codex apply must not print the Claude auto-mode warning, got:\n%s", out)
+	}
+}
+
 func TestApply_UnknownCLI_Errors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
