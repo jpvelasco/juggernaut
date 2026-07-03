@@ -1043,6 +1043,56 @@ func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
 	}
 }
 
+func TestApply_UnknownCLI_Errors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--cli=nonesuch", "--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown --cli")
+	}
+	if !strings.Contains(err.Error(), "nonesuch") {
+		t.Errorf("error should name the bad CLI, got: %v", err)
+	}
+}
+
+func TestApply_DefaultCLI_IsClaude_StillWrites(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// No --cli flag: must behave exactly as before (Claude), writing settings.json.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); err != nil {
+		t.Errorf("expected settings.json written for default (claude) CLI: %v", err)
+	}
+}
+
+func TestApply_ExplicitClaudeCLI_Works(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--cli=claude", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --cli=claude error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); err != nil {
+		t.Errorf("expected settings.json written for --cli=claude: %v", err)
+	}
+}
+
 func TestApply_NoMantle_NoMantleWarning(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
