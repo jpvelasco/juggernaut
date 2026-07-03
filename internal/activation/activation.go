@@ -285,6 +285,9 @@ type UninstallOptions struct {
 	// PowerShellResult, when set, is used instead of resolving profiles
 	// dynamically. This is required for tests to avoid touching real profiles.
 	PowerShellResult *ProfileResolverResult
+	// Spec selects which CLI's activation block to remove. Zero value defaults
+	// to Claude (which also sweeps legacy launcher/bedrock blocks).
+	Spec CLISpec
 }
 
 // Uninstall removes Juggernaut activation blocks from shell profiles.
@@ -295,6 +298,13 @@ func Uninstall(home string) ([]string, error) {
 
 // UninstallWith is like Uninstall but accepts injectable dependencies.
 func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
+	// Non-Claude specs remove only that CLI's marker-delimited block; the legacy
+	// launcher/bedrock sweep is Claude-only (those blocks never existed for other
+	// CLIs), so it stays on the default path below.
+	if opts.Spec.Name != "" && opts.Spec.Name != "claude" {
+		return uninstallCLIBlocks(home, opts)
+	}
+
 	var removed []string
 
 	if runtime.GOOS == "windows" {
@@ -328,8 +338,46 @@ func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
 	return removed, nil
 }
 
-// RemoveTarget removes the activation block from a profile.
+// uninstallCLIBlocks removes one non-Claude CLI's activation block (by its
+// markers) from all managed profiles, leaving other CLIs' blocks intact.
+func uninstallCLIBlocks(home string, opts UninstallOptions) ([]string, error) {
+	var removed []string
+	begin, end := opts.Spec.Begin, opts.Spec.End
+
+	targets := DefaultTargets(home)
+	if opts.PowerShellResult != nil {
+		targets = append(targets, opts.PowerShellResult.ActiveTargets...)
+	} else if runtime.GOOS == "windows" {
+		r := ResolvePowerShellProfilesScoped(home)
+		targets = append(targets, r.ActiveTargets...)
+	}
+
+	seen := map[string]bool{}
+	for _, target := range targets {
+		if seen[target.Path] {
+			continue
+		}
+		seen[target.Path] = true
+		ok, err := RemoveTargetForMarkers(target.Path, begin, end)
+		if err != nil {
+			return removed, err
+		}
+		if ok {
+			removed = append(removed, target.Path)
+		}
+	}
+	return removed, nil
+}
+
+// RemoveTarget removes the Claude activation block from a profile.
 func RemoveTarget(path string) (bool, error) {
+	return RemoveTargetForMarkers(path, BeginMarker, EndMarker)
+}
+
+// RemoveTargetForMarkers removes the block delimited by the given markers from a
+// profile, leaving other CLIs' blocks untouched (uses the matched-span remover
+// so an orphaned marker never deletes trailing content).
+func RemoveTargetForMarkers(path, begin, end string) (bool, error) {
 	base := filepath.Dir(path)
 	data, err := safepath.ReadFile(base, path)
 	if os.IsNotExist(err) {
@@ -338,7 +386,7 @@ func RemoveTarget(path string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("reading %s: %w", path, err)
 	}
-	next, found := removeBlock(string(data))
+	next, found := removeBlockWithMarkers(normalizeNewlines(string(data)), begin, end)
 	if !found {
 		return false, nil
 	}

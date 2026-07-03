@@ -236,19 +236,32 @@ func mergePermissions(existing map[string]any, v any) {
 	existing["permissions"] = perms
 }
 
-// RemoveJuggernautBlock strips Juggernaut-managed keys from settings.json.
-// For "permissions", only the defaultMode sub-key is removed so user-defined
-// allow/deny rules are preserved.
+// RemoveJuggernautBlock strips Claude's Juggernaut-managed keys from
+// settings.json. For "permissions", only the defaultMode sub-key is removed so
+// user-defined allow/deny rules are preserved.
 func (m *Manager) RemoveJuggernautBlock() error {
+	return m.RemoveManagedKeys(nativeManagedKeys)
+}
+
+// RemoveManagedKeys removes the juggernaut block plus the given top-level
+// managed keys, preserving user content. "permissions" is handled specially
+// (only defaultMode is stripped). This is the generic, provider-driven form of
+// RemoveJuggernautBlock.
+func (m *Manager) RemoveManagedKeys(keys []string) error {
 	existing, err := m.Read()
 	if err != nil {
 		return err
 	}
 	delete(existing, "juggernaut")
-	for _, k := range nativeManagedKeys {
+	for _, k := range keys {
+		if k == "permissions" {
+			mergePermissions(existing, nil)
+			continue
+		}
 		delete(existing, k)
 	}
-	// Only remove the Juggernaut-managed sub-key from permissions.
+	// Ensure the Juggernaut-managed permissions sub-key is stripped even if
+	// "permissions" was not in the key list (matches legacy behavior).
 	mergePermissions(existing, nil)
 	return m.Write(existing)
 }
