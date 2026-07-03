@@ -271,7 +271,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return err
 	}
 
-	installActivation(home)
+	installActivation(home, prov)
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
 	warnAutoModeModel(block)
@@ -332,17 +332,21 @@ func warnMantleTradeoffs(block *schema.Block) {
 	fmt.Println("  Leave Mantle off unless you specifically need it (e.g. non-Anthropic models).")
 }
 
-func installActivation(home string) {
-	paths, err := activation.Install(home)
+func installActivation(home string, prov provider.Provider) {
+	begin, end := prov.ActivationMarkers()
+	paths, err := activation.InstallWith(home, activation.InstallOptions{
+		Spec: activation.CLISpec{Name: prov.Name(), Begin: begin, End: end},
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not install shell activation: %v\n", err)
 		return
 	}
+	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names; strings.Title is fine here
 	if len(paths) == 0 {
-		fmt.Println("  ✓ Shell activation already up to date")
+		fmt.Printf("  ✓ %s shell activation already up to date\n", title)
 		return
 	}
-	fmt.Printf("  ✓ Installed Claude activation in %d shell profile(s)\n", len(paths))
+	fmt.Printf("  ✓ Installed %s activation in %d shell profile(s)\n", title, len(paths))
 }
 
 func reportLegacyRecovery(home string) {

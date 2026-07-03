@@ -184,6 +184,17 @@ type InstallOptions struct {
 	// PowerShellResult, when set, is used instead of resolving profiles
 	// dynamically. This is required for tests to avoid touching real profiles.
 	PowerShellResult *ProfileResolverResult
+	// Spec selects which CLI's activation block to install. Zero value defaults
+	// to Claude (back-compat).
+	Spec CLISpec
+}
+
+// specOrClaude returns s if populated, else the Claude default.
+func specOrClaude(s CLISpec) CLISpec {
+	if s.Name == "" {
+		return claudeCLISpec()
+	}
+	return s
 }
 
 // Install writes or updates Juggernaut activation blocks in shell profiles.
@@ -196,9 +207,10 @@ func Install(home string) ([]string, error) {
 // InstallWith is like Install but accepts injectable dependencies.
 func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	var installed []string
+	spec := specOrClaude(opts.Spec)
 
 	if runtime.GOOS == "windows" {
-		psInstalled, err := InstallPowerShellActivationWith(home, opts.PowerShellResult)
+		psInstalled, err := installPowerShellActivationForSpec(home, opts.PowerShellResult, spec)
 		if err != nil {
 			return installed, err
 		}
@@ -206,7 +218,7 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	} else if opts.PowerShellResult != nil {
 		// On non-Windows, use the injected PowerShell result for profile paths.
 		for _, target := range opts.PowerShellResult.ActiveTargets {
-			changed, err := InstallTarget(target)
+			changed, err := InstallTargetFor(target, spec)
 			if err != nil {
 				return installed, err
 			}
@@ -217,7 +229,7 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	}
 
 	for _, target := range DefaultTargets(home) {
-		changed, err := InstallTarget(target)
+		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
 		}
@@ -677,6 +689,10 @@ func InstallPowerShellActivation(home string) ([]string, error) {
 // InstallPowerShellActivationWith is like InstallPowerShellActivation but
 // accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
 func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResult) ([]string, error) {
+	return installPowerShellActivationForSpec(home, psResult, claudeCLISpec())
+}
+
+func installPowerShellActivationForSpec(home string, psResult *ProfileResolverResult, spec CLISpec) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
@@ -720,7 +736,7 @@ func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResul
 	// (AllHosts profiles — CurrentHost profiles load after AllHosts and
 	// can override or retain a stale duplicate of the global activation).
 	for _, target := range result.InstallTargets {
-		changed, err := InstallTarget(target)
+		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
 		}
