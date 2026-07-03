@@ -27,8 +27,13 @@ func NewManager(path string) *Manager {
 }
 
 // NewManagerWithFormat creates a Manager that reads/writes using the given
-// on-disk format (JSON for Claude Code/OpenCode/Grok, TOML for Codex).
+// on-disk format (JSON for Claude Code/OpenCode/Grok, TOML for Codex). A nil
+// format is a programming error: Read/Write would otherwise nil-panic deep in
+// the I/O path, so fail loudly at the boundary instead.
 func NewManagerWithFormat(path string, format ConfigFormat) *Manager {
+	if format == nil {
+		panic("config.NewManagerWithFormat: format must not be nil")
+	}
 	clean := filepath.Clean(path)
 	return &Manager{path: clean, base: filepath.Dir(clean), format: format}
 }

@@ -1058,6 +1058,9 @@ func TestApply_UnknownCLI_Errors(t *testing.T) {
 	if !strings.Contains(err.Error(), "nonesuch") {
 		t.Errorf("error should name the bad CLI, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "claude") {
+		t.Errorf("error should list supported CLI names to guide the user, got: %v", err)
+	}
 }
 
 func TestApply_DefaultCLI_IsClaude_StillWrites(t *testing.T) {
