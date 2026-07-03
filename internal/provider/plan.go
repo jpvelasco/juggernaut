@@ -1,6 +1,52 @@
 package provider
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// toMapViaJSON serializes a struct to a generic map via JSON round-trip (mirrors
+// cmd.toMap), so a typed block becomes ConfigPlan.Keys content.
+func toMapViaJSON(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("serializing block: %w", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// Options are the apply-time inputs a Provider turns into a ConfigPlan. It is a
+// neutral, CLI-agnostic struct: cmd/ populates it, and each provider maps it to
+// its own config shape internally (claude.go maps it to schema.Options; codex.go
+// selects a per-model Mantle block). Kept separate from schema.Options so the
+// provider package stays decoupled from Claude's schema — the mapping lives only
+// in claude.go.
+type Options struct {
+	AuthMode       string
+	Region         string
+	Effort         string
+	Scope          string
+	Version        string
+	Model          string // friendly model key or override (provider-interpreted)
+	OpusModel      string
+	SonnetModel    string
+	HaikuModel     string
+	FableModel     string
+	Opusplan       bool
+	FallbackModels []string
+	Use1M          bool
+	UseMantle      bool
+	MantleURL      string
+	AuthValidated  bool
+	PermissionMode string
+	AlwaysThinking bool
+	ServiceTier    string
+	Route          string // "mantle" (default) or "native"
+}
 
 // Capability identifies an optional feature a Provider may support, so cmd/ can
 // gate CLI-specific flags without hardcoding per-CLI knowledge.

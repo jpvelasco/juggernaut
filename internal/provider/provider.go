@@ -11,7 +11,11 @@
 // the interface shape rather than a guessed one.
 package provider
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+)
 
 // Provider describes one coding CLI that Juggernaut can configure for Bedrock.
 type Provider interface {
@@ -35,7 +39,21 @@ type Provider interface {
 
 	// BedrockEnvVar is the env var (key,value) the launcher sets to route this
 	// CLI through Bedrock.
+	//
+	// Deprecated: superseded by LaunchSpec().StaticEnv. Retained during the
+	// interface migration; removed once cmd/activation consume LaunchSpec.
 	BedrockEnvVar() (key, value string)
+
+	// BuildConfig turns apply-time Options (plus the embedded Bedrock config, a
+	// genuine input to config-building) into the config the Provider persists.
+	BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
+
+	// LaunchSpec is what the shell wrapper injects at launch time.
+	LaunchSpec() LaunchSpec
+
+	// Supports reports whether the Provider handles a given optional capability,
+	// so cmd/ can gate CLI-specific flags without per-CLI branches.
+	Supports(Capability) bool
 }
 
 // registry holds every known provider by name.

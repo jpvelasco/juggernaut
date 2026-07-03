@@ -1,0 +1,162 @@
+package provider
+
+import (
+	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+)
+
+// testConfig is a minimal embedded-style bedrock.Config for provider tests.
+func testConfig() *bedrock.Config {
+	return &bedrock.Config{
+		Models: bedrock.ModelSet{
+			Opus:   "global.anthropic.claude-opus-4-8",
+			Sonnet: "global.anthropic.claude-sonnet-4-6",
+			Haiku:  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+		},
+		Regions:     []string{"us-west-2", "us-east-1"},
+		Environment: map[string]string{},
+	}
+}
+
+func baseOpts() Options {
+	return Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "high",
+		Scope:         "user",
+		Version:       "9.9.9",
+		AuthValidated: true,
+	}
+}
+
+// TestClaude_BuildConfig_ProducesManagedKeys verifies Claude's ConfigPlan carries
+// the same top-level native keys commitApply writes today, so rewiring cmd/ to
+// use BuildConfig cannot drift the settings.json shape.
+func TestClaude_BuildConfig_ProducesManagedKeys(t *testing.T) {
+	p, _ := Get("claude")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	want := []string{"juggernaut", "env", "modelOverrides", "effortLevel", "skipWebFetchPreflight"}
+	for _, k := range want {
+		if _, ok := plan.Keys[k]; !ok {
+			t.Errorf("Claude ConfigPlan.Keys missing %q", k)
+		}
+	}
+}
+
+// TestClaude_BuildConfig_EnvHasBedrockModels spot-checks the env carries the
+// Claude-specific model vars (proving BuildConfig wraps schema.Build, not a stub).
+func TestClaude_BuildConfig_EnvHasBedrockModels(t *testing.T) {
+	p, _ := Get("claude")
+	plan, _ := p.BuildConfig(testConfig(), baseOpts())
+	env, _ := plan.Keys["env"].(map[string]string)
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "" {
+		t.Errorf("expected ANTHROPIC_DEFAULT_SONNET_MODEL in env, got: %v", env)
+	}
+	if env["AWS_REGION"] != "us-west-2" {
+		t.Errorf("AWS_REGION = %q, want us-west-2", env["AWS_REGION"])
+	}
+}
+
+// TestClaude_LaunchSpec pins Claude's runtime injection: the use-bedrock flag +
+// the bearer token env var (what activation.Launch hardcodes today).
+func TestClaude_LaunchSpec(t *testing.T) {
+	p, _ := Get("claude")
+	ls := p.LaunchSpec()
+	if ls.StaticEnv["CLAUDE_CODE_USE_BEDROCK"] != "1" {
+		t.Errorf("expected CLAUDE_CODE_USE_BEDROCK=1, got %v", ls.StaticEnv)
+	}
+	if ls.TokenEnvVar != "AWS_BEARER_TOKEN_BEDROCK" {
+		t.Errorf("TokenEnvVar = %q, want AWS_BEARER_TOKEN_BEDROCK", ls.TokenEnvVar)
+	}
+	if !ls.NeedsToken {
+		t.Error("Claude on Bedrock needs a token")
+	}
+}
+
+// TestClaude_Supports covers the Claude-only capabilities.
+func TestClaude_Supports(t *testing.T) {
+	p, _ := Get("claude")
+	for _, c := range []Capability{CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels} {
+		if !p.Supports(c) {
+			t.Errorf("Claude should support capability %d", c)
+		}
+	}
+}
+
+// TestCodex_LaunchSpec: no static enable flag (routes via config), bearer token
+// still injected (Mantle requires it).
+func TestCodex_LaunchSpec(t *testing.T) {
+	p, _ := Get("codex")
+	ls := p.LaunchSpec()
+	if len(ls.StaticEnv) != 0 {
+		t.Errorf("Codex should have no static enable flag, got %v", ls.StaticEnv)
+	}
+	if ls.TokenEnvVar != "AWS_BEARER_TOKEN_BEDROCK" {
+		t.Errorf("TokenEnvVar = %q, want AWS_BEARER_TOKEN_BEDROCK", ls.TokenEnvVar)
+	}
+	if !ls.NeedsToken {
+		t.Error("Codex via Mantle needs a token")
+	}
+}
+
+// TestCodex_Supports: only effort levels; the Claude-only caps are absent.
+func TestCodex_Supports(t *testing.T) {
+	p, _ := Get("codex")
+	if !p.Supports(CapEffortLevels) {
+		t.Error("Codex should support effort levels")
+	}
+	for _, c := range []Capability{CapAutoMode, Cap1MContext, CapOpusplan, CapServiceTiers} {
+		if p.Supports(c) {
+			t.Errorf("Codex should NOT support Claude-only capability %d", c)
+		}
+	}
+}
+
+// TestCodex_BuildConfig_MantleBlock verifies the Codex plan writes a
+// [model_providers] block pointing at the correct per-model Mantle base_url +
+// wire_api for the default model (gpt-5.5 → /openai/v1 + responses).
+func TestCodex_BuildConfig_MantleBlock(t *testing.T) {
+	p, _ := Get("codex")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if plan.Keys["model_provider"] != "bedrock-mantle" {
+		t.Errorf("model_provider = %v, want bedrock-mantle", plan.Keys["model_provider"])
+	}
+	mp, ok := plan.Keys["model_providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("model_providers missing/wrong type: %T", plan.Keys["model_providers"])
+	}
+	bm, ok := mp["bedrock-mantle"].(map[string]any)
+	if !ok {
+		t.Fatalf("bedrock-mantle block missing: %v", mp)
+	}
+	if bm["wire_api"] != "responses" {
+		t.Errorf("wire_api = %v, want responses (gpt-5.5 default)", bm["wire_api"])
+	}
+	base, _ := bm["base_url"].(string)
+	if len(base) < len("/openai/v1") || base[len(base)-len("/openai/v1"):] != "/openai/v1" {
+		t.Errorf("base_url = %q, want .../openai/v1", base)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Errorf("Codex plan should validate: %v", err)
+	}
+}
+
+// TestCodex_BuildConfig_Region uses the requested region in the base_url.
+func TestCodex_BuildConfig_Region(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Region = "us-east-1"
+	plan, _ := p.BuildConfig(testConfig(), opts)
+	mp := plan.Keys["model_providers"].(map[string]any)
+	bm := mp["bedrock-mantle"].(map[string]any)
+	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
+		t.Errorf("base_url = %q, want us-east-1 /openai/v1", got)
+	}
+}

@@ -1,6 +1,11 @@
 package provider
 
-import "runtime"
+import (
+	"fmt"
+	"runtime"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+)
 
 // codex is the OpenAI Codex CLI provider (config at ~/.codex/config.toml, TOML).
 //
@@ -87,3 +92,70 @@ func codexModel(key string) (codexMantleModel, bool) {
 
 // codexDefaultModel is GPT-5.5 — the flagship, mirroring the native Codex CLI.
 func codexDefaultModel() string { return "gpt-5.5" }
+
+// BuildConfig writes Codex's config.toml keys: a top-level model + model_provider
+// plus a [model_providers.bedrock-mantle] block whose base_url, wire_api, and
+// env_key are derived from the chosen model's verified Mantle facts. Base path
+// and wire_api are PER-MODEL (live-verified): gpt-5.x → /openai/v1 + responses;
+// gpt-oss → /v1 + chat.
+func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+	key := opts.Model
+	if key == "" {
+		key = codexDefaultModel()
+	}
+	m, ok := codexModel(key)
+	if !ok {
+		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (supported: gpt-5.5, gpt-5.4, gpt-oss-120b, gpt-oss-20b)", key)
+	}
+
+	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws%s", opts.Region, m.BasePath)
+	provBlock := map[string]any{
+		"name":     "Amazon Bedrock (Mantle)",
+		"base_url": baseURL,
+		"wire_api": m.WireAPI,
+		"env_key":  "AWS_BEARER_TOKEN_BEDROCK",
+	}
+
+	keys := map[string]any{
+		"model":          m.ModelID,
+		"model_provider": "bedrock-mantle",
+		"model_providers": map[string]any{
+			"bedrock-mantle": provBlock,
+		},
+	}
+
+	var warnings []string
+	if len(m.Regions) > 0 && !regionAllowed(opts.Region, m.Regions) {
+		warnings = append(warnings, fmt.Sprintf(
+			"model %s is not confirmed available in %s (known: %v) — apply will still write config, but requests may fail",
+			m.ModelID, opts.Region, m.Regions))
+	}
+
+	return ConfigPlan{
+		Keys:        keys,
+		ManagedKeys: codex{}.NativeManagedKeys(),
+		Warnings:    warnings,
+	}, nil
+}
+
+func (codex) LaunchSpec() LaunchSpec {
+	// Codex has no "use bedrock" flag — routing lives in config.toml. Only the
+	// bearer token is injected at runtime (Mantle requires it).
+	return LaunchSpec{
+		TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+		NeedsToken:  true,
+	}
+}
+
+func (codex) Supports(c Capability) bool {
+	return c == CapEffortLevels
+}
+
+func regionAllowed(region string, allowed []string) bool {
+	for _, r := range allowed {
+		if r == region {
+			return true
+		}
+	}
+	return false
+}
