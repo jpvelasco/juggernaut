@@ -961,3 +961,61 @@ func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
 		t.Errorf("did not expect auto-mode warning for --mode=plan, got:\n%s", out)
 	}
 }
+
+func TestApply_Mantle_WarnsAboutPromptCaching(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--mantle", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "prompt caching") {
+		t.Errorf("expected Mantle warning about prompt caching, got:\n%s", out)
+	}
+}
+
+func TestApply_MantleURL_WarnsAboutPromptCaching(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2",
+			"--mantle-url=https://example.test", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "prompt caching") {
+		t.Errorf("expected Mantle warning about prompt caching with --mantle-url, got:\n%s", out)
+	}
+}
+
+func TestApply_NoMantle_NoMantleWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "prompt caching") {
+		t.Errorf("did not expect Mantle warning when Mantle is off, got:\n%s", out)
+	}
+}
