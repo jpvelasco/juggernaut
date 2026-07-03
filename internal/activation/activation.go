@@ -88,6 +88,36 @@ type LaunchOptions struct {
 	// Warner receives non-fatal warnings (e.g. an expired short-term API key).
 	// Defaults to printing to stderr.
 	Warner func(msg string)
+
+	// Target describes the CLI being launched (binary names + how to route it to
+	// Bedrock). A zero Target defaults to Claude Code, so existing callers are
+	// unaffected. cmd/ populates it from the resolved Provider's LaunchSpec.
+	Target LaunchTarget
+}
+
+// LaunchTarget carries the per-CLI launch configuration, mirroring
+// provider.LaunchSpec (the activation package stays provider-free; cmd/ maps
+// LaunchSpec → LaunchTarget).
+type LaunchTarget struct {
+	BinaryNames []string          // real exe names to resolve on PATH
+	TokenEnvVar string            // env var to inject the bearer token into
+	StaticEnv   map[string]string // static enable-flags (Claude: CLAUDE_CODE_USE_BEDROCK=1)
+	NeedsToken  bool              // whether a bearer token is required
+}
+
+// claudeLaunchTarget is the default Target (back-compat with the historical
+// hardcoded Claude launch behavior).
+func claudeLaunchTarget() LaunchTarget {
+	names := []string{"claude"}
+	if runtime.GOOS == "windows" {
+		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
+	}
+	return LaunchTarget{
+		BinaryNames: names,
+		TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
+		NeedsToken:  false, // determined by auth mode, not the target
+	}
 }
 
 // DefaultTargets returns the shell profile targets Juggernaut updates.
@@ -479,6 +509,14 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	if opts.Warner == nil {
 		opts.Warner = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
 	}
+	target := opts.Target
+	if len(target.BinaryNames) == 0 {
+		target = claudeLaunchTarget() // default: Claude (back-compat)
+	}
+	tokenEnvVar := target.TokenEnvVar
+	if tokenEnvVar == "" {
+		tokenEnvVar = "AWS_BEARER_TOKEN_BEDROCK"
+	}
 
 	env := os.Environ()
 	modes, err := authModes(opts.Home)
@@ -486,10 +524,11 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		return err
 	}
 	if len(modes) > 0 {
-		env = setEnv(env, "CLAUDE_CODE_USE_BEDROCK", "1")
+		for k, v := range target.StaticEnv {
+			env = setEnv(env, k, v)
+		}
 	}
-	needsToken := needsBearerToken(modes)
-	if needsToken {
+	if needsBearerToken(modes) {
 		token, err := opts.TokenGetter()
 		if err != nil {
 			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
@@ -502,18 +541,18 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		// Juggernaut can't refresh short-term keys (it holds no AWS creds).
 		if bedrock.IsAPIKeyExpired(token, time.Now().UTC()) {
 			opts.Warner("Warning: your short-term Bedrock API key has expired; regenerate it and run " +
-				"`juggernaut apply --auth=" + authmode.BedrockAPIKey + "` (Claude Code will fail to authenticate until then)")
+				"`juggernaut apply --auth=" + authmode.BedrockAPIKey + "` (the CLI will fail to authenticate until then)")
 		}
-		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
+		env = setEnv(env, tokenEnvVar, token)
 	} else if len(modes) > 0 {
-		env = unsetEnv(env, "AWS_BEARER_TOKEN_BEDROCK")
+		env = unsetEnv(env, tokenEnvVar)
 	}
 
-	claudePath, err := ResolveClaudeBinary(opts.Path)
+	binPath, err := resolveBinary(opts.Path, target.BinaryNames)
 	if err != nil {
-		return errors.New("real claude binary not found on PATH; install Claude Code with `curl -fsSL https://claude.ai/install.sh | bash`")
+		return fmt.Errorf("real %s binary not found on PATH", target.BinaryNames[0])
 	}
-	return opts.Runner(claudePath, opts.Args, env)
+	return opts.Runner(binPath, opts.Args, env)
 }
 
 // ResolveClaudeBinary finds the real Anthropic claude command while avoiding
@@ -560,8 +599,15 @@ func DetectLegacyArtifacts(binDir string) []LegacyAction {
 }
 
 func upsertBlock(content, block string) string {
+	return upsertBlockWithMarkers(content, block, BeginMarker, EndMarker)
+}
+
+// upsertBlockWithMarkers replaces the block delimited by begin/end (if present)
+// with the given block, or appends it. Only the block for THESE markers is
+// touched, so different CLIs' blocks (Claude, Codex, …) coexist in one profile.
+func upsertBlockWithMarkers(content, block, begin, end string) string {
 	content = normalizeNewlines(content)
-	without, _ := removeBlock(content)
+	without, _ := removeBlockWithMarkers(content, begin, end)
 	without = strings.TrimRight(without, "\n")
 	if without == "" {
 		return block + "\n"
@@ -773,11 +819,15 @@ func normalizeNewlines(content string) string {
 	return strings.ReplaceAll(content, "\r\n", "\n")
 }
 
-func resolveClaudeBinary(pathList, self string) (string, error) {
-	names := []string{"claude"}
-	if runtime.GOOS == "windows" {
-		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
-	}
+// resolveBinary finds a real CLI executable on pathList by trying each of names,
+// skipping this juggernaut binary and known v4.2.6 launcher artifacts. Used by
+// the launcher for any CLI (claude, codex, …).
+func resolveBinary(pathList string, names []string) (string, error) {
+	self, _ := os.Executable()
+	return resolveBinaryFrom(pathList, names, self)
+}
+
+func resolveBinaryFrom(pathList string, names []string, self string) (string, error) {
 	for _, dir := range filepath.SplitList(pathList) {
 		for _, name := range names {
 			candidate := filepath.Join(dir, name)
@@ -797,6 +847,14 @@ func resolveClaudeBinary(pathList, self string) (string, error) {
 		}
 	}
 	return "", exec.ErrNotFound
+}
+
+func resolveClaudeBinary(pathList, self string) (string, error) {
+	names := []string{"claude"}
+	if runtime.GOOS == "windows" {
+		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
+	}
+	return resolveBinaryFrom(pathList, names, self)
 }
 
 // isLegacyClaudeShim returns true if the file at path is a legacy v4.2.6
