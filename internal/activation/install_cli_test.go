@@ -1,8 +1,11 @@
 package activation
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 const (
@@ -39,6 +42,42 @@ func TestUpsertBlockWithMarkers_ReplacesOwn(t *testing.T) {
 	if strings.Count(twice, codexBegin) != 1 {
 		t.Errorf("codex block should appear exactly once after re-install, got %d:\n%s",
 			strings.Count(twice, codexBegin), twice)
+	}
+}
+
+// TestUninstallWith_CodexSpec_PreservesClaude: uninstalling the Codex block via
+// UninstallWith{Spec} removes only Codex, leaving Claude's block in the profile.
+func TestUninstallWith_CodexSpec_PreservesClaude(t *testing.T) {
+	home := t.TempDir()
+	profile := filepath.Join(home, ".bashrc")
+	claudeBlk := blockFor(ShellPOSIX, "claude", BeginMarker, EndMarker)
+	codexBlk := blockFor(ShellPOSIX, "codex", codexBegin, codexEnd)
+	seed := "export X=1\n\n" + claudeBlk + "\n\n" + codexBlk + "\n"
+	if err := safepath.WriteFile(home, profile, []byte(seed)); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := UninstallWith(home, UninstallOptions{
+		Spec:             CLISpec{Name: "codex", Begin: codexBegin, End: codexEnd},
+		PowerShellResult: &ProfileResolverResult{}, // avoid touching real PS profiles
+	})
+	if err != nil {
+		t.Fatalf("UninstallWith: %v", err)
+	}
+	if len(removed) == 0 {
+		t.Error("expected the codex block to be removed from at least one profile")
+	}
+
+	data, _ := safepath.ReadFile(home, profile)
+	got := string(data)
+	if strings.Contains(got, codexBegin) {
+		t.Error("codex block should be gone")
+	}
+	if !strings.Contains(got, BeginMarker) {
+		t.Error("claude block must be preserved")
+	}
+	if !strings.Contains(got, "export X=1") {
+		t.Error("user content must be preserved")
 	}
 }
 
