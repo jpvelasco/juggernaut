@@ -168,7 +168,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	}
 
 	if applyFlags.dryRun {
-		return printApplyDryRun(home)
+		return printApplyDryRun(home, block)
 	}
 	return commitApply(home, authMode, token, block)
 }
@@ -187,7 +187,7 @@ func resolveOpusplanConflict() error {
 	return nil
 }
 
-func printApplyDryRun(home string) error {
+func printApplyDryRun(home string, block *schema.Block) error {
 	fmt.Println("Dry run — no changes written.")
 	path, err := settingsPath(home, applyFlags.scope)
 	if err != nil {
@@ -196,6 +196,7 @@ func printApplyDryRun(home string) error {
 	fmt.Printf("Would write juggernaut block to %s\n", path)
 	fmt.Println("Would install Juggernaut Claude activation blocks in shell profiles")
 	fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
+	warnMantleTradeoffs(block)
 	return nil
 }
 

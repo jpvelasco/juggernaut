@@ -1001,6 +1001,48 @@ func TestApply_MantleURL_WarnsAboutPromptCaching(t *testing.T) {
 	}
 }
 
+func TestApply_MantleDryRun_WarnsAboutPromptCaching(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2",
+			"--mantle", "--dry-run", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Dry run — no changes written.") {
+		t.Errorf("expected dry-run output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "prompt caching") {
+		t.Errorf("expected Mantle warning on dry run, got:\n%s", out)
+	}
+}
+
+func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--dry-run", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "prompt caching") {
+		t.Errorf("did not expect Mantle warning on dry run without Mantle, got:\n%s", out)
+	}
+}
+
 func TestApply_NoMantle_NoMantleWarning(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
