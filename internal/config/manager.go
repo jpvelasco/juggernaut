@@ -127,45 +127,83 @@ func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[strin
 		existing["env"] = nativeEnv
 	}
 	for k, v := range nativeKeys {
-		if k == "permissions" {
-			mergePermissions(existing, v)
+		if err := applyManagedKey(existing, k, v); err != nil {
+			return err
+		}
+	}
+	return m.Write(existing)
+}
+
+// applyManagedKey sets or deletes one managed top-level key using the shared
+// set-or-delete-by-zero-value semantics. "permissions" is deep-merged (only
+// defaultMode is managed). This is the single source of truth for how a managed
+// key is applied, shared by MergeJuggernautBlock and MergeConfigPlan.
+func applyManagedKey(existing map[string]any, k string, v any) error {
+	if k == "permissions" {
+		mergePermissions(existing, v)
+		return nil
+	}
+	switch val := v.(type) {
+	case string:
+		if val != "" {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case bool:
+		if val {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case map[string]any:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case map[string]string:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case []string:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case []any:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case nil:
+		delete(existing, k)
+	default:
+		return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, map[string]string, or map[string]any)", v, k)
+	}
+	return nil
+}
+
+// MergeConfigPlan merges a provider's ConfigPlan.Keys into the existing config
+// using the same set-or-delete semantics as MergeJuggernautBlock. The
+// "juggernaut" key (if present) is always set. This is the generic,
+// provider-driven entry point that supersedes MergeJuggernautBlock's fixed shape.
+func (m *Manager) MergeConfigPlan(keys map[string]any) error {
+	existing, err := m.Read()
+	if err != nil {
+		return err
+	}
+	for k, v := range keys {
+		if k == "juggernaut" {
+			existing[k] = v // the managed block is always set verbatim
 			continue
 		}
-		switch val := v.(type) {
-		case string:
-			if val != "" {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case bool:
-			if val {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case map[string]any:
-			if len(val) > 0 {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case []string:
-			if len(val) > 0 {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case []any:
-			if len(val) > 0 {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case nil:
-			delete(existing, k)
-		default:
-			return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, or map[string]any)", v, k)
+		if err := applyManagedKey(existing, k, v); err != nil {
+			return err
 		}
 	}
 	return m.Write(existing)

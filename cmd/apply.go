@@ -180,7 +180,37 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if applyFlags.dryRun {
 		return printApplyDryRun(home, block)
 	}
-	return commitApply(home, authMode, token, block)
+
+	prov, err := provider.Get(applyFlags.cli)
+	if err != nil {
+		return err
+	}
+	return commitApply(home, authMode, token, block, prov, bCfg, toProviderOptions(opts))
+}
+
+// toProviderOptions maps the cmd-built schema.Options onto the CLI-neutral
+// provider.Options consumed by Provider.BuildConfig.
+func toProviderOptions(o schema.Options) provider.Options {
+	return provider.Options{
+		AuthMode:       o.AuthMode,
+		Region:         o.Region,
+		Effort:         o.Effort,
+		Scope:          o.Scope,
+		Version:        o.Version,
+		OpusModel:      o.OpusModel,
+		SonnetModel:    o.SonnetModel,
+		HaikuModel:     o.HaikuModel,
+		FableModel:     o.FableModel,
+		Opusplan:       o.Opusplan,
+		FallbackModels: o.FallbackModels,
+		Use1M:          o.Use1M,
+		UseMantle:      o.UseMantle,
+		MantleURL:      o.MantleURL,
+		AuthValidated:  o.AuthValidated,
+		PermissionMode: o.PermissionMode,
+		AlwaysThinking: o.AlwaysThinking,
+		ServiceTier:    o.ServiceTier,
+	}
 }
 
 func resolveMantle() (bool, error) {
@@ -210,38 +240,34 @@ func printApplyDryRun(home string, block *schema.Block) error {
 	return nil
 }
 
-func commitApply(home, authMode, token string, block *schema.Block) error {
-	native := block.NativeKeys()
-
+func commitApply(home, authMode, token string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
 		if err := keychain.Default().SetWithFallback(token, home); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
 		}
 	}
 
+	// The provider owns what to persist. Claude's BuildConfig wraps schema.Build
+	// and reproduces the exact key set commitApply built by hand before — proven
+	// byte-identical by the golden test.
+	plan, err := prov.BuildConfig(bCfg, provOpts)
+	if err != nil {
+		return err
+	}
+	if err := plan.Validate(); err != nil {
+		return fmt.Errorf("invalid config plan for %s: %w", prov.Name(), err)
+	}
+
 	path, err := settingsPath(home, applyFlags.scope)
 	if err != nil {
 		return err
 	}
-	mgr := config.NewManager(path)
-	blockMap, err := toMap(block)
+	format, err := config.FormatByName(prov.ConfigFormatName())
 	if err != nil {
 		return err
 	}
-	modelOverrides := map[string]any{}
-	for k, v := range native.ModelOverrides {
-		modelOverrides[k] = v
-	}
-	nativeKeys := map[string]any{
-		"model":                 native.Model,
-		"modelOverrides":        modelOverrides,
-		"fallbackModel":         native.FallbackModel,
-		"effortLevel":           native.EffortLevel,
-		"alwaysThinkingEnabled": native.AlwaysThinking,
-		"skipWebFetchPreflight": native.SkipWebFetchPreflight,
-		"permissions":           native.Permissions,
-	}
-	if err := mgr.MergeJuggernautBlock(blockMap, native.Env, nativeKeys); err != nil {
+	mgr := config.NewManagerWithFormat(path, format)
+	if err := mgr.MergeConfigPlan(plan.Keys); err != nil {
 		return err
 	}
 
