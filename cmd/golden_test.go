@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // Golden test: the "serial-numbered artifacts" inventory for the provider
@@ -56,24 +58,25 @@ func TestGolden_ClaudeApply_SettingsUnchanged(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	settingsFile := filepath.Join(home, ".claude", "settings.json")
+	raw, err := safepath.ReadFile(filepath.Dir(settingsFile), settingsFile)
 	if err != nil {
 		t.Fatalf("read settings.json: %v", err)
 	}
 	got := normalizeSettings(t, raw, home)
 
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.MkdirAll(filepath.Dir(goldenSettingsFile), 0o755); err != nil {
+		if err := safepath.MkdirAll(filepath.Dir(goldenSettingsFile)); err != nil {
 			t.Fatalf("mkdir golden: %v", err)
 		}
-		if err := os.WriteFile(goldenSettingsFile, []byte(got), 0o600); err != nil {
+		if err := safepath.WriteFile(filepath.Dir(goldenSettingsFile), goldenSettingsFile, []byte(got)); err != nil {
 			t.Fatalf("write golden: %v", err)
 		}
 		t.Logf("golden updated: %s", goldenSettingsFile)
 		return
 	}
 
-	want, err := os.ReadFile(goldenSettingsFile)
+	want, err := safepath.ReadFile(filepath.Dir(goldenSettingsFile), goldenSettingsFile)
 	if err != nil {
 		t.Fatalf("read golden (run with UPDATE_GOLDEN=1 to create): %v", err)
 	}

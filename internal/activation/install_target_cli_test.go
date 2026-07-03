@@ -1,7 +1,6 @@
 package activation
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,7 +32,7 @@ func TestInstallTargetFor_Coexist(t *testing.T) {
 		t.Fatalf("install codex: %v", err)
 	}
 
-	data, _ := os.ReadFile(profile)
+	data, _ := safepath.ReadFile(filepath.Dir(profile), profile)
 	got := string(data)
 	if !strings.Contains(got, "claude()") {
 		t.Error("claude block lost after installing codex")
@@ -67,8 +66,8 @@ func TestInstallTargetFor_ClaudeMatchesLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a, _ := os.ReadFile(legacyProfile)
-	b, _ := os.ReadFile(specProfile)
+	a, _ := safepath.ReadFile(filepath.Dir(legacyProfile), legacyProfile)
+	b, _ := safepath.ReadFile(filepath.Dir(specProfile), specProfile)
 	if string(a) != string(b) {
 		t.Errorf("claude spec install drifted from legacy:\n legacy:\n%s\n spec:\n%s", a, b)
 	}
