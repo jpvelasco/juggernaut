@@ -1043,6 +1043,46 @@ func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
 	}
 }
 
+func TestUninstall_Codex_PreservesSharedToken(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// Uninstalling a non-Claude CLI must NOT remove the shared bearer token,
+	// even with --full (that would break a still-configured Claude).
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"uninstall", "--cli=codex", "--full", "--force",
+		}); err != nil {
+			t.Fatalf("uninstall: %v", err)
+		}
+	})
+	if strings.Contains(out, "Removed bearer token from keychain") {
+		t.Errorf("uninstall --cli=codex must NOT remove the shared keychain token, got:\n%s", out)
+	}
+}
+
+func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=codex", "--auth=iam", "--region=us-east-1",
+			"--mode=auto", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+	})
+	// The Claude auto-mode warning is nonsensical for Codex and must not appear.
+	if strings.Contains(out, "Auto mode on Bedrock requires Opus") {
+		t.Errorf("Codex apply must not print the Claude auto-mode warning, got:\n%s", out)
+	}
+}
+
 func TestApply_UnknownCLI_Errors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

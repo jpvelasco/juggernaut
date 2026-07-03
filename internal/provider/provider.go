@@ -11,7 +11,11 @@
 // the interface shape rather than a guessed one.
 package provider
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+)
 
 // Provider describes one coding CLI that Juggernaut can configure for Bedrock.
 type Provider interface {
@@ -25,6 +29,11 @@ type Provider interface {
 	// ConfigFormatName reports the on-disk config encoding ("json", "toml").
 	ConfigFormatName() string
 
+	// ConfigPath returns the file this CLI's config is written to, for the given
+	// home dir and scope ("user" or "project"). Each provider owns its own path
+	// (Claude: ~/.claude/settings.json; Codex: ~/.codex/config.toml).
+	ConfigPath(home, scope string) (string, error)
+
 	// NativeManagedKeys lists the top-level config keys Juggernaut fully owns
 	// (replaced on apply, removed on uninstall).
 	NativeManagedKeys() []string
@@ -33,9 +42,16 @@ type Provider interface {
 	// CLI's managed shell-activation block.
 	ActivationMarkers() (begin, end string)
 
-	// BedrockEnvVar is the env var (key,value) the launcher sets to route this
-	// CLI through Bedrock.
-	BedrockEnvVar() (key, value string)
+	// BuildConfig turns apply-time Options (plus the embedded Bedrock config, a
+	// genuine input to config-building) into the config the Provider persists.
+	BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
+
+	// LaunchSpec is what the shell wrapper injects at launch time.
+	LaunchSpec() LaunchSpec
+
+	// Supports reports whether the Provider handles a given optional capability,
+	// so cmd/ can gate CLI-specific flags without per-CLI branches.
+	Supports(Capability) bool
 }
 
 // registry holds every known provider by name.
@@ -45,6 +61,7 @@ func register(p Provider) { registry[p.Name()] = p }
 
 func init() {
 	register(claude{})
+	register(codex{})
 }
 
 // Get resolves a provider by name. An empty name defaults to "claude" so every

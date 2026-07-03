@@ -87,7 +87,7 @@ func TestUninstall_ScopeFilter(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "user settings.json") {
+	if !strings.Contains(out, "user claude config") {
 		t.Errorf("expected scoped removal message for user scope, got:\n%s", out)
 	}
 

@@ -84,15 +84,6 @@ func TestClaude_BinaryNames(t *testing.T) {
 	}
 }
 
-// TestClaude_BedrockEnvVar pins the launch-time Bedrock activation env var.
-func TestClaude_BedrockEnvVar(t *testing.T) {
-	p, _ := Get("claude")
-	k, v := p.BedrockEnvVar()
-	if k != "CLAUDE_CODE_USE_BEDROCK" || v != "1" {
-		t.Errorf("BedrockEnvVar() = (%q,%q), want (CLAUDE_CODE_USE_BEDROCK,1)", k, v)
-	}
-}
-
 // TestClaude_ConfigFormatIsJSON confirms Claude writes JSON.
 func TestClaude_ConfigFormatIsJSON(t *testing.T) {
 	p, _ := Get("claude")

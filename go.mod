@@ -3,6 +3,7 @@ module github.com/jpvelasco/juggernaut/v5
 go 1.26.4
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/huh v1.0.0
 	github.com/gofrs/flock v0.13.0
 	github.com/spf13/cobra v1.10.2

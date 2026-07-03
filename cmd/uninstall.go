@@ -9,6 +9,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,7 @@ var uninstallCmd = &cobra.Command{
 }
 
 var uninstallFlags struct {
+	cli    string
 	scope  string
 	full   bool
 	force  bool
@@ -27,6 +29,7 @@ var uninstallFlags struct {
 
 func init() {
 	f := uninstallCmd.Flags()
+	f.StringVar(&uninstallFlags.cli, "cli", "claude", "CLI to remove: claude, codex")
 	f.StringVar(&uninstallFlags.scope, "scope", "", "remove only user or project scope")
 	f.BoolVar(&uninstallFlags.full, "full", false, "also remove shell activation blocks")
 	f.BoolVarP(&uninstallFlags.force, "force", "f", false, "skip confirmation prompt")
@@ -40,16 +43,25 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	prov, err := provider.Get(uninstallFlags.cli)
+	if err != nil {
+		return err
+	}
+
 	if aborted, err := confirmUninstallAborted(); aborted || err != nil {
 		return err
 	}
 
-	uninstallSettingsBlocks(home)
-	if !uninstallFlags.dryRun {
+	uninstallSettingsBlocks(home, prov)
+	// The Bedrock bearer token is SHARED across all CLIs, so removing it on a
+	// per-CLI uninstall would break any other CLI still configured. Only remove
+	// it when uninstalling Claude (the primary). `--full` broadens shell-block
+	// removal, NOT shared-credential removal.
+	if !uninstallFlags.dryRun && prov.Name() == "claude" {
 		removeKeychainToken(home)
 	}
 	if uninstallFlags.full {
-		uninstallActivationFull(home)
+		uninstallActivationFull(home, prov)
 	}
 	if !uninstallFlags.dryRun {
 		fmt.Println("Uninstall complete.")
@@ -84,20 +96,25 @@ func uninstallScopes() []string {
 	return []string{"user", "project"}
 }
 
-func uninstallSettingsBlocks(home string) {
+func uninstallSettingsBlocks(home string, prov provider.Provider) {
 	for _, scope := range uninstallScopes() {
-		uninstallSettingsBlock(home, scope)
+		uninstallSettingsBlock(home, scope, prov)
 	}
 }
 
-func uninstallSettingsBlock(home, scope string) {
-	path, err := settingsPath(home, scope)
+func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
+	path, err := prov.ConfigPath(home, scope)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: invalid %s settings path: %v\n", scope, err)
+		fmt.Fprintf(os.Stderr, "Warning: invalid %s config path: %v\n", scope, err)
 		return
 	}
-	mgr := config.NewManager(path)
-	has, err := mgr.HasJuggernautBlock()
+	format, err := config.FormatByName(prov.ConfigFormatName())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		return
+	}
+	mgr := config.NewManagerWithFormat(path, format)
+	has, err := mgr.HasManagedKeys(prov.NativeManagedKeys())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not check %s scope: %v\n", scope, err)
 		return
@@ -106,14 +123,14 @@ func uninstallSettingsBlock(home, scope string) {
 		return
 	}
 	if uninstallFlags.dryRun {
-		fmt.Printf("Would remove juggernaut block from %s settings.json\n", scope)
+		fmt.Printf("Would remove juggernaut block from %s %s config\n", scope, prov.Name())
 		return
 	}
-	if err := mgr.RemoveJuggernautBlock(); err != nil {
+	if err := mgr.RemoveManagedKeys(prov.NativeManagedKeys()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove %s block: %v\n", scope, err)
 		return
 	}
-	fmt.Printf("  ✓ Removed juggernaut block from %s settings.json\n", scope)
+	fmt.Printf("  ✓ Removed juggernaut block from %s %s config\n", scope, prov.Name())
 }
 
 func removeKeychainToken(home string) {
@@ -124,19 +141,29 @@ func removeKeychainToken(home string) {
 	fmt.Println("  ✓ Removed bearer token from keychain")
 }
 
-func uninstallActivationFull(home string) {
+func uninstallActivationFull(home string, prov provider.Provider) {
+	begin, end := prov.ActivationMarkers()
+	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names
 	if uninstallFlags.dryRun {
-		fmt.Println("Would remove Juggernaut Claude activation blocks from shell profiles")
-		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
+		fmt.Printf("Would remove Juggernaut %s activation blocks from shell profiles\n", title)
+		if prov.Name() == "claude" {
+			fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
+		}
 		return
 	}
-	removed, err := activation.Uninstall(home)
+	removed, err := activation.UninstallWith(home, activation.UninstallOptions{
+		Spec: activation.CLISpec{Name: prov.Name(), Begin: begin, End: end},
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove shell activation: %v\n", err)
 	} else if len(removed) > 0 {
-		fmt.Printf("  ✓ Removed Claude activation from %d shell profile(s)\n", len(removed))
+		fmt.Printf("  ✓ Removed %s activation from %d shell profile(s)\n", title, len(removed))
 	}
 
+	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
+	if prov.Name() != "claude" {
+		return
+	}
 	binDir := activation.DefaultBinDir(home)
 	actions, err := activation.RecoverLegacyArtifacts(binDir)
 	if err != nil {

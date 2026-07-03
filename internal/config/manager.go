@@ -127,45 +127,83 @@ func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[strin
 		existing["env"] = nativeEnv
 	}
 	for k, v := range nativeKeys {
-		if k == "permissions" {
-			mergePermissions(existing, v)
+		if err := applyManagedKey(existing, k, v); err != nil {
+			return err
+		}
+	}
+	return m.Write(existing)
+}
+
+// applyManagedKey sets or deletes one managed top-level key using the shared
+// set-or-delete-by-zero-value semantics. "permissions" is deep-merged (only
+// defaultMode is managed). This is the single source of truth for how a managed
+// key is applied, shared by MergeJuggernautBlock and MergeConfigPlan.
+func applyManagedKey(existing map[string]any, k string, v any) error {
+	if k == "permissions" {
+		mergePermissions(existing, v)
+		return nil
+	}
+	switch val := v.(type) {
+	case string:
+		if val != "" {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case bool:
+		if val {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case map[string]any:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case map[string]string:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case []string:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case []any:
+		if len(val) > 0 {
+			existing[k] = val
+		} else {
+			delete(existing, k)
+		}
+	case nil:
+		delete(existing, k)
+	default:
+		return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, map[string]string, or map[string]any)", v, k)
+	}
+	return nil
+}
+
+// MergeConfigPlan merges a provider's ConfigPlan.Keys into the existing config
+// using the same set-or-delete semantics as MergeJuggernautBlock. The
+// "juggernaut" key (if present) is always set. This is the generic,
+// provider-driven entry point that supersedes MergeJuggernautBlock's fixed shape.
+func (m *Manager) MergeConfigPlan(keys map[string]any) error {
+	existing, err := m.Read()
+	if err != nil {
+		return err
+	}
+	for k, v := range keys {
+		if k == "juggernaut" {
+			existing[k] = v // the managed block is always set verbatim
 			continue
 		}
-		switch val := v.(type) {
-		case string:
-			if val != "" {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case bool:
-			if val {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case map[string]any:
-			if len(val) > 0 {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case []string:
-			if len(val) > 0 {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case []any:
-			if len(val) > 0 {
-				existing[k] = val
-			} else {
-				delete(existing, k)
-			}
-		case nil:
-			delete(existing, k)
-		default:
-			return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, or map[string]any)", v, k)
+		if err := applyManagedKey(existing, k, v); err != nil {
+			return err
 		}
 	}
 	return m.Write(existing)
@@ -198,21 +236,54 @@ func mergePermissions(existing map[string]any, v any) {
 	existing["permissions"] = perms
 }
 
-// RemoveJuggernautBlock strips Juggernaut-managed keys from settings.json.
-// For "permissions", only the defaultMode sub-key is removed so user-defined
-// allow/deny rules are preserved.
+// RemoveJuggernautBlock strips Claude's Juggernaut-managed keys from
+// settings.json. For "permissions", only the defaultMode sub-key is removed so
+// user-defined allow/deny rules are preserved.
 func (m *Manager) RemoveJuggernautBlock() error {
+	return m.RemoveManagedKeys(nativeManagedKeys)
+}
+
+// RemoveManagedKeys removes the juggernaut block plus the given top-level
+// managed keys, preserving user content. "permissions" is handled specially
+// (only defaultMode is stripped). This is the generic, provider-driven form of
+// RemoveJuggernautBlock.
+func (m *Manager) RemoveManagedKeys(keys []string) error {
 	existing, err := m.Read()
 	if err != nil {
 		return err
 	}
 	delete(existing, "juggernaut")
-	for _, k := range nativeManagedKeys {
+	for _, k := range keys {
+		if k == "permissions" {
+			mergePermissions(existing, nil)
+			continue
+		}
 		delete(existing, k)
 	}
-	// Only remove the Juggernaut-managed sub-key from permissions.
+	// Ensure the Juggernaut-managed permissions sub-key is stripped even if
+	// "permissions" was not in the key list (matches legacy behavior).
 	mergePermissions(existing, nil)
 	return m.Write(existing)
+}
+
+// HasManagedKeys reports whether the config contains the juggernaut block or any
+// of the given managed top-level keys. Unlike HasJuggernautBlock it does not
+// require the Claude-specific juggernaut.meta.managedBy marker, so it correctly
+// detects CLIs (e.g. Codex TOML) whose config carries only native keys.
+func (m *Manager) HasManagedKeys(keys []string) (bool, error) {
+	data, err := m.Read()
+	if err != nil {
+		return false, err
+	}
+	if _, ok := data["juggernaut"]; ok {
+		return true, nil
+	}
+	for _, k := range keys {
+		if _, ok := data[k]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // HasJuggernautBlock returns true if settings.json contains a managed Juggernaut block.

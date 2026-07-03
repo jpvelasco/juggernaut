@@ -102,7 +102,8 @@ func runApply(_ *cobra.Command, _ []string) error {
 	// Resolve and validate the target CLI. Defaults to Claude Code, so callers
 	// that pass no --cli are unaffected. An unknown name errors here before any
 	// work is done.
-	if _, err := provider.Get(applyFlags.cli); err != nil {
+	prov, err := provider.Get(applyFlags.cli)
+	if err != nil {
 		return err
 	}
 
@@ -178,9 +179,40 @@ func runApply(_ *cobra.Command, _ []string) error {
 	}
 
 	if applyFlags.dryRun {
-		return printApplyDryRun(home, block)
+		return printApplyDryRun(home, block, prov)
 	}
-	return commitApply(home, authMode, token, block)
+
+	provOpts := toProviderOptions(opts)
+	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
+	// not one of Claude's per-tier IDs. Thread the raw flag through so the
+	// provider selects the right model instead of silently defaulting.
+	provOpts.Model = applyFlags.model
+	return commitApply(home, authMode, token, block, prov, bCfg, provOpts)
+}
+
+// toProviderOptions maps the cmd-built schema.Options onto the CLI-neutral
+// provider.Options consumed by Provider.BuildConfig.
+func toProviderOptions(o schema.Options) provider.Options {
+	return provider.Options{
+		AuthMode:       o.AuthMode,
+		Region:         o.Region,
+		Effort:         o.Effort,
+		Scope:          o.Scope,
+		Version:        o.Version,
+		OpusModel:      o.OpusModel,
+		SonnetModel:    o.SonnetModel,
+		HaikuModel:     o.HaikuModel,
+		FableModel:     o.FableModel,
+		Opusplan:       o.Opusplan,
+		FallbackModels: o.FallbackModels,
+		Use1M:          o.Use1M,
+		UseMantle:      o.UseMantle,
+		MantleURL:      o.MantleURL,
+		AuthValidated:  o.AuthValidated,
+		PermissionMode: o.PermissionMode,
+		AlwaysThinking: o.AlwaysThinking,
+		ServiceTier:    o.ServiceTier,
+	}
 }
 
 func resolveMantle() (bool, error) {
@@ -197,59 +229,68 @@ func resolveOpusplanConflict() error {
 	return nil
 }
 
-func printApplyDryRun(home string, block *schema.Block) error {
+func printApplyDryRun(home string, block *schema.Block, prov provider.Provider) error {
 	fmt.Println("Dry run — no changes written.")
-	path, err := settingsPath(home, applyFlags.scope)
+	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Would write juggernaut block to %s\n", path)
-	fmt.Println("Would install Juggernaut Claude activation blocks in shell profiles")
-	fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
-	warnMantleTradeoffs(block)
+	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names
+	fmt.Printf("Would write juggernaut config to %s\n", path)
+	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
+	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
+	if prov.Name() == "claude" {
+		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
+	}
+	if prov.Supports(provider.CapThinking) {
+		warnMantleTradeoffs(block)
+	}
 	return nil
 }
 
-func commitApply(home, authMode, token string, block *schema.Block) error {
-	native := block.NativeKeys()
-
+func commitApply(home, authMode, token string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
 		if err := keychain.Default().SetWithFallback(token, home); err != nil {
 			return fmt.Errorf("storing API key: %w", err)
 		}
 	}
 
-	path, err := settingsPath(home, applyFlags.scope)
+	// The provider owns what to persist. Claude's BuildConfig wraps schema.Build
+	// and reproduces the exact key set commitApply built by hand before — proven
+	// byte-identical by the golden test.
+	plan, err := prov.BuildConfig(bCfg, provOpts)
 	if err != nil {
 		return err
 	}
-	mgr := config.NewManager(path)
-	blockMap, err := toMap(block)
+	if err := plan.Validate(); err != nil {
+		return fmt.Errorf("invalid config plan for %s: %w", prov.Name(), err)
+	}
+
+	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
 		return err
 	}
-	modelOverrides := map[string]any{}
-	for k, v := range native.ModelOverrides {
-		modelOverrides[k] = v
+	format, err := config.FormatByName(prov.ConfigFormatName())
+	if err != nil {
+		return err
 	}
-	nativeKeys := map[string]any{
-		"model":                 native.Model,
-		"modelOverrides":        modelOverrides,
-		"fallbackModel":         native.FallbackModel,
-		"effortLevel":           native.EffortLevel,
-		"alwaysThinkingEnabled": native.AlwaysThinking,
-		"skipWebFetchPreflight": native.SkipWebFetchPreflight,
-		"permissions":           native.Permissions,
-	}
-	if err := mgr.MergeJuggernautBlock(blockMap, native.Env, nativeKeys); err != nil {
+	mgr := config.NewManagerWithFormat(path, format)
+	if err := mgr.MergeConfigPlan(plan.Keys); err != nil {
 		return err
 	}
 
-	installActivation(home)
+	installActivation(home, prov)
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
-	warnAutoModeModel(block)
-	warnMantleTradeoffs(block)
+	// Auto-mode and the Mantle prompt-caching tradeoff are Claude-specific
+	// concerns; gate their warnings on provider capability so other CLIs don't
+	// print nonsensical Claude guidance.
+	if prov.Supports(provider.CapAutoMode) {
+		warnAutoModeModel(block)
+	}
+	if prov.Supports(provider.CapThinking) {
+		warnMantleTradeoffs(block)
+	}
 	return nil
 }
 
@@ -306,17 +347,21 @@ func warnMantleTradeoffs(block *schema.Block) {
 	fmt.Println("  Leave Mantle off unless you specifically need it (e.g. non-Anthropic models).")
 }
 
-func installActivation(home string) {
-	paths, err := activation.Install(home)
+func installActivation(home string, prov provider.Provider) {
+	begin, end := prov.ActivationMarkers()
+	paths, err := activation.InstallWith(home, activation.InstallOptions{
+		Spec: activation.CLISpec{Name: prov.Name(), Begin: begin, End: end},
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not install shell activation: %v\n", err)
 		return
 	}
+	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names; strings.Title is fine here
 	if len(paths) == 0 {
-		fmt.Println("  ✓ Shell activation already up to date")
+		fmt.Printf("  ✓ %s shell activation already up to date\n", title)
 		return
 	}
-	fmt.Printf("  ✓ Installed Claude activation in %d shell profile(s)\n", len(paths))
+	fmt.Printf("  ✓ Installed %s activation in %d shell profile(s)\n", title, len(paths))
 }
 
 func reportLegacyRecovery(home string) {

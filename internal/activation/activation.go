@@ -18,6 +18,10 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
+// bedrockAuthEnvName is the environment variable name (not a secret) that the
+// launcher injects the Bedrock bearer token into by default.
+const bedrockAuthEnvName = "AWS_BEARER_TOKEN_BEDROCK"
+
 const (
 	BeginMarker = "# BEGIN: Juggernaut Claude Activation"
 	EndMarker   = "# END: Juggernaut Claude Activation"
@@ -88,6 +92,36 @@ type LaunchOptions struct {
 	// Warner receives non-fatal warnings (e.g. an expired short-term API key).
 	// Defaults to printing to stderr.
 	Warner func(msg string)
+
+	// Target describes the CLI being launched (binary names + how to route it to
+	// Bedrock). A zero Target defaults to Claude Code, so existing callers are
+	// unaffected. cmd/ populates it from the resolved Provider's LaunchSpec.
+	Target LaunchTarget
+}
+
+// LaunchTarget carries the per-CLI launch configuration, mirroring
+// provider.LaunchSpec (the activation package stays provider-free; cmd/ maps
+// LaunchSpec → LaunchTarget).
+type LaunchTarget struct {
+	BinaryNames []string          // real exe names to resolve on PATH
+	TokenEnvVar string            // env var to inject the bearer token into
+	StaticEnv   map[string]string // static enable-flags (Claude: CLAUDE_CODE_USE_BEDROCK=1)
+	NeedsToken  bool              // whether a bearer token is required
+}
+
+// claudeLaunchTarget is the default Target (back-compat with the historical
+// hardcoded Claude launch behavior).
+func claudeLaunchTarget() LaunchTarget {
+	names := []string{"claude"}
+	if runtime.GOOS == "windows" {
+		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
+	}
+	return LaunchTarget{
+		BinaryNames: names,
+		TokenEnvVar: bedrockAuthEnvName,
+		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
+		NeedsToken:  false, // determined by auth mode, not the target
+	}
 }
 
 // DefaultTargets returns the shell profile targets Juggernaut updates.
@@ -103,32 +137,47 @@ func DefaultTargets(home string) []Target {
 	}
 }
 
-// Block returns the activation block for a shell.
+// Block returns the Claude activation block. Retained for back-compat; delegates
+// to the per-CLI generator with Claude's identity.
 func Block(shell Shell) string {
+	return blockFor(shell, "claude", BeginMarker, EndMarker)
+}
+
+// blockFor generates a shell activation block that defines a function named
+// `cli` delegating to `juggernaut launch [cli] -- ...`. For the default CLI
+// (claude) the launch verb takes no CLI argument, so the emitted block is
+// byte-identical to the historical Claude block; other CLIs pass their name
+// (`juggernaut launch codex --`).
+func blockFor(shell Shell, cli, begin, end string) string {
+	// Default CLI (claude) uses the bare `launch`; others name the CLI.
+	launchArg := ""
+	if cli != "claude" {
+		launchArg = " " + cli
+	}
 	switch shell {
 	case ShellFish:
 		return strings.Join([]string{
-			BeginMarker,
-			"function claude",
-			"    juggernaut launch -- $argv",
+			begin,
+			"function " + cli,
+			"    juggernaut launch" + launchArg + " -- $argv",
 			"end",
-			EndMarker,
+			end,
 		}, "\n")
 	case ShellPowerShell:
 		return strings.Join([]string{
-			BeginMarker,
-			"function global:claude {",
-			"  juggernaut launch -- @args",
+			begin,
+			"function global:" + cli + " {",
+			"  juggernaut launch" + launchArg + " -- @args",
 			"}",
-			EndMarker,
+			end,
 		}, "\n")
 	default:
 		return strings.Join([]string{
-			BeginMarker,
-			"claude() {",
-			"  juggernaut launch -- \"$@\"",
+			begin,
+			cli + "() {",
+			"  juggernaut launch" + launchArg + " -- \"$@\"",
 			"}",
-			EndMarker,
+			end,
 		}, "\n")
 	}
 }
@@ -138,6 +187,17 @@ type InstallOptions struct {
 	// PowerShellResult, when set, is used instead of resolving profiles
 	// dynamically. This is required for tests to avoid touching real profiles.
 	PowerShellResult *ProfileResolverResult
+	// Spec selects which CLI's activation block to install. Zero value defaults
+	// to Claude (back-compat).
+	Spec CLISpec
+}
+
+// specOrClaude returns s if populated, else the Claude default.
+func specOrClaude(s CLISpec) CLISpec {
+	if s.Name == "" {
+		return claudeCLISpec()
+	}
+	return s
 }
 
 // Install writes or updates Juggernaut activation blocks in shell profiles.
@@ -150,9 +210,10 @@ func Install(home string) ([]string, error) {
 // InstallWith is like Install but accepts injectable dependencies.
 func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	var installed []string
+	spec := specOrClaude(opts.Spec)
 
 	if runtime.GOOS == "windows" {
-		psInstalled, err := InstallPowerShellActivationWith(home, opts.PowerShellResult)
+		psInstalled, err := installPowerShellActivationForSpec(home, opts.PowerShellResult, spec)
 		if err != nil {
 			return installed, err
 		}
@@ -160,7 +221,7 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	} else if opts.PowerShellResult != nil {
 		// On non-Windows, use the injected PowerShell result for profile paths.
 		for _, target := range opts.PowerShellResult.ActiveTargets {
-			changed, err := InstallTarget(target)
+			changed, err := InstallTargetFor(target, spec)
 			if err != nil {
 				return installed, err
 			}
@@ -171,7 +232,7 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	}
 
 	for _, target := range DefaultTargets(home) {
-		changed, err := InstallTarget(target)
+		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
 		}
@@ -182,8 +243,28 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	return installed, nil
 }
 
-// InstallTarget writes or updates the activation block for one profile.
+// CLISpec identifies a CLI's activation block: its shell-function name and the
+// begin/end markers delimiting its block. cmd/ builds this from a Provider.
+type CLISpec struct {
+	Name  string
+	Begin string
+	End   string
+}
+
+// claudeCLISpec is the default (back-compat).
+func claudeCLISpec() CLISpec {
+	return CLISpec{Name: "claude", Begin: BeginMarker, End: EndMarker}
+}
+
+// InstallTarget writes or updates the Claude activation block for one profile.
 func InstallTarget(target Target) (bool, error) {
+	return InstallTargetFor(target, claudeCLISpec())
+}
+
+// InstallTargetFor writes or updates one CLI's activation block in a profile,
+// leaving other CLIs' blocks (matched by their own markers) untouched so they
+// coexist.
+func InstallTargetFor(target Target, spec CLISpec) (bool, error) {
 	base := filepath.Dir(target.Path)
 	data, err := safepath.ReadFile(base, target.Path)
 	if os.IsNotExist(err) {
@@ -191,7 +272,8 @@ func InstallTarget(target Target) (bool, error) {
 	} else if err != nil {
 		return false, fmt.Errorf("reading %s: %w", target.Path, err)
 	}
-	next := upsertBlock(string(data), Block(target.Shell))
+	block := blockFor(target.Shell, spec.Name, spec.Begin, spec.End)
+	next := upsertBlockWithMarkers(string(data), block, spec.Begin, spec.End)
 	if string(data) == next {
 		return false, nil
 	}
@@ -206,6 +288,9 @@ type UninstallOptions struct {
 	// PowerShellResult, when set, is used instead of resolving profiles
 	// dynamically. This is required for tests to avoid touching real profiles.
 	PowerShellResult *ProfileResolverResult
+	// Spec selects which CLI's activation block to remove. Zero value defaults
+	// to Claude (which also sweeps legacy launcher/bedrock blocks).
+	Spec CLISpec
 }
 
 // Uninstall removes Juggernaut activation blocks from shell profiles.
@@ -216,6 +301,13 @@ func Uninstall(home string) ([]string, error) {
 
 // UninstallWith is like Uninstall but accepts injectable dependencies.
 func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
+	// Non-Claude specs remove only that CLI's marker-delimited block; the legacy
+	// launcher/bedrock sweep is Claude-only (those blocks never existed for other
+	// CLIs), so it stays on the default path below.
+	if opts.Spec.Name != "" && opts.Spec.Name != "claude" {
+		return uninstallCLIBlocks(home, opts)
+	}
+
 	var removed []string
 
 	if runtime.GOOS == "windows" {
@@ -249,8 +341,46 @@ func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
 	return removed, nil
 }
 
-// RemoveTarget removes the activation block from a profile.
+// uninstallCLIBlocks removes one non-Claude CLI's activation block (by its
+// markers) from all managed profiles, leaving other CLIs' blocks intact.
+func uninstallCLIBlocks(home string, opts UninstallOptions) ([]string, error) {
+	var removed []string
+	begin, end := opts.Spec.Begin, opts.Spec.End
+
+	targets := DefaultTargets(home)
+	if opts.PowerShellResult != nil {
+		targets = append(targets, opts.PowerShellResult.ActiveTargets...)
+	} else if runtime.GOOS == "windows" {
+		r := ResolvePowerShellProfilesScoped(home)
+		targets = append(targets, r.ActiveTargets...)
+	}
+
+	seen := map[string]bool{}
+	for _, target := range targets {
+		if seen[target.Path] {
+			continue
+		}
+		seen[target.Path] = true
+		ok, err := RemoveTargetForMarkers(target.Path, begin, end)
+		if err != nil {
+			return removed, err
+		}
+		if ok {
+			removed = append(removed, target.Path)
+		}
+	}
+	return removed, nil
+}
+
+// RemoveTarget removes the Claude activation block from a profile.
 func RemoveTarget(path string) (bool, error) {
+	return RemoveTargetForMarkers(path, BeginMarker, EndMarker)
+}
+
+// RemoveTargetForMarkers removes the block delimited by the given markers from a
+// profile, leaving other CLIs' blocks untouched (uses the matched-span remover
+// so an orphaned marker never deletes trailing content).
+func RemoveTargetForMarkers(path, begin, end string) (bool, error) {
 	base := filepath.Dir(path)
 	data, err := safepath.ReadFile(base, path)
 	if os.IsNotExist(err) {
@@ -259,7 +389,7 @@ func RemoveTarget(path string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("reading %s: %w", path, err)
 	}
-	next, found := removeBlock(string(data))
+	next, found := removeBlockWithMarkers(normalizeNewlines(string(data)), begin, end)
 	if !found {
 		return false, nil
 	}
@@ -437,12 +567,20 @@ func removeBlockWithMarkers(content, begin, end string) (string, bool) {
 
 // Launch runs Claude Code with Juggernaut Bedrock activation.
 func Launch(home string, args []string) error {
+	return LaunchCLI(home, args, LaunchTarget{})
+}
+
+// LaunchCLI runs the CLI described by target (a zero target defaults to Claude),
+// injecting Bedrock env from the keychain. It is the target-aware entry point
+// used by `juggernaut launch [cli] -- ...`.
+func LaunchCLI(home string, args []string, target LaunchTarget) error {
 	return LaunchWithOptions(LaunchOptions{
 		Home:        home,
 		Args:        args,
 		Path:        os.Getenv("PATH"),
 		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
-		Runner:      runClaudeBinary,
+		Runner:      runBinary,
+		Target:      target,
 	})
 }
 
@@ -458,10 +596,18 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		opts.TokenGetter = func() (string, error) { return keychain.Default().GetWithFallback(opts.Home) }
 	}
 	if opts.Runner == nil {
-		opts.Runner = runClaudeBinary
+		opts.Runner = runBinary
 	}
 	if opts.Warner == nil {
 		opts.Warner = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
+	}
+	target := opts.Target
+	if len(target.BinaryNames) == 0 {
+		target = claudeLaunchTarget() // default: Claude (back-compat)
+	}
+	tokenEnvVar := target.TokenEnvVar
+	if tokenEnvVar == "" {
+		tokenEnvVar = bedrockAuthEnvName
 	}
 
 	env := os.Environ()
@@ -469,11 +615,21 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	if err != nil {
 		return err
 	}
-	if len(modes) > 0 {
-		env = setEnv(env, "CLAUDE_CODE_USE_BEDROCK", "1")
+
+	// Determine whether this launch is Juggernaut-managed and whether it needs a
+	// bearer token. Claude declares its auth mode in ~/.claude/settings.json
+	// (scanned by authModes). Other CLIs (Codex) store no auth mode there — their
+	// need is declared by the target's NeedsToken. The bearer token is SHARED, so
+	// injecting it for a token-needing target is correct regardless of authModes.
+	managed := len(modes) > 0 || target.NeedsToken
+	wantToken := needsBearerToken(modes) || target.NeedsToken
+
+	if managed {
+		for k, v := range target.StaticEnv {
+			env = setEnv(env, k, v)
+		}
 	}
-	needsToken := needsBearerToken(modes)
-	if needsToken {
+	if wantToken {
 		token, err := opts.TokenGetter()
 		if err != nil {
 			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
@@ -486,18 +642,18 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		// Juggernaut can't refresh short-term keys (it holds no AWS creds).
 		if bedrock.IsAPIKeyExpired(token, time.Now().UTC()) {
 			opts.Warner("Warning: your short-term Bedrock API key has expired; regenerate it and run " +
-				"`juggernaut apply --auth=" + authmode.BedrockAPIKey + "` (Claude Code will fail to authenticate until then)")
+				"`juggernaut apply --auth=" + authmode.BedrockAPIKey + "` (the CLI will fail to authenticate until then)")
 		}
-		env = setEnv(env, "AWS_BEARER_TOKEN_BEDROCK", token)
-	} else if len(modes) > 0 {
-		env = unsetEnv(env, "AWS_BEARER_TOKEN_BEDROCK")
+		env = setEnv(env, tokenEnvVar, token)
+	} else if managed {
+		env = unsetEnv(env, tokenEnvVar)
 	}
 
-	claudePath, err := ResolveClaudeBinary(opts.Path)
+	binPath, err := resolveBinary(opts.Path, target.BinaryNames)
 	if err != nil {
-		return errors.New("real claude binary not found on PATH; install Claude Code with `curl -fsSL https://claude.ai/install.sh | bash`")
+		return fmt.Errorf("real %s binary not found on PATH", target.BinaryNames[0])
 	}
-	return opts.Runner(claudePath, opts.Args, env)
+	return opts.Runner(binPath, opts.Args, env)
 }
 
 // ResolveClaudeBinary finds the real Anthropic claude command while avoiding
@@ -544,8 +700,15 @@ func DetectLegacyArtifacts(binDir string) []LegacyAction {
 }
 
 func upsertBlock(content, block string) string {
+	return upsertBlockWithMarkers(content, block, BeginMarker, EndMarker)
+}
+
+// upsertBlockWithMarkers replaces the block delimited by begin/end (if present)
+// with the given block, or appends it. Only the block for THESE markers is
+// touched, so different CLIs' blocks (Claude, Codex, …) coexist in one profile.
+func upsertBlockWithMarkers(content, block, begin, end string) string {
 	content = normalizeNewlines(content)
-	without, _ := removeBlock(content)
+	without, _ := removeBlockWithMarkers(content, begin, end)
 	without = strings.TrimRight(without, "\n")
 	if without == "" {
 		return block + "\n"
@@ -586,6 +749,10 @@ func InstallPowerShellActivation(home string) ([]string, error) {
 // InstallPowerShellActivationWith is like InstallPowerShellActivation but
 // accepts a pre-resolved ProfileResolverResult to avoid launching PowerShell.
 func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResult) ([]string, error) {
+	return installPowerShellActivationForSpec(home, psResult, claudeCLISpec())
+}
+
+func installPowerShellActivationForSpec(home string, psResult *ProfileResolverResult, spec CLISpec) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
@@ -629,7 +796,7 @@ func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResul
 	// (AllHosts profiles — CurrentHost profiles load after AllHosts and
 	// can override or retain a stale duplicate of the global activation).
 	for _, target := range result.InstallTargets {
-		changed, err := InstallTarget(target)
+		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
 		}
@@ -757,11 +924,15 @@ func normalizeNewlines(content string) string {
 	return strings.ReplaceAll(content, "\r\n", "\n")
 }
 
-func resolveClaudeBinary(pathList, self string) (string, error) {
-	names := []string{"claude"}
-	if runtime.GOOS == "windows" {
-		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
-	}
+// resolveBinary finds a real CLI executable on pathList by trying each of names,
+// skipping this juggernaut binary and known v4.2.6 launcher artifacts. Used by
+// the launcher for any CLI (claude, codex, …).
+func resolveBinary(pathList string, names []string) (string, error) {
+	self, _ := os.Executable()
+	return resolveBinaryFrom(pathList, names, self)
+}
+
+func resolveBinaryFrom(pathList string, names []string, self string) (string, error) {
 	for _, dir := range filepath.SplitList(pathList) {
 		for _, name := range names {
 			candidate := filepath.Join(dir, name)
@@ -781,6 +952,14 @@ func resolveClaudeBinary(pathList, self string) (string, error) {
 		}
 	}
 	return "", exec.ErrNotFound
+}
+
+func resolveClaudeBinary(pathList, self string) (string, error) {
+	names := []string{"claude"}
+	if runtime.GOOS == "windows" {
+		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
+	}
+	return resolveBinaryFrom(pathList, names, self)
 }
 
 // isLegacyClaudeShim returns true if the file at path is a legacy v4.2.6
@@ -871,7 +1050,7 @@ func authModes(home string) ([]string, error) {
 	return modes, nil
 }
 
-func runClaudeBinary(path string, args []string, env []string) error {
+func runBinary(path string, args []string, env []string) error {
 	// path is the resolved real Claude Code executable from ResolveClaudeBinary;
 	// exec.Command is intentionally used without a shell to preserve arguments.
 	cmd := exec.Command(path, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
