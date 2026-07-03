@@ -615,12 +615,21 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	if err != nil {
 		return err
 	}
-	if len(modes) > 0 {
+
+	// Determine whether this launch is Juggernaut-managed and whether it needs a
+	// bearer token. Claude declares its auth mode in ~/.claude/settings.json
+	// (scanned by authModes). Other CLIs (Codex) store no auth mode there — their
+	// need is declared by the target's NeedsToken. The bearer token is SHARED, so
+	// injecting it for a token-needing target is correct regardless of authModes.
+	managed := len(modes) > 0 || target.NeedsToken
+	wantToken := needsBearerToken(modes) || target.NeedsToken
+
+	if managed {
 		for k, v := range target.StaticEnv {
 			env = setEnv(env, k, v)
 		}
 	}
-	if needsBearerToken(modes) {
+	if wantToken {
 		token, err := opts.TokenGetter()
 		if err != nil {
 			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
@@ -636,7 +645,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 				"`juggernaut apply --auth=" + authmode.BedrockAPIKey + "` (the CLI will fail to authenticate until then)")
 		}
 		env = setEnv(env, tokenEnvVar, token)
-	} else if len(modes) > 0 {
+	} else if managed {
 		env = unsetEnv(env, tokenEnvVar)
 	}
 

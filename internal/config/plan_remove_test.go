@@ -98,6 +98,31 @@ func TestRemoveManagedKeys_PermissionsInKeyList(t *testing.T) {
 	}
 }
 
+// TestHasManagedKeys detects a provider's config presence without requiring the
+// Claude-specific juggernaut.meta block (Codex TOML has no such marker).
+func TestHasManagedKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManager(path)
+
+	// Codex-style config: managed keys, no juggernaut.meta block.
+	_ = m.Write(map[string]any{"model": "openai.gpt-5.5", "model_provider": "bedrock-mantle"})
+	has, err := m.HasManagedKeys([]string{"model", "model_provider", "model_providers"})
+	if err != nil {
+		t.Fatalf("HasManagedKeys: %v", err)
+	}
+	if !has {
+		t.Error("expected HasManagedKeys=true when a managed key is present")
+	}
+
+	// Empty config → false.
+	empty := NewManager(filepath.Join(t.TempDir(), "empty.toml"))
+	_ = empty.Write(map[string]any{"unrelated": "x"})
+	has, _ = empty.HasManagedKeys([]string{"model", "model_provider"})
+	if has {
+		t.Error("expected HasManagedKeys=false when no managed key present")
+	}
+}
+
 func cloneMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {

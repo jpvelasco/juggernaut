@@ -185,7 +185,12 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return commitApply(home, authMode, token, block, prov, bCfg, toProviderOptions(opts))
+	provOpts := toProviderOptions(opts)
+	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
+	// not one of Claude's per-tier IDs. Thread the raw flag through so the
+	// provider selects the right model instead of silently defaulting.
+	provOpts.Model = applyFlags.model
+	return commitApply(home, authMode, token, block, prov, bCfg, provOpts)
 }
 
 // toProviderOptions maps the cmd-built schema.Options onto the CLI-neutral

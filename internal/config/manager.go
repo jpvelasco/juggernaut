@@ -266,6 +266,26 @@ func (m *Manager) RemoveManagedKeys(keys []string) error {
 	return m.Write(existing)
 }
 
+// HasManagedKeys reports whether the config contains the juggernaut block or any
+// of the given managed top-level keys. Unlike HasJuggernautBlock it does not
+// require the Claude-specific juggernaut.meta.managedBy marker, so it correctly
+// detects CLIs (e.g. Codex TOML) whose config carries only native keys.
+func (m *Manager) HasManagedKeys(keys []string) (bool, error) {
+	data, err := m.Read()
+	if err != nil {
+		return false, err
+	}
+	if _, ok := data["juggernaut"]; ok {
+		return true, nil
+	}
+	for _, k := range keys {
+		if _, ok := data[k]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // HasJuggernautBlock returns true if settings.json contains a managed Juggernaut block.
 func (m *Manager) HasJuggernautBlock() (bool, error) {
 	data, err := m.Read()

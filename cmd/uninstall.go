@@ -114,7 +114,7 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 		return
 	}
 	mgr := config.NewManagerWithFormat(path, format)
-	has, err := mgr.HasJuggernautBlock()
+	has, err := mgr.HasManagedKeys(prov.NativeManagedKeys())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not check %s scope: %v\n", scope, err)
 		return
