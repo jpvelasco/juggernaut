@@ -4,6 +4,16 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.9] - 2026-07-02
+
+**Patch release — warn about Mantle routing tradeoffs on apply.**
+
+### Fixed
+
+- **`apply` now warns when Mantle routing is enabled.** Turning on Mantle (`--mantle` / `--mantle-url`) silently dropped features that native Bedrock (`bedrock-runtime`) provides, with no indication to the user. `apply` now prints an actionable heads-up: prompt caching is unavailable on Mantle (so large repeated context is re-read every turn, costing more and adding latency), and only current-generation Claude models are reachable via Mantle (Sonnet 5, Opus 4.7/4.8, Haiku 4.5, Fable 5) while older models stay on `bedrock-runtime`.
+
+- **The Mantle warning also appears on `apply --dry-run`.** The dry-run path returned before the warning fired, so users previewing an apply — the ones most likely to want the tradeoff called out before committing — never saw it. The warning is now emitted in the dry-run preview too.
+
 ## [5.2.8] - 2026-07-01
 
 **Patch release — fix shell-profile data loss, dry-run side effects, and GovCloud model handling.**
@@ -1004,7 +1014,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.8...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.9...HEAD
+[5.2.9]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.9
 [5.2.8]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.8
 [5.2.7]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.7
 [5.2.6]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.6
