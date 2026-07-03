@@ -104,31 +104,47 @@ func DefaultTargets(home string) []Target {
 }
 
 // Block returns the activation block for a shell.
+// Block returns the Claude activation block. Retained for back-compat; delegates
+// to the per-CLI generator with Claude's identity.
 func Block(shell Shell) string {
+	return blockFor(shell, "claude", BeginMarker, EndMarker)
+}
+
+// blockFor generates a shell activation block that defines a function named
+// `cli` delegating to `juggernaut launch [cli] -- ...`. For the default CLI
+// (claude) the launch verb takes no CLI argument, so the emitted block is
+// byte-identical to the historical Claude block; other CLIs pass their name
+// (`juggernaut launch codex --`).
+func blockFor(shell Shell, cli, begin, end string) string {
+	// Default CLI (claude) uses the bare `launch`; others name the CLI.
+	launchArg := ""
+	if cli != "claude" {
+		launchArg = " " + cli
+	}
 	switch shell {
 	case ShellFish:
 		return strings.Join([]string{
-			BeginMarker,
-			"function claude",
-			"    juggernaut launch -- $argv",
+			begin,
+			"function " + cli,
+			"    juggernaut launch" + launchArg + " -- $argv",
 			"end",
-			EndMarker,
+			end,
 		}, "\n")
 	case ShellPowerShell:
 		return strings.Join([]string{
-			BeginMarker,
-			"function global:claude {",
-			"  juggernaut launch -- @args",
+			begin,
+			"function global:" + cli + " {",
+			"  juggernaut launch" + launchArg + " -- @args",
 			"}",
-			EndMarker,
+			end,
 		}, "\n")
 	default:
 		return strings.Join([]string{
-			BeginMarker,
-			"claude() {",
-			"  juggernaut launch -- \"$@\"",
+			begin,
+			cli + "() {",
+			"  juggernaut launch" + launchArg + " -- \"$@\"",
 			"}",
-			EndMarker,
+			end,
 		}, "\n")
 	}
 }
