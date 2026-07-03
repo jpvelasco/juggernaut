@@ -2,9 +2,11 @@ package provider
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // codex is the OpenAI Codex CLI provider (config at ~/.codex/config.toml, TOML).
@@ -27,6 +29,14 @@ func (codex) BinaryNames() []string {
 }
 
 func (codex) ConfigFormatName() string { return "toml" }
+
+// ConfigPath is ~/.codex/config.toml (user) or ./.codex/config.toml (project).
+func (codex) ConfigPath(home, scope string) (string, error) {
+	if scope == "project" {
+		return filepath.Join(".", ".codex", "config.toml"), nil
+	}
+	return safepath.JoinUnder(home, ".codex", "config.toml")
+}
 
 // NativeManagedKeys are the top-level config.toml keys Juggernaut owns for Codex.
 func (codex) NativeManagedKeys() []string {

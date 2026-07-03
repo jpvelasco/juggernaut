@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"path/filepath"
 	"runtime"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
@@ -25,6 +27,15 @@ func (claude) BinaryNames() []string {
 }
 
 func (claude) ConfigFormatName() string { return "json" }
+
+// ConfigPath is ~/.claude/settings.json (user) or ./.claude/settings.json
+// (project) — identical to the pre-abstraction cmd/helpers.settingsPath.
+func (claude) ConfigPath(home, scope string) (string, error) {
+	if scope == "project" {
+		return filepath.Join(".", ".claude", "settings.json"), nil
+	}
+	return safepath.JoinUnder(home, ".claude", "settings.json")
+}
 
 func (claude) NativeManagedKeys() []string {
 	return []string{

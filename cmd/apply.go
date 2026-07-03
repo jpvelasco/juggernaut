@@ -258,7 +258,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return fmt.Errorf("invalid config plan for %s: %w", prov.Name(), err)
 	}
 
-	path, err := settingsPath(home, applyFlags.scope)
+	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
 		return err
 	}

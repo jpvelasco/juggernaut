@@ -29,6 +29,11 @@ type Provider interface {
 	// ConfigFormatName reports the on-disk config encoding ("json", "toml").
 	ConfigFormatName() string
 
+	// ConfigPath returns the file this CLI's config is written to, for the given
+	// home dir and scope ("user" or "project"). Each provider owns its own path
+	// (Claude: ~/.claude/settings.json; Codex: ~/.codex/config.toml).
+	ConfigPath(home, scope string) (string, error)
+
 	// NativeManagedKeys lists the top-level config keys Juggernaut fully owns
 	// (replaced on apply, removed on uninstall).
 	NativeManagedKeys() []string
