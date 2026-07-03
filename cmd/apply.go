@@ -13,6 +13,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,7 @@ var applyCmd = &cobra.Command{
 }
 
 var applyFlags struct {
+	cli            string
 	auth           string
 	bedrockKey     string
 	preserveKey    bool
@@ -55,6 +57,7 @@ var applyFlags struct {
 
 func init() {
 	f := applyCmd.Flags()
+	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: claude")
 	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
@@ -93,6 +96,13 @@ func init() {
 func runApply(_ *cobra.Command, _ []string) error {
 	home, err := homeDir()
 	if err != nil {
+		return err
+	}
+
+	// Resolve and validate the target CLI. Defaults to Claude Code, so callers
+	// that pass no --cli are unaffected. An unknown name errors here before any
+	// work is done.
+	if _, err := provider.Get(applyFlags.cli); err != nil {
 		return err
 	}
 

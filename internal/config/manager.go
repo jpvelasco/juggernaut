@@ -2,7 +2,6 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,16 +14,23 @@ import (
 
 const backupRetain = 5
 
-// Manager handles atomic read/merge/write of a settings.json file.
+// Manager handles atomic read/merge/write of a settings file.
 type Manager struct {
-	path string
-	base string
+	path   string
+	base   string
+	format ConfigFormat
 }
 
-// NewManager creates a Manager for the settings.json at the given path.
+// NewManager creates a Manager for the JSON settings file at the given path.
 func NewManager(path string) *Manager {
+	return NewManagerWithFormat(path, jsonFormat{})
+}
+
+// NewManagerWithFormat creates a Manager that reads/writes using the given
+// on-disk format (JSON for Claude Code/OpenCode/Grok, TOML for Codex).
+func NewManagerWithFormat(path string, format ConfigFormat) *Manager {
 	clean := filepath.Clean(path)
-	return &Manager{path: clean, base: filepath.Dir(clean)}
+	return &Manager{path: clean, base: filepath.Dir(clean), format: format}
 }
 
 func (m *Manager) Read() (map[string]any, error) {
@@ -39,8 +45,8 @@ func (m *Manager) Read() (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	data = stripUTF8BOM(data)
-	var result map[string]any
-	if err := json.Unmarshal(data, &result); err != nil {
+	result, err := m.format.Unmarshal(data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", m.path, err)
 	}
 	return result, nil
@@ -68,7 +74,7 @@ func (m *Manager) Write(data map[string]any) error {
 		}
 	}
 
-	encoded, err := json.MarshalIndent(data, "", "  ")
+	encoded, err := m.format.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("encoding settings.json: %w", err)
 	}
