@@ -55,6 +55,16 @@ func (codex) NativeManagedKeys() []string {
 	}
 }
 
+// DeepMergeKeys: model_providers is a nested [model_providers.<id>] table where a
+// user may have their own providers; merge only our bedrock-mantle entry.
+func (codex) DeepMergeKeys() []string { return []string{"model_providers"} }
+
+// OwnedSubKeys: uninstall removes only our bedrock-mantle provider from the
+// model_providers table (model / model_provider leaves are removed whole).
+func (codex) OwnedSubKeys() map[string][]string {
+	return map[string][]string{"model_providers": {"bedrock-mantle"}}
+}
+
 func (codex) ActivationMarkers() (begin, end string) {
 	return "# BEGIN: Juggernaut Codex Activation", "# END: Juggernaut Codex Activation"
 }

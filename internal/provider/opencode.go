@@ -52,6 +52,16 @@ func (opencode) NativeManagedKeys() []string {
 	return []string{"model", "provider"}
 }
 
+// DeepMergeKeys: "provider" is a nested map where a user may have their own
+// providers (anthropic, openai, …); merge only our bedrock-mantle entry.
+func (opencode) DeepMergeKeys() []string { return []string{"provider"} }
+
+// OwnedSubKeys: uninstall removes only our bedrock-mantle provider from the
+// provider map (the model leaf is removed whole).
+func (opencode) OwnedSubKeys() map[string][]string {
+	return map[string][]string{"provider": {mantleProviderID}}
+}
+
 // OwnsConfig recognizes a config Juggernaut wrote by our bedrock-mantle provider
 // under the "provider" map — NOT a plain user opencode.json that merely has a
 // "provider" block for other vendors or a "model" key.

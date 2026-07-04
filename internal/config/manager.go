@@ -193,13 +193,31 @@ func applyManagedKey(existing map[string]any, k string, v any) error {
 // "juggernaut" key (if present) is always set. This is the generic,
 // provider-driven entry point that supersedes MergeJuggernautBlock's fixed shape.
 func (m *Manager) MergeConfigPlan(keys map[string]any) error {
+	return m.MergeConfigPlanDeep(keys, nil)
+}
+
+// MergeConfigPlanDeep is like MergeConfigPlan but deep-merges the named keys
+// (nested tables where Juggernaut owns only its OWN sub-keys, e.g. Grok's
+// [model.<name>], Codex's [model_providers.<id>], OpenCode's provider.<id>):
+// their sub-keys are merged into the existing table rather than replacing it, so
+// a user's sibling entries survive. All other keys keep whole-value
+// set-or-delete semantics.
+func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) error {
 	existing, err := m.Read()
 	if err != nil {
 		return err
 	}
+	deep := make(map[string]bool, len(deepKeys))
+	for _, k := range deepKeys {
+		deep[k] = true
+	}
 	for k, v := range keys {
 		if k == "juggernaut" {
 			existing[k] = v // the managed block is always set verbatim
+			continue
+		}
+		if deep[k] {
+			mergeNested(existing, k, v)
 			continue
 		}
 		if err := applyManagedKey(existing, k, v); err != nil {
@@ -207,6 +225,25 @@ func (m *Manager) MergeConfigPlan(keys map[string]any) error {
 		}
 	}
 	return m.Write(existing)
+}
+
+// mergeNested merges the sub-keys of a nested-table value into existing[k],
+// preserving the user's other sub-keys. Juggernaut's leaves overwrite matching
+// ones. If the incoming value isn't a map, it falls back to whole replace.
+func mergeNested(existing map[string]any, k string, v any) {
+	incoming, ok := v.(map[string]any)
+	if !ok {
+		existing[k] = v
+		return
+	}
+	dst, ok := existing[k].(map[string]any)
+	if !ok || dst == nil {
+		dst = map[string]any{}
+	}
+	for sk, sv := range incoming {
+		dst[sk] = sv
+	}
+	existing[k] = dst
 }
 
 // mergePermissions sets or removes only the permissions.defaultMode sub-key,
@@ -248,6 +285,15 @@ func (m *Manager) RemoveJuggernautBlock() error {
 // (only defaultMode is stripped). This is the generic, provider-driven form of
 // RemoveJuggernautBlock.
 func (m *Manager) RemoveManagedKeys(keys []string) error {
+	return m.RemoveManagedKeysDeep(keys, nil)
+}
+
+// RemoveManagedKeysDeep removes the juggernaut block plus the given managed
+// top-level keys. For keys listed in ownedSubKeys (nested tables where a user
+// may have their own sibling entries), ONLY Juggernaut's own sub-keys are
+// removed — preserving the user's; if that empties the table, the table is
+// dropped. All other keys are removed whole-value.
+func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][]string) error {
 	existing, err := m.Read()
 	if err != nil {
 		return err
@@ -258,12 +304,34 @@ func (m *Manager) RemoveManagedKeys(keys []string) error {
 			mergePermissions(existing, nil)
 			continue
 		}
+		if subs, deep := ownedSubKeys[k]; deep {
+			removeOwnedSubKeys(existing, k, subs)
+			continue
+		}
 		delete(existing, k)
 	}
 	// Ensure the Juggernaut-managed permissions sub-key is stripped even if
 	// "permissions" was not in the key list (matches legacy behavior).
 	mergePermissions(existing, nil)
 	return m.Write(existing)
+}
+
+// removeOwnedSubKeys deletes only the named sub-keys from existing[k]'s nested
+// table, preserving the user's other entries. Drops the table entirely if it
+// becomes empty.
+func removeOwnedSubKeys(existing map[string]any, k string, subs []string) {
+	tbl, ok := existing[k].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, sk := range subs {
+		delete(tbl, sk)
+	}
+	if len(tbl) == 0 {
+		delete(existing, k)
+	} else {
+		existing[k] = tbl
+	}
 }
 
 // HasManagedKeys reports whether the config contains the juggernaut block or any

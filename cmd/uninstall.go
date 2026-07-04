@@ -126,7 +126,7 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 		fmt.Printf("Would remove juggernaut block from %s %s config\n", scope, prov.Name())
 		return
 	}
-	if err := mgr.RemoveManagedKeys(prov.NativeManagedKeys()); err != nil {
+	if err := mgr.RemoveManagedKeysDeep(prov.NativeManagedKeys(), prov.OwnedSubKeys()); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not remove %s block: %v\n", scope, err)
 		return
 	}
