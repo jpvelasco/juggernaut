@@ -79,6 +79,33 @@ func TestGrok_LaunchSpec(t *testing.T) {
 	}
 }
 
+// TestDeepMergeContract pins each provider's deep-merge keys + owned sub-keys —
+// the contract the data-loss fix depends on.
+func TestDeepMergeContract(t *testing.T) {
+	cases := map[string]struct {
+		deep  []string
+		owned map[string][]string
+	}{
+		"claude":   {nil, nil},
+		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {"bedrock-mantle"}}},
+		"opencode": {[]string{"provider"}, map[string][]string{"provider": {"bedrock-mantle"}}},
+		"grok":     {[]string{"model", "models"}, map[string][]string{"model": {"bedrock-grok"}, "models": {"default"}}},
+	}
+	for name, want := range cases {
+		p, _ := Get(name)
+		got := p.DeepMergeKeys()
+		if len(got) != len(want.deep) {
+			t.Errorf("%s DeepMergeKeys = %v, want %v", name, got, want.deep)
+		}
+		os := p.OwnedSubKeys()
+		for k, subs := range want.owned {
+			if len(os[k]) != len(subs) || (len(subs) > 0 && os[k][0] != subs[0]) {
+				t.Errorf("%s OwnedSubKeys[%s] = %v, want %v", name, k, os[k], subs)
+			}
+		}
+	}
+}
+
 func TestGrok_Supports_None(t *testing.T) {
 	p, _ := Get("grok")
 	for _, c := range []Capability{CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels} {

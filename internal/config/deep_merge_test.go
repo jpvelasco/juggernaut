@@ -114,6 +114,36 @@ func TestRemoveManagedKeysDeep_EmptyTableCleaned(t *testing.T) {
 	}
 }
 
+// TestMergeConfigPlanDeep_NonMapValueFallsBackToReplace covers mergeNested's
+// fallback: if a "deep" key's incoming value isn't a map, it's set whole.
+func TestMergeConfigPlanDeep_NonMapValueFallsBackToReplace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	_ = m.Write(map[string]any{"model": "old-string-value"})
+	// "model" is declared deep but incoming value is a string → whole replace.
+	if err := m.MergeConfigPlanDeep(map[string]any{"model": "new-string"}, []string{"model"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := m.Read()
+	if got["model"] != "new-string" {
+		t.Errorf("non-map deep value should replace, got %v", got["model"])
+	}
+}
+
+// TestRemoveManagedKeysDeep_MissingTable is a no-op when the deep key is absent.
+func TestRemoveManagedKeysDeep_MissingTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	_ = m.Write(map[string]any{"unrelated": "x"})
+	if err := m.RemoveManagedKeysDeep([]string{"model"}, map[string][]string{"model": {"bedrock-grok"}}); err != nil {
+		t.Fatalf("should not error on missing table: %v", err)
+	}
+	got, _ := m.Read()
+	if got["unrelated"] != "x" {
+		t.Error("unrelated key must survive")
+	}
+}
+
 // TestMergeConfigPlanDeep_NonDeepKeysStillReplace verifies keys NOT in the
 // deep-merge set keep whole-value replace semantics (back-compat for Claude's
 // env / modelOverrides etc.).
