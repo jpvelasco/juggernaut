@@ -128,7 +128,7 @@ func (claude) LaunchSpec() LaunchSpec {
 
 func (claude) Supports(c Capability) bool {
 	switch c {
-	case CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels:
+	case CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels, CapNativeAuth:
 		return true
 	default:
 		return false

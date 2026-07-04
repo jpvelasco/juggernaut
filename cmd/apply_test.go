@@ -1073,8 +1073,8 @@ func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
-			"apply", "--cli=codex", "--auth=iam", "--region=us-east-1",
-			"--mode=auto", "--skip-preflight",
+			"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=dummy",
+			"--region=us-east-1", "--mode=auto", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply: %v", err)
 		}
