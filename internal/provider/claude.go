@@ -51,6 +51,13 @@ func (claude) OwnsConfig(data map[string]any) bool {
 	return meta["managedBy"] == "juggernaut"
 }
 
+// DeepMergeKeys: Claude's managed keys are all whole-value (Juggernaut fully
+// owns env/modelOverrides/etc.), so none are deep-merged.
+func (claude) DeepMergeKeys() []string { return nil }
+
+// OwnedSubKeys: none — Claude has no deep-merge keys.
+func (claude) OwnedSubKeys() map[string][]string { return nil }
+
 func (claude) NativeManagedKeys() []string {
 	return []string{
 		"env",

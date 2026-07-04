@@ -38,6 +38,19 @@ type Provider interface {
 	// (replaced on apply, removed on uninstall).
 	NativeManagedKeys() []string
 
+	// DeepMergeKeys lists the subset of NativeManagedKeys that are NESTED tables
+	// where Juggernaut owns only its OWN sub-key (e.g. Grok's [model.<name>],
+	// Codex's [model_providers.<id>], OpenCode's provider.<id>). On apply these
+	// are deep-merged so a user's sibling entries survive instead of the whole
+	// table being replaced. Providers whose keys are all whole-value return nil.
+	DeepMergeKeys() []string
+
+	// OwnedSubKeys maps each deep-merge key to the specific sub-keys Juggernaut
+	// writes into it, so uninstall removes ONLY those (preserving a user's
+	// sibling entries) instead of deleting the whole nested table. Keys not
+	// listed here are removed whole-value on uninstall.
+	OwnedSubKeys() map[string][]string
+
 	// OwnsConfig reports whether the given parsed config was written by
 	// Juggernaut for THIS provider (i.e. Bedrock is already configured). It must
 	// be stricter than "any managed key is present": a plain user config that
@@ -71,6 +84,7 @@ func init() {
 	register(claude{})
 	register(codex{})
 	register(opencode{})
+	register(grok{})
 }
 
 // Get resolves a provider by name. An empty name defaults to "claude" so every

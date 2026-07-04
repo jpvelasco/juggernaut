@@ -275,7 +275,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return err
 	}
 	mgr := config.NewManagerWithFormat(path, format)
-	if err := mgr.MergeConfigPlan(plan.Keys); err != nil {
+	if err := mgr.MergeConfigPlanDeep(plan.Keys, prov.DeepMergeKeys()); err != nil {
 		return err
 	}
 
@@ -379,6 +379,8 @@ func providerDisplayName(name string) string {
 		return "Codex"
 	case "opencode":
 		return "OpenCode"
+	case "grok":
+		return "Grok"
 	default:
 		return strings.Title(name) //nolint:staticcheck // ASCII CLI name fallback
 	}
