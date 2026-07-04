@@ -4,6 +4,17 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.3.1] - 2026-07-04
+
+**Patch release — fix Codex and Grok launching to their own sign-in instead of Bedrock.**
+
+### Fixed
+
+- **Codex no longer prompts for ChatGPT sign-in on Bedrock.** `apply --cli=codex` now writes `requires_openai_auth = false` in the `[model_providers.bedrock-mantle]` block, so Codex skips its OpenAI/ChatGPT login screen and uses the Bedrock bearer token from the `env_key`. Without it, Codex ignored the configured provider and prompted to sign in even with a valid token.
+- **Grok no longer prompts for sign-in on Bedrock.** `apply --cli=grok` now configures Grok's `[auth]` block with `auth_provider_command = "juggernaut auth-token"` (and label `Bedrock`) instead of relying on `env_key`, which did not satisfy Grok's session auth and left the interactive login flow active. A new hidden `juggernaut auth-token` command supplies the keychain bearer token to Grok on demand (as JSON with a refresh hint), so Grok authenticates to Bedrock Mantle without a browser login and picks up rotated keys.
+- **IAM/SSO is rejected for Mantle-only CLIs.** Codex, OpenCode, and Grok route only through Bedrock Mantle, which requires a bearer token; `apply` now rejects `--auth=iam` for them (and no longer offers it in the prompt) rather than writing a config that can never authenticate.
+- **Codex `gpt-oss` models removed.** Current Codex is Responses-API-only and rejects `wire_api = "chat"`, but `gpt-oss` on Mantle speaks only Chat Completions, so Codex could not reach it. `gpt-oss` remains available via OpenCode. Supported Codex models are now `gpt-5.5` and `gpt-5.4`.
+
 ## [5.3.0] - 2026-07-04
 
 **Minor release — multi-CLI support.** Juggernaut is no longer Claude-only: it now configures OpenAI Codex, OpenCode, and the official xAI Grok CLI for Amazon Bedrock too, each behind a shared Provider abstraction. Pick your coding agent with `--cli`; the blocks coexist and the Bedrock bearer token is shared across all of them.
@@ -1031,7 +1042,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.1...HEAD
+[5.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.1
 [5.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.0
 [5.2.9]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.9
 [5.2.8]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.8
