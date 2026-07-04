@@ -89,7 +89,7 @@ func TestDeepMergeContract(t *testing.T) {
 		"claude":   {nil, nil},
 		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {"bedrock-mantle"}}},
 		"opencode": {[]string{"provider"}, map[string][]string{"provider": {"bedrock-mantle"}}},
-		"grok":     {[]string{"model", "models"}, map[string][]string{"model": {"bedrock-grok"}, "models": {"default"}}},
+		"grok":     {[]string{"model", "models", "auth"}, map[string][]string{"model": {"bedrock-grok"}, "models": {"default"}, "auth": {"auth_provider_command", "auth_provider_label"}}},
 	}
 	for name, want := range cases {
 		p, _ := Get(name)
@@ -136,7 +136,10 @@ func TestGrok_OwnsConfig(t *testing.T) {
 }
 
 // TestGrok_BuildConfig writes the [model.bedrock-grok] block (base_url→Mantle
-// /openai/v1, env_key, model xai.grok-4.3) + [models].default.
+// /openai/v1, api_backend=responses, model xai.grok-4.3) + [models].default +
+// an [auth] block. Crucially it does NOT set env_key: with env_key, Grok's
+// credential order (api_key→env_key→XAI_API_KEY) still runs the interactive
+// login for the session. The [auth] auth_provider_command is what replaces login.
 func TestGrok_BuildConfig(t *testing.T) {
 	p, _ := Get("grok")
 	opts := baseOpts()
@@ -159,11 +162,11 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if base, _ := bg["base_url"].(string); base != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
 		t.Errorf("base_url = %q, want .../openai/v1", base)
 	}
-	if bg["env_key"] != "AWS_BEARER_TOKEN_BEDROCK" {
-		t.Errorf("env_key = %v, want AWS_BEARER_TOKEN_BEDROCK", bg["env_key"])
+	if _, hasEnvKey := bg["env_key"]; hasEnvKey {
+		t.Errorf("env_key must NOT be set (it keeps Grok's login flow alive); got %v", bg["env_key"])
 	}
-	if bg["api_backend"] != "chat_completions" {
-		t.Errorf("api_backend = %v, want chat_completions", bg["api_backend"])
+	if bg["api_backend"] != "responses" {
+		t.Errorf("api_backend = %v, want responses", bg["api_backend"])
 	}
 	models, ok := plan.Keys["models"].(map[string]any)
 	if !ok || models["default"] != "bedrock-grok" {
@@ -171,5 +174,57 @@ func TestGrok_BuildConfig(t *testing.T) {
 	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("plan should validate: %v", err)
+	}
+}
+
+// TestGrok_BuildConfig_AuthBlock: the [auth] block points auth_provider_command
+// at `juggernaut auth-token` with a Bedrock label — this is what makes Grok skip
+// its sign-in and use our keychain bearer token.
+func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
+	p, _ := Get("grok")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	auth, ok := plan.Keys["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("[auth] block missing: %T", plan.Keys["auth"])
+	}
+	if cmd, _ := auth["auth_provider_command"].(string); !strings.Contains(cmd, "auth-token") {
+		t.Errorf("auth_provider_command = %v, want it to invoke `juggernaut auth-token`", auth["auth_provider_command"])
+	}
+	if auth["auth_provider_label"] != "Bedrock" {
+		t.Errorf("auth_provider_label = %v, want Bedrock", auth["auth_provider_label"])
+	}
+	// "auth" must be a managed key so uninstall removes it.
+	found := false
+	for _, k := range plan.ManagedKeys {
+		if k == "auth" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("auth must be in ManagedKeys")
+	}
+}
+
+// TestGrok_BuildConfig_RegionWarning: xai.grok-4.3 is verified in us-east-1/2 and
+// us-west-2; an unlisted region should warn (not fail).
+func TestGrok_BuildConfig_RegionWarning(t *testing.T) {
+	p, _ := Get("grok")
+	opts := baseOpts()
+	opts.Region = "eu-west-1"
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig should not fail on an unlisted region: %v", err)
+	}
+	if len(plan.Warnings) == 0 {
+		t.Error("expected a region-availability warning for grok-4.3 in eu-west-1")
+	}
+	// A known region must NOT warn.
+	opts.Region = "us-west-2"
+	plan, _ = p.BuildConfig(testConfig(), opts)
+	if len(plan.Warnings) != 0 {
+		t.Errorf("us-west-2 is a known region and must not warn, got %v", plan.Warnings)
 	}
 }
