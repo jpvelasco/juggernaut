@@ -4,6 +4,23 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-07-04
+
+**Minor release — multi-CLI support.** Juggernaut is no longer Claude-only: it now configures OpenAI Codex, OpenCode, and the official xAI Grok CLI for Amazon Bedrock too, each behind a shared Provider abstraction. Pick your coding agent with `--cli`; the blocks coexist and the Bedrock bearer token is shared across all of them.
+
+### Added
+
+- **OpenAI Codex on Bedrock (`--cli=codex`).** Configures `~/.codex/config.toml` with a `[model_providers.bedrock-mantle]` block routed through Bedrock Mantle. Base path and wire API are per-model (live-verified): `gpt-5.5`/`gpt-5.4` use `/openai/v1` + the Responses API, `gpt-oss-120b`/`gpt-oss-20b` use `/v1` + Chat Completions. Select with `--model` (default `gpt-5.5`); installs a `codex()` shell wrapper delegating to `juggernaut launch codex`.
+- **OpenCode on Bedrock (`--cli=opencode`).** Configures `~/.config/opencode/opencode.json` with a custom `@ai-sdk/openai-compatible` provider pointing at Mantle. OpenCode is model-agnostic, so Juggernaut ships a curated tier of verified Mantle models (gpt-oss-120b/20b, GLM-4.7/5, Kimi K2.5, DeepSeek V3.2, Qwen3-Coder, Grok 4.3) and passes any other `--model` through verbatim with an "unverified" heads-up.
+- **Official xAI Grok CLI on Bedrock (`--cli=grok`).** Configures `~/.grok/config.toml` with a `[model.bedrock-grok]` block for `xai.grok-4.3` via Mantle (`/openai/v1`, Chat Completions, 1M context) and sets it as the default model. User-scoped only.
+- **`--cli` flag on `apply` and `uninstall`, and `launch <cli>`.** Selects the coding CLI to configure (default `claude`). Each CLI gets its own config file and its own marked shell-activation block, so multiple CLIs coexist in one profile. The Bedrock bearer token is shared — `uninstall --cli=codex|opencode|grok` never removes it (only `uninstall --cli=claude` does).
+
+### Fixed
+
+- **Nested-config data loss across all config-file CLIs.** `apply`/`uninstall` for CLIs whose config nests provider tables (`[model.*]`, `[model_providers.*]`, `provider.*`) previously replaced or deleted the whole table, which would wipe a user's own sibling entries. Providers now declare the exact sub-keys Juggernaut owns, and merges/removals touch only those — a user's other model profiles and providers survive. (Claude is unaffected; its output is byte-identical.)
+- **Silent data loss on type-mismatched deep-merge keys.** If a config-file CLI's nested key unexpectedly held a scalar instead of a table, apply silently discarded the user's value and uninstall silently skipped removal. Both now stop with an actionable error naming the file and key, leaving the config untouched.
+- **`apply --cli=codex` re-prompted for auth even when already configured.** Re-apply detection was hardcoded to Claude's `~/.claude/settings.json`; it now checks the resolved provider's own config, so an existing Codex/OpenCode/Grok setup is recognized and the interactive prompt is skipped. A plain (non-Juggernaut) config is still correctly treated as first-time so the auth prompt isn't skipped.
+
 ## [5.2.9] - 2026-07-02
 
 **Patch release — warn about Mantle routing tradeoffs on apply.**
@@ -1014,7 +1031,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.2.9...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.0...HEAD
+[5.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.0
 [5.2.9]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.9
 [5.2.8]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.8
 [5.2.7]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.7
