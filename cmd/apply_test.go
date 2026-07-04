@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
@@ -1137,6 +1139,84 @@ func TestApply_ClaudeDryRun_ReapplySkipsPromptWhenClaudeConfigExists(t *testing.
 	})
 	if err != nil {
 		t.Fatalf("claude re-apply dry-run should not prompt when settings.json exists: %v", err)
+	}
+}
+
+// stubProvider is a minimal provider.Provider for exercising resolveApplyInputs
+// error branches (bad config format, config-path failure) that a real
+// registered provider never hits.
+type stubProvider struct {
+	formatName string
+	pathErr    error
+}
+
+func (s stubProvider) Name() string             { return "stub" }
+func (s stubProvider) BinaryNames() []string    { return []string{"stub"} }
+func (s stubProvider) ConfigFormatName() string { return s.formatName }
+func (s stubProvider) ConfigPath(home, scope string) (string, error) {
+	if s.pathErr != nil {
+		return "", s.pathErr
+	}
+	return filepath.Join(home, ".stub", "config"), nil
+}
+func (s stubProvider) NativeManagedKeys() []string         { return []string{"model"} }
+func (s stubProvider) OwnsConfig(map[string]any) bool      { return false }
+func (s stubProvider) ActivationMarkers() (string, string) { return "# B", "# E" }
+func (s stubProvider) BuildConfig(*bedrock.Config, provider.Options) (provider.ConfigPlan, error) {
+	return provider.ConfigPlan{}, nil
+}
+func (s stubProvider) LaunchSpec() provider.LaunchSpec   { return provider.LaunchSpec{} }
+func (s stubProvider) Supports(provider.Capability) bool { return false }
+
+// TestResolveApplyInputs_BadConfigFormat_Errors covers the FormatByName error
+// branch: a provider reporting an unknown config format surfaces an error rather
+// than silently proceeding.
+func TestResolveApplyInputs_BadConfigFormat_Errors(t *testing.T) {
+	home := t.TempDir()
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
+	_, _, _, err := resolveApplyInputs(home, bCfg, stubProvider{formatName: "yaml"})
+	if err == nil {
+		t.Fatal("expected error for unknown config format")
+	}
+	if !strings.Contains(err.Error(), "yaml") {
+		t.Errorf("error should name the bad format, got: %v", err)
+	}
+}
+
+// TestResolveApplyInputs_ConfigPathError_Propagates covers the ConfigPath error branch.
+func TestResolveApplyInputs_ConfigPathError_Propagates(t *testing.T) {
+	home := t.TempDir()
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
+	sentinel := fmt.Errorf("bad path")
+	_, _, _, err := resolveApplyInputs(home, bCfg, stubProvider{formatName: "json", pathErr: sentinel})
+	if err == nil {
+		t.Fatal("expected ConfigPath error to propagate")
+	}
+}
+
+// dirPathProvider is a stub whose ConfigPath points at an existing DIRECTORY, so
+// Manager.Read fails (reading a directory as a file), covering the
+// "checking existing configuration" error branch of resolveApplyInputs.
+type dirPathProvider struct {
+	stubProvider
+	dir string
+}
+
+func (d dirPathProvider) ConfigPath(string, string) (string, error) { return d.dir, nil }
+
+func TestResolveApplyInputs_ReadError_Propagates(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "isadir")
+	if err := safepath.MkdirAll(dir); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
+	_, _, _, err := resolveApplyInputs(home, bCfg, dirPathProvider{stubProvider: stubProvider{formatName: "json"}, dir: dir})
+	if err == nil {
+		t.Fatal("expected a read error when config path is a directory")
+	}
+	if !strings.Contains(err.Error(), "checking existing configuration") {
+		t.Errorf("expected wrapped read error, got: %v", err)
 	}
 }
 

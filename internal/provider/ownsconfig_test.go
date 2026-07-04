@@ -36,3 +36,22 @@ func TestCodex_OwnsConfig(t *testing.T) {
 		t.Error("codex must NOT claim a config pointing at a non-Mantle provider")
 	}
 }
+
+// TestClaude_OwnsConfig_MalformedBlocks covers the defensive branches: a
+// juggernaut key that isn't a map, or a block missing/!map meta, or a wrong
+// owner, must not be mistaken for ownership.
+func TestClaude_OwnsConfig_MalformedBlocks(t *testing.T) {
+	p, _ := Get("claude")
+	cases := []map[string]any{
+		{},                               // no juggernaut key
+		{"juggernaut": "not-a-map"},      // juggernaut not a map
+		{"juggernaut": map[string]any{}}, // no meta
+		{"juggernaut": map[string]any{"meta": "x"}},                                         // meta not a map
+		{"juggernaut": map[string]any{"meta": map[string]any{"managedBy": "someone-else"}}}, // wrong owner
+	}
+	for i, c := range cases {
+		if p.OwnsConfig(c) {
+			t.Errorf("case %d: claude must not claim ownership of %v", i, c)
+		}
+	}
+}
