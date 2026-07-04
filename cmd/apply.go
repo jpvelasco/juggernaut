@@ -116,7 +116,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg)
+	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg, prov)
 	if err != nil {
 		return err
 	}
@@ -376,7 +376,7 @@ func reportLegacyRecovery(home string) {
 	}
 }
 
-func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region string, opusplan bool, err error) {
+func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider) (authMode, region string, opusplan bool, err error) {
 	authMode = applyFlags.auth
 	region = applyFlags.region
 	if region == "" {
@@ -384,13 +384,18 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config) (authMode, region str
 	}
 	opusplan = applyFlags.opusplan
 
-	path, herr := settingsPath(home, applyFlags.scope)
+	path, herr := prov.ConfigPath(home, applyFlags.scope)
 	if herr != nil {
 		err = herr
 		return
 	}
-	mgr := config.NewManager(path)
-	has, herr := mgr.HasJuggernautBlock()
+	format, herr := config.FormatByName(prov.ConfigFormatName())
+	if herr != nil {
+		err = herr
+		return
+	}
+	mgr := config.NewManagerWithFormat(path, format)
+	has, herr := mgr.HasManagedKeys(prov.NativeManagedKeys())
 	if herr != nil {
 		err = fmt.Errorf("checking existing configuration: %w", herr)
 		return

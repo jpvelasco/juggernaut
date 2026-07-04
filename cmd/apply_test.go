@@ -1083,6 +1083,36 @@ func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
 	}
 }
 
+func TestApply_CodexDryRun_ReapplySkipsPromptWhenCodexConfigExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := safepath.MkdirAll(codexDir); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	configPath := filepath.Join(codexDir, "config.toml")
+	content := []byte("model = \"openai.gpt-5.5\"\nmodel_provider = \"bedrock-mantle\"\n\n[model_providers.bedrock-mantle]\nname = \"Amazon Bedrock (Mantle)\"\nbase_url = \"https://bedrock-mantle.us-west-2.api.aws/openai/v1\"\nwire_api = \"responses\"\nenv_key = \"AWS_BEARER_TOKEN_BEDROCK\"\n")
+	if err := safepath.WriteFile(codexDir, configPath, content); err != nil {
+		t.Fatalf("write codex config: %v", err)
+	}
+
+	var err error
+	withStdin(t, "", func() {
+		err = ExecuteArgs([]string{
+			"apply",
+			"--cli=codex",
+			"--dry-run",
+			"--skip-preflight",
+		})
+	})
+	if err != nil {
+		t.Fatalf("codex re-apply dry-run should not prompt when codex config exists: %v", err)
+	}
+}
+
 func TestApply_UnknownCLI_Errors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
