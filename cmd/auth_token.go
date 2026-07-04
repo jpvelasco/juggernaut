@@ -13,6 +13,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// longTermRefreshSecs bounds how long Grok caches a long-term (no-embedded-
+// expiry) Bedrock key before re-running auth-token. Short enough to pick up a
+// same-day key rotation, long enough that the re-run overhead is negligible.
+const longTermRefreshSecs = 6 * 60 * 60 // 6 hours
+
 // authTokenCmd is a hidden command invoked by the Grok CLI's
 // `auth_provider_command` (see internal/provider/grok.go). Grok runs it via
 // `sh -c`, reads a token from stdout, stores it in ~/.grok/auth.json, and
@@ -54,7 +59,9 @@ func runAuthToken(_ *cobra.Command, _ []string) error {
 // {"access_token":"<token>"} plus an optional "expires_in" (seconds until the
 // key's embedded expiry) so Grok can refresh proactively. Short-term Bedrock
 // keys carry an expiry; long-term keys don't, in which case expires_in is
-// omitted and Grok assumes a long lifetime (refreshing on a 401).
+// bounded (longTermRefreshSecs) so Grok periodically re-runs the command and
+// picks up a rotated key from the keychain instead of caching the old token for
+// ~30 days (Grok's default) and only refreshing on a 401.
 func buildAuthTokenJSON(token string, now time.Time) string {
 	payload := map[string]any{"access_token": token}
 	if exp, ok := bedrock.ParseAPIKeyExpiry(token); ok {
@@ -62,6 +69,12 @@ func buildAuthTokenJSON(token string, now time.Time) string {
 		if secs > 0 {
 			payload["expires_in"] = secs
 		}
+	} else {
+		// No embedded expiry (long-term key). Emit a bounded lifetime so Grok
+		// re-runs auth-token periodically and picks up a key rotated via
+		// `apply --cli=grok --bedrock-key <new>` — otherwise Grok caches the old
+		// token for ~30 days and keeps sending it until a 401.
+		payload["expires_in"] = longTermRefreshSecs
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {

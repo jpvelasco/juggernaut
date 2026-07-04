@@ -19,8 +19,9 @@ func makeShortTermKey(issued time.Time, expiresSecs int) string {
 	return "bedrock-api-key-" + base64.StdEncoding.EncodeToString([]byte(url))
 }
 
-// TestBuildAuthTokenJSON_BareToken: a token with no parseable expiry yields just
-// access_token (Grok then assumes a long lifetime).
+// TestBuildAuthTokenJSON_BareToken: a token with no parseable expiry (long-term
+// key) emits a BOUNDED expires_in so Grok re-runs the command periodically and
+// picks up a rotated key, rather than caching the old token for ~30 days.
 func TestBuildAuthTokenJSON_BareToken(t *testing.T) {
 	out := buildAuthTokenJSON("plain-token-value", time.Now().UTC())
 	var m map[string]any
@@ -30,8 +31,12 @@ func TestBuildAuthTokenJSON_BareToken(t *testing.T) {
 	if m["access_token"] != "plain-token-value" {
 		t.Errorf("access_token = %v, want plain-token-value", m["access_token"])
 	}
-	if _, ok := m["expires_in"]; ok {
-		t.Errorf("expires_in must be omitted for a key with no expiry, got %v", m["expires_in"])
+	exp, ok := m["expires_in"].(float64)
+	if !ok {
+		t.Fatalf("expires_in must be present (bounded) for a long-term key, got %v", m["expires_in"])
+	}
+	if int(exp) != longTermRefreshSecs {
+		t.Errorf("expires_in = %d, want bounded %d for a no-expiry key", int(exp), longTermRefreshSecs)
 	}
 }
 
