@@ -61,7 +61,7 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=dummy", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply --cli=codex: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=codex", "--model=gpt-5.4",
-		"--auth=bedrock-api-key", "--bedrock-key=dummy",
+		"--auth=bedrock-api-key", "--bedrock-key=test-key-value",
 		"--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -117,7 +117,7 @@ func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
 			"apply", "--cli=opencode", "--model=some.exotic-v9",
-			"--auth=bedrock-api-key", "--bedrock-key=dummy", "--region=us-west-2", "--skip-preflight",
+			"--auth=bedrock-api-key", "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
 			"apply", "--cli=opencode", "--model=glm-4.7",
-			"--auth=bedrock-api-key", "--bedrock-key=dummy", "--region=us-west-2", "--skip-preflight",
+			"--auth=bedrock-api-key", "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestUninstall_Codex_DryRun(t *testing.T) {
 	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=dummy", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 	setupMockPSRunner(t, home)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=dummy", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
