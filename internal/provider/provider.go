@@ -38,6 +38,14 @@ type Provider interface {
 	// (replaced on apply, removed on uninstall).
 	NativeManagedKeys() []string
 
+	// OwnsConfig reports whether the given parsed config was written by
+	// Juggernaut for THIS provider (i.e. Bedrock is already configured). It must
+	// be stricter than "any managed key is present": a plain user config that
+	// merely shares a key name (e.g. Codex's own top-level `model`) must NOT
+	// count, or a first-time apply would wrongly skip the auth prompt. Used to
+	// decide whether an apply is a re-apply.
+	OwnsConfig(data map[string]any) bool
+
 	// ActivationMarkers returns the begin/end comment markers delimiting this
 	// CLI's managed shell-activation block.
 	ActivationMarkers() (begin, end string)

@@ -38,6 +38,15 @@ func (codex) ConfigPath(home, scope string) (string, error) {
 }
 
 // NativeManagedKeys are the top-level config.toml keys Juggernaut owns for Codex.
+// OwnsConfig recognizes a Codex config Juggernaut wrote by its Bedrock-Mantle
+// routing (model_provider == "bedrock-mantle"). A plain user config that merely
+// has a top-level `model` is NOT ours — critical so a first-time
+// `apply --cli=codex` over an existing Codex config still prompts for auth
+// instead of defaulting to iam (Mantle requires a bearer token).
+func (codex) OwnsConfig(data map[string]any) bool {
+	return data["model_provider"] == "bedrock-mantle"
+}
+
 func (codex) NativeManagedKeys() []string {
 	return []string{
 		"model",
