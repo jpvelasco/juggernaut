@@ -37,6 +37,20 @@ func (claude) ConfigPath(home, scope string) (string, error) {
 	return safepath.JoinUnder(home, ".claude", "settings.json")
 }
 
+// OwnsConfig recognizes a Claude config Juggernaut wrote by its managed
+// juggernaut block with managedBy == "juggernaut".
+func (claude) OwnsConfig(data map[string]any) bool {
+	block, ok := data["juggernaut"].(map[string]any)
+	if !ok {
+		return false
+	}
+	meta, ok := block["meta"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return meta["managedBy"] == "juggernaut"
+}
+
 func (claude) NativeManagedKeys() []string {
 	return []string{
 		"env",

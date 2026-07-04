@@ -395,14 +395,19 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 		return
 	}
 	mgr := config.NewManagerWithFormat(path, format)
-	has, herr := mgr.HasManagedKeys(prov.NativeManagedKeys())
+	existing, herr := mgr.Read()
 	if herr != nil {
 		err = fmt.Errorf("checking existing configuration: %w", herr)
 		return
 	}
-	if has {
+	// Re-apply detection must recognize a config JUGGERNAUT wrote for THIS
+	// provider (Bedrock already configured) — not merely any shared key. A plain
+	// Codex config already has a top-level `model`; treating that as "configured"
+	// would skip the auth prompt on a FIRST apply and default to iam, breaking
+	// Mantle which requires a bearer token. OwnsConfig is the strict check.
+	if prov.OwnsConfig(existing) {
 		// Preserve auth mode and permission mode from the existing block when not supplied as flags.
-		if existing, rerr := mgr.Read(); rerr == nil {
+		{
 			if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
 				if authMode == "" {
 					if auth, ok := jBlock["auth"].(map[string]any); ok {
