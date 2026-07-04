@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"time"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/spf13/cobra"
@@ -40,7 +42,8 @@ func runAuthToken(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
 	}
 	if token == "" {
-		return fmt.Errorf("no Bedrock API key found; run `juggernaut apply --cli=grok --auth=bedrock-api-key`")
+		return errors.New("no Bedrock bearer token stored in the keychain — " +
+			"run juggernaut apply --cli=grok with --auth=" + authmode.BedrockAPIKey + " to store one")
 	}
 	out := buildAuthTokenJSON(token, time.Now().UTC())
 	fmt.Println(out)
