@@ -70,6 +70,7 @@ func register(p Provider) { registry[p.Name()] = p }
 func init() {
 	register(claude{})
 	register(codex{})
+	register(opencode{})
 }
 
 // Get resolves a provider by name. An empty name defaults to "claude" so every

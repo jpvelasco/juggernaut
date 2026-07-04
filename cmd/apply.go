@@ -235,7 +235,7 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider) 
 	if err != nil {
 		return err
 	}
-	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names
+	title := providerDisplayName(prov.Name())
 	fmt.Printf("Would write juggernaut config to %s\n", path)
 	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
 	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
@@ -282,6 +282,11 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	installActivation(home, prov)
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
+	// Surface any provider-emitted heads-ups (e.g. an unverified/passthrough
+	// model, or a model not confirmed in the chosen region).
+	for _, w := range plan.Warnings {
+		fmt.Printf("⚠ %s\n", w)
+	}
 	// Auto-mode and the Mantle prompt-caching tradeoff are Claude-specific
 	// concerns; gate their warnings on provider capability so other CLIs don't
 	// print nonsensical Claude guidance.
@@ -356,12 +361,27 @@ func installActivation(home string, prov provider.Provider) {
 		fmt.Fprintf(os.Stderr, "Warning: could not install shell activation: %v\n", err)
 		return
 	}
-	title := strings.Title(prov.Name()) //nolint:staticcheck // ASCII CLI names; strings.Title is fine here
+	title := providerDisplayName(prov.Name())
 	if len(paths) == 0 {
 		fmt.Printf("  ✓ %s shell activation already up to date\n", title)
 		return
 	}
 	fmt.Printf("  ✓ Installed %s activation in %d shell profile(s)\n", title, len(paths))
+}
+
+// providerDisplayName returns a human-facing CLI name for messages. Falls back
+// to strings.Title for unknown providers.
+func providerDisplayName(name string) string {
+	switch name {
+	case "claude":
+		return "Claude"
+	case "codex":
+		return "Codex"
+	case "opencode":
+		return "OpenCode"
+	default:
+		return strings.Title(name) //nolint:staticcheck // ASCII CLI name fallback
+	}
 }
 
 func reportLegacyRecovery(home string) {
