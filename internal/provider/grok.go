@@ -53,7 +53,11 @@ func (grok) DeepMergeKeys() []string { return []string{"model", "models"} }
 
 // OwnedSubKeys: uninstall removes only our bedrock-grok model profile and the
 // models.default pointer we set — preserving the user's other model profiles
-// and settings.
+// and settings. Note: apply sets models.default = bedrock-grok (that IS the
+// point — route Grok through Bedrock), and uninstall deletes that pointer
+// rather than restoring whatever default the user had before, since Juggernaut
+// does not persist the prior value. Grok then falls back to its built-in
+// default; the user's own model profiles are untouched.
 func (grok) OwnedSubKeys() map[string][]string {
 	return map[string][]string{
 		"model":  {grokModelName},

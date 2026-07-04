@@ -217,7 +217,9 @@ func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) er
 			continue
 		}
 		if deep[k] {
-			mergeNested(existing, k, v)
+			if err := mergeNested(existing, k, v, m.path); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := applyManagedKey(existing, k, v); err != nil {
@@ -230,20 +232,34 @@ func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) er
 // mergeNested merges the sub-keys of a nested-table value into existing[k],
 // preserving the user's other sub-keys. Juggernaut's leaves overwrite matching
 // ones. If the incoming value isn't a map, it falls back to whole replace.
-func mergeNested(existing map[string]any, k string, v any) {
+//
+// If existing[k] is already present but holds a NON-table value (a scalar or
+// array), the config is corrupt/foreign for a key Juggernaut deep-merges (these
+// are always tables in a valid config). Rather than silently discard the user's
+// value, refuse and tell them what to fix — losing data quietly is worse than
+// stopping.
+func mergeNested(existing map[string]any, k string, v any, path string) error {
 	incoming, ok := v.(map[string]any)
 	if !ok {
 		existing[k] = v
-		return
+		return nil
 	}
-	dst, ok := existing[k].(map[string]any)
-	if !ok || dst == nil {
-		dst = map[string]any{}
+	dst := map[string]any{}
+	if raw, present := existing[k]; present {
+		m, isMap := raw.(map[string]any)
+		if !isMap {
+			return fmt.Errorf("cannot merge into %q in %s: expected a table but found %T — "+
+				"remove or fix that key in the file, then re-run", k, path, raw)
+		}
+		if m != nil {
+			dst = m
+		}
 	}
 	for sk, sv := range incoming {
 		dst[sk] = sv
 	}
 	existing[k] = dst
+	return nil
 }
 
 // mergePermissions sets or removes only the permissions.defaultMode sub-key,
@@ -305,7 +321,9 @@ func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][
 			continue
 		}
 		if subs, deep := ownedSubKeys[k]; deep {
-			removeOwnedSubKeys(existing, k, subs)
+			if err := removeOwnedSubKeys(existing, k, subs, m.path); err != nil {
+				return err
+			}
 			continue
 		}
 		delete(existing, k)
@@ -318,11 +336,19 @@ func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][
 
 // removeOwnedSubKeys deletes only the named sub-keys from existing[k]'s nested
 // table, preserving the user's other entries. Drops the table entirely if it
-// becomes empty.
-func removeOwnedSubKeys(existing map[string]any, k string, subs []string) {
-	tbl, ok := existing[k].(map[string]any)
+// becomes empty. If the key is absent there is nothing to remove (a clean
+// no-op); but if it is PRESENT holding a non-table value, the config is
+// corrupt/foreign for a key Juggernaut owns as a table — surface that instead
+// of silently leaving our sub-keys unremoved.
+func removeOwnedSubKeys(existing map[string]any, k string, subs []string, path string) error {
+	raw, present := existing[k]
+	if !present {
+		return nil
+	}
+	tbl, ok := raw.(map[string]any)
 	if !ok {
-		return
+		return fmt.Errorf("cannot remove managed sub-keys from %q in %s: expected a table but found %T — "+
+			"remove or fix that key in the file, then re-run", k, path, raw)
 	}
 	for _, sk := range subs {
 		delete(tbl, sk)
@@ -332,6 +358,7 @@ func removeOwnedSubKeys(existing map[string]any, k string, subs []string) {
 	} else {
 		existing[k] = tbl
 	}
+	return nil
 }
 
 // HasManagedKeys reports whether the config contains the juggernaut block or any

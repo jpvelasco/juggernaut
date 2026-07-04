@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -127,6 +128,48 @@ func TestMergeConfigPlanDeep_NonMapValueFallsBackToReplace(t *testing.T) {
 	got, _ := m.Read()
 	if got["model"] != "new-string" {
 		t.Errorf("non-map deep value should replace, got %v", got["model"])
+	}
+}
+
+// TestMergeConfigPlanDeep_ScalarUnderTableKeyErrors: if a deep-merge key is
+// already present holding a NON-table value while we're merging a table into it,
+// the config is corrupt/foreign for a key Juggernaut owns as a table. Rather
+// than silently discard the user's value, merge must refuse with an actionable
+// error and leave the file untouched.
+func TestMergeConfigPlanDeep_ScalarUnderTableKeyErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	_ = m.Write(map[string]any{"model": "legacy-scalar"})
+	// Incoming is a TABLE (our bedrock-grok block) but existing "model" is a scalar.
+	err := m.MergeConfigPlanDeep(map[string]any{
+		"model": map[string]any{"bedrock-grok": map[string]any{"model": "xai.grok-4.3"}},
+	}, []string{"model"})
+	if err == nil {
+		t.Fatal("expected an error merging a table onto an existing scalar, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected a table") {
+		t.Errorf("error should explain the type mismatch, got: %v", err)
+	}
+	// The user's scalar must survive untouched — we refused before writing.
+	got, _ := m.Read()
+	if got["model"] != "legacy-scalar" {
+		t.Errorf("user's value must be preserved on refusal, got %v", got["model"])
+	}
+}
+
+// TestRemoveManagedKeysDeep_ScalarUnderTableKeyErrors: uninstall must not
+// silently no-op when a deep key holds a non-table value; it surfaces the
+// corruption instead of leaving managed sub-keys unremoved.
+func TestRemoveManagedKeysDeep_ScalarUnderTableKeyErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	_ = m.Write(map[string]any{"model": "legacy-scalar"})
+	err := m.RemoveManagedKeysDeep([]string{"model"}, map[string][]string{"model": {"bedrock-grok"}})
+	if err == nil {
+		t.Fatal("expected an error removing sub-keys from a scalar, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected a table") {
+		t.Errorf("error should explain the type mismatch, got: %v", err)
 	}
 }
 
