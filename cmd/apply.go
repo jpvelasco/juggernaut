@@ -121,6 +121,16 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Mantle-only CLIs (Codex, OpenCode, Grok) authenticate solely via a bearer
+	// token; IAM/SSO (SigV4) does not reach Mantle. Reject a non-bearer auth mode
+	// for them so we never write a config that can't authenticate — the symptom
+	// is the CLI silently falling back to its own sign-in at launch.
+	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
+		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
+			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
+			providerDisplayName(prov.Name()), authmode.BedrockAPIKey)
+	}
+
 	// Skip credential resolution in dry-run mode: it can prompt interactively
 	// for a Bedrock API key, and a dry-run must have no side effects. The token
 	// is only consumed by commitApply, which dry-run never reaches.
@@ -400,6 +410,13 @@ func reportLegacyRecovery(home string) {
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider) (authMode, region string, opusplan bool, err error) {
 	authMode = applyFlags.auth
+	// Mantle-only CLIs (Codex, OpenCode, Grok) have exactly one valid auth mode:
+	// the Bedrock API key. Pin it up front so neither the interactive prompt, a
+	// re-apply of an existing config (which stores no auth mode), nor the global
+	// default (iam) can steer them to a tokenless mode the launch can't satisfy.
+	if authMode == "" && !prov.Supports(provider.CapNativeAuth) {
+		authMode = authmode.BedrockAPIKey
+	}
 	region = applyFlags.region
 	if region == "" {
 		region = bCfg.Defaults.Region
@@ -464,6 +481,8 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 		return
 	}
 
+	// authMode is already pinned for Mantle-only CLIs (top of this function), so
+	// this point is reached only by CLIs that support IAM (Claude) with no --auth.
 	if authMode != "" {
 		return
 	}

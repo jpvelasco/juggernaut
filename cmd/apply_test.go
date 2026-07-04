@@ -1070,11 +1070,12 @@ func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
-			"apply", "--cli=codex", "--auth=iam", "--region=us-east-1",
-			"--mode=auto", "--skip-preflight",
+			"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value",
+			"--region=us-east-1", "--mode=auto", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply: %v", err)
 		}

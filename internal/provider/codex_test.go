@@ -75,20 +75,17 @@ func TestCodexModel_GPT55(t *testing.T) {
 	}
 }
 
-// TestCodexModel_GPTOSS pins gpt-oss-120b: Chat on the /v1 base path.
-func TestCodexModel_GPTOSS(t *testing.T) {
-	m, ok := codexModel("gpt-oss-120b")
-	if !ok {
-		t.Fatal("gpt-oss-120b not in Codex model table")
-	}
-	if m.ModelID != "openai.gpt-oss-120b" {
-		t.Errorf("ModelID = %q, want openai.gpt-oss-120b", m.ModelID)
-	}
-	if m.BasePath != "/v1" {
-		t.Errorf("BasePath = %q, want /v1", m.BasePath)
-	}
-	if m.WireAPI != "chat" {
-		t.Errorf("WireAPI = %q, want chat", m.WireAPI)
+// TestCodexModel_GPTOSSExcluded: gpt-oss is NOT selectable for Codex. Current
+// Codex is Responses-API-only (it rejects `wire_api = "chat"` at config load,
+// see openai/codex CHAT_WIRE_API_REMOVED_ERROR), but gpt-oss on Mantle speaks
+// only Chat Completions on /v1 — it has no Responses endpoint. So Codex cannot
+// reach gpt-oss at all; offering it would write a config that fails to load.
+// (OpenCode, which does speak Chat, still curates gpt-oss — that's unaffected.)
+func TestCodexModel_GPTOSSExcluded(t *testing.T) {
+	for _, key := range []string{"gpt-oss-120b", "gpt-oss-20b"} {
+		if _, ok := codexModel(key); ok {
+			t.Errorf("%s must NOT be a Codex model (Codex is Responses-only; gpt-oss is Chat-only)", key)
+		}
 	}
 }
 
@@ -99,23 +96,15 @@ func TestCodexModel_Unknown(t *testing.T) {
 	}
 }
 
-// TestCodexModel_PathsMatchVerifiedSplit guards the core finding that base path
-// is per-model: gpt-5.x on /openai/v1, gpt-oss on /v1.
-func TestCodexModel_PathsMatchVerifiedSplit(t *testing.T) {
-	cases := map[string]string{
-		"gpt-5.5":      "/openai/v1",
-		"gpt-5.4":      "/openai/v1",
-		"gpt-oss-120b": "/v1",
-		"gpt-oss-20b":  "/v1",
-	}
-	for key, wantPath := range cases {
-		m, ok := codexModel(key)
-		if !ok {
-			t.Errorf("%s missing from table", key)
-			continue
+// TestCodexModel_AllModelsAreResponsesOnly guards that every Codex model uses
+// the Responses wire API on /openai/v1 — the only shape current Codex accepts.
+func TestCodexModel_AllModelsAreResponsesOnly(t *testing.T) {
+	for key, m := range codexModels {
+		if m.WireAPI != "responses" {
+			t.Errorf("%s WireAPI = %q, want responses (Codex removed chat)", key, m.WireAPI)
 		}
-		if m.BasePath != wantPath {
-			t.Errorf("%s BasePath = %q, want %q", key, m.BasePath, wantPath)
+		if m.BasePath != "/openai/v1" {
+			t.Errorf("%s BasePath = %q, want /openai/v1", key, m.BasePath)
 		}
 	}
 }

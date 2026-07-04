@@ -71,6 +71,11 @@ const (
 	CapServiceTiers
 	// CapEffortLevels: reasoning-effort levels. Claude + Codex (gpt-5.x).
 	CapEffortLevels
+	// CapNativeAuth: the CLI can authenticate to Bedrock WITHOUT a bearer token
+	// (IAM/SSO via SigV4 on the native bedrock-runtime path). Claude supports this;
+	// the Mantle-only CLIs (Codex, OpenCode, Grok) do NOT — Mantle requires a
+	// bearer token, so apply must reject --auth=iam for them.
+	CapNativeAuth
 )
 
 // ConfigPlan is what a Provider persists to its config file at apply time.

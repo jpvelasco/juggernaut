@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"slices"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -70,13 +71,13 @@ func (codex) ActivationMarkers() (begin, end string) {
 }
 
 // codexMantleModel describes one OpenAI-family model reachable through Bedrock
-// Mantle from Codex. Base path AND wire_api are PER-MODEL — this is the core
-// finding, live-verified 2026-07-03: gpt-5.x use /openai/v1 + Responses, gpt-oss
-// use /v1 + Chat, and gpt-5.5 hard-rejects chat/completions.
+// Mantle from Codex. Current Codex is Responses-API-only (it rejects
+// `wire_api = "chat"` at config load), so every entry here uses /openai/v1 +
+// Responses. gpt-5.5 hard-rejects chat/completions, live-verified 2026-07-03.
 type codexMantleModel struct {
 	ModelID  string   // Bedrock Mantle model ID, e.g. "openai.gpt-5.5"
-	BasePath string   // endpoint path suffix: "/openai/v1" or "/v1"
-	WireAPI  string   // Codex wire_api: "responses" or "chat"
+	BasePath string   // endpoint path suffix (always "/openai/v1" for Codex)
+	WireAPI  string   // Codex wire_api (always "responses")
 	Regions  []string // regions where live-servable (informational)
 }
 
@@ -95,18 +96,11 @@ var codexModels = map[string]codexMantleModel{
 		WireAPI:  "responses",
 		Regions:  []string{"us-east-1", "us-west-2"},
 	},
-	"gpt-oss-120b": {
-		ModelID:  "openai.gpt-oss-120b",
-		BasePath: "/v1",
-		WireAPI:  "chat",
-		Regions:  []string{"us-east-1", "us-east-2", "us-west-2"},
-	},
-	"gpt-oss-20b": {
-		ModelID:  "openai.gpt-oss-20b",
-		BasePath: "/v1",
-		WireAPI:  "chat",
-		Regions:  []string{"us-east-1", "us-east-2", "us-west-2"},
-	},
+	// NOTE: gpt-oss is intentionally absent. Current Codex is Responses-API-only
+	// (it rejects `wire_api = "chat"` at config load — openai/codex
+	// CHAT_WIRE_API_REMOVED_ERROR), but gpt-oss on Mantle serves only Chat
+	// Completions on /v1 and has no Responses endpoint, so Codex cannot reach it.
+	// gpt-oss remains available via OpenCode (which speaks Chat Completions).
 }
 
 func codexModel(key string) (codexMantleModel, bool) {
@@ -129,7 +123,7 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 	}
 	m, ok := codexModel(key)
 	if !ok {
-		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (supported: gpt-5.5, gpt-5.4, gpt-oss-120b, gpt-oss-20b)", key)
+		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (supported: gpt-5.5, gpt-5.4)", key)
 	}
 
 	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws%s", opts.Region, m.BasePath)
@@ -138,6 +132,11 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 		"base_url": baseURL,
 		"wire_api": m.WireAPI,
 		"env_key":  bedrockAuthEnvName,
+		// Skip the ChatGPT/OpenAI login screen. Codex prompts for OpenAI auth only
+		// when the active provider's requires_openai_auth is true (verified in
+		// openai/codex tui should_show_login_screen); our credential is the bearer
+		// token in env_key, so declare no OpenAI auth is required.
+		"requires_openai_auth": false,
 	}
 
 	keys := map[string]any{
@@ -176,10 +175,5 @@ func (codex) Supports(c Capability) bool {
 }
 
 func regionAllowed(region string, allowed []string) bool {
-	for _, r := range allowed {
-		if r == region {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, region)
 }

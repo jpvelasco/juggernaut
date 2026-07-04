@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -26,6 +27,32 @@ func containsStr(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
+// TestApply_MantleOnlyCLI_RejectsIAM: Codex/OpenCode/Grok route only through
+// Mantle (bearer token required), so an explicit --auth=iam must be rejected with
+// an actionable error rather than writing a config that can never authenticate.
+func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
+	for _, cli := range []string{"codex", "opencode", "grok"} {
+		t.Run(cli, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			setupMockPSRunner(t, home)
+
+			err := ExecuteArgs([]string{
+				"apply", "--cli=" + cli, "--auth=iam",
+				"--region=us-east-1", "--skip-preflight",
+			})
+			if err == nil {
+				t.Fatalf("%s: expected --auth=iam to be rejected (Mantle needs a bearer token)", cli)
+			}
+			msg := strings.ToLower(err.Error())
+			if !strings.Contains(msg, "iam") && !strings.Contains(msg, "bedrock api key") {
+				t.Errorf("%s: error should explain IAM is unsupported, got: %v", cli, err)
+			}
+		})
+	}
+}
+
 // TestApply_Codex_WritesTOMLConfig drives a full codex apply and asserts the
 // TOML config lands at ~/.codex/config.toml with the Mantle provider block.
 func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
@@ -33,9 +60,10 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=iam", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply --cli=codex: %v", err)
 	}
@@ -47,30 +75,34 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	}
 }
 
-// TestApply_Codex_ModelFlag_Respected: --model=gpt-oss-120b must produce a
-// gpt-oss config (chat/v1), not the GPT-5.5 default. Regression for the P2 bug
-// where --model never reached provider.Options.Model.
+// TestApply_Codex_ModelFlag_Respected: --model=gpt-5.4 must produce a gpt-5.4
+// config, not the GPT-5.5 default. Regression for the P2 bug where --model never
+// reached provider.Options.Model. (Uses gpt-5.4 rather than gpt-oss because
+// current Codex is Responses-only and gpt-oss — Chat-only on Mantle — is no
+// longer a valid Codex model.)
 func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--model=gpt-oss-120b",
-		"--auth=iam", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--model=gpt-5.4",
+		"--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value",
+		"--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	if !containsStr(data, "openai.gpt-oss-120b") {
-		t.Errorf("expected gpt-oss-120b model, got:\n%s", data)
+	if !containsStr(data, "openai.gpt-5.4") {
+		t.Errorf("expected gpt-5.4 model, got:\n%s", data)
 	}
 	if containsStr(data, "openai.gpt-5.5") {
 		t.Errorf("must not fall back to gpt-5.5 when --model given:\n%s", data)
 	}
-	if !containsStr(data, `wire_api = "chat"`) {
-		t.Errorf("gpt-oss should use wire_api=chat, got:\n%s", data)
+	if !containsStr(data, `wire_api = "responses"`) {
+		t.Errorf("gpt-5.4 should use wire_api=responses, got:\n%s", data)
 	}
 }
 
@@ -84,11 +116,12 @@ func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
 			"apply", "--cli=opencode", "--model=some.exotic-v9",
-			"--auth=iam", "--region=us-west-2", "--skip-preflight",
+			"--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply: %v", err)
 		}
@@ -105,11 +138,12 @@ func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
 			"apply", "--cli=opencode", "--model=glm-4.7",
-			"--auth=iam", "--region=us-west-2", "--skip-preflight",
+			"--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply: %v", err)
 		}
@@ -129,9 +163,10 @@ func TestUninstall_Codex_DryRun(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=iam", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -155,9 +190,10 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=iam", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}

@@ -83,9 +83,21 @@ func TestClaude_LaunchSpec(t *testing.T) {
 // TestClaude_Supports covers the Claude-only capabilities.
 func TestClaude_Supports(t *testing.T) {
 	p, _ := Get("claude")
-	for _, c := range []Capability{CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels} {
+	for _, c := range []Capability{CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels, CapNativeAuth} {
 		if !p.Supports(c) {
 			t.Errorf("Claude should support capability %d", c)
+		}
+	}
+}
+
+// TestMantleOnlyCLIs_NoNativeAuth: Codex/OpenCode/Grok route only through Mantle,
+// which requires a bearer token, so none may claim CapNativeAuth (IAM/SSO). apply
+// relies on this to reject --auth=iam for them.
+func TestMantleOnlyCLIs_NoNativeAuth(t *testing.T) {
+	for _, name := range []string{"codex", "opencode", "grok"} {
+		p, _ := Get(name)
+		if p.Supports(CapNativeAuth) {
+			t.Errorf("%s is Mantle-only and must NOT support CapNativeAuth", name)
 		}
 	}
 }
@@ -151,6 +163,28 @@ func TestCodex_BuildConfig_MantleBlock(t *testing.T) {
 	}
 }
 
+// TestCodex_BuildConfig_SkipsOpenAILogin verifies the Mantle provider block sets
+// requires_openai_auth = false. Without it, the Codex CLI shows its ChatGPT
+// login screen on launch even with a valid custom provider + env_key token
+// (verified in openai/codex tui/src/lib.rs should_show_login_screen: login is
+// skipped ONLY when the active provider's requires_openai_auth is false).
+func TestCodex_BuildConfig_SkipsOpenAILogin(t *testing.T) {
+	p, _ := Get("codex")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	mp := plan.Keys["model_providers"].(map[string]any)
+	bm := mp["bedrock-mantle"].(map[string]any)
+	got, ok := bm["requires_openai_auth"]
+	if !ok {
+		t.Fatal("bedrock-mantle block must set requires_openai_auth to skip the ChatGPT login screen")
+	}
+	if got != false {
+		t.Errorf("requires_openai_auth = %v, want false", got)
+	}
+}
+
 // TestCodex_BuildConfig_UnknownModel errors on an unlisted model.
 func TestCodex_BuildConfig_UnknownModel(t *testing.T) {
 	p, _ := Get("codex")
@@ -177,19 +211,15 @@ func TestCodex_BuildConfig_RegionWarning(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_ExplicitGptOss selects the /v1 + chat path.
-func TestCodex_BuildConfig_ExplicitGptOss(t *testing.T) {
+// TestCodex_BuildConfig_GptOssRejected: gpt-oss is no longer a valid Codex model
+// (Codex is Responses-only; gpt-oss on Mantle is Chat-only), so BuildConfig must
+// error rather than emit a config Codex would reject at load.
+func TestCodex_BuildConfig_GptOssRejected(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
 	opts.Model = "gpt-oss-120b"
-	plan, _ := p.BuildConfig(testConfig(), opts)
-	mp := plan.Keys["model_providers"].(map[string]any)
-	bm := mp["bedrock-mantle"].(map[string]any)
-	if bm["wire_api"] != "chat" {
-		t.Errorf("gpt-oss wire_api = %v, want chat", bm["wire_api"])
-	}
-	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-west-2.api.aws/v1" {
-		t.Errorf("gpt-oss base_url = %q, want .../v1", got)
+	if _, err := p.BuildConfig(testConfig(), opts); err == nil {
+		t.Error("expected gpt-oss-120b to be rejected for Codex (Responses-only)")
 	}
 }
 
