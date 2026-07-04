@@ -60,6 +60,7 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
@@ -84,6 +85,7 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=codex", "--model=gpt-5.4",
@@ -114,6 +116,7 @@ func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -135,6 +138,7 @@ func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -159,6 +163,7 @@ func TestUninstall_Codex_DryRun(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
@@ -185,6 +190,7 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",

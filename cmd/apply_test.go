@@ -1070,6 +1070,7 @@ func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
