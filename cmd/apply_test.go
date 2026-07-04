@@ -1113,6 +1113,33 @@ func TestApply_CodexDryRun_ReapplySkipsPromptWhenCodexConfigExists(t *testing.T)
 	}
 }
 
+func TestApply_ClaudeDryRun_ReapplySkipsPromptWhenClaudeConfigExists(t *testing.T) {
+	// Cross-provider guard: the reapply-detection refactor (threading the
+	// provider through resolveApplyInputs) must NOT break Claude's own detection.
+	// A first apply writes ~/.claude/settings.json; a second dry-run with closed
+	// stdin must skip the prompt (detect existing config) and return cleanly.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=claude", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply: %v", err)
+	}
+
+	var err error
+	withStdin(t, "", func() {
+		err = ExecuteArgs([]string{
+			"apply", "--cli=claude", "--dry-run", "--skip-preflight",
+		})
+	})
+	if err != nil {
+		t.Fatalf("claude re-apply dry-run should not prompt when settings.json exists: %v", err)
+	}
+}
+
 func TestApply_UnknownCLI_Errors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
