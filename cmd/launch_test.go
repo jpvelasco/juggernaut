@@ -74,6 +74,55 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	}
 }
 
+// TestApply_OpenCode_PassthroughModel_PrintsWarning locks in that provider
+// ConfigPlan.Warnings are surfaced to the user. An unverified (passthrough)
+// OpenCode model must print the "not in the curated set" heads-up — the warning
+// is the whole point of the honest-passthrough design and was previously
+// computed but never printed.
+func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=opencode", "--model=some.exotic-v9",
+			"--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+	})
+	if !strings.Contains(out, "curated set") {
+		t.Errorf("expected passthrough (unverified) model warning, got:\n%s", out)
+	}
+}
+
+// TestApply_OpenCode_CuratedModel_NoWarning: a curated model writes cleanly with
+// no passthrough warning.
+func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=opencode", "--model=glm-4.7",
+			"--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+	})
+	if strings.Contains(out, "curated set") {
+		t.Errorf("curated model must not warn, got:\n%s", out)
+	}
+	data := readFileForTest(t, filepath.Join(home, ".config", "opencode", "opencode.json"))
+	if !containsStr(data, "zai.glm-4.7") {
+		t.Errorf("expected glm-4.7 in config, got:\n%s", data)
+	}
+}
+
 // TestUninstall_Codex_DryRun exercises the codex uninstall path without writing.
 func TestUninstall_Codex_DryRun(t *testing.T) {
 	home := t.TempDir()
