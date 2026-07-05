@@ -18,41 +18,64 @@ import (
 // same-day key rotation, long enough that the re-run overhead is negligible.
 const longTermRefreshSecs = 6 * 60 * 60 // 6 hours
 
-// authTokenCmd is a hidden command invoked by the Grok CLI's
-// `auth_provider_command` (see internal/provider/grok.go). Grok runs it via
-// `sh -c`, reads a token from stdout, stores it in ~/.grok/auth.json, and
-// re-runs it to refresh. Its stdout MUST contain ONLY the token JSON — any other
-// text breaks Grok's parsing — so all diagnostics go to stderr.
+// authTokenFormat selects the stdout shape (see runAuthToken). Reset by
+// resetFlags between ExecuteArgs calls.
+var authTokenFormat string
+
+// authTokenCmd is a hidden command invoked by a CLI's external auth provider to
+// fetch the Bedrock bearer token from the keychain. Two consumers, two shapes
+// (--format):
+//   - "json"  (default) → {"access_token":...,"expires_in":N} — the Grok CLI's
+//     auth_provider_command reads this (see internal/provider/grok.go).
+//   - "token"           → the BARE token on one line — the Codex CLI's
+//     auth.command trims stdout and uses the whole thing as the bearer token
+//     (verified in openai/codex external_bearer.rs), so it must NOT be JSON.
+//
+// stdout MUST contain ONLY the token payload — any stray text breaks parsing —
+// so all diagnostics go to stderr.
 var authTokenCmd = &cobra.Command{
 	Use:          "auth-token",
-	Short:        "Print the Bedrock bearer token as JSON (used by the Grok CLI auth provider)",
+	Short:        "Print the Bedrock bearer token (used by the Grok/Codex external auth providers)",
 	Hidden:       true,
 	SilenceUsage: true,
 	RunE:         runAuthToken,
 }
 
 func init() {
+	authTokenCmd.Flags().StringVar(&authTokenFormat, "format", "json",
+		"output format: json (Grok) or token (Codex, bare token)")
 	rootCmd.AddCommand(authTokenCmd)
 }
 
 func runAuthToken(_ *cobra.Command, _ []string) error {
+	if authTokenFormat != "json" && authTokenFormat != "token" {
+		return fmt.Errorf("invalid --format %q — must be json or token", authTokenFormat)
+	}
 	home, err := homeDir()
 	if err != nil {
 		return err
 	}
 	token, err := keychain.Default().GetWithFallback(home)
 	if err != nil {
-		// Diagnostics go to stderr; stdout stays clean so Grok never mis-parses
-		// an error message as a token.
+		// Diagnostics go to stderr; stdout stays clean so the caller never
+		// mis-parses an error message as a token.
 		return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
 	}
 	if token == "" {
 		return errors.New("no Bedrock bearer token stored in the keychain — " +
-			"run juggernaut apply --cli=grok with --auth=" + authmode.BedrockAPIKey + " to store one")
+			"run juggernaut apply with --auth=" + authmode.BedrockAPIKey + " to store one")
 	}
-	out := buildAuthTokenJSON(token, time.Now().UTC())
-	fmt.Println(out)
+	fmt.Println(buildAuthTokenOutput(token, authTokenFormat, time.Now().UTC()))
 	return nil
+}
+
+// buildAuthTokenOutput renders the token in the requested shape. "token" emits
+// the bare token (Codex); anything else emits the Grok JSON.
+func buildAuthTokenOutput(token, format string, now time.Time) string {
+	if format == "token" {
+		return token
+	}
+	return buildAuthTokenJSON(token, now)
 }
 
 // buildAuthTokenJSON renders the token in Grok's expected stdout shape:
