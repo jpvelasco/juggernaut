@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
-	"slices"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -126,7 +125,12 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (supported: gpt-5.5, gpt-5.4)", key)
 	}
 
-	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws%s", opts.Region, m.BasePath)
+	// A model is only reachable in the regions where it's verified available; a
+	// user's default region may not serve it. Auto-switch when the region was
+	// defaulted, honor-and-warn when it was explicit.
+	region, regionMsg, _ := resolveMantleRegion(opts.Region, opts.RegionExplicit, m.Regions)
+
+	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws%s", region, m.BasePath)
 	provBlock := map[string]any{
 		"name":     "Amazon Bedrock (Mantle)",
 		"base_url": baseURL,
@@ -148,10 +152,8 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 	}
 
 	var warnings []string
-	if len(m.Regions) > 0 && !regionAllowed(opts.Region, m.Regions) {
-		warnings = append(warnings, fmt.Sprintf(
-			"model %s is not confirmed available in %s (known: %v) — apply will still write config, but requests may fail",
-			m.ModelID, opts.Region, m.Regions))
+	if regionMsg != "" {
+		warnings = append(warnings, fmt.Sprintf("%s: %s", m.ModelID, regionMsg))
 	}
 
 	return ConfigPlan{
@@ -172,8 +174,4 @@ func (codex) LaunchSpec() LaunchSpec {
 
 func (codex) Supports(c Capability) bool {
 	return c == CapEffortLevels
-}
-
-func regionAllowed(region string, allowed []string) bool {
-	return slices.Contains(allowed, region)
 }

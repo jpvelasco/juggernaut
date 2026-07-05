@@ -31,8 +31,13 @@ const bedrockAuthEnvName = "AWS_BEARER_TOKEN_BEDROCK"
 // provider package stays decoupled from Claude's schema — the mapping lives only
 // in claude.go.
 type Options struct {
-	AuthMode       string
-	Region         string
+	AuthMode string
+	Region   string
+	// RegionExplicit is true when the user passed --region, false when Region was
+	// filled from the global default. Mantle providers use this to decide whether
+	// they may auto-switch a model to a region that actually serves it (default)
+	// or must honor the user's explicit choice (and only warn).
+	RegionExplicit bool
 	Effort         string
 	Scope          string
 	Version        string

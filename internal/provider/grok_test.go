@@ -208,22 +208,32 @@ func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 	}
 }
 
-// TestGrok_BuildConfig_RegionWarning: xai.grok-4.3 is verified in us-east-1/2 and
-// us-west-2; an unlisted region should warn (not fail).
-func TestGrok_BuildConfig_RegionWarning(t *testing.T) {
+// TestGrok_BuildConfig_RegionIronFist: xai.grok-4.3 is verified in us-east-1/2
+// and us-west-2. An unlisted region is OVERRIDDEN to a known-good one (base_url
+// reflects it) rather than written as-is; a known region is kept silently.
+func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("grok")
 	opts := baseOpts()
 	opts.Region = "eu-west-1"
+	opts.RegionExplicit = true
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatalf("BuildConfig should not fail on an unlisted region: %v", err)
 	}
-	if len(plan.Warnings) == 0 {
-		t.Error("expected a region-availability warning for grok-4.3 in eu-west-1")
+	bg := plan.Keys["model"].(map[string]any)[grokModelName].(map[string]any)
+	if base := bg["base_url"].(string); strings.Contains(base, "eu-west-1") {
+		t.Errorf("base_url must not use the non-serving region eu-west-1, got %q", base)
 	}
-	// A known region must NOT warn.
+	if len(plan.Warnings) == 0 {
+		t.Error("expected a region-override message for grok-4.3 in eu-west-1")
+	}
+	// us-west-2 IS a known grok-4.3 region → kept, silent.
 	opts.Region = "us-west-2"
 	plan, _ = p.BuildConfig(testConfig(), opts)
+	bg = plan.Keys["model"].(map[string]any)[grokModelName].(map[string]any)
+	if base := bg["base_url"].(string); !strings.Contains(base, "us-west-2") {
+		t.Errorf("us-west-2 serves grok-4.3 and must be kept, got %q", base)
+	}
 	if len(plan.Warnings) != 0 {
 		t.Errorf("us-west-2 is a known region and must not warn, got %v", plan.Warnings)
 	}

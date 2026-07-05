@@ -154,9 +154,13 @@ func TestCodex_BuildConfig_MantleBlock(t *testing.T) {
 	if bm["wire_api"] != "responses" {
 		t.Errorf("wire_api = %v, want responses (gpt-5.5 default)", bm["wire_api"])
 	}
-	base, _ := bm["base_url"].(string)
-	if len(base) < len("/openai/v1") || base[len(base)-len("/openai/v1"):] != "/openai/v1" {
-		t.Errorf("base_url = %q, want .../openai/v1", base)
+	// baseOpts uses the default region us-west-2 (non-explicit). gpt-5.5 is only
+	// in us-east-1/2, so the region auto-switches to us-east-1.
+	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
+		t.Errorf("base_url = %q, want us-east-1 /openai/v1 (auto-switched from default us-west-2)", got)
+	}
+	if len(plan.Warnings) == 0 {
+		t.Error("expected an auto-switch heads-up when the default region can't serve gpt-5.5")
 	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("Codex plan should validate: %v", err)
@@ -195,19 +199,27 @@ func TestCodex_BuildConfig_UnknownModel(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_RegionWarning warns when the model isn't confirmed in
-// the requested region (gpt-5.5 is us-east-1/2 only).
-func TestCodex_BuildConfig_RegionWarning(t *testing.T) {
+// TestCodex_BuildConfig_RegionIronFist: gpt-5.5 is us-east-1/2 only, so ANY
+// non-serving region — even one the user passed explicitly — is overridden to a
+// known-good region and the base_url reflects the override. Juggernaut never
+// writes a config that can't reach the model.
+func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
 	opts.Model = "gpt-5.5"
 	opts.Region = "eu-west-1" // not in gpt-5.5's known regions
+	opts.RegionExplicit = true
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
+	mp := plan.Keys["model_providers"].(map[string]any)
+	bm := mp["bedrock-mantle"].(map[string]any)
+	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
+		t.Errorf("base_url = %q, want us-east-1 (overridden from eu-west-1)", got)
+	}
 	if len(plan.Warnings) == 0 {
-		t.Error("expected a region-availability warning for gpt-5.5 in eu-west-1")
+		t.Error("expected a message noting the region override")
 	}
 }
 

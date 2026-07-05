@@ -197,6 +197,10 @@ func runApply(_ *cobra.Command, _ []string) error {
 	// not one of Claude's per-tier IDs. Thread the raw flag through so the
 	// provider selects the right model instead of silently defaulting.
 	provOpts.Model = applyFlags.model
+	// Whether the region was explicitly chosen (vs filled from the global
+	// default). Mantle providers auto-switch a model to a region that serves it
+	// only when the region was defaulted; an explicit --region is honored.
+	provOpts.RegionExplicit = applyFlags.region != ""
 	return commitApply(home, authMode, token, block, prov, bCfg, provOpts)
 }
 

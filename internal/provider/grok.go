@@ -115,7 +115,11 @@ func (grok) Supports(Capability) bool { return false }
 // still falls through to interactive login. The [auth] block is the documented
 // way to replace login entirely.
 func (grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
-	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", opts.Region)
+	// Iron Fist: route to a region that actually serves grok-4.3 rather than
+	// writing a config that can't reach it (see resolveMantleRegion).
+	region, regionMsg, _ := resolveMantleRegion(opts.Region, opts.RegionExplicit, grokRegions)
+
+	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
 	keys := map[string]any{
 		"model": map[string]any{
 			grokModelName: map[string]any{
@@ -139,10 +143,8 @@ func (grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	}
 
 	var warnings []string
-	if !regionAllowed(opts.Region, grokRegions) {
-		warnings = append(warnings, fmt.Sprintf(
-			"model xai.grok-4.3 is not confirmed available in %s (known: %v) — apply will still write config, but requests may fail",
-			opts.Region, grokRegions))
+	if regionMsg != "" {
+		warnings = append(warnings, "xai.grok-4.3 "+regionMsg)
 	}
 
 	return ConfigPlan{
