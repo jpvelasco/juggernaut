@@ -4,6 +4,20 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.3.3] - 2026-07-05
+
+**Patch release — Sonnet 5 default, working auto mode out of the box, and Codex direct-run auth.**
+
+### Added
+
+- **Default model bumped to Claude Sonnet 5 on Bedrock.** `apply` now pins the default/`sonnet` tier to `global.anthropic.claude-sonnet-5` (was Sonnet 4.6), matching Claude Code's first-party default and bringing native 1M context + 128K output to the everyday model. Verified live: listed and ACTIVE in us-east-1/us-east-2/us-west-2, `global.` inference profile active, and a real inference call returned 200 in both us-east-1 and us-west-2. Sonnet 4.6 is not deprecated and stays selectable via `--sonnet-model`.
+
+### Fixed
+
+- **Auto mode now works out of the box.** `apply --mode=auto` writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` whenever any configured model can use auto mode, instead of gating on the default Sonnet-tier model. Combined with the Sonnet 5 default (which is auto-capable), auto mode appears in Claude Code's Shift+Tab cycle without needing `claude --model opus`. The capability check was also corrected — it now recognizes Claude Sonnet 5 alongside Opus 4.7/4.8 (Sonnet 5 was wrongly excluded), verified against Claude Code's permission-modes docs. The apply message now explains how to reach auto mode, and only warns when no configured model supports it.
+- **Sonnet 5's 1M context suffix is applied.** Juggernaut now recognizes Sonnet 5 as a 1M-context model, so it correctly appends Claude Code's `[1m]` accounting suffix (previously dropped for Sonnet 5).
+- **Codex works when launched directly (not just through the wrapper).** `codex` run directly failed with "Missing environment variable: AWS_BEARER_TOKEN_BEDROCK" because the config used `env_key`, which only resolves when the launch wrapper injects it. Codex now uses a command-backed auth provider (`[model_providers.bedrock-mantle.auth]` running `juggernaut auth-token --format=token`) that reads the keychain directly and refreshes after a 401 — so it authenticates whether launched via the wrapper or standalone. `juggernaut auth-token` gained a `--format` flag (`json` for Grok, `token` bare for Codex).
+
 ## [5.3.2] - 2026-07-04
 
 **Patch release — always route Mantle CLIs to a region that actually serves the model.**
@@ -1050,7 +1064,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.2...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.3...HEAD
+[5.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.3
 [5.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.2
 [5.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.1
 [5.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.0
