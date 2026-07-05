@@ -178,8 +178,14 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 			env["ANTHROPIC_BEDROCK_MANTLE_BASE_URL"] = opts.MantleURL
 		}
 	}
-	if opts.PermissionMode == "auto" {
-		// Required on Bedrock/Vertex/Foundry — without it auto mode silently does nothing.
+	// Enable auto mode when it's the requested mode AND at least one configured
+	// model can use it (Opus/Sonnet/Fable; Haiku never qualifies). The var only
+	// makes auto AVAILABLE in the Shift+Tab cycle — Claude Code gates it by the
+	// live session model — so a Sonnet-tier default with an auto-capable Opus
+	// override (the standard config) still gets it. Required on
+	// Bedrock/Vertex/Foundry; without it auto silently never appears.
+	if opts.PermissionMode == "auto" &&
+		(IsAutoModeCapableModel(opus) || IsAutoModeCapableModel(sonnet) || IsAutoModeCapableModel(fable)) {
 		env["CLAUDE_CODE_ENABLE_AUTO_MODE"] = "1"
 	}
 	if opts.ServiceTier != "" {
@@ -218,26 +224,46 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}, nil
 }
 
-// IsAutoModeCapableModel reports whether modelID is an Opus 4.7 or 4.8 model.
-// On Bedrock, Vertex, and Foundry, auto mode is offered only when the active
-// session model is one of these; Sonnet, Haiku, and older models are excluded.
-// See https://code.claude.com/docs/en/permission-modes.
+// IsAutoModeCapableModel reports whether modelID is a model that can use auto
+// permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7, or Opus
+// 4.8. Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified against
+// https://code.claude.com/docs/en/permission-modes ("only Claude Sonnet 5, Opus
+// 4.7, and Opus 4.8"). Note claude-sonnet-5 is capable while claude-sonnet-4-6 is
+// not — the version digits matter, so match the full token, not just "sonnet".
 func IsAutoModeCapableModel(modelID string) bool {
 	normalized := strings.TrimSuffix(modelID, "[1m]")
 	for _, prefix := range regionalInferencePrefixes {
 		normalized = strings.TrimPrefix(normalized, prefix)
 	}
 	return strings.Contains(normalized, "claude-opus-4-8") ||
-		strings.Contains(normalized, "claude-opus-4-7")
+		strings.Contains(normalized, "claude-opus-4-7") ||
+		strings.Contains(normalized, "claude-sonnet-5")
 }
 
-// AutoModeUsable reports whether auto mode will actually be offered by Claude
-// Code for this block. It requires PermissionMode=="auto" AND the active default
-// session model (the Sonnet-tier pin, which is the account default on Bedrock)
-// to be an Opus 4.7/4.8 model. opusplan does not qualify: its execution phase
-// runs on Sonnet, and the session's default model is still Sonnet-tier.
+// AutoModeUsable reports whether auto mode will be offered for this block's
+// ACTIVE DEFAULT session model (the Sonnet-tier pin, the account default on
+// Bedrock). Distinct from AutoModeAvailable: this is the stricter "auto works
+// out of the box without switching models" check. opusplan does not qualify —
+// its execution phase runs on Sonnet, and the default model is still Sonnet-tier.
 func (b *Block) AutoModeUsable() bool {
 	return b.Meta.PermissionMode == "auto" && IsAutoModeCapableModel(b.Models.Sonnet)
+}
+
+// AutoModeAvailable reports whether Juggernaut should enable auto mode (write
+// CLAUDE_CODE_ENABLE_AUTO_MODE=1) for this block: PermissionMode=="auto" AND at
+// least one configured model (Opus, Sonnet, or Fable — Haiku is never capable)
+// can use auto mode. The env var only makes auto AVAILABLE in the Shift+Tab
+// cycle; Claude Code still gates it by the live session model. So enabling it
+// whenever a capable model is configured is correct — the user unlocks auto by
+// running a capable model (e.g. `claude --model opus`), even when the default
+// pin is Sonnet-tier.
+func (b *Block) AutoModeAvailable() bool {
+	if b.Meta.PermissionMode != "auto" {
+		return false
+	}
+	return IsAutoModeCapableModel(b.Models.Opus) ||
+		IsAutoModeCapableModel(b.Models.Sonnet) ||
+		IsAutoModeCapableModel(b.Models.Fable)
 }
 
 // regionalInferencePrefixes are the Bedrock cross-region inference profile

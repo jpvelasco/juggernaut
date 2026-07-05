@@ -906,7 +906,11 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
-func TestApply_AutoMode_WarnsWhenModelNotOpus(t *testing.T) {
+// TestApply_AutoMode_EnabledWithDefaultConfig: the default config configures Opus
+// 4.8 (auto-capable) as the opus override even though the default model is Sonnet,
+// so --mode=auto ENABLES auto mode and prints the "enabled / how to reach it" info
+// — NOT the incapable-model warning. This is the fix for JP's case.
+func TestApply_AutoMode_EnabledWithDefaultConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -920,12 +924,18 @@ func TestApply_AutoMode_WarnsWhenModelNotOpus(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(out, "Auto mode on Bedrock requires Opus") {
-		t.Errorf("expected auto-mode model warning with default Sonnet model, got:\n%s", out)
+	if !strings.Contains(out, "Auto mode is enabled") {
+		t.Errorf("expected the auto-mode-enabled info with the default config, got:\n%s", out)
+	}
+	if strings.Contains(out, "cannot be enabled") {
+		t.Errorf("must not warn 'cannot be enabled' when Opus 4.8 is configured, got:\n%s", out)
 	}
 }
 
-func TestApply_AutoMode_NoWarnWhenModelIsOpus(t *testing.T) {
+// TestApply_AutoMode_WarnsWhenNoCapableModel: force every model tier to a
+// non-capable one → auto can't be enabled → the warning fires and the enable var
+// is absent.
+func TestApply_AutoMode_WarnsWhenNoCapableModel(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -934,14 +944,17 @@ func TestApply_AutoMode_NoWarnWhenModelIsOpus(t *testing.T) {
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
 			"apply", "--auth=iam", "--region=us-west-2", "--mode=auto",
-			"--model", "global.anthropic.claude-opus-4-8", "--skip-preflight",
+			"--model", "global.anthropic.claude-sonnet-4-6", "--skip-preflight",
 		}); err != nil {
 			t.Fatalf("apply error: %v", err)
 		}
 	})
 
-	if strings.Contains(out, "Auto mode on Bedrock requires Opus") {
-		t.Errorf("did not expect auto-mode warning when model is Opus, got:\n%s", out)
+	if !strings.Contains(out, "cannot be enabled") {
+		t.Errorf("expected the incapable-model warning when no model is auto-capable, got:\n%s", out)
+	}
+	if got := readNativeEnvValue(t, home, "CLAUDE_CODE_ENABLE_AUTO_MODE"); got == "1" {
+		t.Errorf("enable var must be absent when no configured model is capable, got %q", got)
 	}
 }
 
