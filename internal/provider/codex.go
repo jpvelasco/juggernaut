@@ -135,12 +135,20 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 		"name":     "Amazon Bedrock (Mantle)",
 		"base_url": baseURL,
 		"wire_api": m.WireAPI,
-		"env_key":  bedrockAuthEnvName,
 		// Skip the ChatGPT/OpenAI login screen. Codex prompts for OpenAI auth only
 		// when the active provider's requires_openai_auth is true (verified in
-		// openai/codex tui should_show_login_screen); our credential is the bearer
-		// token in env_key, so declare no OpenAI auth is required.
+		// openai/codex tui should_show_login_screen).
 		"requires_openai_auth": false,
+		// Command-backed auth: Codex execs this and uses the trimmed stdout as the
+		// bearer token, refreshing after a 401 (openai/codex external_bearer.rs).
+		// This reads the keychain directly, so it works even when codex is launched
+		// WITHOUT Juggernaut's wrapper — unlike env_key, which needs the wrapper to
+		// inject AWS_BEARER_TOKEN_BEDROCK and fails ("Missing environment variable")
+		// on a direct `codex` run. --format=token emits the BARE token Codex wants.
+		"auth": map[string]any{
+			"command": "juggernaut",
+			"args":    []string{"auth-token", "--format=token"},
+		},
 	}
 
 	keys := map[string]any{

@@ -167,9 +167,39 @@ func TestCodex_BuildConfig_MantleBlock(t *testing.T) {
 	}
 }
 
+// TestCodex_BuildConfig_AuthCommand: the Mantle provider block uses a command-
+// backed auth provider (reads the keychain via `juggernaut auth-token
+// --format=token`) instead of env_key. env_key requires the launch wrapper to
+// inject AWS_BEARER_TOKEN_BEDROCK; running codex directly then fails with
+// "Missing environment variable". The auth.command is self-contained (verified
+// in openai/codex external_bearer.rs: it execs the command and uses trimmed
+// stdout as the bearer token, refreshing after a 401).
+func TestCodex_BuildConfig_AuthCommand(t *testing.T) {
+	p, _ := Get("codex")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	bm := plan.Keys["model_providers"].(map[string]any)["bedrock-mantle"].(map[string]any)
+	if _, hasEnvKey := bm["env_key"]; hasEnvKey {
+		t.Errorf("env_key must NOT be set (it needs the launch wrapper); got %v", bm["env_key"])
+	}
+	auth, ok := bm["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("bedrock-mantle.auth block missing: %v", bm)
+	}
+	if auth["command"] != "juggernaut" {
+		t.Errorf("auth.command = %v, want juggernaut", auth["command"])
+	}
+	args, ok := auth["args"].([]string)
+	if !ok || len(args) < 2 || args[0] != "auth-token" || args[1] != "--format=token" {
+		t.Errorf("auth.args = %v, want [auth-token --format=token]", auth["args"])
+	}
+}
+
 // TestCodex_BuildConfig_SkipsOpenAILogin verifies the Mantle provider block sets
 // requires_openai_auth = false. Without it, the Codex CLI shows its ChatGPT
-// login screen on launch even with a valid custom provider + env_key token
+// login screen on launch even with a valid custom provider
 // (verified in openai/codex tui/src/lib.rs should_show_login_screen: login is
 // skipped ONLY when the active provider's requires_openai_auth is false).
 func TestCodex_BuildConfig_SkipsOpenAILogin(t *testing.T) {

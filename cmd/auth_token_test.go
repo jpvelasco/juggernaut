@@ -101,6 +101,45 @@ func TestAuthToken_Command_EmitsKeychainToken(t *testing.T) {
 	}
 }
 
+// TestAuthToken_Command_FormatToken: --format=token prints the BARE token (no
+// JSON), which is what Codex's auth.command reads (it trims stdout and uses the
+// whole thing as the bearer token — verified in openai/codex external_bearer.rs).
+func TestAuthToken_Command_FormatToken(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("kc-bare-456", home); err != nil {
+		t.Fatalf("seed token: %v", err)
+	}
+	t.Cleanup(func() { _ = store.DeleteWithFallback(home) })
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"auth-token", "--format=token"}); err != nil {
+			t.Fatalf("auth-token --format=token: %v", err)
+		}
+	})
+	got := strings.TrimSpace(out)
+	if got != "kc-bare-456" {
+		t.Errorf("bare output = %q, want exactly the token kc-bare-456", got)
+	}
+	if strings.Contains(got, "{") || strings.Contains(got, "access_token") {
+		t.Errorf("--format=token must emit no JSON, got %q", got)
+	}
+}
+
+// TestBuildAuthTokenOutput_Formats pins the pure renderer for both formats.
+func TestBuildAuthTokenOutput_Formats(t *testing.T) {
+	now := time.Now().UTC()
+	if got := buildAuthTokenOutput("tok", "token", now); got != "tok" {
+		t.Errorf("token format = %q, want bare tok", got)
+	}
+	jsonOut := buildAuthTokenOutput("tok", "json", now)
+	if !strings.HasPrefix(jsonOut, "{") || !strings.Contains(jsonOut, "access_token") {
+		t.Errorf("json format = %q, want a JSON object", jsonOut)
+	}
+}
+
 // TestAuthToken_Command_ErrorsWhenNoToken: with no stored token, the command
 // errors (non-zero) and prints nothing parseable as a token to stdout, so Grok
 // falls through to its normal login.
