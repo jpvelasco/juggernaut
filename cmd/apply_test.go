@@ -167,7 +167,7 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8[1m]" {
 		t.Errorf("expected Opus default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
-	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6[1m]" {
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
 		t.Errorf("expected Sonnet default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
 	if _, ok := env["ANTHROPIC_DEFAULT_FABLE_MODEL"]; ok {
@@ -209,7 +209,7 @@ func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
 	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8" {
 		t.Errorf("expected Opus default model without [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
-	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6" {
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5" {
 		t.Errorf("expected Sonnet default model without [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
 	if env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
@@ -242,7 +242,7 @@ func TestApply_DefaultMantleDisabledPreservesInferenceProfiles(t *testing.T) {
 		t.Fatal("Mantle should be disabled by default")
 	}
 	overrides := settings["modelOverrides"].(map[string]any)
-	if overrides["sonnet"] != "global.anthropic.claude-sonnet-4-6" {
+	if overrides["sonnet"] != "global.anthropic.claude-sonnet-5" {
 		t.Errorf("expected global Sonnet inference profile by default, got %v", overrides["sonnet"])
 	}
 	block := settings["juggernaut"].(map[string]any)
@@ -278,7 +278,7 @@ func TestApply_MantleFlagStripsInferenceProfilePrefix(t *testing.T) {
 		t.Fatalf("expected CLAUDE_CODE_USE_MANTLE=1 with --mantle, got %v", env["CLAUDE_CODE_USE_MANTLE"])
 	}
 	overrides := settings["modelOverrides"].(map[string]any)
-	if overrides["sonnet"] != "anthropic.claude-sonnet-4-6" {
+	if overrides["sonnet"] != "anthropic.claude-sonnet-5" {
 		t.Errorf("expected raw Sonnet model ID with --mantle, got %v", overrides["sonnet"])
 	}
 }

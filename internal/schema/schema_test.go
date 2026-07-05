@@ -13,7 +13,7 @@ func testConfig() *bedrock.Config {
 		Version: "4.1.0",
 		Models: bedrock.ModelSet{
 			Opus:   "global.anthropic.claude-opus-4-8",
-			Sonnet: "global.anthropic.claude-sonnet-4-6",
+			Sonnet: "global.anthropic.claude-sonnet-5",
 			Haiku:  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 			Fable:  "global.anthropic.claude-fable-5",
 		},
@@ -126,7 +126,7 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8[1m]" {
 		t.Errorf("expected Opus env model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
-	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6[1m]" {
+	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
 		t.Errorf("expected Sonnet env model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
 	if block.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] != "global.anthropic.claude-haiku-4-5-20251001-v1:0" {
@@ -146,8 +146,8 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	if native.Model != "opusplan[1m]" {
 		t.Errorf("expected native model=opusplan[1m], got %q", native.Model)
 	}
-	if native.ModelOverrides["claude-sonnet-4-6[1m]"] != "global.anthropic.claude-sonnet-4-6" {
-		t.Errorf("expected [1m] Sonnet override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-sonnet-4-6[1m]"])
+	if native.ModelOverrides["claude-sonnet-5[1m]"] != "global.anthropic.claude-sonnet-5" {
+		t.Errorf("expected [1m] Sonnet override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-sonnet-5[1m]"])
 	}
 	if native.ModelOverrides["claude-opus-4-8[1m]"] != "global.anthropic.claude-opus-4-8" {
 		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-4-8[1m]"])
@@ -174,7 +174,7 @@ func TestBuild_No1MDisablesClaudeCodeExtendedContext(t *testing.T) {
 	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8" {
 		t.Errorf("expected Opus env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
-	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-4-6" {
+	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5" {
 		t.Errorf("expected Sonnet env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
 	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5" {
@@ -183,7 +183,7 @@ func TestBuild_No1MDisablesClaudeCodeExtendedContext(t *testing.T) {
 	if block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
 		t.Errorf("expected CLAUDE_CODE_DISABLE_1M_CONTEXT=1, got %q", block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"])
 	}
-	if _, ok := block.NativeKeys().ModelOverrides["claude-sonnet-4-6[1m]"]; ok {
+	if _, ok := block.NativeKeys().ModelOverrides["claude-sonnet-5[1m]"]; ok {
 		t.Error("[1m] model override should be omitted when Use1M=false")
 	}
 	if _, ok := block.NativeKeys().ModelOverrides["claude-fable-5[1m]"]; ok {
@@ -409,8 +409,8 @@ func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 	overrides := block.NativeKeys().ModelOverrides
-	for _, key := range []string{"sonnet", "claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"} {
-		if overrides[key] != "global.anthropic.claude-sonnet-4-6" {
+	for _, key := range []string{"sonnet", "claude-sonnet-5", "anthropic.claude-sonnet-5"} {
+		if overrides[key] != "global.anthropic.claude-sonnet-5" {
 			t.Errorf("expected %s to map to global Sonnet profile, got %q", key, overrides[key])
 		}
 	}
@@ -491,7 +491,7 @@ func TestBuild_Mantle_StripsGlobalPrefix(t *testing.T) {
 	if block.Models.Opus != "anthropic.claude-opus-4-8" {
 		t.Errorf("expected opus without global. prefix, got %s", block.Models.Opus)
 	}
-	if block.Models.Sonnet != "anthropic.claude-sonnet-4-6" {
+	if block.Models.Sonnet != "anthropic.claude-sonnet-5" {
 		t.Errorf("expected sonnet without global. prefix, got %s", block.Models.Sonnet)
 	}
 	if block.Models.Haiku != "anthropic.claude-haiku-4-5-20251001-v1:0" {
@@ -638,10 +638,12 @@ func TestIsAutoModeCapableModel(t *testing.T) {
 }
 
 func TestBlock_AutoModeUsable_FalseWhenDefaultModelIsSonnet(t *testing.T) {
-	// Default config: Sonnet-tier active model => auto mode hidden on Bedrock.
+	// A Sonnet-4.6-tier active model => auto mode hidden on Bedrock. Pin it
+	// explicitly (the default config now ships Sonnet 5, which IS capable).
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",
 		Scope: "user", Version: "5.2.0", PermissionMode: "auto", AuthValidated: true,
+		SonnetModel: "global.anthropic.claude-sonnet-4-6",
 	}
 	block, err := schema.Build(testConfig(), opts)
 	if err != nil {

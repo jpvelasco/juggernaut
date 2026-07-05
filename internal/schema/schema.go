@@ -298,6 +298,7 @@ func supportsClaudeCode1M(model string) bool {
 		strings.Contains(normalized, "claude-opus-4-8") ||
 		strings.Contains(normalized, "claude-opus-4-7") ||
 		strings.Contains(normalized, "claude-opus-4-6") ||
+		strings.Contains(normalized, "claude-sonnet-5") || // 1M context, verified via model card
 		strings.Contains(normalized, "claude-sonnet-4-6")
 }
 
@@ -332,15 +333,15 @@ func (b *Block) NativeKeys() NativeKeys {
 
 func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 	overrides := map[string]string{
-		"opus":                        models.Opus,
-		"claude-opus-4-8":             models.Opus,
-		"anthropic.claude-opus-4-8":   models.Opus,
-		"sonnet":                      models.Sonnet,
-		"claude-sonnet-4-6":           models.Sonnet,
-		"anthropic.claude-sonnet-4-6": models.Sonnet,
-		"haiku":                       models.Haiku,
-		"claude-haiku-4-5":            models.Haiku,
-		"claude-haiku-4-5-20251001":   models.Haiku,
+		"opus":                      models.Opus,
+		"claude-opus-4-8":           models.Opus,
+		"anthropic.claude-opus-4-8": models.Opus,
+		"sonnet":                    models.Sonnet,
+		"claude-sonnet-5":           models.Sonnet,
+		"anthropic.claude-sonnet-5": models.Sonnet,
+		"haiku":                     models.Haiku,
+		"claude-haiku-4-5":          models.Haiku,
+		"claude-haiku-4-5-20251001": models.Haiku,
 		"anthropic.claude-haiku-4-5-20251001-v1:0": models.Haiku,
 	}
 	if models.Fable != "" {
@@ -353,8 +354,8 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 		overrides["claude-opus-4-8[1m]"] = models.Opus
 		overrides["anthropic.claude-opus-4-8[1m]"] = models.Opus
 		overrides["sonnet[1m]"] = models.Sonnet
-		overrides["claude-sonnet-4-6[1m]"] = models.Sonnet
-		overrides["anthropic.claude-sonnet-4-6[1m]"] = models.Sonnet
+		overrides["claude-sonnet-5[1m]"] = models.Sonnet
+		overrides["anthropic.claude-sonnet-5[1m]"] = models.Sonnet
 		if models.Fable != "" {
 			overrides["fable[1m]"] = models.Fable
 			overrides["claude-fable-5[1m]"] = models.Fable
