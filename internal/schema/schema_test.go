@@ -610,13 +610,18 @@ func TestIsAutoModeCapableModel(t *testing.T) {
 		model string
 		want  bool
 	}{
-		// Supported on Bedrock: Opus 4.7 and 4.8 (with any region prefix / [1m]).
+		// Supported on Bedrock (verified against code.claude.com/docs/en/permission-modes):
+		// Sonnet 5, Opus 4.7, and Opus 4.8 — with any region prefix / [1m] suffix.
 		{"global.anthropic.claude-opus-4-8", true},
 		{"global.anthropic.claude-opus-4-8[1m]", true},
 		{"us.anthropic.claude-opus-4-7", true},
 		{"anthropic.claude-opus-4-7", true},
 		{"claude-opus-4-8", true},
-		// Not supported: Sonnet, Haiku, older Opus, Fable, empty.
+		{"global.anthropic.claude-sonnet-5", true},
+		{"global.anthropic.claude-sonnet-5[1m]", true},
+		{"us.anthropic.claude-sonnet-5", true},
+		{"claude-sonnet-5", true},
+		// Not supported: Sonnet 4.6, Haiku, older Opus, Fable, empty.
 		{"global.anthropic.claude-sonnet-4-6", false},
 		{"global.anthropic.claude-sonnet-4-6[1m]", false},
 		{"us.anthropic.claude-opus-4-6", false},
@@ -675,5 +680,77 @@ func TestBlock_AutoModeUsable_FalseWhenModeNotAuto(t *testing.T) {
 	}
 	if block.AutoModeUsable() {
 		t.Error("expected AutoModeUsable()=false when PermissionMode is not auto")
+	}
+}
+
+// autoOpts is the default-config auto-mode option set: Sonnet-tier default model
+// (not capable) but the Opus 4.8 override IS capable — the exact shape of JP's setup.
+func autoOpts() schema.Options {
+	return schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "5.3.0", PermissionMode: "auto", AuthValidated: true,
+	}
+}
+
+// TestBlock_AutoModeAvailable_TrueWithDefaultConfig: the default config pins Sonnet
+// as the default model but always configures Opus 4.8 as the opus override, which IS
+// auto-capable — so auto mode is AVAILABLE (the enable var should be written) even
+// though the default model isn't capable. This is JP's real scenario.
+func TestBlock_AutoModeAvailable_TrueWithDefaultConfig(t *testing.T) {
+	block, err := schema.Build(testConfig(), autoOpts())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if !block.AutoModeAvailable() {
+		t.Error("expected AutoModeAvailable()=true: the Opus 4.8 override is auto-capable")
+	}
+}
+
+// TestBlock_AutoModeAvailable_FalseWhenModeNotAuto: available only applies at mode=auto.
+func TestBlock_AutoModeAvailable_FalseWhenModeNotAuto(t *testing.T) {
+	opts := autoOpts()
+	opts.PermissionMode = "plan"
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.AutoModeAvailable() {
+		t.Error("expected AutoModeAvailable()=false when PermissionMode != auto")
+	}
+}
+
+// TestBlock_AutoModeAvailable_FalseWhenNoCapableModel: force every model to a
+// non-capable one → no configured model qualifies → not available.
+func TestBlock_AutoModeAvailable_FalseWhenNoCapableModel(t *testing.T) {
+	opts := autoOpts()
+	// --model overrides all tiers → in schema.Options that's every per-tier field.
+	opts.OpusModel = "global.anthropic.claude-sonnet-4-6"
+	opts.SonnetModel = "global.anthropic.claude-sonnet-4-6"
+	opts.HaikuModel = "global.anthropic.claude-sonnet-4-6"
+	opts.FableModel = "global.anthropic.claude-sonnet-4-6"
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.AutoModeAvailable() {
+		t.Error("expected AutoModeAvailable()=false when no configured model is auto-capable")
+	}
+}
+
+// TestBuild_AutoMode_NoEnableVarWhenNoCapableModel: the enable var must NOT be written
+// when no configured model can use auto mode (writing it would mislead — auto still
+// wouldn't appear).
+func TestBuild_AutoMode_NoEnableVarWhenNoCapableModel(t *testing.T) {
+	opts := autoOpts()
+	opts.OpusModel = "global.anthropic.claude-sonnet-4-6"
+	opts.SonnetModel = "global.anthropic.claude-sonnet-4-6"
+	opts.HaikuModel = "global.anthropic.claude-sonnet-4-6"
+	opts.FableModel = "global.anthropic.claude-sonnet-4-6"
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if block.Env["CLAUDE_CODE_ENABLE_AUTO_MODE"] == "1" {
+		t.Error("CLAUDE_CODE_ENABLE_AUTO_MODE must not be set when no configured model is capable")
 	}
 }
