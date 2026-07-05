@@ -4,6 +4,14 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.3.2] - 2026-07-04
+
+**Patch release — always route Mantle CLIs to a region that actually serves the model.**
+
+### Fixed
+
+- **Codex/Grok no longer get a config pointing at a region that can't serve the model.** A model is only reachable in the regions where it's available on Bedrock Mantle, and a user's configured (or default) region can't be assumed to serve it. `apply --cli=codex` previously defaulted to `us-west-2`, where the default model `gpt-5.5` isn't served, so Codex was configured against an endpoint that couldn't authenticate. Juggernaut now overrides the region to one that serves the chosen model — whether the region was the global default or passed with `--region` — and prints what it did (e.g. `gpt-5.5: not available in default region us-west-2; using us-east-1 instead`). If the requested region already serves the model, it's kept unchanged. Applies to Codex and Grok, which have verified per-model region data.
+
 ## [5.3.1] - 2026-07-04
 
 **Patch release — fix Codex and Grok launching to their own sign-in instead of Bedrock.**
@@ -1042,7 +1050,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.1...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.2...HEAD
+[5.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.2
 [5.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.1
 [5.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.0
 [5.2.9]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.2.9
