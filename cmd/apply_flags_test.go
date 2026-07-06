@@ -1,9 +1,27 @@
 package cmd
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestApply_RejectsBareFlagShapedArgument(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{"apply", "cli=codex", "--dry-run"})
+	if err == nil {
+		t.Fatal("expected bare cli=codex argument to be rejected")
+	}
+	if !strings.Contains(err.Error(), "did you mean --cli=codex?") {
+		t.Fatalf("expected actionable flag hint, got: %v", err)
+	}
+	if _, statErr := readFileForTestErr(filepath.Join(home, ".claude", "settings.json")); statErr == nil {
+		t.Fatal("invalid apply arguments must not write Claude configuration")
+	}
+}
 
 // TestApply_NoOpusplanConflict verifies --no-opusplan cannot be combined with
 // --opusplan (mirrors the --no-mantle conflict guard).
@@ -53,5 +71,37 @@ func TestApply_SkipPreflightAccepted(t *testing.T) {
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("--skip-preflight should be accepted as a no-op, got: %v", err)
+	}
+}
+
+// TestApply_RejectsNonFlagArgument covers the fallback path in validateApplyArgs
+// where the positional arg does not contain "=" (not flag-shaped). It falls
+// through to cobra.NoArgs and must be rejected.
+func TestApply_RejectsNonFlagArgument(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{"apply", "some-random-arg"})
+	if err == nil {
+		t.Fatal("expected non-flag argument to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unknown") && !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("expected cobra NoArgs error, got: %v", err)
+	}
+}
+
+// TestApply_ValidateArgsEmptyArgs passes through without error (the happy path).
+func TestApply_ValidateArgsEmptyArgs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// apply with no positional args — validateApplyArgs must return nil.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply with no positional args should succeed, got: %v", err)
 	}
 }

@@ -40,8 +40,8 @@ func TestInstallTargetFor_Coexist(t *testing.T) {
 	if !strings.Contains(got, "codex()") {
 		t.Error("codex block not installed")
 	}
-	if !strings.Contains(got, "juggernaut launch codex --") {
-		t.Error("codex block should delegate to `launch codex`")
+	if !strings.Contains(got, "juggernaut launch-cli codex --") {
+		t.Error("codex block should delegate to `launch-cli codex`")
 	}
 	if !strings.Contains(got, "export X=1") {
 		t.Error("user content lost")

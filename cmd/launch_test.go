@@ -255,3 +255,79 @@ func TestLaunchTargetFor_Codex(t *testing.T) {
 		t.Error("codex via Mantle needs a token")
 	}
 }
+
+func TestLaunchCLI_RequiresExplicitCLIName(t *testing.T) {
+	err := ExecuteArgs([]string{"launch-cli", "--"})
+	if err == nil {
+		t.Fatal("expected launch-cli without a CLI name to fail")
+	}
+	if !strings.Contains(err.Error(), "requires a CLI name") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestLaunchCLI_UnknownCLI returns an error from provider.Get before touching
+// activation or keychain, verifying the provider lookup is the first gate.
+func TestLaunchCLI_UnknownCLI(t *testing.T) {
+	err := ExecuteArgs([]string{"launch-cli", "not-a-real-cli", "--"})
+	if err == nil {
+		t.Fatal("expected launch-cli with unknown CLI name to fail")
+	}
+	if !strings.Contains(err.Error(), "not-a-real-cli") {
+		t.Fatalf("expected error mentioning unknown CLI, got: %v", err)
+	}
+}
+
+// TestLaunchCLI_NoArgs returns the "requires a CLI name" error even when there
+// is no "--" separator — zero args is the same failure.
+func TestLaunchCLI_NoArgsAtAll(t *testing.T) {
+	err := ExecuteArgs([]string{"launch-cli"})
+	if err == nil {
+		t.Fatal("expected launch-cli with no args to fail")
+	}
+	if !strings.Contains(err.Error(), "requires a CLI name") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestLaunch_HistoricalFormWithCLIName verifies the legacy `launch codex -- ...`
+// syntax (positional CLI name before --) is accepted and routes through the same
+// provider lookup as launch-cli.
+func TestLaunch_HistoricalFormWithCLIName(t *testing.T) {
+	err := ExecuteArgs([]string{"launch", "not-a-real-cli", "--"})
+	if err == nil {
+		t.Fatal("expected launch with unknown CLI name to fail")
+	}
+	if !strings.Contains(err.Error(), "not-a-real-cli") {
+		t.Fatalf("expected error mentioning unknown CLI, got: %v", err)
+	}
+}
+
+// TestLaunch_HistoricalFormNoArgs verifies the bare `launch -- ...` form
+// (defaulting to claude) reaches provider lookup, not a parsing error.
+func TestLaunch_HistoricalFormNoArgs(t *testing.T) {
+	err := ExecuteArgs([]string{"launch", "--"})
+	// This hits provider.Get("claude") which succeeds, then activation.LaunchCLI
+	// which tries to resolve the real claude binary on PATH — it is not found in
+	// tests, so we expect an exec error, not a parse error.
+	if err == nil {
+		t.Fatal("expected launch with no CLI name to fail (binary not found)")
+	}
+	// The error should be about finding the claude binary, not a parse error.
+	if strings.Contains(err.Error(), "requires a CLI name") {
+		t.Fatalf("bare launch should not require a CLI name, got: %v", err)
+	}
+}
+
+// TestLaunch_DefaultsToClaude verifies `launch -- ...` with no positional CLI
+// name defaults to "claude" by reaching the provider-get step (not a parse error).
+func TestLaunch_DefaultsToClaude(t *testing.T) {
+	err := ExecuteArgs([]string{"launch"})
+	if err == nil {
+		t.Fatal("expected launch to fail (binary not found)")
+	}
+	// Should reach provider.Get("claude") → activation, not a parse error.
+	if strings.Contains(err.Error(), "requires a CLI name") {
+		t.Fatalf("launch should not require a CLI name, got: %v", err)
+	}
+}

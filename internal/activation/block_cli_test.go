@@ -18,8 +18,8 @@ func TestBlockFor_ClaudeByteIdentical(t *testing.T) {
 	}
 }
 
-// TestBlockFor_Codex: a codex wrapper calls `juggernaut launch codex --`, names
-// the function `codex`, and uses the Codex markers.
+// TestBlockFor_Codex: a codex wrapper calls the multi-CLI-only launch command,
+// names the function `codex`, and uses the Codex markers.
 func TestBlockFor_Codex(t *testing.T) {
 	begin := "# BEGIN: Juggernaut Codex Activation"
 	end := "# END: Juggernaut Codex Activation"
@@ -31,8 +31,11 @@ func TestBlockFor_Codex(t *testing.T) {
 	if !strings.Contains(got, "codex()") {
 		t.Errorf("expected codex() function, got:\n%s", got)
 	}
-	if !strings.Contains(got, "juggernaut launch codex --") {
-		t.Errorf("expected `juggernaut launch codex --` delegation, got:\n%s", got)
+	if !strings.Contains(got, "juggernaut launch-cli codex --") {
+		t.Errorf("expected `juggernaut launch-cli codex --` delegation, got:\n%s", got)
+	}
+	if strings.Contains(got, "juggernaut launch codex --") {
+		t.Errorf("version-skew-unsafe launch form must not be emitted:\n%s", got)
 	}
 	if strings.Contains(got, "claude") {
 		t.Errorf("codex block must not mention claude:\n%s", got)

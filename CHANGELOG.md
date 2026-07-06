@@ -4,6 +4,12 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Non-Claude activation blocks fail safely under binary version skew.** New Codex/OpenCode/Grok blocks use `juggernaut launch-cli <cli>` instead of overloading the historical Claude `launch` command. An older binary does not recognize `launch-cli` and errors instead of silently launching Claude.
+- **Bare flag-shaped arguments no longer silently configure Claude.** `apply cli=codex` now fails with a `did you mean --cli=codex?` hint before writing anything.
+- **Windows npm installs remain updatable during launched sessions.** The npm shim runs long-lived `launch` commands from a private temporary copy of `juggernaut.exe`, so the executable inside the installed package is not locked while Claude, Codex, OpenCode, or Grok is running.
+
 ## [5.3.3] - 2026-07-05
 
 **Patch release — Sonnet 5 default, working auto mode out of the box, and Codex direct-run auth.**
