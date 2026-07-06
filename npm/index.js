@@ -117,8 +117,11 @@ function isLongRunningLaunch(args) {
 function stageLaunchBinary(bin, tempRoot) {
   var root = tempRoot || os.tmpdir();
   var tempDir = fs.mkdtempSync(path.join(root, "juggernaut-launch-")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — OS temp dir, constant prefix, unique suffix
-  var stagedBin = path.join(tempDir, path.basename(bin)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — tempDir is mkdtemp-generated; bin basename from validated path
+  // Pin the staged filename to a known constant — no user input in the path.
+  var stagedBin = path.join(tempDir, "juggernaut-staged.exe"); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — tempDir is mkdtemp-generated; filename is a fixed constant
   try {
+    // bin is validated by safeResolveBin (realpath'd + under __dirname).
+    // COPYFILE_EXCL prevents overwriting an existing staged file.
     fs.copyFileSync(bin, stagedBin, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — COPYFILE_EXCL prevents overwrite; both paths validated above
   } catch (err) {
     fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — mkdtemp-generated temp dir

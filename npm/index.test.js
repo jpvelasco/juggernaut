@@ -148,6 +148,36 @@ describe("stageLaunchBinary", function() {
     // Temp dir should be cleaned up even on error
     return void 0;
   });
+  it("rejects a source that is not a regular file", function() {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-stage-notfile-"));
+    try {
+      // Pass a directory as the source — copyFileSync fails when source is not a regular file
+      assert.throws(function() {
+        stageLaunchBinary(root, root);
+      });
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+    return void 0;
+  });
+  it("uses a fixed staged filename regardless of source name", function() {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-stage-filename-"));
+    var source = path.join(root, "some-random-name.exe");
+    var staged;
+    try {
+      fs.writeFileSync(source, "fixture-binary"); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+      staged = stageLaunchBinary(source, root);
+      assert.strictEqual(path.basename(staged.bin), "juggernaut-staged.exe");
+      staged.cleanup();
+      staged = void 0;
+    } finally {
+      if (staged) {
+        staged.cleanup();
+      }
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+    return void 0;
+  });
   return void 0;
 });
 
