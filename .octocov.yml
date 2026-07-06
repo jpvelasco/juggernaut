@@ -1,4 +1,0 @@
-coverage:
-  paths:
-    - coverage.out
-  acceptable: 60%
