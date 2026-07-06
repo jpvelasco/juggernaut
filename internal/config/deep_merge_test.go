@@ -301,6 +301,136 @@ func TestRemoveOwnedSubKeys_DotNotation(t *testing.T) {
 	}
 }
 
+// TestRemoveOwnedSubKeys_DotNotationMissingIntermediate: when the intermediate
+// path component doesn't exist, removal is a clean no-op (nothing to remove).
+func TestRemoveOwnedSubKeys_DotNotationMissingIntermediate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"name": "Amazon Bedrock (Mantle)",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// "amazon-bedrock.aws" — aws doesn't exist → no-op, no error.
+	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
+		"model_providers": {"amazon-bedrock.aws"},
+	})
+	if err != nil {
+		t.Fatalf("should not error when intermediate key is missing: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	if ab["name"] != "Amazon Bedrock (Mantle)" {
+		t.Error("sibling name must survive")
+	}
+}
+
+// TestRemoveOwnedSubKeys_DotNotationNonMapIntermediate: when the intermediate
+// path component is a scalar (not a map), removal errors with an actionable
+// message instead of silently no-opping. Uses a 3-part path so the intermediate
+// lookup triggers the type check.
+func TestRemoveOwnedSubKeys_DotNotationNonMapIntermediate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"config": "not-a-table", // intermediate "aws.config" — config is a scalar
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// "amazon-bedrock.aws.config" — aws is a map, but config is a scalar at the
+	// leaf. Since len(parts)==1 at the leaf, delete just works. To hit the
+	// error path we need a 3-level walk where the *middle* is not a map.
+	// Rewrite: make "aws" a scalar so the walk from amazon-bedrock → aws fails.
+	_ = m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": "not-a-table",
+			},
+		},
+	})
+	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
+		"model_providers": {"amazon-bedrock.aws.region"},
+	})
+	if err == nil {
+		t.Fatal("expected an error when intermediate is a scalar, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected a table") {
+		t.Errorf("error should explain the type mismatch, got: %v", err)
+	}
+}
+
+// TestMergeNestedPrefix_IncomingNotMap: when the incoming value for a deep-merge
+// key is not a map, fall back to whole-value set (the !ok branch).
+func TestMergeNestedPrefix_IncomingNotMap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{"region": "us-east-1"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// model_providers is deep, but incoming value is a string → whole replace.
+	err := m.MergeConfigPlanDeep(map[string]any{
+		"model_providers": "just-a-string",
+	}, []string{"model_providers"})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ := m.Read()
+	if got["model_providers"] != "just-a-string" {
+		t.Errorf("non-map deep value should replace, got %v", got["model_providers"])
+	}
+}
+
+// TestMergeNestedPrefix_RecursiveScalarOverrideMap: when existing has a map at a
+// sub-key but incoming has a scalar, the scalar wins (no recursion).
+func TestMergeNestedPrefix_RecursiveScalarOverrideMap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"profile": "my-profile",
+					"region":  "us-west-2",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Incoming aws is a scalar → overrides the entire aws map.
+	err := m.MergeConfigPlanDeep(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": "override-scalar",
+			},
+		},
+	}, []string{"model_providers"})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	if ab["aws"] != "override-scalar" {
+		t.Errorf("scalar should override map, got %v", ab["aws"])
+	}
+}
+
 // TestRemoveOwnedSubKeys_DotNotationEmptyParentCleaned: removing a nested key
 // that empties its parent should clean up the parent map too.
 func TestRemoveOwnedSubKeys_DotNotationEmptyParentCleaned(t *testing.T) {
