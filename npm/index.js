@@ -105,24 +105,29 @@ function isLongRunningLaunch(args) {
  * Copies the standalone Go executable out of the npm package before a
  * long-running Windows launch. Windows locks a running .exe; running this copy
  * leaves npm free to replace or remove the installed package during a session.
- * @param {string} bin
- * @param {string=} tempRoot
+ *
+ * Safety: `bin` is validated by safeResolveBin (realpath'd + under __dirname).
+ * The temp dir is OS-generated via mkdtempSync (unique, unpredictable suffix).
+ * The staged filename is a fixed constant. No user input reaches any path.
+ *
+ * @param {string} bin  validated realpath (from safeResolveBin)
+ * @param {string=} tempRoot  optional temp directory root for testing
  * @returns {{bin: string, cleanup: function(): void}}
  */
 function stageLaunchBinary(bin, tempRoot) {
   var root = tempRoot || os.tmpdir();
-  var tempDir = fs.mkdtempSync(path.join(root, "juggernaut-launch-"));
-  var stagedBin = path.join(tempDir, path.basename(bin));
+  var tempDir = fs.mkdtempSync(path.join(root, "juggernaut-launch-")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — OS temp dir, constant prefix, unique suffix
+  var stagedBin = path.join(tempDir, path.basename(bin)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — tempDir is mkdtemp-generated; bin basename from validated path
   try {
-    fs.copyFileSync(bin, stagedBin, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    fs.copyFileSync(bin, stagedBin, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — COPYFILE_EXCL prevents overwrite; both paths validated above
   } catch (err) {
-    fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — mkdtemp-generated temp dir
     throw err;
   }
   return {
     bin: stagedBin,
     cleanup: function() {
-      fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — mkdtemp-generated temp dir
     }
   };
 }
