@@ -930,14 +930,6 @@ func normalizeNewlines(content string) string {
 	return strings.ReplaceAll(content, "\r\n", "\n")
 }
 
-// resolveBinary finds a real CLI executable on pathList by trying each of names,
-// skipping this juggernaut binary and known v4.2.6 launcher artifacts. Used by
-// the launcher for any CLI (claude, codex, …).
-func resolveBinary(pathList string, names []string) (string, error) {
-	self, _ := os.Executable()
-	return resolveBinaryFrom(pathList, names, self, nil)
-}
-
 func resolveBinaryFrom(pathList string, names []string, self string, selfPaths []string) (string, error) {
 	for _, dir := range filepath.SplitList(pathList) {
 		for _, name := range names {

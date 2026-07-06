@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -345,7 +346,11 @@ func TestResolveSelfPaths_NoEnv(t *testing.T) {
 }
 
 // TestResolveSelfPaths_RelativePath returns nil for a relative (unsafe) path.
+// Windows-only: resolveSelfPaths returns nil on non-Windows before checking the env var.
 func TestResolveSelfPaths_RelativePath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only")
+	}
 	t.Setenv("JUGGERNAUT_ORIGINAL_BIN", "relative/path.exe")
 	result := resolveSelfPaths()
 	if result != nil {
@@ -354,7 +359,14 @@ func TestResolveSelfPaths_RelativePath(t *testing.T) {
 }
 
 // TestResolveSelfPaths_AbsolutePath returns the path when it's absolute.
+// Windows-only: resolveSelfPaths returns nil on non-Windows before checking the env var.
 func TestResolveSelfPaths_AbsolutePath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only")
+	}
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only")
+	}
 	t.Setenv("JUGGERNAUT_ORIGINAL_BIN", "C:\\some\\path\\juggernaut.exe")
 	result := resolveSelfPaths()
 	if len(result) != 1 {
