@@ -11,11 +11,12 @@ import (
 
 // codex is the OpenAI Codex CLI provider (config at ~/.codex/config.toml, TOML).
 //
-// Codex routes to Bedrock via a custom [model_providers.<id>] block with a
-// base_url + env_key + wire_api (verified from openai/codex's
-// model-provider-info Rust struct). Unlike Claude Code it has NO "use bedrock"
-// env var — routing lives entirely in the config file, so its LaunchSpec has an
-// empty StaticEnv and relies on the config plus the injected bearer token.
+// Codex uses the built-in amazon-bedrock provider which ships a model catalog
+// (eliminates "Model metadata not found" warnings and /model 404s). The config
+// is minimal: model, model_provider, and an [aws] sub-table for region. Auth
+// uses the standard AWS credential chain — Juggernaut's launch wrapper injects
+// AWS_BEARER_TOKEN_BEDROCK. Unlike Claude Code it has NO "use bedrock" env var
+// — routing lives entirely in the config file.
 type codex struct{}
 
 func (codex) Name() string { return "codex" }
@@ -38,13 +39,13 @@ func (codex) ConfigPath(home, scope string) (string, error) {
 }
 
 // NativeManagedKeys are the top-level config.toml keys Juggernaut owns for Codex.
-// OwnsConfig recognizes a Codex config Juggernaut wrote by its Bedrock-Mantle
-// routing (model_provider == "bedrock-mantle"). A plain user config that merely
+// OwnsConfig recognizes a Codex config Juggernaut wrote by its Bedrock provider
+// selection (model_provider == "amazon-bedrock"). A plain user config that merely
 // has a top-level `model` is NOT ours — critical so a first-time
 // `apply --cli=codex` over an existing Codex config still prompts for auth
 // instead of defaulting to iam (Mantle requires a bearer token).
 func (codex) OwnsConfig(data map[string]any) bool {
-	return data["model_provider"] == "bedrock-mantle"
+	return data["model_provider"] == "amazon-bedrock"
 }
 
 func (codex) NativeManagedKeys() []string {
@@ -56,13 +57,13 @@ func (codex) NativeManagedKeys() []string {
 }
 
 // DeepMergeKeys: model_providers is a nested [model_providers.<id>] table where a
-// user may have their own providers; merge only our bedrock-mantle entry.
+// user may have their own providers; merge only our amazon-bedrock entry.
 func (codex) DeepMergeKeys() []string { return []string{"model_providers"} }
 
-// OwnedSubKeys: uninstall removes only our bedrock-mantle provider from the
+// OwnedSubKeys: uninstall removes only our amazon-bedrock provider from the
 // model_providers table (model / model_provider leaves are removed whole).
 func (codex) OwnedSubKeys() map[string][]string {
-	return map[string][]string{"model_providers": {"bedrock-mantle"}}
+	return map[string][]string{"model_providers": {"amazon-bedrock"}}
 }
 
 func (codex) ActivationMarkers() (begin, end string) {
@@ -110,11 +111,21 @@ func codexModel(key string) (codexMantleModel, bool) {
 // codexDefaultModel is GPT-5.5 — the flagship, mirroring the native Codex CLI.
 func codexDefaultModel() string { return "gpt-5.5" }
 
-// BuildConfig writes Codex's config.toml keys: a top-level model + model_provider
-// plus a [model_providers.bedrock-mantle] block whose base_url, wire_api, and
-// env_key are derived from the chosen model's verified Mantle facts. Base path
-// and wire_api are PER-MODEL (live-verified): gpt-5.x → /openai/v1 + responses;
-// gpt-oss → /v1 + chat.
+// BuildConfig writes Codex's config.toml using the built-in amazon-bedrock
+// provider. This provider ships a model catalog with the dotted Mantle wire IDs
+// (openai.gpt-5.5 etc.), eliminating the "Model metadata not found" warning and
+// the /model 404 that occurred with a custom bedrock-mantle provider.
+//
+// The built-in provider uses the standard AWS credential chain:
+// AWS_BEARER_TOKEN_BEDROCK env var (injected by Juggernaut's launch wrapper) or
+// standard AWS SDK credentials (SSO, IAM roles, credential_process).
+//
+// Config shape:
+//
+//	model = "openai.gpt-5.5"
+//	model_provider = "amazon-bedrock"
+//	[model_providers.amazon-bedrock.aws]
+//	  region = "us-east-1"
 func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
@@ -130,32 +141,15 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 	// defaulted, honor-and-warn when it was explicit.
 	region, regionMsg, _ := resolveMantleRegion(opts.Region, opts.RegionExplicit, m.Regions)
 
-	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws%s", region, m.BasePath)
-	provBlock := map[string]any{
-		"name":     "Amazon Bedrock (Mantle)",
-		"base_url": baseURL,
-		"wire_api": m.WireAPI,
-		// Skip the ChatGPT/OpenAI login screen. Codex prompts for OpenAI auth only
-		// when the active provider's requires_openai_auth is true (verified in
-		// openai/codex tui should_show_login_screen).
-		"requires_openai_auth": false,
-		// Command-backed auth: Codex execs this and uses the trimmed stdout as the
-		// bearer token, refreshing after a 401 (openai/codex external_bearer.rs).
-		// This reads the keychain directly, so it works even when codex is launched
-		// WITHOUT Juggernaut's wrapper — unlike env_key, which needs the wrapper to
-		// inject AWS_BEARER_TOKEN_BEDROCK and fails ("Missing environment variable")
-		// on a direct `codex` run. --format=token emits the BARE token Codex wants.
-		"auth": map[string]any{
-			"command": "juggernaut",
-			"args":    []string{"auth-token", "--format=token"},
-		},
-	}
-
 	keys := map[string]any{
 		"model":          m.ModelID,
-		"model_provider": "bedrock-mantle",
+		"model_provider": "amazon-bedrock",
 		"model_providers": map[string]any{
-			"bedrock-mantle": provBlock,
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"region": region,
+				},
+			},
 		},
 	}
 

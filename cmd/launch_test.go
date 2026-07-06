@@ -70,7 +70,7 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 		t.Fatalf("apply --cli=codex: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	for _, want := range []string{"openai.gpt-5.5", "bedrock-mantle", "wire_api", "openai/v1"} {
+	for _, want := range []string{"openai.gpt-5.5", "amazon-bedrock", "model_provider"} {
 		if !containsStr(data, want) {
 			t.Errorf("codex config.toml missing %q; got:\n%s", want, data)
 		}
@@ -103,8 +103,8 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	if containsStr(data, "openai.gpt-5.5") {
 		t.Errorf("must not fall back to gpt-5.5 when --model given:\n%s", data)
 	}
-	if !containsStr(data, `wire_api = "responses"`) {
-		t.Errorf("gpt-5.4 should use wire_api=responses, got:\n%s", data)
+	if !containsStr(data, `model_provider = "amazon-bedrock"`) {
+		t.Errorf("gpt-5.4 should use amazon-bedrock provider, got:\n%s", data)
 	}
 }
 
@@ -205,7 +205,7 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 		t.Fatalf("uninstall: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	if containsStr(data, "bedrock-mantle") || containsStr(data, "model_provider") {
+	if containsStr(data, "amazon-bedrock") || containsStr(data, "model_provider") {
 		t.Errorf("codex managed keys should be removed, got:\n%s", data)
 	}
 }

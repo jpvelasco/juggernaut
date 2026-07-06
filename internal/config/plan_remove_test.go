@@ -13,7 +13,7 @@ func TestRemoveManagedKeys(t *testing.T) {
 	if err := m.Write(map[string]any{
 		"juggernaut":     map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}},
 		"model":          "openai.gpt-5.5",
-		"model_provider": "bedrock-mantle",
+		"model_provider": "amazon-bedrock",
 		"userKept":       "yes",
 	}); err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestHasManagedKeys(t *testing.T) {
 	m := NewManager(path)
 
 	// Codex-style config: managed keys, no juggernaut.meta block.
-	_ = m.Write(map[string]any{"model": "openai.gpt-5.5", "model_provider": "bedrock-mantle"})
+	_ = m.Write(map[string]any{"model": "openai.gpt-5.5", "model_provider": "amazon-bedrock"})
 	has, err := m.HasManagedKeys([]string{"model", "model_provider", "model_providers"})
 	if err != nil {
 		t.Fatalf("HasManagedKeys: %v", err)

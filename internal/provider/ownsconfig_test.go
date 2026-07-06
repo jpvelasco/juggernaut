@@ -16,16 +16,17 @@ func TestClaude_OwnsConfig(t *testing.T) {
 	}
 }
 
-// TestCodex_OwnsConfig: Codex recognizes ONLY its Bedrock-Mantle routing, not a
-// plain user config that merely has a `model` key. This is the P2 fix: a vanilla
-// Codex config (model = "...") must NOT be mistaken for a Juggernaut-configured one.
+// TestCodex_OwnsConfig: Codex recognizes ONLY its amazon-bedrock provider
+// routing, not a plain user config that merely has a `model` key. This is the
+// P2 fix: a vanilla Codex config (model = "...") must NOT be mistaken for a
+// Juggernaut-configured one.
 func TestCodex_OwnsConfig(t *testing.T) {
 	p, _ := Get("codex")
 	if !p.OwnsConfig(map[string]any{
 		"model":          "openai.gpt-5.5",
-		"model_provider": "bedrock-mantle",
+		"model_provider": "amazon-bedrock",
 	}) {
-		t.Error("codex should own a config routed to bedrock-mantle")
+		t.Error("codex should own a config routed to amazon-bedrock")
 	}
 	// Plain non-Juggernaut Codex config with just a model → NOT ours.
 	if p.OwnsConfig(map[string]any{"model": "gpt-5.1-codex"}) {
