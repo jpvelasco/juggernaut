@@ -1,4 +1,4 @@
-.PHONY: build test lint clean codacy codacy-sync fmt vet test-race test-cover tidy ci
+.PHONY: build test lint clean codacy fmt vet test-race test-cover tidy ci
 
 build:
 	go build -ldflags "-X github.com/jpvelasco/juggernaut/v5/cmd.Version=$(shell cat VERSION)" -o bin/juggernaut .
@@ -26,12 +26,9 @@ tidy:
 
 ci: tidy fmt vet lint test
 
-# Local Codacy parity check (WSL). Sync rules from server first: make codacy-sync
+# Codacy cloud — check dashboard issues (requires @codacy/codacy-cloud-cli + CODACY_API_TOKEN)
 codacy:
-	wsl -e bash -lic "cd /mnt/f/source/juggernaut && chmod +x scripts/codacy-full.sh scripts/codacy-sync.sh scripts/codacy/patch-eslint.sh && ./scripts/codacy-full.sh"
-
-codacy-sync:
-	wsl -e bash -lic "cd /mnt/f/source/juggernaut && chmod +x scripts/codacy-sync.sh scripts/codacy/patch-eslint.sh && ./scripts/codacy-sync.sh"
+	npx @codacy/codacy-cloud-cli issues gh jpvelasco juggernaut --overview
 
 clean:
 	rm -rf bin/
