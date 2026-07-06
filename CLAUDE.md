@@ -43,11 +43,8 @@ make fmt vet
 scripts/setup-hooks.ps1    # Windows
 bash scripts/setup-hooks.sh  # Linux/macOS
 
-# Local Codacy analysis (requires WSL2 with codacy-cli installed)
+# Check Codacy dashboard issues (requires @codacy/codacy-cloud-cli + CODACY_API_TOKEN)
 make codacy
-
-# Sync Codacy rules from server first (requires CODACY_API_TOKEN)
-make codacy-sync
 ```
 
 ## Architecture
@@ -122,4 +119,4 @@ Version must stay in sync across **three** locations: `VERSION`, `bedrock-config
 
 ## Codacy
 
-`.codacy/tools-configs/` holds generated configs for revive, eslint, trivy, etc. created by `codacy-cli init`. Run `codacy-cli analyze` in WSL2 to check locally. The `.codacy.yml` at root excludes `.remember/` and `.codacy/` from analysis.
+Codacy cloud analysis runs on every push/PR via the Codacy GitHub integration — `Codacy Static Code Analysis` is a required status check on `main`. Use `make codacy` to check dashboard issues locally (requires `@codacy/codacy-cloud-cli` + `CODACY_API_TOKEN`). The `.codacy/` directory holds synced tool configs (eslint, trivy, pmd, opengrep) and `.codacy.yml` excludes `.remember/` and `.codacy/` from analysis.
