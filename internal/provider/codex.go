@@ -74,30 +74,23 @@ func (codex) ActivationMarkers() (begin, end string) {
 }
 
 // codexMantleModel describes one OpenAI-family model reachable through Bedrock
-// Mantle from Codex. Current Codex is Responses-API-only (it rejects
-// `wire_api = "chat"` at config load), so every entry here uses /openai/v1 +
-// Responses. gpt-5.5 hard-rejects chat/completions, live-verified 2026-07-03.
+// Mantle from Codex. gpt-5.5 hard-rejects chat/completions (Responses-API-only),
+// live-verified 2026-07-03.
 type codexMantleModel struct {
-	ModelID  string   // Bedrock Mantle model ID, e.g. "openai.gpt-5.5"
-	BasePath string   // endpoint path suffix (always "/openai/v1" for Codex)
-	WireAPI  string   // Codex wire_api (always "responses")
-	Regions  []string // regions where live-servable (informational)
+	ModelID string   // Bedrock Mantle model ID, e.g. "openai.gpt-5.5"
+	Regions []string // regions where live-servable (informational)
 }
 
 // codexModels maps a friendly key to its verified Mantle facts. Sourced from AWS
 // model cards + live inference against bedrock-mantle (see mantle-model-matrix).
 var codexModels = map[string]codexMantleModel{
 	"gpt-5.5": {
-		ModelID:  "openai.gpt-5.5",
-		BasePath: "/openai/v1",
-		WireAPI:  "responses",
-		Regions:  []string{"us-east-1", "us-east-2"},
+		ModelID: "openai.gpt-5.5",
+		Regions: []string{"us-east-1", "us-east-2"},
 	},
 	"gpt-5.4": {
-		ModelID:  "openai.gpt-5.4",
-		BasePath: "/openai/v1",
-		WireAPI:  "responses",
-		Regions:  []string{"us-east-1", "us-west-2"},
+		ModelID: "openai.gpt-5.4",
+		Regions: []string{"us-east-1", "us-west-2"},
 	},
 	// NOTE: gpt-oss is intentionally absent. Current Codex is Responses-API-only
 	// (it rejects `wire_api = "chat"` at config load — openai/codex

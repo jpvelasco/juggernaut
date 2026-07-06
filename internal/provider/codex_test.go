@@ -57,8 +57,7 @@ func TestCodex_ActivationMarkers(t *testing.T) {
 
 // --- Per-model table (all facts live-verified 2026-07-03 against Mantle) ---
 
-// TestCodexModel_GPT55 pins the load-bearing GPT-5.5 facts: Responses-only on the
-// /openai/v1 base path. Getting wire_api wrong is a live-confirmed 400.
+// TestCodexModel_GPT55 pins the GPT-5.5 model ID and region availability.
 func TestCodexModel_GPT55(t *testing.T) {
 	m, ok := codexModel("gpt-5.5")
 	if !ok {
@@ -67,11 +66,8 @@ func TestCodexModel_GPT55(t *testing.T) {
 	if m.ModelID != "openai.gpt-5.5" {
 		t.Errorf("ModelID = %q, want openai.gpt-5.5", m.ModelID)
 	}
-	if m.BasePath != "/openai/v1" {
-		t.Errorf("BasePath = %q, want /openai/v1", m.BasePath)
-	}
-	if m.WireAPI != "responses" {
-		t.Errorf("WireAPI = %q, want responses (live: gpt-5.5 rejects chat)", m.WireAPI)
+	if len(m.Regions) == 0 {
+		t.Error("gpt-5.5 should have non-empty regions")
 	}
 }
 
@@ -96,15 +92,16 @@ func TestCodexModel_Unknown(t *testing.T) {
 	}
 }
 
-// TestCodexModel_AllModelsAreResponsesOnly guards that every Codex model uses
-// the Responses wire API on /openai/v1 — the only shape current Codex accepts.
-func TestCodexModel_AllModelsAreResponsesOnly(t *testing.T) {
+// TestCodexModel_AllModelsHaveRegions guards that every Codex model has
+// non-empty region info — an empty list would cause resolveMantleRegion to
+// silently pass through any user region, potentially writing an unreachable config.
+func TestCodexModel_AllModelsHaveRegions(t *testing.T) {
 	for key, m := range codexModels {
-		if m.WireAPI != "responses" {
-			t.Errorf("%s WireAPI = %q, want responses (Codex removed chat)", key, m.WireAPI)
+		if len(m.Regions) == 0 {
+			t.Errorf("%s has no regions (will skip region enforcement)", key)
 		}
-		if m.BasePath != "/openai/v1" {
-			t.Errorf("%s BasePath = %q, want /openai/v1", key, m.BasePath)
+		if m.ModelID == "" {
+			t.Errorf("%s has empty ModelID", key)
 		}
 	}
 }
