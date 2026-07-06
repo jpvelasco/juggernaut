@@ -232,3 +232,25 @@ func TestCodex_BuildConfig_Region(t *testing.T) {
 		t.Errorf("region = %q, want us-east-1", got)
 	}
 }
+
+// TestCodex_BuildConfig_ExplicitServingRegion: when the user explicitly
+// requests a region that serves the model, no warning is emitted and the
+// region is kept as-is. This covers the "happy path" that resolveMantleRegion
+// takes when the explicit region is already in the known set.
+func TestCodex_BuildConfig_ExplicitServingRegion(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Region = "us-east-1"
+	opts.RegionExplicit = true
+	opts.Model = "gpt-5.5"
+	plan, _ := p.BuildConfig(testConfig(), opts)
+	mp := plan.Keys["model_providers"].(map[string]any)
+	ab := mp["amazon-bedrock"].(map[string]any)
+	aws := ab["aws"].(map[string]any)
+	if got := aws["region"].(string); got != "us-east-1" {
+		t.Errorf("region = %q, want us-east-1 (explicit serving region)", got)
+	}
+	if len(plan.Warnings) > 0 {
+		t.Errorf("explicit serving region must not warn, got: %v", plan.Warnings)
+	}
+}

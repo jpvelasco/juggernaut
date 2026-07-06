@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -55,8 +56,9 @@ func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
 	}
 }
 
-// TestApply_Codex_WritesTOMLConfig drives a full codex apply and asserts the
-// TOML config lands at ~/.codex/config.toml with the Mantle provider block.
+// TestApply_Codex_WritesTOMLConfig drives a full codex apply and structurally
+// verifies the TOML config lands at ~/.codex/config.toml with the correct
+// amazon-bedrock provider shape.
 func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -69,11 +71,35 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("apply --cli=codex: %v", err)
 	}
-	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	for _, want := range []string{"openai.gpt-5.5", "amazon-bedrock", "model_provider"} {
-		if !containsStr(data, want) {
-			t.Errorf("codex config.toml missing %q; got:\n%s", want, data)
-		}
+
+	// Structural TOML parse — verify the nested table shape, not just strings.
+	cfgPath := filepath.Join(home, ".codex", "config.toml")
+	tomlFmt, _ := config.FormatByName("toml")
+	mgr := config.NewManagerWithFormat(cfgPath, tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml: %v", err)
+	}
+	if got["model"] != "openai.gpt-5.5" {
+		t.Errorf("model = %v, want openai.gpt-5.5", got["model"])
+	}
+	if got["model_provider"] != "amazon-bedrock" {
+		t.Errorf("model_provider = %v, want amazon-bedrock", got["model_provider"])
+	}
+	mp, ok := got["model_providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("model_providers not a table: %T", got["model_providers"])
+	}
+	ab, ok := mp["amazon-bedrock"].(map[string]any)
+	if !ok {
+		t.Fatalf("amazon-bedrock not a table: %T", mp["amazon-bedrock"])
+	}
+	aws, ok := ab["aws"].(map[string]any)
+	if !ok {
+		t.Fatalf("aws not a table: %T", ab["aws"])
+	}
+	if aws["region"] != "us-east-1" {
+		t.Errorf("aws.region = %v, want us-east-1", aws["region"])
 	}
 }
 
@@ -204,9 +230,19 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
-	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	if containsStr(data, "amazon-bedrock") || containsStr(data, "model_provider") {
-		t.Errorf("codex managed keys should be removed, got:\n%s", data)
+
+	// Structural TOML parse — verify specific keys are removed, not just strings.
+	cfgPath := filepath.Join(home, ".codex", "config.toml")
+	tomlFmt, _ := config.FormatByName("toml")
+	mgr := config.NewManagerWithFormat(cfgPath, tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml: %v", err)
+	}
+	for _, key := range []string{"model", "model_provider", "model_providers"} {
+		if _, ok := got[key]; ok {
+			t.Errorf("managed key %q should be removed, got: %v", key, got)
+		}
 	}
 }
 
