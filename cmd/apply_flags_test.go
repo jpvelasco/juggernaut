@@ -105,3 +105,23 @@ func TestApply_ValidateArgsEmptyArgs(t *testing.T) {
 		t.Fatalf("apply with no positional args should succeed, got: %v", err)
 	}
 }
+
+// TestApply_RedactsBedrockKey verifies that a mistyped bedrock-key argument
+// does not leak the secret value in the error message.
+func TestApply_RedactsBedrockKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{"apply", "bedrock-key=sk-secret-12345"})
+	if err == nil {
+		t.Fatal("expected bedrock-key argument to be rejected")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "sk-secret-12345") {
+		t.Fatalf("error message leaked secret value: %s", msg)
+	}
+	if !strings.Contains(msg, "redacted") {
+		t.Fatalf("expected redacted hint, got: %s", msg)
+	}
+}

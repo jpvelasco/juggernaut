@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -329,5 +330,37 @@ func TestLaunch_DefaultsToClaude(t *testing.T) {
 	// Should reach provider.Get("claude") → activation, not a parse error.
 	if strings.Contains(err.Error(), "requires a CLI name") {
 		t.Fatalf("launch should not require a CLI name, got: %v", err)
+	}
+}
+
+// TestResolveSelfPaths_NoEnv returns nil when JUGGERNAUT_ORIGINAL_BIN is not set.
+func TestResolveSelfPaths_NoEnv(t *testing.T) {
+	orig := os.Getenv("JUGGERNAUT_ORIGINAL_BIN")
+	os.Unsetenv("JUGGERNAUT_ORIGINAL_BIN")
+	t.Cleanup(func() { os.Setenv("JUGGERNAUT_ORIGINAL_BIN", orig) })
+	result := resolveSelfPaths()
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
+}
+
+// TestResolveSelfPaths_RelativePath returns nil for a relative (unsafe) path.
+func TestResolveSelfPaths_RelativePath(t *testing.T) {
+	t.Setenv("JUGGERNAUT_ORIGINAL_BIN", "relative/path.exe")
+	result := resolveSelfPaths()
+	if result != nil {
+		t.Errorf("expected nil for relative path, got %v", result)
+	}
+}
+
+// TestResolveSelfPaths_AbsolutePath returns the path when it's absolute.
+func TestResolveSelfPaths_AbsolutePath(t *testing.T) {
+	t.Setenv("JUGGERNAUT_ORIGINAL_BIN", "C:\\some\\path\\juggernaut.exe")
+	result := resolveSelfPaths()
+	if len(result) != 1 {
+		t.Fatalf("expected 1 path, got %d", len(result))
+	}
+	if result[0] != "C:\\some\\path\\juggernaut.exe" {
+		t.Errorf("expected original path, got %q", result[0])
 	}
 }

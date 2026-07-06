@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/spf13/cobra"
 )
@@ -66,7 +70,17 @@ func launchNamedCLI(cli string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return activation.LaunchCLI(home, args, launchTargetFor(prov))
+
+	selfPaths := resolveSelfPaths()
+	return activation.LaunchWithOptions(activation.LaunchOptions{
+		Home:        home,
+		Args:        args,
+		Path:        os.Getenv("PATH"),
+		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
+		Runner:      activation.RunBinary,
+		Target:      launchTargetFor(prov),
+		SelfPaths:   selfPaths,
+	})
 }
 
 // launchTargetFor maps a provider's LaunchSpec + binary names onto the
@@ -79,4 +93,24 @@ func launchTargetFor(p provider.Provider) activation.LaunchTarget {
 		StaticEnv:   spec.StaticEnv,
 		NeedsToken:  spec.NeedsToken,
 	}
+}
+
+// resolveSelfPaths returns additional executable paths that resolveBinary should
+// skip alongside os.Executable(). On Windows staged launches, the npm shim sets
+// JUGGERNAUT_ORIGINAL_BIN to the installed binary path so that PATH candidates
+// hardlinked to the installed binary are also skipped (os.Executable() returns
+// the temp copy, not the installed binary).
+func resolveSelfPaths() []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	originalBin := os.Getenv("JUGGERNAUT_ORIGINAL_BIN")
+	if originalBin == "" {
+		return nil
+	}
+	// Normalize to absolute to avoid any ambiguity.
+	if !filepath.IsAbs(originalBin) {
+		return nil
+	}
+	return []string{originalBin}
 }

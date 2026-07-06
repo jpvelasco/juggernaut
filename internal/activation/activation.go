@@ -97,6 +97,13 @@ type LaunchOptions struct {
 	// Bedrock). A zero Target defaults to Claude Code, so existing callers are
 	// unaffected. cmd/ populates it from the resolved Provider's LaunchSpec.
 	Target LaunchTarget
+
+	// SelfPaths are additional executable paths that resolveBinary should skip
+	// alongside os.Executable(). This is needed on Windows when the npm shim
+	// stages the binary to a temp copy: os.Executable() returns the temp path,
+	// but PATH candidates hardlinked to the original installed binary must also
+	// be skipped to prevent recursive self-invocation.
+	SelfPaths []string
 }
 
 // LaunchTarget carries the per-CLI launch configuration, mirroring
@@ -577,7 +584,7 @@ func LaunchCLI(home string, args []string, target LaunchTarget) error {
 		Args:        args,
 		Path:        os.Getenv("PATH"),
 		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
-		Runner:      runBinary,
+		Runner:      RunBinary,
 		Target:      target,
 	})
 }
@@ -594,7 +601,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		opts.TokenGetter = func() (string, error) { return keychain.Default().GetWithFallback(opts.Home) }
 	}
 	if opts.Runner == nil {
-		opts.Runner = runBinary
+		opts.Runner = RunBinary
 	}
 	if opts.Warner == nil {
 		opts.Warner = func(msg string) { fmt.Fprintln(os.Stderr, msg) }
@@ -647,7 +654,8 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		env = unsetEnv(env, tokenEnvVar)
 	}
 
-	binPath, err := resolveBinary(opts.Path, target.BinaryNames)
+	self, _ := os.Executable()
+	binPath, err := resolveBinaryFrom(opts.Path, target.BinaryNames, self, opts.SelfPaths)
 	if err != nil {
 		return fmt.Errorf("real %s binary not found on PATH", target.BinaryNames[0])
 	}
@@ -927,14 +935,28 @@ func normalizeNewlines(content string) string {
 // the launcher for any CLI (claude, codex, …).
 func resolveBinary(pathList string, names []string) (string, error) {
 	self, _ := os.Executable()
-	return resolveBinaryFrom(pathList, names, self)
+	return resolveBinaryFrom(pathList, names, self, nil)
 }
 
-func resolveBinaryFrom(pathList string, names []string, self string) (string, error) {
+func resolveBinaryFrom(pathList string, names []string, self string, selfPaths []string) (string, error) {
 	for _, dir := range filepath.SplitList(pathList) {
 		for _, name := range names {
 			candidate := filepath.Join(dir, name)
 			if sameExecutable(candidate, self) {
+				continue
+			}
+			// On Windows staged launches, os.Executable() returns the temp copy
+			// path. A stale claude.exe/codex.exe hardlinked to the installed
+			// binary won't match the temp copy's inode, so also check against
+			// any additional self paths passed by the caller.
+			skip := false
+			for _, sp := range selfPaths {
+				if sameExecutable(candidate, sp) {
+					skip = true
+					break
+				}
+			}
+			if skip {
 				continue
 			}
 			// Reject legacy v4.2.6 claude.cmd/claude.bat shims that invoke
@@ -957,7 +979,7 @@ func resolveClaudeBinary(pathList, self string) (string, error) {
 	if runtime.GOOS == "windows" {
 		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
 	}
-	return resolveBinaryFrom(pathList, names, self)
+	return resolveBinaryFrom(pathList, names, self, nil)
 }
 
 // isLegacyClaudeShim returns true if the file at path is a legacy v4.2.6
@@ -1048,7 +1070,10 @@ func authModes(home string) ([]string, error) {
 	return modes, nil
 }
 
-func runBinary(path string, args []string, env []string) error {
+// RunBinary executes the resolved CLI binary with the given args and environment,
+// inheriting stdin/stdout/stderr. Exported for cmd/launch.go which constructs
+// LaunchOptions directly instead of using LaunchCLI.
+func RunBinary(path string, args []string, env []string) error {
 	// path is the resolved real Claude Code executable from ResolveClaudeBinary;
 	// exec.Command is intentionally used without a shell to preserve arguments.
 	cmd := exec.Command(path, args...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc

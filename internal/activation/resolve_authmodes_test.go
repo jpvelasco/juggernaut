@@ -95,6 +95,59 @@ func claudeName() string {
 	return "claude"
 }
 
+// TestResolveBinaryFrom_SelfPaths covers the staged-launch scenario on Windows:
+// os.Executable() returns the temp copy path, but a stale claude.exe hardlinked
+// to the installed binary must also be skipped. resolveBinaryFrom with SelfPaths
+// ensures both the temp copy AND the original installed binary are skipped.
+func TestResolveBinaryFrom_SelfPaths(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	// "installed" is the original installed Juggernaut binary (hardlinked target).
+	installed := filepath.Join(dirA, "juggernaut-installed")
+	writeExecutableFile(t, dirA, installed, "installed-binary")
+
+	// "tempCopy" simulates os.Executable() on a staged Windows launch —
+	// a different file on disk (not hardlinked to installed).
+	tempCopy := filepath.Join(dirA, "juggernaut-temp")
+	writeExecutableFile(t, dirA, tempCopy, "temp-copy-binary")
+
+	// Stale claude.exe in dirA is hardlinked to the installed binary.
+	// It should be skipped because it's the same file as the installed binary.
+	staleClaude := filepath.Join(dirA, claudeName())
+	if err := os.Link(installed, staleClaude); err != nil {
+		if err := os.Symlink(installed, staleClaude); err != nil {
+			t.Skipf("cannot link/symlink to simulate staged launch: %v", err)
+		}
+	}
+
+	// Real claude in dirB — the correct target.
+	realClaude := filepath.Join(dirB, claudeName())
+	writeExecutableFile(t, dirB, realClaude, "real-claude")
+
+	pathList := strings.Join([]string{dirA, dirB}, string(os.PathListSeparator))
+
+	// Without SelfPaths: tempCopy is os.Executable(), staleClaude is NOT
+	// the same file as tempCopy → staleClaude would be selected (WRONG).
+	gotWithoutSelfPaths, err := resolveBinaryFrom(pathList, []string{claudeName()}, tempCopy, nil)
+	if err != nil {
+		t.Fatalf("resolveBinaryFrom (no selfPaths): %v", err)
+	}
+	if gotWithoutSelfPaths != staleClaude {
+		t.Errorf("without SelfPaths, expected stale claude at %q (demonstrating the bug), got %q", staleClaude, gotWithoutSelfPaths)
+	}
+
+	// With SelfPaths containing the installed binary: staleClaude IS the same
+	// file as installed → skipped → real claude selected (CORRECT).
+	gotWithSelfPaths, err := resolveBinaryFrom(pathList, []string{claudeName()}, tempCopy, []string{installed})
+	if err != nil {
+		t.Fatalf("resolveBinaryFrom (with selfPaths): %v", err)
+	}
+	if gotWithSelfPaths != realClaude {
+		t.Errorf("with SelfPaths, expected real claude at %q, got %q", realClaude, gotWithSelfPaths)
+	}
+}
+
 // TestAuthModes_SkipsMalformedSettings covers the guard branches: a juggernaut
 // block missing the managedBy marker, or with wrong-typed auth, contributes no
 // mode instead of erroring.

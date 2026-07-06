@@ -204,11 +204,18 @@ if (require.main === module) {
     ? stageLaunchBinary(bin)
     : void 0;
   var runBin = staged ? staged.bin : bin;
+  // When staging, pass the original installed binary path so resolveBinary
+  // can also skip PATH candidates hardlinked to it (os.Executable() returns
+  // the temp copy, not the installed binary).
+  var launchEnv = Object.assign({}, process.env);
+  if (staged) {
+    launchEnv.JUGGERNAUT_ORIGINAL_BIN = bin;
+  }
   var result;
   try {
     result = childProcess.spawnSync(runBin, args, {
       stdio: "inherit",
-      env: Object.assign({}, process.env),
+      env: launchEnv,
       shell: false,
       windowsHide: true
     });
