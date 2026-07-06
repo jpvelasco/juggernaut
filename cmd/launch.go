@@ -72,26 +72,34 @@ func launchNamedCLI(cli string, args []string) error {
 	}
 
 	selfPaths := resolveSelfPaths()
+
+	// Resolve the provider's user-scoped config path for auth mode lookup at
+	// launch time. Fall back to user scope — if the user applied project scope,
+	// the launch wrapper still needs to find the auth mode, and user scope is
+	// the default. If user scope doesn't have the block, check project scope too.
+	cfgPath, _ := prov.ConfigPath(home, "user")
+
 	return activation.LaunchWithOptions(activation.LaunchOptions{
 		Home:        home,
 		Args:        args,
 		Path:        os.Getenv("PATH"),
 		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
 		Runner:      activation.RunBinary,
-		Target:      launchTargetFor(prov),
+		Target:      launchTargetFor(prov, cfgPath),
 		SelfPaths:   selfPaths,
 	})
 }
 
 // launchTargetFor maps a provider's LaunchSpec + binary names onto the
 // activation package's LaunchTarget (activation stays provider-free).
-func launchTargetFor(p provider.Provider) activation.LaunchTarget {
+func launchTargetFor(p provider.Provider, cfgPath string) activation.LaunchTarget {
 	spec := p.LaunchSpec()
 	return activation.LaunchTarget{
 		BinaryNames: p.BinaryNames(),
 		TokenEnvVar: spec.TokenEnvVar,
 		StaticEnv:   spec.StaticEnv,
 		NeedsToken:  spec.NeedsToken,
+		ConfigPath:  cfgPath,
 	}
 }
 

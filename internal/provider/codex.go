@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 // codex is the OpenAI Codex CLI provider (config at ~/.codex/config.toml, TOML).
@@ -50,6 +52,7 @@ func (codex) OwnsConfig(data map[string]any) bool {
 
 func (codex) NativeManagedKeys() []string {
 	return []string{
+		"juggernaut",
 		"model",
 		"model_provider",
 		"model_providers",
@@ -60,13 +63,12 @@ func (codex) NativeManagedKeys() []string {
 // user may have their own providers; merge only our amazon-bedrock entry.
 func (codex) DeepMergeKeys() []string { return []string{"model_providers"} }
 
-// OwnedSubKeys: uninstall removes only the aws sub-table we wrote under
-// model_providers.amazon-bedrock. The amazon-bedrock provider is built-in to
-// Codex — users may configure their own profile or other settings there — so we
-// don't delete the entire provider entry. Dot-notation paths are supported by
-// removeOwnedSubKeys for nested removal.
+// OwnedSubKeys: uninstall removes only the region leaf we wrote under
+// model_providers.amazon-bedrock.aws. Users may configure their own profile or
+// other settings in that sub-table — dot-notation targets the leaf so siblings
+// survive.
 func (codex) OwnedSubKeys() map[string][]string {
-	return map[string][]string{"model_providers": {"amazon-bedrock.aws"}}
+	return map[string][]string{"model_providers": {"amazon-bedrock.aws.region"}}
 }
 
 func (codex) ActivationMarkers() (begin, end string) {
@@ -149,6 +151,27 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 		},
 	}
 
+	// Persist the juggernaut block so the launch wrapper can read the auth mode
+	// at runtime (IAM → no token needed; API key → inject bearer token).
+	juggernautBlock := &schema.Block{
+		Auth: schema.Auth{
+			Mode:   opts.AuthMode,
+			Region: region,
+		},
+		Meta: schema.Meta{
+			SchemaVersion: 2,
+			Version:       opts.Version,
+			ManagedBy:     "juggernaut",
+			Scope:         opts.Scope,
+			AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
+		},
+	}
+	blockMap, err := toMapViaJSON(juggernautBlock)
+	if err != nil {
+		return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
+	}
+	keys["juggernaut"] = blockMap
+
 	var warnings []string
 	if regionMsg != "" {
 		warnings = append(warnings, fmt.Sprintf("%s: %s", m.ModelID, regionMsg))
@@ -162,14 +185,15 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 }
 
 func (codex) LaunchSpec() LaunchSpec {
-	// Codex has no "use bedrock" flag — routing lives in config.toml. Only the
-	// bearer token is injected at runtime (Mantle requires it).
+	// Codex has no "use bedrock" flag — routing lives in config.toml.
+	// Token injection is decided at launch time from the stored auth mode:
+	// API key → inject AWS_BEARER_TOKEN_BEDROCK; IAM → SDK credential chain.
 	return LaunchSpec{
 		TokenEnvVar: bedrockAuthEnvName,
-		NeedsToken:  true,
+		NeedsToken:  false, // auth mode in juggernaut block decides at launch
 	}
 }
 
 func (codex) Supports(c Capability) bool {
-	return c == CapEffortLevels
+	return c == CapEffortLevels || c == CapNativeAuth
 }

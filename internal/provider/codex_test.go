@@ -112,3 +112,21 @@ func TestCodex_DefaultModel(t *testing.T) {
 		t.Errorf("default Codex model = %q, want gpt-5.5", got)
 	}
 }
+
+// TestCodex_OwnedSubKeys_LeafRegion: OwnedSubKeys must target the region leaf
+// (amazon-bedrock.aws.region), not the entire aws sub-table. Users may configure
+// their own profile/credentials under aws — uninstall must preserve them.
+func TestCodex_OwnedSubKeys_LeafRegion(t *testing.T) {
+	p, _ := Get("codex")
+	subs := p.OwnedSubKeys()
+	keys, ok := subs["model_providers"]
+	if !ok {
+		t.Fatal("model_providers not in OwnedSubKeys")
+	}
+	if len(keys) != 1 {
+		t.Fatalf("expected 1 owned sub-key, got %d: %v", len(keys), keys)
+	}
+	if keys[0] != "amazon-bedrock.aws.region" {
+		t.Errorf("owned sub-key = %q, want amazon-bedrock.aws.region (leaf-level to preserve user aws subkeys)", keys[0])
+	}
+}

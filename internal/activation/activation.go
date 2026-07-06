@@ -114,6 +114,11 @@ type LaunchTarget struct {
 	TokenEnvVar string            // env var to inject the bearer token into
 	StaticEnv   map[string]string // static enable-flags (Claude: CLAUDE_CODE_USE_BEDROCK=1)
 	NeedsToken  bool              // whether a bearer token is required
+	// ConfigPath is the provider's config file (e.g. ~/.codex/config.toml).
+	// If set, the launch reads the auth mode from the juggernaut block in that
+	// file to decide whether to inject the bearer token. Falls back to NeedsToken
+	// when the block is absent or has no auth mode.
+	ConfigPath string
 }
 
 // claudeLaunchTarget is the default Target (back-compat with the historical
@@ -623,11 +628,21 @@ func LaunchWithOptions(opts LaunchOptions) error {
 
 	// Determine whether this launch is Juggernaut-managed and whether it needs a
 	// bearer token. Claude declares its auth mode in ~/.claude/settings.json
-	// (scanned by authModes). Other CLIs (Codex) store no auth mode there — their
-	// need is declared by the target's NeedsToken. The bearer token is SHARED, so
-	// injecting it for a token-needing target is correct regardless of authModes.
+	// (scanned by authModes). Non-Claude CLIs (Codex) store the auth mode in their
+	// own config file's juggernaut block — read it from ConfigPath if set.
+	// The bearer token is SHARED, so injecting it for a token-needing target
+	// is correct regardless of authModes.
 	managed := len(modes) > 0 || target.NeedsToken
 	wantToken := needsBearerToken(modes) || target.NeedsToken
+
+	// If the target has a config path (non-Claude provider), read the auth mode
+	// from its juggernaut block to decide token injection.
+	if target.ConfigPath != "" {
+		if mode := readAuthModeFromConfig(target.ConfigPath); mode != "" {
+			managed = true
+			wantToken = authmode.IsBedrockAPIKey(mode)
+		}
+	}
 
 	if managed {
 		for k, v := range target.StaticEnv {
@@ -1029,6 +1044,41 @@ func needsBearerToken(modes []string) bool {
 		}
 	}
 	return false
+}
+
+// readAuthModeFromConfig reads the auth mode from a provider config file's
+// juggernaut block. It handles both JSON and TOML formats based on file
+// extension. Returns empty string if the file doesn't exist, has no juggernaut
+// block, or can't be parsed.
+func readAuthModeFromConfig(path string) string {
+	var mgr *config.Manager
+	if strings.HasSuffix(path, ".toml") {
+		f, err := config.FormatByName("toml")
+		if err != nil {
+			return ""
+		}
+		mgr = config.NewManagerWithFormat(path, f)
+	} else {
+		mgr = config.NewManager(path)
+	}
+	data, err := mgr.Read()
+	if err != nil {
+		return ""
+	}
+	block, ok := data["juggernaut"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	meta, ok := block["meta"].(map[string]any)
+	if !ok || meta["managedBy"] != "juggernaut" {
+		return ""
+	}
+	auth, ok := block["auth"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	mode, _ := auth["mode"].(string)
+	return mode
 }
 
 func authModes(home string) ([]string, error) {

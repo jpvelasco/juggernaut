@@ -1,22 +1,22 @@
 package activation
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-// TestLaunchWithOptions_CodexSpec: with a Codex LaunchTarget, the launcher must
-// resolve the `codex` binary, inject the bearer token into the spec's env var,
-// and NOT set CLAUDE_CODE_USE_BEDROCK (Codex routes via config, not an env flag).
+// TestLaunchWithOptions_CodexSpec: with a Codex LaunchTarget that has a config
+// path containing an API-key auth mode, the launcher reads the auth mode from
+// the config file's juggernaut block and injects the bearer token.
 func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 	// Clear the ambient var: this test process runs inside Claude Code, which
 	// sets CLAUDE_CODE_USE_BEDROCK in the real environment. We assert the Codex
 	// launch does not itself set it.
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
 	home := t.TempDir()
-	writeSettings(t, home, "bedrock-api-key") // token needed
 
 	realDir := t.TempDir()
 	codexName := "codex"
@@ -24,6 +24,19 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 		codexName = "codex.exe"
 	}
 	writeExecutableFile(t, realDir, filepath.Join(realDir, codexName), "real codex")
+
+	// Write a config.toml with a juggernaut block that declares API key auth.
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config.toml")
+	cfgContent := `[juggernaut]
+  [juggernaut.auth]
+    mode = "bedrock-api-key"
+  [juggernaut.meta]
+    managedBy = "juggernaut"
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 
 	var gotPath string
 	var gotEnv []string
@@ -39,7 +52,8 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
 			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
-			NeedsToken:  true,
+			NeedsToken:  false, // auth mode read from config
+			ConfigPath:  cfgPath,
 		},
 	})
 	if err != nil {
@@ -48,6 +62,7 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 	if !strings.Contains(gotPath, "codex") {
 		t.Errorf("expected codex binary resolved, got %q", gotPath)
 	}
+	// Config says bedrock-api-key → token injected
 	if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "tok-123" {
 		t.Errorf("expected bearer token injected, env=%v", gotEnv)
 	}
@@ -58,7 +73,8 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 
 // TestLaunchWithOptions_CodexOnly_InjectsToken is the P1 regression: a Codex-only
 // user has NO ~/.claude/settings.json, so authModes is empty. The token must
-// still be injected because the target NeedsToken (the bearer token is shared).
+// still be injected because the config file's juggernaut block declares
+// bedrock-api-key auth (the bearer token is shared).
 func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
 	home := t.TempDir() // no .claude settings written
@@ -69,6 +85,19 @@ func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 		codexName = "codex.exe"
 	}
 	writeExecutableFile(t, realDir, filepath.Join(realDir, codexName), "real codex")
+
+	// Write a config.toml with a juggernaut block that declares API key auth.
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config.toml")
+	cfgContent := `[juggernaut]
+  [juggernaut.auth]
+    mode = "bedrock-api-key"
+  [juggernaut.meta]
+    managedBy = "juggernaut"
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 
 	var gotEnv []string
 	err := LaunchWithOptions(LaunchOptions{
@@ -83,7 +112,8 @@ func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
 			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
-			NeedsToken:  true,
+			NeedsToken:  false, // auth mode read from config
+			ConfigPath:  cfgPath,
 		},
 	})
 	if err != nil {
@@ -91,6 +121,62 @@ func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 	}
 	if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "codex-tok" {
 		t.Errorf("Codex-only launch must inject the shared token, env=%v", gotEnv)
+	}
+}
+
+// TestLaunchWithOptions_Codex_IAM_NoToken: when the config file's juggernaut
+// block declares IAM auth, the launcher must NOT inject a bearer token (IAM
+// uses the AWS SDK credential chain, not a keychain token).
+func TestLaunchWithOptions_Codex_IAM_NoToken(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
+	home := t.TempDir()
+
+	realDir := t.TempDir()
+	codexName := "codex"
+	if runtime.GOOS == "windows" {
+		codexName = "codex.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, codexName), "real codex")
+
+	// Write a config.toml with a juggernaut block that declares IAM auth.
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config.toml")
+	cfgContent := `[juggernaut]
+  [juggernaut.auth]
+    mode = "iam"
+  [juggernaut.meta]
+    managedBy = "juggernaut"
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	tokenCalled := false
+	var gotEnv []string
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Args:        []string{"--version"},
+		Path:        realDir,
+		TokenGetter: func() (string, error) { tokenCalled = true; return "", nil },
+		Runner: func(_ string, _ []string, env []string) error {
+			gotEnv = env
+			return nil
+		},
+		Target: LaunchTarget{
+			BinaryNames: []string{codexName},
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+			NeedsToken:  false,
+			ConfigPath:  cfgPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	if tokenCalled {
+		t.Error("IAM auth must NOT call TokenGetter")
+	}
+	if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "" {
+		t.Errorf("IAM auth must NOT inject bearer token, env=%v", gotEnv)
 	}
 }
 
