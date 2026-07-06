@@ -123,12 +123,12 @@ describe("stageLaunchBinary", function() {
     var source = path.join(root, "installed-juggernaut.exe");
     var staged;
     try {
-      fs.writeFileSync(source, "fixture-binary"); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+      fs.writeFileSync(source, "fixture-binary"); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
       staged = stageLaunchBinary(source, root);
       assert.notStrictEqual(staged.bin, source);
-      assert.strictEqual(fs.readFileSync(staged.bin, "utf8"), "fixture-binary"); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+      assert.strictEqual(fs.readFileSync(staged.bin, "utf8"), "fixture-binary"); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
       staged.cleanup();
-      assert.strictEqual(fs.existsSync(staged.bin), false); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+      assert.strictEqual(fs.existsSync(staged.bin), false); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
       staged = void 0;
     } finally {
       if (staged) {
