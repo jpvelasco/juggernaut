@@ -330,10 +330,45 @@ func TestRemoveOwnedSubKeys_DotNotationMissingIntermediate(t *testing.T) {
 	}
 }
 
+// TestRemoveOwnedSubKeys_DotNotationMissingDeepIntermediate: when a 3+ part path
+// has a missing intermediate component (not the leaf), the recursive call hits
+// the !present short-circuit (line 401-402 of manager.go) and returns nil.
+func TestRemoveOwnedSubKeys_DotNotationMissingDeepIntermediate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"name":   "Amazon Bedrock (Mantle)",
+				"region": "us-east-1",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 3-part path: "amazon-bedrock.aws.credentials" — amazon-bedrock exists,
+	// but "aws" does not → recursive call finds missing intermediate → no-op.
+	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
+		"model_providers": {"amazon-bedrock.aws.credentials"},
+	})
+	if err != nil {
+		t.Fatalf("should not error when deep intermediate is missing: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	if ab["name"] != "Amazon Bedrock (Mantle)" {
+		t.Error("sibling name must survive")
+	}
+	if ab["region"] != "us-east-1" {
+		t.Error("sibling region must survive")
+	}
+}
+
 // TestRemoveOwnedSubKeys_DotNotationNonMapIntermediate: when the intermediate
 // path component is a scalar (not a map), removal errors with an actionable
-// message instead of silently no-opping. Uses a 3-part path so the intermediate
-// lookup triggers the type check.
+// message instead of silently no-opping. Uses a 4-part path so the recursive
+// call itself hits the type check and propagates the error back.
 func TestRemoveOwnedSubKeys_DotNotationNonMapIntermediate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	m := NewManagerWithFormat(path, tomlFormat{})
@@ -341,32 +376,93 @@ func TestRemoveOwnedSubKeys_DotNotationNonMapIntermediate(t *testing.T) {
 		"model_providers": map[string]any{
 			"amazon-bedrock": map[string]any{
 				"aws": map[string]any{
-					"config": "not-a-table", // intermediate "aws.config" — config is a scalar
+					"credentials": "not-a-table", // 3rd level is a scalar
 				},
 			},
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// "amazon-bedrock.aws.config" — aws is a map, but config is a scalar at the
-	// leaf. Since len(parts)==1 at the leaf, delete just works. To hit the
-	// error path we need a 3-level walk where the *middle* is not a map.
-	// Rewrite: make "aws" a scalar so the walk from amazon-bedrock → aws fails.
-	_ = m.Write(map[string]any{
-		"model_providers": map[string]any{
-			"amazon-bedrock": map[string]any{
-				"aws": "not-a-table",
-			},
-		},
-	})
+	// "amazon-bedrock.aws.credentials.access_key" — aws is a map, credentials
+	// is a scalar → recursive call errors at "credentials" and propagates back.
 	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
-		"model_providers": {"amazon-bedrock.aws.region"},
+		"model_providers": {"amazon-bedrock.aws.credentials.access_key"},
 	})
 	if err == nil {
 		t.Fatal("expected an error when intermediate is a scalar, got nil")
 	}
 	if !strings.Contains(err.Error(), "expected a table") {
 		t.Errorf("error should explain the type mismatch, got: %v", err)
+	}
+}
+
+// TestMergeNestedPrefix_RecursionGuard: the recursion guard (lines 268-270 of
+// manager.go) only recurses when BOTH existing and incoming sub-keys are maps.
+// If either side is not a map, the incoming value wins without recursion.
+func TestMergeNestedPrefix_RecursionGuard(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+
+	// Existing: "aws" is a map with two keys.
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"profile": "my-profile",
+					"region":  "us-west-2",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Incoming: "aws" is a scalar — guard skips recursion, scalar replaces map.
+	err := m.MergeConfigPlanDeep(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": "flat-string",
+			},
+		},
+	}, []string{"model_providers"})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	if ab["aws"] != "flat-string" {
+		t.Errorf("scalar should replace map (guard skipped recursion), got %v", ab["aws"])
+	}
+
+	// Reverse: existing is a scalar, incoming is a map — guard skips recursion,
+	// incoming map replaces the scalar.
+	_ = m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": "flat-string",
+			},
+		},
+	})
+	err = m.MergeConfigPlanDeep(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{"region": "us-east-1"},
+			},
+		},
+	}, []string{"model_providers"})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ = m.Read()
+	mp, _ = got["model_providers"].(map[string]any)
+	ab, _ = mp["amazon-bedrock"].(map[string]any)
+	aws, ok := ab["aws"].(map[string]any)
+	if !ok {
+		t.Fatalf("incoming map should replace scalar, got %T", ab["aws"])
+	}
+	if aws["region"] != "us-east-1" {
+		t.Errorf("map replacement incorrect: %v", aws)
 	}
 }
 
@@ -428,6 +524,99 @@ func TestMergeNestedPrefix_RecursiveScalarOverrideMap(t *testing.T) {
 	ab, _ := mp["amazon-bedrock"].(map[string]any)
 	if ab["aws"] != "override-scalar" {
 		t.Errorf("scalar should override map, got %v", ab["aws"])
+	}
+}
+
+// TestMergeNestedPrefix_DeeperRecursivePreservesUserSubKeys: verifies recursion
+// works at multiple nesting levels, preserving user sub-keys at each depth.
+func TestMergeNestedPrefix_DeeperRecursivePreservesUserSubKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"credentials": map[string]any{
+						"profile": "my-sso-profile",
+						"region":  "us-west-2",
+					},
+				},
+				"name": "Amazon Bedrock (Mantle)",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// 4-level merge: model_providers → amazon-bedrock → aws → credentials.
+	// User's profile survives; Juggernaut's region overrides.
+	err := m.MergeConfigPlanDeep(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"credentials": map[string]any{
+						"region": "us-east-1",
+					},
+				},
+			},
+		},
+	}, []string{"model_providers"})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	aws, _ := ab["aws"].(map[string]any)
+	creds, _ := aws["credentials"].(map[string]any)
+	if creds["profile"] != "my-sso-profile" {
+		t.Errorf("user profile lost at deep level: %v", creds)
+	}
+	if creds["region"] != "us-east-1" {
+		t.Errorf("region not overridden at deep level: %v", creds)
+	}
+	if ab["name"] != "Amazon Bedrock (Mantle)" {
+		t.Errorf("sibling name lost: %v", ab)
+	}
+}
+
+// TestRemoveOwnedSubKeys_DotNotationPreservesSiblings: removing a deeply nested
+// key preserves sibling entries at all levels and exercises the successful
+// recursive return path (line 407-416).
+func TestRemoveOwnedSubKeys_DotNotationPreservesSiblings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"region":  "us-east-1",
+					"profile": "my-profile",
+				},
+				"name": "Amazon Bedrock (Mantle)",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Remove only the region — profile and name must survive.
+	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
+		"model_providers": {"amazon-bedrock.aws.region"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveManagedKeysDeep: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	aws, _ := ab["aws"].(map[string]any)
+	if _, ok := aws["region"]; ok {
+		t.Error("region should be removed")
+	}
+	if aws["profile"] != "my-profile" {
+		t.Error("sibling profile must survive")
+	}
+	if ab["name"] != "Amazon Bedrock (Mantle)" {
+		t.Error("sibling name must survive")
 	}
 }
 
