@@ -3,18 +3,14 @@
 # Coverage is uploaded from all three OS matrix legs (ubuntu/macos/windows) via
 # OIDC (no stored CODECOV_TOKEN) and merged, so platform-specific code (the
 # Windows PowerShell/launcher/keychain paths) is counted. Both gates block PRs:
-#   - project: overall coverage may not drop below the floor
+#   - project: overall coverage must stay at 80% or above
 #   - patch:   new/changed lines in a PR must meet the target
-#
-# The project floor sits just below the current merged total (~75%), giving a
-# little headroom while preventing regressions. Ratchet it upward as coverage
-# grows. The patch gate holds new code to a higher bar than the legacy average.
 coverage:
   status:
     project:
       default:
-        target: 73%         # floor — below current ~75%, raise over time
-        threshold: 1%       # tolerate <=1% drift before failing
+        target: 80%         # hard floor — blocks merge if below
+        threshold: 0%       # zero tolerance — any drop below 80% fails
     patch:
       default:
         target: 80%         # new/changed lines must be >=80% covered
@@ -38,7 +34,7 @@ component_management:
         - internal/**
 
 comment:
-  layout: "reach, diff, flags, components, files"
+  layout: "reach, diff, files"
   behavior: default
   require_changes: false
 
@@ -52,7 +48,7 @@ ignore:
   # Windows leg (covered there at 78-100%); the Linux/macOS legs that dominate
   # the merged report can't see it, so it reads as 0% and unfairly sinks patch
   # coverage. crypter_other.go is the non-Windows no-op stub. Same rationale as
-  # ignoring main.go — build-tagged shims aren't meaningfully measurable in a
+  # ignoring main.go - build-tagged shims aren't meaningfully measurable in a
   # merged multi-OS report.
   - "internal/keychain/crypter_windows.go"
   - "internal/keychain/crypter_other.go"

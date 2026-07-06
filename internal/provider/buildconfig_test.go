@@ -90,11 +90,11 @@ func TestClaude_Supports(t *testing.T) {
 	}
 }
 
-// TestMantleOnlyCLIs_NoNativeAuth: Codex/OpenCode/Grok route only through Mantle,
-// which requires a bearer token, so none may claim CapNativeAuth (IAM/SSO). apply
-// relies on this to reject --auth=iam for them.
+// TestMantleOnlyCLIs_NoNativeAuth: OpenCode and Grok route only through Mantle,
+// which requires a bearer token, so they must NOT claim CapNativeAuth (IAM/SSO).
+// Codex now supports IAM via the AWS SDK credential chain.
 func TestMantleOnlyCLIs_NoNativeAuth(t *testing.T) {
-	for _, name := range []string{"codex", "opencode", "grok"} {
+	for _, name := range []string{"opencode", "grok"} {
 		p, _ := Get(name)
 		if p.Supports(CapNativeAuth) {
 			t.Errorf("%s is Mantle-only and must NOT support CapNativeAuth", name)
@@ -102,8 +102,9 @@ func TestMantleOnlyCLIs_NoNativeAuth(t *testing.T) {
 	}
 }
 
-// TestCodex_LaunchSpec: no static enable flag (routes via config), bearer token
-// still injected (Mantle requires it).
+// TestCodex_LaunchSpec: no static enable flag (routes via config), NeedsToken is
+// false — auth mode (IAM or API key) is stored in the config.toml juggernaut block
+// and resolved at launch time.
 func TestCodex_LaunchSpec(t *testing.T) {
 	p, _ := Get("codex")
 	ls := p.LaunchSpec()
@@ -113,8 +114,10 @@ func TestCodex_LaunchSpec(t *testing.T) {
 	if ls.TokenEnvVar != "AWS_BEARER_TOKEN_BEDROCK" {
 		t.Errorf("TokenEnvVar = %q, want AWS_BEARER_TOKEN_BEDROCK", ls.TokenEnvVar)
 	}
-	if !ls.NeedsToken {
-		t.Error("Codex via Mantle needs a token")
+	// Codex now supports both IAM and API key — NeedsToken=false because the
+	// launch wrapper reads auth mode from the config file to decide at runtime.
+	if ls.NeedsToken {
+		t.Error("Codex NeedsToken must be false — auth mode resolved from config at launch")
 	}
 }
 

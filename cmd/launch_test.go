@@ -30,11 +30,11 @@ func containsStr(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
-// TestApply_MantleOnlyCLI_RejectsIAM: Codex/OpenCode/Grok route only through
+// TestApply_MantleOnlyCLI_RejectsIAM: OpenCode and Grok route only through
 // Mantle (bearer token required), so an explicit --auth=iam must be rejected with
-// an actionable error rather than writing a config that can never authenticate.
+// an actionable error. Codex now supports IAM via the AWS SDK credential chain.
 func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
-	for _, cli := range []string{"codex", "opencode", "grok"} {
+	for _, cli := range []string{"opencode", "grok"} {
 		t.Run(cli, func(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
@@ -246,11 +246,47 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 	}
 }
 
+// TestApply_Codex_IAM_Allowed: Codex now supports IAM via the AWS SDK credential
+// chain, so apply --cli=codex --auth=iam must succeed (not rejected).
+func TestApply_Codex_IAM_Allowed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=codex", "--auth=iam",
+		"--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --cli=codex --auth=iam: %v", err)
+	}
+
+	// Verify the config was written with IAM auth mode in the juggernaut block.
+	cfgPath := filepath.Join(home, ".codex", "config.toml")
+	tomlFmt, _ := config.FormatByName("toml")
+	mgr := config.NewManagerWithFormat(cfgPath, tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml: %v", err)
+	}
+	juggernaut, ok := got["juggernaut"].(map[string]any)
+	if !ok {
+		t.Fatalf("juggernaut block not found in config")
+	}
+	auth, ok := juggernaut["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("juggernaut.auth not found")
+	}
+	if auth["mode"] != "iam" {
+		t.Errorf("auth mode = %v, want iam", auth["mode"])
+	}
+}
+
 // TestLaunchTargetFor_Claude maps the Claude provider's LaunchSpec + binaries
 // onto the activation LaunchTarget.
 func TestLaunchTargetFor_Claude(t *testing.T) {
 	p, _ := provider.Get("claude")
-	tgt := launchTargetFor(p)
+	tgt := launchTargetFor(p, "")
 	if len(tgt.BinaryNames) == 0 || tgt.BinaryNames[0] != "claude" && tgt.BinaryNames[0] != "claude.exe" {
 		t.Errorf("claude binary names = %v", tgt.BinaryNames)
 	}
@@ -269,17 +305,19 @@ func TestLaunchTargetFor_Claude(t *testing.T) {
 // every Claude+IAM launch would fail with "bedrock API key not found".
 func TestLaunchTargetFor_Claude_IAM_NeedsNoStaticToken(t *testing.T) {
 	p, _ := provider.Get("claude")
-	tgt := launchTargetFor(p)
+	tgt := launchTargetFor(p, "")
 	if tgt.NeedsToken {
 		t.Error("Claude LaunchTarget.NeedsToken must be false — token need is auth-mode-dependent (IAM needs none), decided at launch by authModes")
 	}
 }
 
 // TestLaunchTargetFor_Codex maps the Codex provider: codex binary, bearer token,
-// and NO static enable flag (routes via config).
+// and NO static enable flag (routes via config). NeedsToken is false — auth mode
+// (IAM or API key) is stored in the config.toml juggernaut block and resolved at
+// launch time.
 func TestLaunchTargetFor_Codex(t *testing.T) {
 	p, _ := provider.Get("codex")
-	tgt := launchTargetFor(p)
+	tgt := launchTargetFor(p, "")
 	if len(tgt.BinaryNames) == 0 || (tgt.BinaryNames[0] != "codex" && tgt.BinaryNames[0] != "codex.exe") {
 		t.Errorf("codex binary names = %v", tgt.BinaryNames)
 	}
@@ -289,8 +327,11 @@ func TestLaunchTargetFor_Codex(t *testing.T) {
 	if len(tgt.StaticEnv) != 0 {
 		t.Errorf("codex should have no static enable flag, got %v", tgt.StaticEnv)
 	}
-	if !tgt.NeedsToken {
-		t.Error("codex via Mantle needs a token")
+	// Codex now supports both IAM and API key auth — NeedsToken is false because
+	// the launch wrapper reads the auth mode from the config file's juggernaut
+	// block to decide at runtime.
+	if tgt.NeedsToken {
+		t.Error("codex NeedsToken must be false — auth mode is resolved from config at launch time")
 	}
 }
 
