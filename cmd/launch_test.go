@@ -364,9 +364,6 @@ func TestResolveSelfPaths_AbsolutePath(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows-only")
 	}
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows-only")
-	}
 	t.Setenv("JUGGERNAUT_ORIGINAL_BIN", "C:\\some\\path\\juggernaut.exe")
 	result := resolveSelfPaths()
 	if len(result) != 1 {
