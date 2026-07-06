@@ -70,11 +70,11 @@ gh api repos/OWNER/REPO/rulesets \
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "Lint" },
-          { "context": "Test on ubuntu-latest" },
-          { "context": "Test on macos-latest" },
-          { "context": "Test on Windows (PowerShell)" },
-          { "context": "Test on Windows (Git Bash)" }
+          { "context": "lint" },
+          { "context": "test (ubuntu-latest)" },
+          { "context": "test (macos-latest)" },
+          { "context": "test (windows-latest)" },
+          { "context": "Codacy Static Code Analysis" }
         ]
       }
     }
@@ -121,11 +121,11 @@ EOF
 - Require CODEOWNERS review: no
 - Require conversation resolution: yes
 - Required status checks (all must pass):
-  - `Lint`
-  - `Test on ubuntu-latest`
-  - `Test on macos-latest`
-  - `Test on Windows (PowerShell)`
-  - `Test on Windows (Git Bash)`
+  - `lint`
+  - `test (ubuntu-latest)`
+  - `test (macos-latest)`
+  - `test (windows-latest)`
+  - `Codacy Static Code Analysis`
 - Require branch up to date: yes
 
 ### Tag ruleset: `protect-version-tags`
