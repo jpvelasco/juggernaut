@@ -2,13 +2,32 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
-## [Unreleased]
+## [5.3.4] - 2026-07-06
+
+**Patch release — Codex IAM support, deep merge hardening, and CI quality gates.**
+
+### Added
+
+- **Codex now supports IAM/SSO authentication.** `apply --cli=codex --auth=iam` is accepted and writes the built-in `amazon-bedrock` provider configured for the AWS SDK credential chain instead of a bearer token. The launch wrapper reads the auth mode from the config file's `juggernaut` block at runtime — API key mode injects `AWS_BEARER_TOKEN_BEDROCK`, IAM mode uses the SDK chain directly.
 
 ### Fixed
 
-- **Non-Claude activation blocks fail safely under binary version skew.** New Codex/OpenCode/Grok blocks use `juggernaut launch-cli <cli>` instead of overloading the historical Claude `launch` command. An older binary does not recognize `launch-cli` and errors instead of silently launching Claude.
-- **Bare flag-shaped arguments no longer silently configure Claude.** `apply cli=codex` now fails with a `did you mean --cli=codex?` hint before writing anything.
-- **Windows npm installs remain updatable during launched sessions.** The npm shim runs long-lived `launch` commands from a private temporary copy of `juggernaut.exe`, so the executable inside the installed package is not locked while Claude, Codex, OpenCode, or Grok is running.
+- **Codex uninstall preserves user AWS subkeys.** `OwnedSubKeys` now targets `amazon-bedrock.aws.region` (leaf-level) instead of `amazon-bedrock.aws`, so user `profile` or other settings under `[model_providers.amazon-bedrock.aws]` survive uninstall.
+- **Codex uses built-in `amazon-bedrock` provider.** Switched from the custom `bedrock-mantle` provider to Codex's native `amazon-bedrock` provider, which supports both Bedrock API key and IAM/SDK credentials. Backward-compat migration handles configs still using the old `bedrock-mantle` shape.
+- **Launch safety hardening on Windows.** `stageLaunchBinary` validates the temp directory and source file before staging, preventing path confusion attacks. Multi-CLI launch paths use pinned filenames and temp directory validation.
+- **Deep merge and removal correctness.** Config merge now recurses through nested tables so user data survives apply. Removal targets only Juggernaut-owned sub-keys using dot-notation paths, with type-mismatch guards that error instead of silently dropping data.
+
+### Changed
+
+- **Codecov quality gate raised to 80%.** Both project and patch coverage gates now enforce 80% with zero tolerance, replacing the previous 73% project floor with 1% threshold.
+- **Codacy migrated to cloud-only analysis.** Local Codacy Analysis CLI removed; quality checks now run entirely through Codacy's cloud integration.
+- **Octocov removed.** Redundant with Codecov for an OSS repo — coverage metrics and Test Analytics are handled by Codecov directly.
+
+### Other
+
+- **CodeQL workflow added.** Explicit scheduled and push/PR workflow analyzing Go, JavaScript/TypeScript, and GitHub Actions via dedicated config.
+- **CI action bumps.** `golangci/golangci-lint-action` 9.2.1→9.3.0, `goreleaser/goreleaser-action` 7.2.2→7.2.3.
+- **Branch protection updated.** `legacy/v3` marked as protected branch in CLAUDE.md and AGENTS.md.
 
 ## [5.3.3] - 2026-07-05
 
