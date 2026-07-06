@@ -105,11 +105,12 @@ jobs:
         run: |
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%' | cut -d. -f1)
           echo "Coverage: ${TOTAL}%"
-          # Compare as integers — Linux-only floor (Windows-only code is not
-          # exercised here, so this sits below the merged Codecov total, which
-          # is the real coverage gate). Currently ~69% on Linux.
-          if [ "${TOTAL}" -lt 60 ]; then
-            echo "Coverage below 60% threshold"
+          # Linux-only floor — Windows-only code is not exercised here, so
+          # this sits below the merged Codecov total. The Codecov project gate
+          # (codecov.yml) is the authoritative 80% gate that blocks merges.
+          # This CI gate catches gross regressions before the upload completes.
+          if [ "${TOTAL}" -lt 65 ]; then
+            echo "Coverage below 65% threshold"
             exit 1
           fi
       # Coverage uploads come from the OS matrix (test job); this job only
