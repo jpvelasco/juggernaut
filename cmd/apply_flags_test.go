@@ -1,9 +1,27 @@
 package cmd
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestApply_RejectsBareFlagShapedArgument(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	err := ExecuteArgs([]string{"apply", "cli=codex", "--dry-run"})
+	if err == nil {
+		t.Fatal("expected bare cli=codex argument to be rejected")
+	}
+	if !strings.Contains(err.Error(), "did you mean --cli=codex?") {
+		t.Fatalf("expected actionable flag hint, got: %v", err)
+	}
+	if _, statErr := readFileForTestErr(filepath.Join(home, ".claude", "settings.json")); statErr == nil {
+		t.Fatal("invalid apply arguments must not write Claude configuration")
+	}
+}
 
 // TestApply_NoOpusplanConflict verifies --no-opusplan cannot be combined with
 // --opusplan (mirrors the --no-mantle conflict guard).

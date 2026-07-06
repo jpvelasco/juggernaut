@@ -26,6 +26,7 @@ const credentialEchoMode huh.EchoMode = huh.EchoMode(textinput.EchoNone)
 var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Configure Claude Code to use Amazon Bedrock",
+	Args:  validateApplyArgs,
 	RunE:  runApply,
 }
 
@@ -91,6 +92,18 @@ func init() {
 	f.StringVar(&applyFlags.serviceTier, "service-tier", "", "Bedrock service tier: default|flex|priority")
 
 	rootCmd.AddCommand(applyCmd)
+}
+
+func validateApplyArgs(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+
+	name, _, hasValue := strings.Cut(args[0], "=")
+	if hasValue && cmd.Flags().Lookup(name) != nil {
+		return fmt.Errorf("unexpected argument %q; did you mean --%s?", args[0], args[0])
+	}
+	return cobra.NoArgs(cmd, args)
 }
 
 func runApply(_ *cobra.Command, _ []string) error {

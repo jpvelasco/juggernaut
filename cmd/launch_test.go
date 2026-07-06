@@ -255,3 +255,13 @@ func TestLaunchTargetFor_Codex(t *testing.T) {
 		t.Error("codex via Mantle needs a token")
 	}
 }
+
+func TestLaunchCLI_RequiresExplicitCLIName(t *testing.T) {
+	err := ExecuteArgs([]string{"launch-cli", "--"})
+	if err == nil {
+		t.Fatal("expected launch-cli without a CLI name to fail")
+	}
+	if !strings.Contains(err.Error(), "requires a CLI name") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

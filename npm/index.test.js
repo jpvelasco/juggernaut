@@ -5,12 +5,16 @@ var describe = nodeTest.describe;
 var it = nodeTest.it;
 var path = require("path");
 var assert = require("assert");
+var fs = require("fs");
+var os = require("os");
 
 var index = require("./index");
 var getPlatformPackage = index.getPlatformPackage;
 var getBinaryPath = index.getBinaryPath;
 var resolvePkgDir = index.resolvePkgDir;
 var safeForwardArgs = index.safeForwardArgs;
+var isLongRunningLaunch = index.isLongRunningLaunch;
+var stageLaunchBinary = index.stageLaunchBinary;
 
 describe("getPlatformPackage", function() {
   it("maps linux x64", function() {
@@ -94,6 +98,44 @@ describe("safeForwardArgs", function() {
     assert.throws(function() {
       safeForwardArgs(["ok", "bad\u0000arg"]);
     }, /NUL byte/);
+    return void 0;
+  });
+  return void 0;
+});
+
+describe("isLongRunningLaunch", function() {
+  it("recognizes both activation launch commands", function() {
+    assert.strictEqual(isLongRunningLaunch(["launch", "--"]), true);
+    assert.strictEqual(isLongRunningLaunch(["launch-cli", "codex", "--"]), true);
+    return void 0;
+  });
+  it("does not stage short-lived commands", function() {
+    assert.strictEqual(isLongRunningLaunch(["apply", "--dry-run"]), false);
+    assert.strictEqual(isLongRunningLaunch([]), false);
+    return void 0;
+  });
+  return void 0;
+});
+
+describe("stageLaunchBinary", function() {
+  it("runs from a disposable copy outside the installed binary path", function() {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-stage-test-"));
+    var source = path.join(root, "installed-juggernaut.exe");
+    var staged;
+    try {
+      fs.writeFileSync(source, "fixture-binary");
+      staged = stageLaunchBinary(source, root);
+      assert.notStrictEqual(staged.bin, source);
+      assert.strictEqual(fs.readFileSync(staged.bin, "utf8"), "fixture-binary");
+      staged.cleanup();
+      assert.strictEqual(fs.existsSync(staged.bin), false);
+      staged = void 0;
+    } finally {
+      if (staged) {
+        staged.cleanup();
+      }
+      fs.rmSync(root, {recursive: true, force: true});
+    }
     return void 0;
   });
   return void 0;

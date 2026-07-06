@@ -4,6 +4,7 @@
 var path = require("path");
 var childProcess = require("node:child_process");
 var fs = require("fs");
+var os = require("os");
 
 var PLATFORM_MAP = {
   "linux-x64": "juggernaut-bedrock-linux-x64",
@@ -96,6 +97,36 @@ function safeForwardArgs(args) {
   return forwarded;
 }
 
+function isLongRunningLaunch(args) {
+  return args.length > 0 && (args[0] === "launch" || args[0] === "launch-cli");
+}
+
+/**
+ * Copies the standalone Go executable out of the npm package before a
+ * long-running Windows launch. Windows locks a running .exe; running this copy
+ * leaves npm free to replace or remove the installed package during a session.
+ * @param {string} bin
+ * @param {string=} tempRoot
+ * @returns {{bin: string, cleanup: function(): void}}
+ */
+function stageLaunchBinary(bin, tempRoot) {
+  var root = tempRoot || os.tmpdir();
+  var tempDir = fs.mkdtempSync(path.join(root, "juggernaut-launch-"));
+  var stagedBin = path.join(tempDir, path.basename(bin));
+  try {
+    fs.copyFileSync(bin, stagedBin, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  } catch (err) {
+    fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    throw err;
+  }
+  return {
+    bin: stagedBin,
+    cleanup: function() {
+      fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    }
+  };
+}
+
 
 /**
  * @param {*} rootVersion
@@ -164,12 +195,29 @@ if (require.main === module) {
     process.exit(1);
   }
   var args = safeForwardArgs(process.argv.slice(2));
-  var result = childProcess.spawnSync(bin, args, {
-    stdio: "inherit",
-    env: Object.assign({}, process.env),
-    shell: false,
-    windowsHide: true
-  });
+  var staged = process.platform === "win32" && isLongRunningLaunch(args)
+    ? stageLaunchBinary(bin)
+    : void 0;
+  var runBin = staged ? staged.bin : bin;
+  var result;
+  try {
+    result = childProcess.spawnSync(runBin, args, {
+      stdio: "inherit",
+      env: Object.assign({}, process.env),
+      shell: false,
+      windowsHide: true
+    });
+  } finally {
+    if (staged) {
+      // Cleanup must not replace the launched CLI's exit status with a
+      // transient Windows file-removal error (for example, from antivirus).
+      try {
+        staged.cleanup();
+      } catch (_) {
+        // The uniquely named temporary directory is safe to leave behind.
+      }
+    }
+  }
   process.exit(result.status !== null ? result.status : 1);
 }
 
@@ -178,5 +226,7 @@ module.exports = {
   getBinaryPath: getBinaryPath,
   resolvePkgDir: resolvePkgDir,
   safeForwardArgs: safeForwardArgs,
+  isLongRunningLaunch: isLongRunningLaunch,
+  stageLaunchBinary: stageLaunchBinary,
   versionsMatch: versionsMatch
 };

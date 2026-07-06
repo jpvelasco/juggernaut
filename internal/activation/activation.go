@@ -144,22 +144,20 @@ func Block(shell Shell) string {
 }
 
 // blockFor generates a shell activation block that defines a function named
-// `cli` delegating to `juggernaut launch [cli] -- ...`. For the default CLI
-// (claude) the launch verb takes no CLI argument, so the emitted block is
-// byte-identical to the historical Claude block; other CLIs pass their name
-// (`juggernaut launch codex --`).
+// `cli`. Claude retains the byte-identical historical `juggernaut launch`
+// delegation. Other CLIs use the newer `launch-cli` command so a pre-multi-CLI
+// binary fails fast instead of silently launching Claude.
 func blockFor(shell Shell, cli, begin, end string) string {
-	// Default CLI (claude) uses the bare `launch`; others name the CLI.
-	launchArg := ""
+	launchCommand := "juggernaut launch"
 	if cli != "claude" {
-		launchArg = " " + cli
+		launchCommand = "juggernaut launch-cli " + cli
 	}
 	switch shell {
 	case ShellFish:
 		return strings.Join([]string{
 			begin,
 			"function " + cli,
-			"    juggernaut launch" + launchArg + " -- $argv",
+			"    " + launchCommand + " -- $argv",
 			"end",
 			end,
 		}, "\n")
@@ -167,7 +165,7 @@ func blockFor(shell Shell, cli, begin, end string) string {
 		return strings.Join([]string{
 			begin,
 			"function global:" + cli + " {",
-			"  juggernaut launch" + launchArg + " -- @args",
+			"  " + launchCommand + " -- @args",
 			"}",
 			end,
 		}, "\n")
@@ -175,7 +173,7 @@ func blockFor(shell Shell, cli, begin, end string) string {
 		return strings.Join([]string{
 			begin,
 			cli + "() {",
-			"  juggernaut launch" + launchArg + " -- \"$@\"",
+			"  " + launchCommand + " -- \"$@\"",
 			"}",
 			end,
 		}, "\n")
@@ -572,7 +570,7 @@ func Launch(home string, args []string) error {
 
 // LaunchCLI runs the CLI described by target (a zero target defaults to Claude),
 // injecting Bedrock env from the keychain. It is the target-aware entry point
-// used by `juggernaut launch [cli] -- ...`.
+// used by the hidden launch commands.
 func LaunchCLI(home string, args []string, target LaunchTarget) error {
 	return LaunchWithOptions(LaunchOptions{
 		Home:        home,
