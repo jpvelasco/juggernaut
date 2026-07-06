@@ -111,6 +111,12 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 
 Version must stay in sync across **three** locations: `VERSION`, `bedrock-config.json` (`.version`), and `var Version` in `cmd/root.go`. CI enforces this — a mismatch fails the lint job.
 
+## Git Branches
+
+**Protected branches:** `legacy/v3` must never be deleted — it is required for
+older releases. When cleaning up branches after merges, skip any branch named
+`legacy/*`.
+
 ## Testing
 
 - Standard Go `testing` package. Run with `go test ./... -v` or `make test`.
