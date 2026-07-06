@@ -92,3 +92,6 @@ discard changes without explicit authorization.
 Use conventional commit subjects when asked to commit. Release tags are `v*`
 and trigger publishing; do not create or push a release tag unless explicitly
 requested.
+
+**Protected branches:** `legacy/v3` must never be deleted — it is required for
+older releases. When cleaning up branches, skip any branch named `legacy/*`.
