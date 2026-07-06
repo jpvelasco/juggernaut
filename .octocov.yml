@@ -1,12 +1,4 @@
-octocov:
-  coverage:
-    # Go test coverage from the CI test-coverage job
-    files:
-      - coverage.out
-    format: gocover
-    threshold: 60.0
-  measure:
-    # Code-to-test ratio and test execution time
-    tool: go
-  test_time:
-    tool: go
+coverage:
+  paths:
+    - coverage.out
+  acceptable: 60%
