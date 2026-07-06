@@ -13,18 +13,17 @@ func TestTOMLFormat_Name(t *testing.T) {
 }
 
 // TestTOMLFormat_RoundTrip verifies TOML reads back what it writes, including a
-// nested table (the [model_providers.<id>] shape Codex uses).
+// nested table (the [model_providers.amazon-bedrock.aws] shape Codex uses).
 func TestTOMLFormat_RoundTrip(t *testing.T) {
 	f := tomlFormat{}
 	in := map[string]any{
-		"model_provider": "bedrock-mantle",
+		"model_provider": "amazon-bedrock",
 		"model":          "openai.gpt-5.5",
 		"model_providers": map[string]any{
-			"bedrock-mantle": map[string]any{
-				"name":     "Amazon Bedrock (Mantle)",
-				"base_url": "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
-				"wire_api": "responses",
-				"env_key":  "AWS_BEARER_TOKEN_BEDROCK",
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
 			},
 		},
 	}
@@ -39,33 +38,43 @@ func TestTOMLFormat_RoundTrip(t *testing.T) {
 	if out["model"] != "openai.gpt-5.5" {
 		t.Errorf("lost model key: %v", out["model"])
 	}
+	if out["model_provider"] != "amazon-bedrock" {
+		t.Errorf("lost model_provider key: %v", out["model_provider"])
+	}
 	mp, ok := out["model_providers"].(map[string]any)
 	if !ok {
 		t.Fatalf("model_providers not a table: %T", out["model_providers"])
 	}
-	bm, ok := mp["bedrock-mantle"].(map[string]any)
+	ab, ok := mp["amazon-bedrock"].(map[string]any)
 	if !ok {
-		t.Fatalf("bedrock-mantle not a table: %T", mp["bedrock-mantle"])
+		t.Fatalf("amazon-bedrock not a table: %T", mp["amazon-bedrock"])
 	}
-	if bm["wire_api"] != "responses" {
-		t.Errorf("lost wire_api: %v", bm["wire_api"])
+	aws, ok := ab["aws"].(map[string]any)
+	if !ok {
+		t.Fatalf("aws not a table: %T", ab["aws"])
+	}
+	if aws["region"] != "us-east-1" {
+		t.Errorf("lost aws.region: %v", aws["region"])
 	}
 }
 
 // TestTOMLFormat_EmitsProviderTable confirms the encoded output contains the
-// [model_providers.<id>] header Codex's config.toml expects.
+// [model_providers.amazon-bedrock] and [model_providers.amazon-bedrock.aws]
+// headers Codex's config.toml expects.
 func TestTOMLFormat_EmitsProviderTable(t *testing.T) {
 	f := tomlFormat{}
 	encoded, err := f.Marshal(map[string]any{
 		"model_providers": map[string]any{
-			"bedrock-mantle": map[string]any{"wire_api": "responses"},
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{"region": "us-east-1"},
+			},
 		},
 	})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	got := string(encoded)
-	if !strings.Contains(got, "[model_providers.bedrock-mantle]") {
+	if !strings.Contains(got, "[model_providers.amazon-bedrock]") {
 		t.Errorf("expected nested provider table header, got:\n%s", got)
 	}
 }

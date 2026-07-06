@@ -66,7 +66,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 
 **Multi-CLI provider abstraction:** Juggernaut configures multiple coding CLIs for Bedrock, selected with `--cli` (default `claude`) on `apply`/`uninstall`. Activation blocks use the hidden `launch-cli <cli> -- …` command for non-Claude CLIs; the distinct command name is deliberate so a pre-multi-CLI binary fails instead of silently launching Claude. The historical `launch [cli] -- …` form remains accepted for compatibility. Each CLI is a `provider.Provider` (`internal/provider/`) owning its identity, binary names, config path + format, native managed keys, activation markers, capabilities, and the two-phase output: `BuildConfig(cfg, opts) → ConfigPlan` (what to persist at apply time) and `LaunchSpec() → {TokenEnvVar, StaticEnv, NeedsToken}` (what the wrapper injects at runtime). Supported today, registered in `internal/provider/provider.go`'s `init()`:
   - `claude` — JSON `~/.claude/settings.json`
-  - `codex` — TOML `~/.codex/config.toml`, routed to Bedrock Mantle via a `[model_providers.bedrock-mantle]` block with per-model `base_url`/`wire_api`
+  - `codex` — TOML `~/.codex/config.toml`, routed via built-in `amazon-bedrock` provider with `[model_providers.amazon-bedrock.aws]` for region
   - `opencode` — JSON `~/.config/opencode/opencode.json`, routed via a custom OpenAI-compatible provider block (`@ai-sdk/openai-compatible`) since OpenCode is model-agnostic
   - `grok` — TOML `~/.grok/config.toml` (always user-scoped; Grok has no project config), routed via a `[model.bedrock-grok]` block plus an `[auth]` block whose `auth_provider_command` runs `juggernaut auth-token` — a plain `env_key` does not suppress Grok's interactive login, only `auth_provider_command` does
 

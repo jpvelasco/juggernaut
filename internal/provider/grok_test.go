@@ -87,7 +87,7 @@ func TestDeepMergeContract(t *testing.T) {
 		owned map[string][]string
 	}{
 		"claude":   {nil, nil},
-		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {"bedrock-mantle"}}},
+		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {"amazon-bedrock.aws"}}},
 		"opencode": {[]string{"provider"}, map[string][]string{"provider": {"bedrock-mantle"}}},
 		"grok":     {[]string{"model", "models", "auth"}, map[string][]string{"model": {"bedrock-grok"}, "models": {"default"}, "auth": {"auth_provider_command", "auth_provider_label"}}},
 	}

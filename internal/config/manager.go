@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -239,6 +240,13 @@ func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) er
 // value, refuse and tell them what to fix — losing data quietly is worse than
 // stopping.
 func mergeNested(existing map[string]any, k string, v any, path string) error {
+	return mergeNestedPrefix(existing, k, v, path, k)
+}
+
+// mergeNestedPrefix recursively merges incoming into existing at key k. prefix is
+// used for error messages (e.g. "model_providers.amazon-bedrock.aws") so the user
+// can identify the conflicting path.
+func mergeNestedPrefix(existing map[string]any, k string, v any, path string, prefix string) error {
 	incoming, ok := v.(map[string]any)
 	if !ok {
 		existing[k] = v
@@ -249,13 +257,25 @@ func mergeNested(existing map[string]any, k string, v any, path string) error {
 		m, isMap := raw.(map[string]any)
 		if !isMap {
 			return fmt.Errorf("cannot merge into %q in %s: expected a table but found %T — "+
-				"remove or fix that key in the file, then re-run", k, path, raw)
+				"remove or fix that key in the file, then re-run", prefix, path, raw)
 		}
 		if m != nil {
 			dst = m
 		}
 	}
 	for sk, sv := range incoming {
+		// If both existing and incoming have a map at this sub-key, recurse.
+		if dstRaw, hasDst := dst[sk]; hasDst {
+			if _, isDstMap := dstRaw.(map[string]any); isDstMap {
+				if inMap, isInMap := sv.(map[string]any); isInMap {
+					subPrefix := prefix + "." + sk
+					if err := mergeNestedPrefix(dst, sk, inMap, path, subPrefix); err != nil {
+						return err
+					}
+					continue
+				}
+			}
+		}
 		dst[sk] = sv
 	}
 	existing[k] = dst
@@ -351,12 +371,49 @@ func removeOwnedSubKeys(existing map[string]any, k string, subs []string, path s
 			"remove or fix that key in the file, then re-run", k, path, raw)
 	}
 	for _, sk := range subs {
-		delete(tbl, sk)
+		// Support dot-notation for nested paths (e.g. "amazon-bedrock.aws").
+		if idx := strings.Index(sk, "."); idx > 0 {
+			parts := strings.Split(sk, ".")
+			if err := removeNestedKey(tbl, parts, k, path); err != nil {
+				return err
+			}
+		} else {
+			delete(tbl, sk)
+		}
 	}
 	if len(tbl) == 0 {
 		delete(existing, k)
 	} else {
 		existing[k] = tbl
+	}
+	return nil
+}
+
+// removeNestedKey walks a slice of path parts through nested maps and deletes
+// the leaf key. Empty parent maps are cleaned up on the way back so orphan
+// tables don't remain.
+func removeNestedKey(tbl map[string]any, parts []string, prefix string, path string) error {
+	if len(parts) == 1 {
+		delete(tbl, parts[0])
+		return nil
+	}
+	raw, present := tbl[parts[0]]
+	if !present {
+		return nil // sub-key doesn't exist — nothing to remove
+	}
+	child, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("cannot remove nested key %q in %s: expected a table at %s but found %T",
+			prefix, path, parts[0], raw)
+	}
+	if err := removeNestedKey(child, parts[1:], prefix, path); err != nil {
+		return err
+	}
+	// Clean up empty parent maps.
+	if len(child) == 0 {
+		delete(tbl, parts[0])
+	} else {
+		tbl[parts[0]] = child
 	}
 	return nil
 }

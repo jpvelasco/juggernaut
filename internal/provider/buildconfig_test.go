@@ -131,91 +131,45 @@ func TestCodex_Supports(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_MantleBlock verifies the Codex plan writes a
-// [model_providers] block pointing at the correct per-model Mantle base_url +
-// wire_api for the default model (gpt-5.5 → /openai/v1 + responses).
-func TestCodex_BuildConfig_MantleBlock(t *testing.T) {
+// TestCodex_BuildConfig_AmazonBedrockProvider verifies the Codex plan writes
+// the built-in amazon-bedrock provider shape: model, model_provider, and a
+// nested [model_providers.amazon-bedrock.aws] table with region. This provider
+// ships a model catalog (eliminates "Model metadata not found" warnings and
+// /model 404s that occurred with a custom bedrock-mantle provider).
+func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	p, _ := Get("codex")
 	plan, err := p.BuildConfig(testConfig(), baseOpts())
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	if plan.Keys["model_provider"] != "bedrock-mantle" {
-		t.Errorf("model_provider = %v, want bedrock-mantle", plan.Keys["model_provider"])
+	if plan.Keys["model_provider"] != "amazon-bedrock" {
+		t.Errorf("model_provider = %v, want amazon-bedrock", plan.Keys["model_provider"])
+	}
+	if plan.Keys["model"] != "openai.gpt-5.5" {
+		t.Errorf("model = %v, want openai.gpt-5.5", plan.Keys["model"])
 	}
 	mp, ok := plan.Keys["model_providers"].(map[string]any)
 	if !ok {
 		t.Fatalf("model_providers missing/wrong type: %T", plan.Keys["model_providers"])
 	}
-	bm, ok := mp["bedrock-mantle"].(map[string]any)
+	ab, ok := mp["amazon-bedrock"].(map[string]any)
 	if !ok {
-		t.Fatalf("bedrock-mantle block missing: %v", mp)
+		t.Fatalf("amazon-bedrock block missing: %v", mp)
 	}
-	if bm["wire_api"] != "responses" {
-		t.Errorf("wire_api = %v, want responses (gpt-5.5 default)", bm["wire_api"])
+	aws, ok := ab["aws"].(map[string]any)
+	if !ok {
+		t.Fatalf("aws sub-table missing: %v", ab)
 	}
 	// baseOpts uses the default region us-west-2 (non-explicit). gpt-5.5 is only
 	// in us-east-1/2, so the region auto-switches to us-east-1.
-	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
-		t.Errorf("base_url = %q, want us-east-1 /openai/v1 (auto-switched from default us-west-2)", got)
+	if got := aws["region"].(string); got != "us-east-1" {
+		t.Errorf("region = %q, want us-east-1 (auto-switched from default us-west-2)", got)
 	}
 	if len(plan.Warnings) == 0 {
 		t.Error("expected an auto-switch heads-up when the default region can't serve gpt-5.5")
 	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("Codex plan should validate: %v", err)
-	}
-}
-
-// TestCodex_BuildConfig_AuthCommand: the Mantle provider block uses a command-
-// backed auth provider (reads the keychain via `juggernaut auth-token
-// --format=token`) instead of env_key. env_key requires the launch wrapper to
-// inject AWS_BEARER_TOKEN_BEDROCK; running codex directly then fails with
-// "Missing environment variable". The auth.command is self-contained (verified
-// in openai/codex external_bearer.rs: it execs the command and uses trimmed
-// stdout as the bearer token, refreshing after a 401).
-func TestCodex_BuildConfig_AuthCommand(t *testing.T) {
-	p, _ := Get("codex")
-	plan, err := p.BuildConfig(testConfig(), baseOpts())
-	if err != nil {
-		t.Fatalf("BuildConfig: %v", err)
-	}
-	bm := plan.Keys["model_providers"].(map[string]any)["bedrock-mantle"].(map[string]any)
-	if _, hasEnvKey := bm["env_key"]; hasEnvKey {
-		t.Errorf("env_key must NOT be set (it needs the launch wrapper); got %v", bm["env_key"])
-	}
-	auth, ok := bm["auth"].(map[string]any)
-	if !ok {
-		t.Fatalf("bedrock-mantle.auth block missing: %v", bm)
-	}
-	if auth["command"] != "juggernaut" {
-		t.Errorf("auth.command = %v, want juggernaut", auth["command"])
-	}
-	args, ok := auth["args"].([]string)
-	if !ok || len(args) < 2 || args[0] != "auth-token" || args[1] != "--format=token" {
-		t.Errorf("auth.args = %v, want [auth-token --format=token]", auth["args"])
-	}
-}
-
-// TestCodex_BuildConfig_SkipsOpenAILogin verifies the Mantle provider block sets
-// requires_openai_auth = false. Without it, the Codex CLI shows its ChatGPT
-// login screen on launch even with a valid custom provider
-// (verified in openai/codex tui/src/lib.rs should_show_login_screen: login is
-// skipped ONLY when the active provider's requires_openai_auth is false).
-func TestCodex_BuildConfig_SkipsOpenAILogin(t *testing.T) {
-	p, _ := Get("codex")
-	plan, err := p.BuildConfig(testConfig(), baseOpts())
-	if err != nil {
-		t.Fatalf("BuildConfig: %v", err)
-	}
-	mp := plan.Keys["model_providers"].(map[string]any)
-	bm := mp["bedrock-mantle"].(map[string]any)
-	got, ok := bm["requires_openai_auth"]
-	if !ok {
-		t.Fatal("bedrock-mantle block must set requires_openai_auth to skip the ChatGPT login screen")
-	}
-	if got != false {
-		t.Errorf("requires_openai_auth = %v, want false", got)
 	}
 }
 
@@ -231,8 +185,7 @@ func TestCodex_BuildConfig_UnknownModel(t *testing.T) {
 
 // TestCodex_BuildConfig_RegionIronFist: gpt-5.5 is us-east-1/2 only, so ANY
 // non-serving region — even one the user passed explicitly — is overridden to a
-// known-good region and the base_url reflects the override. Juggernaut never
-// writes a config that can't reach the model.
+// known-good region. Juggernaut never writes a config that can't reach the model.
 func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
@@ -244,9 +197,10 @@ func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 		t.Fatalf("BuildConfig: %v", err)
 	}
 	mp := plan.Keys["model_providers"].(map[string]any)
-	bm := mp["bedrock-mantle"].(map[string]any)
-	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
-		t.Errorf("base_url = %q, want us-east-1 (overridden from eu-west-1)", got)
+	ab := mp["amazon-bedrock"].(map[string]any)
+	aws := ab["aws"].(map[string]any)
+	if got := aws["region"].(string); got != "us-east-1" {
+		t.Errorf("region = %q, want us-east-1 (overridden from eu-west-1)", got)
 	}
 	if len(plan.Warnings) == 0 {
 		t.Error("expected a message noting the region override")
@@ -265,15 +219,38 @@ func TestCodex_BuildConfig_GptOssRejected(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_Region uses the requested region in the base_url.
+// TestCodex_BuildConfig_Region uses the requested region in the aws sub-table.
 func TestCodex_BuildConfig_Region(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
 	opts.Region = "us-east-1"
 	plan, _ := p.BuildConfig(testConfig(), opts)
 	mp := plan.Keys["model_providers"].(map[string]any)
-	bm := mp["bedrock-mantle"].(map[string]any)
-	if got := bm["base_url"].(string); got != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
-		t.Errorf("base_url = %q, want us-east-1 /openai/v1", got)
+	ab := mp["amazon-bedrock"].(map[string]any)
+	aws := ab["aws"].(map[string]any)
+	if got := aws["region"].(string); got != "us-east-1" {
+		t.Errorf("region = %q, want us-east-1", got)
+	}
+}
+
+// TestCodex_BuildConfig_ExplicitServingRegion: when the user explicitly
+// requests a region that serves the model, no warning is emitted and the
+// region is kept as-is. This covers the "happy path" that resolveMantleRegion
+// takes when the explicit region is already in the known set.
+func TestCodex_BuildConfig_ExplicitServingRegion(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Region = "us-east-1"
+	opts.RegionExplicit = true
+	opts.Model = "gpt-5.5"
+	plan, _ := p.BuildConfig(testConfig(), opts)
+	mp := plan.Keys["model_providers"].(map[string]any)
+	ab := mp["amazon-bedrock"].(map[string]any)
+	aws := ab["aws"].(map[string]any)
+	if got := aws["region"].(string); got != "us-east-1" {
+		t.Errorf("region = %q, want us-east-1 (explicit serving region)", got)
+	}
+	if len(plan.Warnings) > 0 {
+		t.Errorf("explicit serving region must not warn, got: %v", plan.Warnings)
 	}
 }

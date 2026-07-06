@@ -16,16 +16,17 @@ func TestClaude_OwnsConfig(t *testing.T) {
 	}
 }
 
-// TestCodex_OwnsConfig: Codex recognizes ONLY its Bedrock-Mantle routing, not a
-// plain user config that merely has a `model` key. This is the P2 fix: a vanilla
-// Codex config (model = "...") must NOT be mistaken for a Juggernaut-configured one.
+// TestCodex_OwnsConfig: Codex recognizes ONLY its amazon-bedrock provider
+// routing, not a plain user config that merely has a `model` key. This is the
+// P2 fix: a vanilla Codex config (model = "...") must NOT be mistaken for a
+// Juggernaut-configured one.
 func TestCodex_OwnsConfig(t *testing.T) {
 	p, _ := Get("codex")
 	if !p.OwnsConfig(map[string]any{
 		"model":          "openai.gpt-5.5",
-		"model_provider": "bedrock-mantle",
+		"model_provider": "amazon-bedrock",
 	}) {
-		t.Error("codex should own a config routed to bedrock-mantle")
+		t.Error("codex should own a config routed to amazon-bedrock")
 	}
 	// Plain non-Juggernaut Codex config with just a model → NOT ours.
 	if p.OwnsConfig(map[string]any{"model": "gpt-5.1-codex"}) {
@@ -34,6 +35,22 @@ func TestCodex_OwnsConfig(t *testing.T) {
 	// A different provider value → NOT ours.
 	if p.OwnsConfig(map[string]any{"model": "x", "model_provider": "openai"}) {
 		t.Error("codex must NOT claim a config pointing at a non-Mantle provider")
+	}
+}
+
+// TestCodex_OwnsConfig_OldBedrockMantle: the legacy custom bedrock-mantle
+// provider (pre-amazon-bedrock) must NOT be claimed as owned. This ensures a
+// user upgrading from the old config shape gets a fresh auth prompt on
+// re-apply rather than silently reusing the old auth mode. The old
+// bedrock-mantle entry under model_providers is a different key from
+// amazon-bedrock, so deep merge naturally preserves it alongside the new entry.
+func TestCodex_OwnsConfig_OldBedrockMantle(t *testing.T) {
+	p, _ := Get("codex")
+	if p.OwnsConfig(map[string]any{
+		"model":          "openai.gpt-5.5",
+		"model_provider": "bedrock-mantle",
+	}) {
+		t.Error("codex must NOT claim old bedrock-mantle config (triggers fresh auth prompt)")
 	}
 }
 
