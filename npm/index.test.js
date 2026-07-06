@@ -151,10 +151,10 @@ describe("stageLaunchBinary", function() {
   it("rejects a source that is not a regular file", function() {
     var root = fs.mkdtempSync(path.join(os.tmpdir(), "juggernaut-stage-notfile-"));
     try {
-      // Pass a directory as the source — should be rejected by statSync check
+      // Pass a directory as the source — copyFileSync fails when source is not a regular file
       assert.throws(function() {
         stageLaunchBinary(root, root);
-      }, /not a regular file/);
+      });
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
     }

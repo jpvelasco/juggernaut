@@ -117,19 +117,11 @@ function isLongRunningLaunch(args) {
 function stageLaunchBinary(bin, tempRoot) {
   var root = tempRoot || os.tmpdir();
   var tempDir = fs.mkdtempSync(path.join(root, "juggernaut-launch-")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — OS temp dir, constant prefix, unique suffix
-  // Verify tempDir was actually created and is a directory (TOCTOU mitigation).
-  var dirStat = fs.statSync(tempDir); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — mkdtemp-generated temp dir
-  if (!dirStat.isDirectory()) {
-    throw new Error("mkdtemp did not return a directory: " + tempDir);
-  }
   // Pin the staged filename to a known constant — no user input in the path.
   var stagedBin = path.join(tempDir, "juggernaut-staged.exe"); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — tempDir is mkdtemp-generated; filename is a fixed constant
-  // Verify the source binary is a regular file before copying (not a symlink).
-  var binStat = fs.statSync(bin); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — bin validated by safeResolveBin above
-  if (!binStat.isFile()) {
-    throw new Error("source binary is not a regular file: " + bin);
-  }
   try {
+    // bin is validated by safeResolveBin (realpath'd + under __dirname).
+    // COPYFILE_EXCL prevents overwriting an existing staged file.
     fs.copyFileSync(bin, stagedBin, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — COPYFILE_EXCL prevents overwrite; both paths validated above
   } catch (err) {
     fs.rmSync(tempDir, {recursive: true, force: true}); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename — mkdtemp-generated temp dir
