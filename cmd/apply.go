@@ -99,11 +99,21 @@ func validateApplyArgs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	name, _, hasValue := strings.Cut(args[0], "=")
+	name, value, hasValue := strings.Cut(args[0], "=")
 	if hasValue && cmd.Flags().Lookup(name) != nil {
-		return fmt.Errorf("unexpected argument %q; did you mean --%s?", args[0], args[0])
+		// Redact the value for secret-bearing flags so a mistyped
+		// `bedrock-key=<api key>` does not leak the credential to stderr/logs.
+		if isSecretFlag(name) {
+			return fmt.Errorf("unexpected argument %s=<redacted>; did you mean --%s?", name, name)
+		}
+		return fmt.Errorf("unexpected argument %q; did you mean --%s=%s?", args[0], name, value)
 	}
 	return cobra.NoArgs(cmd, args)
+}
+
+// isSecretFlag returns true for flags that carry credentials.
+func isSecretFlag(name string) bool {
+	return name == "bedrock-key"
 }
 
 func runApply(_ *cobra.Command, _ []string) error {
