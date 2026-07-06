@@ -214,3 +214,117 @@ func TestMergeConfigPlanDeep_NonDeepKeysStillReplace(t *testing.T) {
 		t.Errorf("env not replaced correctly: %v", env)
 	}
 }
+
+// TestMergeNested_RecursivePreservesUserSubKeys: when both existing and incoming
+// have a map at a nested sub-key, the merge recurses so user values survive.
+// This is the fix for the amazon-bedrock built-in provider: a user's
+// profile under [model_providers.amazon-bedrock.aws] must not be overwritten
+// by Juggernaut's region-only entry.
+func TestMergeNested_RecursivePreservesUserSubKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"profile": "my-sso-profile",
+					"region":  "us-west-2",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Juggernaut applies — writes only region into the aws sub-table.
+	err := m.MergeConfigPlanDeep(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+		},
+	}, []string{"model_providers"})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	aws, _ := ab["aws"].(map[string]any)
+	// User's profile must survive the recursive merge.
+	if aws["profile"] != "my-sso-profile" {
+		t.Errorf("user profile lost after merge: %v", aws)
+	}
+	// Juggernaut's region should be written.
+	if aws["region"] != "us-east-1" {
+		t.Errorf("region not updated: %v", aws)
+	}
+}
+
+// TestRemoveOwnedSubKeys_DotNotation: dot-notation paths (e.g.
+// "amazon-bedrock.aws") remove only the nested sub-table, preserving sibling
+// keys at the parent level.
+func TestRemoveOwnedSubKeys_DotNotation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{
+					"profile": "my-sso-profile",
+					"region":  "us-east-1",
+				},
+				"name": "Amazon Bedrock (Mantle)",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Remove only the aws sub-table (not the entire amazon-bedrock entry).
+	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
+		"model_providers": {"amazon-bedrock.aws"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveManagedKeysDeep: %v", err)
+	}
+	got, _ := m.Read()
+	mp, _ := got["model_providers"].(map[string]any)
+	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	// aws sub-table should be removed.
+	if _, ok := ab["aws"]; ok {
+		t.Error("aws sub-table should be removed")
+	}
+	// Sibling keys under amazon-bedrock must survive.
+	if ab["name"] != "Amazon Bedrock (Mantle)" {
+		t.Errorf("sibling name lost: %v", ab)
+	}
+}
+
+// TestRemoveOwnedSubKeys_DotNotationEmptyParentCleaned: removing a nested key
+// that empties its parent should clean up the parent map too.
+func TestRemoveOwnedSubKeys_DotNotationEmptyParentCleaned(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{
+				"aws": map[string]any{"region": "us-east-1"},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := m.RemoveManagedKeysDeep([]string{"model_providers"}, map[string][]string{
+		"model_providers": {"amazon-bedrock.aws"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveManagedKeysDeep: %v", err)
+	}
+	got, _ := m.Read()
+	// amazon-bedrock becomes empty after aws is removed → cleaned up.
+	mp, ok := got["model_providers"].(map[string]any)
+	if ok && len(mp) > 0 {
+		t.Errorf("empty model_providers should be cleaned up: %v", got)
+	}
+}

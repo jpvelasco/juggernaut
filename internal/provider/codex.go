@@ -60,10 +60,13 @@ func (codex) NativeManagedKeys() []string {
 // user may have their own providers; merge only our amazon-bedrock entry.
 func (codex) DeepMergeKeys() []string { return []string{"model_providers"} }
 
-// OwnedSubKeys: uninstall removes only our amazon-bedrock provider from the
-// model_providers table (model / model_provider leaves are removed whole).
+// OwnedSubKeys: uninstall removes only the aws sub-table we wrote under
+// model_providers.amazon-bedrock. The amazon-bedrock provider is built-in to
+// Codex — users may configure their own profile or other settings there — so we
+// don't delete the entire provider entry. Dot-notation paths are supported by
+// removeOwnedSubKeys for nested removal.
 func (codex) OwnedSubKeys() map[string][]string {
-	return map[string][]string{"model_providers": {"amazon-bedrock"}}
+	return map[string][]string{"model_providers": {"amazon-bedrock.aws"}}
 }
 
 func (codex) ActivationMarkers() (begin, end string) {
