@@ -34,7 +34,7 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
   [juggernaut.meta]
     managedBy = "juggernaut"
 `
-	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -95,7 +95,7 @@ func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
   [juggernaut.meta]
     managedBy = "juggernaut"
 `
-	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestLaunchWithOptions_Codex_IAM_NoToken(t *testing.T) {
   [juggernaut.meta]
     managedBy = "juggernaut"
 `
-	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
