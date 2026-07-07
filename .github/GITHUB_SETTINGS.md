@@ -73,7 +73,13 @@ gh api repos/OWNER/REPO/rulesets \
       "parameters": {
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
-        "required_status_checks": []
+        "required_status_checks": [
+          { "context": "lint" },
+          { "context": "test (ubuntu-latest)" },
+          { "context": "test (macos-latest)" },
+          { "context": "test (windows-latest)" },
+          { "context": "Codacy Static Code Analysis" }
+        ]
       }
     }
   ]
