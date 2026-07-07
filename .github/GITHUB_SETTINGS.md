@@ -102,8 +102,16 @@ EOF
 
 > **Note on required status checks:** the `required_status_checks` array above
 > is intentionally empty — GitHub only recognises job names after they've run
-> once. After the first CI run, update the ruleset via:
-> `PATCH /repos/OWNER/REPO/rulesets/{ruleset_id}`
+> once. After the first CI run, populate it with the checks that match your
+> workflows, for example:
+> ```json
+> { "context": "lint" },
+> { "context": "test (ubuntu-latest)" },
+> { "context": "test (macos-latest)" },
+> { "context": "test (windows-latest)" },
+> { "context": "Codacy Static Code Analysis" }
+> ```
+> Then apply via `PATCH /repos/OWNER/REPO/rulesets/{ruleset_id}`.
 
 ---
 
