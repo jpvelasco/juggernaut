@@ -4,6 +4,10 @@ These settings are configured outside the repo (GitHub UI or API) and cannot
 be enforced by files in the codebase. Re-apply these when setting up a fork
 or new instance.
 
+> **Public repos:** all settings below can be applied via `gh api`.
+> **Private repos on free tier:** rulesets, secret scanning, push protection,
+> and CodeQL must be set via the GitHub UI.
+
 ---
 
 ## Apply via `gh api` (replace `OWNER/REPO`)
@@ -15,7 +19,7 @@ gh api repos/OWNER/REPO \
   --field delete_branch_on_merge=true \
   --field default_branch=main
 
-# Dependabot alerts + security updates
+# Dependabot
 gh api repos/OWNER/REPO/vulnerability-alerts --method PUT
 gh api repos/OWNER/REPO/automated-security-fixes --method PUT
 
@@ -58,8 +62,8 @@ gh api repos/OWNER/REPO/rulesets \
       "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 0,
-        "dismiss_stale_reviews_on_push": false,
-        "require_code_owner_review": false,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": true,
         "require_last_push_approval": false,
         "required_review_thread_resolution": true
       }
@@ -69,13 +73,7 @@ gh api repos/OWNER/REPO/rulesets \
       "parameters": {
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
-        "required_status_checks": [
-          { "context": "lint" },
-          { "context": "test (ubuntu-latest)" },
-          { "context": "test (macos-latest)" },
-          { "context": "test (windows-latest)" },
-          { "context": "Codacy Static Code Analysis" }
-        ]
+        "required_status_checks": []
       }
     }
   ]
@@ -102,36 +100,34 @@ gh api repos/OWNER/REPO/rulesets \
 EOF
 ```
 
-> **Note on required status checks:** update `required_status_checks` after
-> the first CI run so GitHub recognises the job names.
+> **Note on required status checks:** the `required_status_checks` array above
+> is intentionally empty — GitHub only recognises job names after they've run
+> once. After the first CI run, update the ruleset via:
+> `PATCH /repos/OWNER/REPO/rulesets/{ruleset_id}`
 
 ---
 
-## Current settings (jpvelasco/juggernaut)
+## Current settings
 
 ### General
 - Default branch: `main`
 - Auto-delete head branches: enabled
 
-### Branch ruleset: `protect-main`
-- Blocks deletion and force pushes
-- Requires PR before merging: yes
+### Branch protection (`main`)
+- Require PR before merging: yes
 - Required approvals: 0
-- Dismiss stale reviews on push: no
-- Require CODEOWNERS review: no
+- Dismiss stale reviews on push: yes
+- Require review from code owners: yes
 - Require conversation resolution: yes
-- Required status checks (all must pass):
-  - `lint`
-  - `test (ubuntu-latest)`
-  - `test (macos-latest)`
-  - `test (windows-latest)`
-  - `Codacy Static Code Analysis`
 - Require branch up to date: yes
+- Block force pushes: yes
+- Allow deletions: no
+- Enforce on admins: yes
 
-### Tag ruleset: `protect-version-tags`
-- Pattern: `v*`
+### Tag protection (`v*`)
+- Ruleset name: `protect-version-tags`
 - Restrict deletions: yes
-- Restrict force pushes: yes
+- Restrict updates: yes
 
 ### Security & Analysis
 - Secret scanning: enabled
