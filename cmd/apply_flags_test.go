@@ -113,12 +113,12 @@ func TestApply_RedactsBedrockKey(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	err := ExecuteArgs([]string{"apply", "bedrock-key=sk-secret-12345"})
+	err := ExecuteArgs([]string{"apply", "bedrock-key=test-fake-key-12345"})
 	if err == nil {
 		t.Fatal("expected bedrock-key argument to be rejected")
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "sk-secret-12345") {
+	if strings.Contains(msg, "test-fake-key-12345") {
 		t.Fatalf("error message leaked secret value: %s", msg)
 	}
 	if !strings.Contains(msg, "redacted") {
