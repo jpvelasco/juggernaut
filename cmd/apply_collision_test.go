@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -207,7 +208,7 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=grok", "--auth=bedrock-api-key", bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
 	})
 	if err == nil {
 		t.Fatal("expected apply to refuse a foreign grok config with a colliding models.default leaf")
@@ -250,7 +251,7 @@ func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing
 	}
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=grok", "--auth=bedrock-api-key", bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply should proceed when only a sibling model profile is present: %v", err)
 	}
@@ -290,7 +291,7 @@ func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=bedrock-api-key", bedrockKeyFlag(), "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(), "--region=us-east-1", "--skip-preflight",
 	})
 	if err == nil {
 		t.Fatal("expected apply to refuse a foreign codex config with a colliding region leaf")
@@ -322,7 +323,7 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=opencode", "--auth=bedrock-api-key", bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
 	})
 	if err == nil {
 		t.Fatal("expected apply to refuse a foreign opencode config with a colliding model key")
@@ -427,7 +428,7 @@ func TestApply_ReApply_OwnedConfig_NoNewFriction_NonClaudeProviders(t *testing.T
 			setupIsolatedKeychain(t) // stores a real credential; skip if backend hangs (macOS CI)
 
 			if err := ExecuteArgs([]string{
-				"apply", "--cli=" + cli, "--auth=bedrock-api-key", bedrockKeyFlag(),
+				"apply", "--cli=" + cli, "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
 				"--region=us-west-2", "--skip-preflight",
 			}); err != nil {
 				t.Fatalf("first apply: %v", err)
@@ -471,7 +472,7 @@ func TestApply_ForeignConfig_Force_AllProviders(t *testing.T) {
 			}
 
 			if err := ExecuteArgs([]string{
-				"apply", "--cli=" + c.cli, "--auth=bedrock-api-key", bedrockKeyFlag(),
+				"apply", "--cli=" + c.cli, "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
 				"--region=us-west-2", "--skip-preflight", "--force",
 			}); err != nil {
 				t.Fatalf("apply --force should succeed for %s: %v", c.cli, err)
