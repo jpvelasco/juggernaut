@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
@@ -42,7 +42,7 @@ func TestApply_Claude_ForeignConfig_Refuses(t *testing.T) {
 	}
 
 	// The foreign file must be untouched — refusal happens before any write.
-	got, err := os.ReadFile(settingsPath)
+	got, err := safepath.ReadFile(claudeDir, settingsPath)
 	if err != nil {
 		t.Fatalf("reading settings.json: %v", err)
 	}
@@ -185,6 +185,7 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // apply --bedrock-key stores a real credential; skip if backend hangs (macOS CI)
 
 	grokDir := filepath.Join(home, ".grok")
 	if err := safepath.MkdirAll(grokDir); err != nil {
@@ -197,7 +198,7 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=grok", "--auth=bedrock-api-key", "--bedrock-key=test-key", "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=grok", "--auth=bedrock-api-key", "--bedrock-key=test-fake-key-value", "--region=us-west-2", "--skip-preflight",
 	})
 	if err == nil {
 		t.Fatal("expected apply to refuse a foreign grok config with a colliding models.default leaf")
@@ -206,12 +207,18 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 		t.Errorf("error should name the colliding path, got: %v", err)
 	}
 
-	got, err := os.ReadFile(configPath)
+	got, err := safepath.ReadFile(grokDir, configPath)
 	if err != nil {
 		t.Fatalf("reading config.toml: %v", err)
 	}
 	if string(got) != foreign {
 		t.Errorf("foreign grok config must be untouched on refusal, got: %s", got)
+	}
+
+	// Refusal must have zero side effects — the credential must not have been
+	// written to the keychain before the collision check ran.
+	if token, _ := keychain.Default().GetWithFallback(home); token != "" {
+		t.Errorf("refused apply must not store a credential in the keychain, got: %q", token)
 	}
 }
 
@@ -222,6 +229,7 @@ func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // apply proceeds and stores a real credential; skip if backend hangs (macOS CI)
 
 	grokDir := filepath.Join(home, ".grok")
 	if err := safepath.MkdirAll(grokDir); err != nil {
@@ -233,12 +241,12 @@ func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing
 	}
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=grok", "--auth=bedrock-api-key", "--bedrock-key=test-key", "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=grok", "--auth=bedrock-api-key", "--bedrock-key=test-fake-key-value", "--region=us-west-2", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply should proceed when only a sibling model profile is present: %v", err)
 	}
 
-	got, err := os.ReadFile(configPath)
+	got, err := safepath.ReadFile(grokDir, configPath)
 	if err != nil {
 		t.Fatalf("reading config.toml: %v", err)
 	}
@@ -273,7 +281,7 @@ func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=test-key", "--region=us-east-1", "--skip-preflight",
+		"apply", "--cli=codex", "--auth=bedrock-api-key", "--bedrock-key=test-fake-key-value", "--region=us-east-1", "--skip-preflight",
 	})
 	if err == nil {
 		t.Fatal("expected apply to refuse a foreign codex config with a colliding region leaf")
@@ -305,7 +313,7 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=opencode", "--auth=bedrock-api-key", "--bedrock-key=test-key", "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=opencode", "--auth=bedrock-api-key", "--bedrock-key=test-fake-key-value", "--region=us-west-2", "--skip-preflight",
 	})
 	if err == nil {
 		t.Fatal("expected apply to refuse a foreign opencode config with a colliding model key")
@@ -314,7 +322,7 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 		t.Errorf("error should name the colliding path, got: %v", err)
 	}
 
-	got, err := os.ReadFile(configPath)
+	got, err := safepath.ReadFile(opencodeDir, configPath)
 	if err != nil {
 		t.Fatalf("reading opencode.json: %v", err)
 	}
@@ -354,7 +362,7 @@ func TestApply_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T
 		t.Errorf("dry-run should report the colliding key, got:\n%s", out)
 	}
 
-	got, err := os.ReadFile(settingsPath)
+	got, err := safepath.ReadFile(claudeDir, settingsPath)
 	if err != nil {
 		t.Fatalf("reading settings.json: %v", err)
 	}
@@ -407,9 +415,10 @@ func TestApply_ReApply_OwnedConfig_NoNewFriction_NonClaudeProviders(t *testing.T
 			t.Setenv("HOME", home)
 			t.Setenv("USERPROFILE", home)
 			setupMockPSRunner(t, home)
+			setupIsolatedKeychain(t) // stores a real credential; skip if backend hangs (macOS CI)
 
 			if err := ExecuteArgs([]string{
-				"apply", "--cli=" + cli, "--auth=bedrock-api-key", "--bedrock-key=test-key",
+				"apply", "--cli=" + cli, "--auth=bedrock-api-key", "--bedrock-key=test-fake-key-value",
 				"--region=us-west-2", "--skip-preflight",
 			}); err != nil {
 				t.Fatalf("first apply: %v", err)
@@ -441,6 +450,7 @@ func TestApply_ForeignConfig_Force_AllProviders(t *testing.T) {
 			t.Setenv("HOME", home)
 			t.Setenv("USERPROFILE", home)
 			setupMockPSRunner(t, home)
+			setupIsolatedKeychain(t) // --force proceeds and stores a real credential; skip if backend hangs (macOS CI)
 
 			dir := filepath.Join(home, c.dir)
 			if err := safepath.MkdirAll(dir); err != nil {
@@ -452,7 +462,7 @@ func TestApply_ForeignConfig_Force_AllProviders(t *testing.T) {
 			}
 
 			if err := ExecuteArgs([]string{
-				"apply", "--cli=" + c.cli, "--auth=bedrock-api-key", "--bedrock-key=test-key",
+				"apply", "--cli=" + c.cli, "--auth=bedrock-api-key", "--bedrock-key=test-fake-key-value",
 				"--region=us-west-2", "--skip-preflight", "--force",
 			}); err != nil {
 				t.Fatalf("apply --force should succeed for %s: %v", c.cli, err)

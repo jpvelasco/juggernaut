@@ -337,12 +337,6 @@ func formatCollisions(collisions []config.Collision) string {
 }
 
 func commitApply(home, authMode, token string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
-	if authmode.IsBedrockAPIKey(authMode) && token != "" {
-		if err := keychain.Default().SetWithFallback(token, home); err != nil {
-			return fmt.Errorf("storing API key: %w", err)
-		}
-	}
-
 	// The provider owns what to persist. Claude's BuildConfig wraps schema.Build
 	// and reproduces the exact key set commitApply built by hand before — proven
 	// byte-identical by the golden test.
@@ -359,6 +353,8 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return err
 	}
 
+	// Collision detection must run before ANY side effect — including storing
+	// a credential in the OS keychain — so a refused apply changes nothing.
 	collisions, err := detectForeignCollisions(path, prov, plan)
 	if err != nil {
 		return err
@@ -367,6 +363,12 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return fmt.Errorf("refusing to modify %s — it isn't managed by Juggernaut and already has:\n%s\n"+
 			"run with --force to overwrite anyway (a backup is still made before writing)",
 			path, formatCollisions(collisions))
+	}
+
+	if authmode.IsBedrockAPIKey(authMode) && token != "" {
+		if err := keychain.Default().SetWithFallback(token, home); err != nil {
+			return fmt.Errorf("storing API key: %w", err)
+		}
 	}
 
 	format, err := config.FormatByName(prov.ConfigFormatName())
