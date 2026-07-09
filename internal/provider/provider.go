@@ -48,7 +48,10 @@ type Provider interface {
 	// OwnedSubKeys maps each deep-merge key to the specific sub-keys Juggernaut
 	// writes into it, so uninstall removes ONLY those (preserving a user's
 	// sibling entries) instead of deleting the whole nested table. Keys not
-	// listed here are removed whole-value on uninstall.
+	// listed here are removed whole-value on uninstall. Also drives apply-time
+	// foreign-config collision detection (config.DetectCollisions): the same
+	// sub-keys define exactly which leaves must be empty before apply is
+	// allowed to touch a config it doesn't already own.
 	OwnedSubKeys() map[string][]string
 
 	// OwnsConfig reports whether the given parsed config was written by
