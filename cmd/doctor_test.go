@@ -32,6 +32,24 @@ func TestOpusplanProblem(t *testing.T) {
 	}
 }
 
+func TestCheckAutoModeReadiness_SilentWhenNotConfigured(t *testing.T) {
+	r := doctor.NewReport()
+
+	checkAutoModeReadiness(r, "user", nil)
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no check for nil settings, got: %s", r.String())
+	}
+
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "default"},
+		},
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no check when permissionMode is not auto, got: %s", r.String())
+	}
+}
+
 func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	dir := t.TempDir()
 	name := "claude"

@@ -13,6 +13,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -247,6 +248,55 @@ func opusplanProblem(data map[string]any) (string, bool) {
 		return "", false
 	}
 	return "top-level model is set to \"opusplan\"; run `juggernaut apply` to rewrite settings.json", true
+}
+
+// checkAutoModeReadiness reports whether Claude Code's auto permission mode
+// will actually work for scope's persisted config, without requiring a
+// re-apply to find out. Silent unless permissionMode=="auto" is configured —
+// mirrors warnAutoModeModel's existing apply-time behavior. Reuses
+// schema.Block.AutoModeUsable()/AutoModeAvailable() directly so this check
+// can never drift out of sync with real auto-mode capability logic.
+func checkAutoModeReadiness(r *doctor.Report, scope string, data map[string]any) {
+	if data == nil {
+		return
+	}
+	juggernautMap, ok := data["juggernaut"].(map[string]any)
+	if !ok {
+		return
+	}
+	var block schema.Block
+	if err := fromMap(juggernautMap, &block); err != nil {
+		return
+	}
+	if block.Meta.PermissionMode != "auto" {
+		return
+	}
+
+	label := "auto-mode readiness (" + scope + ")"
+	if block.AutoModeUsable() {
+		r.Check(label, doctor.OK, "OK — active Sonnet-tier default model is auto-capable")
+		return
+	}
+	if block.AutoModeAvailable() {
+		r.Check(label, doctor.Warn, autoModeAvailableDetail(block))
+		return
+	}
+	r.Check(label, doctor.Warn, "WARN — no configured model supports auto mode; "+
+		"configure Opus 4.7/4.8 or Sonnet 5 and re-run `juggernaut apply --mode=auto`")
+}
+
+// autoModeAvailableDetail names which configured tier IS auto-capable when
+// the active Sonnet-tier default isn't, mirroring warnAutoModeModel's guidance.
+func autoModeAvailableDetail(block schema.Block) string {
+	switch {
+	case schema.IsAutoModeCapableModel(block.Models.Opus):
+		return "WARN — switch to Opus to reach auto mode (`claude --model opus`)"
+	case schema.IsAutoModeCapableModel(block.Models.Fable):
+		return "WARN — switch to Fable to reach auto mode (`claude --model fable`)"
+	default:
+		return "WARN — auto mode enabled but the active default model can't use it; " +
+			"run `claude --model opus` (or `/model opus`) to reach it"
+	}
 }
 
 func checkSettingsScope(home, scope string, required bool) (doctor.Status, string) {
