@@ -13,6 +13,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -56,9 +57,11 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		if status, detail := checkSettingsScope(home, scope, required); status != "" {
 			r.Check("settings.json ("+scope+")", status, detail)
 		}
-		if detail, ok := opusplanProblem(readScopeData(home, scope)); ok {
+		scopeData := readScopeData(home, scope)
+		if detail, ok := opusplanProblem(scopeData); ok {
 			r.Check("top-level model ("+scope+")", doctor.Warn, detail)
 		}
+		checkAutoModeReadiness(r, scope, scopeData)
 	}
 
 	token, err := keychain.Default().GetWithFallback(home)
@@ -247,6 +250,79 @@ func opusplanProblem(data map[string]any) (string, bool) {
 		return "", false
 	}
 	return "top-level model is set to \"opusplan\"; run `juggernaut apply` to rewrite settings.json", true
+}
+
+// checkAutoModeReadiness reports whether Claude Code's auto permission mode
+// will actually work for scope's persisted config, without requiring a
+// re-apply to find out. Silent unless permissionMode=="auto" is configured —
+// mirrors warnAutoModeModel's existing apply-time behavior. Reuses
+// schema.Block.AutoModeUsable()/AutoModeAvailable() directly so this check
+// can never drift out of sync with real auto-mode capability logic.
+func checkAutoModeReadiness(r *doctor.Report, scope string, data map[string]any) {
+	if data == nil {
+		return
+	}
+	juggernautMap, ok := data["juggernaut"].(map[string]any)
+	if !ok {
+		return
+	}
+	var block schema.Block
+	if err := fromMap(juggernautMap, &block); err != nil {
+		r.Check("auto-mode readiness ("+scope+")", doctor.Warn,
+			"could not parse juggernaut block: "+err.Error()+"; re-run `juggernaut apply` to repair")
+		return
+	}
+	// Claude Code's Shift+Tab writes the effective mode straight to the native
+	// top-level permissions.defaultMode without touching juggernaut.meta —
+	// reconcile it the same way apply's own re-apply path does, so AutoModeUsable/
+	// AutoModeAvailable (which gate on Meta.PermissionMode internally) see the
+	// mode that's actually active, not a stale juggernaut-block copy.
+	if mode := effectivePermissionMode(data, block.Meta.PermissionMode); mode != "" {
+		block.Meta.PermissionMode = mode
+	}
+	if block.Meta.PermissionMode != "auto" {
+		return
+	}
+
+	label := "auto-mode readiness (" + scope + ")"
+	if block.AutoModeUsable() {
+		r.Check(label, doctor.OK, "OK — active Sonnet-tier default model is auto-capable")
+		return
+	}
+	if block.AutoModeAvailable() {
+		r.Check(label, doctor.Warn, autoModeAvailableDetail(block))
+		return
+	}
+	r.Check(label, doctor.Warn, "WARN — no configured model supports auto mode; "+
+		"configure Opus 4.7/4.8 or Sonnet 5 and re-run `juggernaut apply --mode=auto`")
+}
+
+// effectivePermissionMode returns the native top-level permissions.defaultMode
+// if present, falling back to the juggernaut block's own copy otherwise. The
+// native value is authoritative: it's what Claude Code actually reads at
+// runtime, and Shift+Tab writes there directly without updating the
+// juggernaut block — mirrors the reconciliation in apply.go's re-apply path.
+func effectivePermissionMode(data map[string]any, juggernautMode string) string {
+	if perms, ok := data["permissions"].(map[string]any); ok {
+		if dmode, ok := perms["defaultMode"].(string); ok && dmode != "" {
+			return dmode
+		}
+	}
+	return juggernautMode
+}
+
+// autoModeAvailableDetail names which configured tier IS auto-capable when
+// the active Sonnet-tier default isn't, mirroring warnAutoModeModel's guidance.
+// Only Opus is ever named here: IsAutoModeCapableModel's own contract excludes
+// Fable entirely (see its doc comment), and this function is only reached when
+// AutoModeAvailable() is already true with AutoModeUsable() false — i.e. Sonnet
+// isn't capable, so if Opus isn't either, no tier is, and the default applies.
+func autoModeAvailableDetail(block schema.Block) string {
+	if schema.IsAutoModeCapableModel(block.Models.Opus) {
+		return "WARN — switch to Opus to reach auto mode (`claude --model opus`)"
+	}
+	return "WARN — auto mode enabled but no configured model tier supports it; " +
+		"re-run `juggernaut apply --mode=auto` to reconfigure with a capable model"
 }
 
 func checkSettingsScope(home, scope string, required bool) (doctor.Status, string) {

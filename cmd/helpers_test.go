@@ -117,6 +117,40 @@ func TestToMap_RoundTrips(t *testing.T) {
 	}
 }
 
+func TestFromMap_RoundTrips(t *testing.T) {
+	m := map[string]any{"name": "x", "n": float64(3)}
+
+	var out struct {
+		Name string `json:"name"`
+		N    int    `json:"n"`
+	}
+	if err := fromMap(m, &out); err != nil {
+		t.Fatalf("fromMap() error: %v", err)
+	}
+	if out.Name != "x" {
+		t.Errorf("fromMap() Name = %q, want x", out.Name)
+	}
+	if out.N != 3 {
+		t.Errorf("fromMap() N = %d, want 3", out.N)
+	}
+}
+
+// TestFromMap_MarshalErrorPropagates covers the json.Marshal error branch:
+// a map value that json.Marshal cannot encode (e.g. a channel) must surface
+// as a wrapped error, not a panic or a silent zero-value struct.
+func TestFromMap_MarshalErrorPropagates(t *testing.T) {
+	m := map[string]any{"bad": make(chan int)}
+
+	var out struct{}
+	err := fromMap(m, &out)
+	if err == nil {
+		t.Fatal("expected fromMap() to error on an unmarshalable map value")
+	}
+	if !strings.Contains(err.Error(), "serializing map") {
+		t.Errorf("expected error to mention serializing map, got: %v", err)
+	}
+}
+
 func TestFileExists(t *testing.T) {
 	dir := t.TempDir()
 	existing := filepath.Join(dir, "present")

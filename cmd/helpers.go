@@ -79,3 +79,13 @@ func toMap(v any) (map[string]any, error) {
 	var m map[string]any
 	return m, json.Unmarshal(b, &m)
 }
+
+// fromMap is the reverse of toMap: it JSON round-trips a generic map into the
+// struct pointed to by v.
+func fromMap(m map[string]any, v any) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("serializing map: %w", err)
+	}
+	return json.Unmarshal(b, v)
+}

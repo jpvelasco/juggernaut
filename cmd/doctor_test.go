@@ -12,6 +12,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 func TestOpusplanProblem(t *testing.T) {
@@ -29,6 +30,186 @@ func TestOpusplanProblem(t *testing.T) {
 	}
 	if !strings.Contains(detail, "opusplan") {
 		t.Fatalf("warning should mention opusplan, got %q", detail)
+	}
+}
+
+func TestCheckAutoModeReadiness_SilentWhenNotConfigured(t *testing.T) {
+	r := doctor.NewReport()
+
+	checkAutoModeReadiness(r, "user", nil)
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no check for nil settings, got: %s", r.String())
+	}
+
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "default"},
+		},
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no check when permissionMode is not auto, got: %s", r.String())
+	}
+}
+
+func TestCheckAutoModeReadiness_OKWhenDefaultModelCapable(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "auto"},
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-8",
+				"sonnet": "global.anthropic.claude-sonnet-5",
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[OK]") {
+		t.Fatalf("expected OK status, got: %s", out)
+	}
+	if !strings.Contains(out, "auto-capable") {
+		t.Fatalf("expected detail to mention auto-capable, got: %s", out)
+	}
+}
+
+// TestCheckAutoModeReadiness_ReconcilesNativePermissionsMode: Claude Code's
+// Shift+Tab writes the effective mode straight to the native top-level
+// permissions.defaultMode WITHOUT touching juggernaut.meta.permissionMode —
+// apply's own re-apply path already accounts for this drift (cmd/apply.go's
+// "adopt a permission mode set outside Juggernaut" comment). The readiness
+// check must reconcile the same way: a user who Shift+Tab'd into auto mode
+// without re-running apply is still on effective auto mode, and doctor must
+// not stay silent just because the juggernaut block's own copy is stale.
+func TestCheckAutoModeReadiness_ReconcilesNativePermissionsMode(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"permissions": map[string]any{"defaultMode": "auto"},
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "default"}, // stale copy
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-8",
+				"sonnet": "global.anthropic.claude-sonnet-5",
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[OK]") {
+		t.Fatalf("expected OK status reconciled from native permissions.defaultMode, got: %s", out)
+	}
+}
+
+func TestCheckAutoModeReadiness_WarnWhenOnlyOpusCapable(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "auto"},
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-8",
+				"sonnet": "global.anthropic.claude-sonnet-4-6", // not auto-capable
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status, got: %s", out)
+	}
+	if !strings.Contains(out, "Opus") {
+		t.Fatalf("expected detail to name Opus as the capable tier, got: %s", out)
+	}
+}
+
+// TestAutoModeAvailableDetail_DefaultBranchWhenOpusNotCapable is a direct unit
+// test of the function in isolation (not reachable through
+// checkAutoModeReadiness's real call pattern, since AutoModeAvailable()
+// guarantees Opus is capable whenever Sonnet isn't and Fable never is) — it
+// exists so the fallback message stays correct if AutoModeAvailable's
+// capability set ever changes.
+func TestAutoModeAvailableDetail_DefaultBranchWhenOpusNotCapable(t *testing.T) {
+	block := schema.Block{
+		Models: schema.ModelOverrides{
+			Opus:   "global.anthropic.claude-opus-4-6", // not auto-capable
+			Sonnet: "global.anthropic.claude-sonnet-4-6",
+		},
+	}
+
+	got := autoModeAvailableDetail(block)
+	if !strings.Contains(got, "no configured model tier supports it") {
+		t.Errorf("expected fallback message, got: %q", got)
+	}
+	if strings.Contains(got, "Opus") {
+		t.Errorf("fallback message must not recommend Opus when it isn't capable, got: %q", got)
+	}
+}
+
+func TestCheckAutoModeReadiness_WarnWhenNoModelCapable(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "auto"},
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-6", // hand-edited to a non-capable model
+				"sonnet": "global.anthropic.claude-sonnet-4-6",
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status, got: %s", out)
+	}
+	if !strings.Contains(out, "no configured model supports auto mode") {
+		t.Fatalf("expected detail to say no model supports auto mode, got: %s", out)
+	}
+}
+
+func TestCheckAutoModeReadiness_AbsentBlockIsNoOp(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": "not-a-map", // malformed
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no-op for malformed juggernaut block, got: %s", r.String())
+	}
+
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"someOtherKey": "value", // juggernaut key entirely absent
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no-op for missing juggernaut key, got: %s", r.String())
+	}
+}
+
+// TestCheckAutoModeReadiness_WarnsOnDeserializationError: a juggernaut block
+// that IS a map but has a field whose type doesn't match schema.Block (e.g.
+// corrupted by a hand-edit or a future schema-version drift) must emit a WARN
+// naming the parse failure, not silently disappear — a corrupted block is not
+// the same as "auto mode not configured", and the user needs to know the
+// check couldn't run at all.
+func TestCheckAutoModeReadiness_WarnsOnDeserializationError(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			// schemaVersion is declared as int in schema.Meta; a string here
+			// makes the JSON round-trip in fromMap fail.
+			"meta": map[string]any{"schemaVersion": "not-a-number", "permissionMode": "auto"},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status on deserialization failure, got: %s", out)
+	}
+	if !strings.Contains(out, "could not parse juggernaut block") {
+		t.Fatalf("expected detail to explain the parse failure, got: %s", out)
+	}
+	if !strings.Contains(out, "juggernaut apply") {
+		t.Fatalf("expected detail to guide the user to re-run apply, got: %s", out)
 	}
 }
 
@@ -350,5 +531,31 @@ func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected warning about legacy block in %s, got: %v", ps5Host, warnings)
+	}
+}
+
+// TestDoctor_ReportsAutoModeReadiness_EndToEnd verifies checkAutoModeReadiness
+// is actually wired into runDoctor's per-scope loop: a real `apply --mode=auto`
+// followed by `doctor` must surface the auto-mode readiness line.
+func TestDoctor_ReportsAutoModeReadiness_EndToEnd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		// doctor may return an error if connectivity fails in the sandbox; we
+		// only assert the auto-mode readiness line is present in the report.
+		_ = ExecuteArgs([]string{"doctor"})
+	})
+
+	if !strings.Contains(out, "auto-mode readiness") {
+		t.Fatalf("expected doctor output to include auto-mode readiness check, got:\n%s", out)
 	}
 }
