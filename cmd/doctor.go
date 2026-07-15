@@ -268,6 +268,8 @@ func checkAutoModeReadiness(r *doctor.Report, scope string, data map[string]any)
 	}
 	var block schema.Block
 	if err := fromMap(juggernautMap, &block); err != nil {
+		r.Check("auto-mode readiness ("+scope+")", doctor.Warn,
+			"could not parse juggernaut block: "+err.Error()+"; re-run `juggernaut apply` to repair")
 		return
 	}
 	if block.Meta.PermissionMode != "auto" {

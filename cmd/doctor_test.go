@@ -133,6 +133,34 @@ func TestCheckAutoModeReadiness_AbsentBlockIsNoOp(t *testing.T) {
 	}
 }
 
+// TestCheckAutoModeReadiness_WarnsOnDeserializationError: a juggernaut block
+// that IS a map but has a field whose type doesn't match schema.Block (e.g.
+// corrupted by a hand-edit or a future schema-version drift) must emit a WARN
+// naming the parse failure, not silently disappear — a corrupted block is not
+// the same as "auto mode not configured", and the user needs to know the
+// check couldn't run at all.
+func TestCheckAutoModeReadiness_WarnsOnDeserializationError(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			// schemaVersion is declared as int in schema.Meta; a string here
+			// makes the JSON round-trip in fromMap fail.
+			"meta": map[string]any{"schemaVersion": "not-a-number", "permissionMode": "auto"},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status on deserialization failure, got: %s", out)
+	}
+	if !strings.Contains(out, "could not parse juggernaut block") {
+		t.Fatalf("expected detail to explain the parse failure, got: %s", out)
+	}
+	if !strings.Contains(out, "juggernaut apply") {
+		t.Fatalf("expected detail to guide the user to re-run apply, got: %s", out)
+	}
+}
+
 func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	dir := t.TempDir()
 	name := "claude"
