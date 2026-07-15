@@ -1,6 +1,10 @@
 {
   "effortLevel": "high",
   "env": {
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "global.anthropic.claude-fable-5[1m]",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION": "Configured Claude Code Fable alias with adaptive thinking metadata and Opus fallback support",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "Fable 5",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
@@ -32,6 +36,10 @@
       "region": "us-west-2"
     },
     "env": {
+      "ANTHROPIC_DEFAULT_FABLE_MODEL": "global.anthropic.claude-fable-5[1m]",
+      "ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION": "Configured Claude Code Fable alias with adaptive thinking metadata and Opus fallback support",
+      "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME": "Fable 5",
+      "ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
       "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
       "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
       "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
@@ -70,6 +78,7 @@
       "version": "5.3.4"
     },
     "modelOverrides": {
+      "fable": "global.anthropic.claude-fable-5",
       "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
       "opus": "global.anthropic.claude-opus-4-8",
       "sonnet": "global.anthropic.claude-sonnet-5",
@@ -77,17 +86,23 @@
     }
   },
   "modelOverrides": {
+    "anthropic.claude-fable-5": "global.anthropic.claude-fable-5",
+    "anthropic.claude-fable-5[1m]": "global.anthropic.claude-fable-5",
     "anthropic.claude-haiku-4-5-20251001-v1:0": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "anthropic.claude-opus-4-8": "global.anthropic.claude-opus-4-8",
     "anthropic.claude-opus-4-8[1m]": "global.anthropic.claude-opus-4-8",
     "anthropic.claude-sonnet-5": "global.anthropic.claude-sonnet-5",
     "anthropic.claude-sonnet-5[1m]": "global.anthropic.claude-sonnet-5",
+    "claude-fable-5": "global.anthropic.claude-fable-5",
+    "claude-fable-5[1m]": "global.anthropic.claude-fable-5",
     "claude-haiku-4-5": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "claude-haiku-4-5-20251001": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "claude-opus-4-8": "global.anthropic.claude-opus-4-8",
     "claude-opus-4-8[1m]": "global.anthropic.claude-opus-4-8",
     "claude-sonnet-5": "global.anthropic.claude-sonnet-5",
     "claude-sonnet-5[1m]": "global.anthropic.claude-sonnet-5",
+    "fable": "global.anthropic.claude-fable-5",
+    "fable[1m]": "global.anthropic.claude-fable-5",
     "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "opus": "global.anthropic.claude-opus-4-8",
     "opus[1m]": "global.anthropic.claude-opus-4-8",

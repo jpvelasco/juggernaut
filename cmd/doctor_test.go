@@ -123,6 +123,54 @@ func TestCheckAutoModeReadiness_WarnWhenOnlyOpusCapable(t *testing.T) {
 	}
 }
 
+// TestCheckFableDataRetention_SilentWhenFableNotConfigured: no fable override
+// present → no check emitted at all.
+func TestCheckFableDataRetention_SilentWhenFableNotConfigured(t *testing.T) {
+	r := doctor.NewReport()
+	checkFableDataRetention(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-8",
+				"sonnet": "global.anthropic.claude-sonnet-5",
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no check without a configured Fable model, got: %s", r.String())
+	}
+}
+
+// TestCheckFableDataRetention_WarnsWhenFableConfigured: doctor cannot verify
+// the account's actual provider_data_share opt-in status (no AWS API exposes
+// it), so it must always WARN when Fable is configured — this is a re-runnable
+// reminder, not a one-time apply-time note that scrolls out of view.
+func TestCheckFableDataRetention_WarnsWhenFableConfigured(t *testing.T) {
+	r := doctor.NewReport()
+	checkFableDataRetention(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"modelOverrides": map[string]any{
+				"fable": "global.anthropic.claude-fable-5",
+			},
+		},
+	})
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status, got: %s", out)
+	}
+	if !strings.Contains(out, "provider_data_share") {
+		t.Fatalf("expected detail to mention provider_data_share, got: %s", out)
+	}
+}
+
+func TestCheckFableDataRetention_AbsentBlockIsNoOp(t *testing.T) {
+	r := doctor.NewReport()
+	checkFableDataRetention(r, "user", nil)
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no check for nil settings, got: %s", r.String())
+	}
+}
+
 // TestAutoModeAvailableDetail_DefaultBranchWhenOpusNotCapable is a direct unit
 // test of the function in isolation (not reachable through
 // checkAutoModeReadiness's real call pattern, since AutoModeAvailable()

@@ -149,12 +149,14 @@ claude
 |------|-------|---------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
-| **Fable alias** | Claude Fable 5 | Configure with `--fable-model=<bedrock-fable-model-id>` |
+| **Fable alias** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
 | **Fast / subagent** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
 Juggernaut appends Claude Code's `[1m]` suffix to the Opus and Sonnet alias environment variables by default, and to the configured Fable alias when it matches Claude Code's Fable ID. Claude Code accounts against 1M context for supported aliases locally, then strips that suffix before calling Bedrock. Use `--no-1m-context` to opt out.
 
-Fable is exposed as an opt-in Claude Code alias. Pass `--fable-model` with a model ID that is available in your Bedrock account and region; Juggernaut does not pin a default Fable ID until one is configured.
+Fable defaults to `global.anthropic.claude-fable-5`, verified live against AWS Bedrock's `ListFoundationModels`/`ListInferenceProfiles` APIs (`ACTIVE` status). Pass `--fable-model` to override with a different Bedrock-accessible model ID.
+
+> **Fable data retention:** Anthropic requires opting in to `provider_data_share` before Fable calls succeed on Bedrock — AWS retains inputs/outputs for up to 30 days and shares them with Anthropic for abuse detection/human review ([AWS docs](https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html)). Juggernaut has no way to check your account's actual opt-in status (no AWS API exposes it), so `apply` and `doctor` both print this as a standing warning whenever Fable is configured — it is not a promise about what is or isn't collected, only what AWS documents.
 
 Override any tier:
 

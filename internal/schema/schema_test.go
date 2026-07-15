@@ -250,6 +250,72 @@ func TestBuild_FableDefaultsAndNativeAliases(t *testing.T) {
 	}
 }
 
+func TestIsFable5Model(t *testing.T) {
+	cases := []struct {
+		model string
+		want  bool
+	}{
+		{"global.anthropic.claude-fable-5", true},
+		{"us.anthropic.claude-fable-5", true},
+		{"anthropic.claude-fable-5", true},
+		{"global.anthropic.claude-fable-5[1m]", true},
+		{"", false},
+		{"global.anthropic.claude-sonnet-5", false},
+		{"global.anthropic.claude-opus-4-8", false},
+	}
+	for _, c := range cases {
+		if got := schema.IsFable5Model(c.model); got != c.want {
+			t.Errorf("IsFable5Model(%q) = %v, want %v", c.model, got, c.want)
+		}
+	}
+}
+
+// TestBuild_FableDataRetentionWarning: Claude Fable 5's Bedrock model card
+// requires opting in to provider_data_share before the model can be invoked
+// (AWS docs: "in order to use Claude Fable 5, as required by Anthropic, you
+// must opt in to sharing retained traffic with Anthropic for abuse detection
+// and potential human review"). Juggernaut cannot check the account's actual
+// retention setting (no queryable AWS API exists for it), so Build must
+// surface a plain, no-promises warning whenever Fable is configured, rather
+// than silently shipping calls that may be denied at runtime.
+func TestBuild_FableDataRetentionWarning(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	found := false
+	for _, w := range block.Warnings {
+		if strings.Contains(w, "Fable") && strings.Contains(w, "data") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a Fable data-retention warning, got %v", block.Warnings)
+	}
+}
+
+func TestBuild_NoFableDataRetentionWarningWhenFableNotConfigured(t *testing.T) {
+	cfg := testConfig()
+	cfg.Models.Fable = ""
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+	}
+	block, err := schema.Build(cfg, opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	for _, w := range block.Warnings {
+		if strings.Contains(w, "Fable") {
+			t.Errorf("expected no Fable warning when Fable is not configured, got %v", block.Warnings)
+		}
+	}
+}
+
 func TestBuild_FallbackModelsNativeKey(t *testing.T) {
 	opts := schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",

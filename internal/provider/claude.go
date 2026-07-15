@@ -115,6 +115,7 @@ func (claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 	return ConfigPlan{
 		Keys:        keys,
 		ManagedKeys: claude{}.NativeManagedKeys(),
+		Warnings:    block.Warnings,
 	}, nil
 }
 

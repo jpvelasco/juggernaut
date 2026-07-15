@@ -170,8 +170,8 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
 		t.Errorf("expected Sonnet default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
-	if _, ok := env["ANTHROPIC_DEFAULT_FABLE_MODEL"]; ok {
-		t.Errorf("Fable default model should be omitted unless configured, got %v", env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	if env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5[1m]" {
+		t.Errorf("expected Fable default model to be pinned with [1m], got %v", env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
 	}
 
 	bashrcPath := filepath.Join(home, ".bashrc")
@@ -1123,6 +1123,56 @@ func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
 
 	if strings.Contains(out, "Auto mode on Bedrock requires Opus") {
 		t.Errorf("did not expect auto-mode warning for --mode=plan, got:\n%s", out)
+	}
+}
+
+// TestApply_Fable_WarnsAboutDataRetention: Fable requires opting in to
+// provider_data_share on Bedrock (Anthropic's requirement) and Juggernaut has
+// no way to check the account's actual opt-in status, so apply must always
+// print the warning when Fable is configured — regardless of auth mode or
+// region — rather than silently risk denied runtime calls.
+func TestApply_Fable_WarnsAboutDataRetention(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2",
+			"--fable-model=global.anthropic.claude-fable-5", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "provider_data_share") {
+		t.Errorf("expected Fable data-retention warning, got:\n%s", out)
+	}
+}
+
+// TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention: the embedded
+// bedrock-config.json pins a default Fable model (see #206), so the warning
+// fires even without --fable-model — every apply configures Fable unless the
+// maintainer ships a config without it. schema-layer and provider-layer tests
+// cover the "Fable genuinely unconfigured" case directly; there is no CLI flag
+// to clear a config-pinned Fable default, so that state isn't reachable here.
+func TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "provider_data_share") {
+		t.Errorf("expected Fable data-retention warning with the default config (Fable pinned by default), got:\n%s", out)
 	}
 }
 
