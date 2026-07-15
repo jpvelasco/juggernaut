@@ -117,6 +117,24 @@ func TestToMap_RoundTrips(t *testing.T) {
 	}
 }
 
+func TestFromMap_RoundTrips(t *testing.T) {
+	m := map[string]any{"name": "x", "n": float64(3)}
+
+	var out struct {
+		Name string `json:"name"`
+		N    int    `json:"n"`
+	}
+	if err := fromMap(m, &out); err != nil {
+		t.Fatalf("fromMap() error: %v", err)
+	}
+	if out.Name != "x" {
+		t.Errorf("fromMap() Name = %q, want x", out.Name)
+	}
+	if out.N != 3 {
+		t.Errorf("fromMap() N = %d, want 3", out.N)
+	}
+}
+
 func TestFileExists(t *testing.T) {
 	dir := t.TempDir()
 	existing := filepath.Join(dir, "present")
