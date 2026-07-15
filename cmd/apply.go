@@ -31,30 +31,32 @@ var applyCmd = &cobra.Command{
 }
 
 var applyFlags struct {
-	cli            string
-	auth           string
-	bedrockKey     string
-	preserveKey    bool
-	region         string
-	model          string
-	opusModel      string
-	sonnetModel    string
-	haikuModel     string
-	fableModel     string
-	fallbackModel  string
-	effort         string
-	opusplan       bool
-	noOpusplan     bool
-	no1m           bool
-	mantle         bool
-	noMantle       bool
-	mantleURL      string
-	scope          string
-	dryRun         bool
-	mode           string
-	alwaysThinking bool
-	serviceTier    string
-	force          bool
+	cli                    string
+	auth                   string
+	bedrockKey             string
+	preserveKey            bool
+	region                 string
+	model                  string
+	opusModel              string
+	sonnetModel            string
+	haikuModel             string
+	fableModel             string
+	fallbackModel          string
+	availableModels        string
+	enforceAvailableModels bool
+	effort                 string
+	opusplan               bool
+	noOpusplan             bool
+	no1m                   bool
+	mantle                 bool
+	noMantle               bool
+	mantleURL              string
+	scope                  string
+	dryRun                 bool
+	mode                   string
+	alwaysThinking         bool
+	serviceTier            string
+	force                  bool
 }
 
 func init() {
@@ -70,6 +72,8 @@ func init() {
 	f.StringVar(&applyFlags.haikuModel, "haiku-model", "", "override Haiku model ID")
 	f.StringVar(&applyFlags.fableModel, "fable-model", "", "override Fable model ID")
 	f.StringVar(&applyFlags.fallbackModel, "fallback-model", "", "comma-separated fallback model IDs")
+	f.StringVar(&applyFlags.availableModels, "available-models", "", "comma-separated model allowlist (families, version prefixes, or full IDs) written to Claude Code's native availableModels")
+	f.BoolVar(&applyFlags.enforceAvailableModels, "enforce-available-models", false, "extend --available-models to the Default model option (requires --available-models)")
 	f.StringVar(&applyFlags.effort, "effort", "high", "effort level: low|medium|high|xhigh|max|auto")
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
@@ -186,26 +190,37 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	availableModels, err := parseAvailableModels(applyFlags.availableModels)
+	if err != nil {
+		return err
+	}
+
+	// Validate that --enforce-available-models requires --available-models to be set.
+	if applyFlags.enforceAvailableModels && (availableModels == nil || len(availableModels) == 0) {
+		return fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
+	}
 
 	opts := schema.Options{
-		AuthMode:       authMode,
-		Region:         region,
-		Effort:         applyFlags.effort,
-		Scope:          applyFlags.scope,
-		Version:        Version,
-		OpusModel:      opusModel,
-		SonnetModel:    sonnetModel,
-		HaikuModel:     haikuModel,
-		FableModel:     fableModel,
-		FallbackModels: fallbackModels,
-		Opusplan:       opusplan,
-		Use1M:          !applyFlags.no1m,
-		UseMantle:      useMantle,
-		MantleURL:      applyFlags.mantleURL,
-		AuthValidated:  true,
-		PermissionMode: applyFlags.mode,
-		AlwaysThinking: applyFlags.alwaysThinking,
-		ServiceTier:    applyFlags.serviceTier,
+		AuthMode:               authMode,
+		Region:                 region,
+		Effort:                 applyFlags.effort,
+		Scope:                  applyFlags.scope,
+		Version:                Version,
+		OpusModel:              opusModel,
+		SonnetModel:            sonnetModel,
+		HaikuModel:             haikuModel,
+		FableModel:             fableModel,
+		FallbackModels:         fallbackModels,
+		AvailableModels:        availableModels,
+		EnforceAvailableModels: applyFlags.enforceAvailableModels,
+		Opusplan:               opusplan,
+		Use1M:                  !applyFlags.no1m,
+		UseMantle:              useMantle,
+		MantleURL:              applyFlags.mantleURL,
+		AuthValidated:          true,
+		PermissionMode:         applyFlags.mode,
+		AlwaysThinking:         applyFlags.alwaysThinking,
+		ServiceTier:            applyFlags.serviceTier,
 	}
 
 	block, err := schema.Build(bCfg, opts)
@@ -234,24 +249,26 @@ func runApply(_ *cobra.Command, _ []string) error {
 // provider.Options consumed by Provider.BuildConfig.
 func toProviderOptions(o schema.Options) provider.Options {
 	return provider.Options{
-		AuthMode:       o.AuthMode,
-		Region:         o.Region,
-		Effort:         o.Effort,
-		Scope:          o.Scope,
-		Version:        o.Version,
-		OpusModel:      o.OpusModel,
-		SonnetModel:    o.SonnetModel,
-		HaikuModel:     o.HaikuModel,
-		FableModel:     o.FableModel,
-		Opusplan:       o.Opusplan,
-		FallbackModels: o.FallbackModels,
-		Use1M:          o.Use1M,
-		UseMantle:      o.UseMantle,
-		MantleURL:      o.MantleURL,
-		AuthValidated:  o.AuthValidated,
-		PermissionMode: o.PermissionMode,
-		AlwaysThinking: o.AlwaysThinking,
-		ServiceTier:    o.ServiceTier,
+		AuthMode:               o.AuthMode,
+		Region:                 o.Region,
+		Effort:                 o.Effort,
+		Scope:                  o.Scope,
+		Version:                o.Version,
+		OpusModel:              o.OpusModel,
+		SonnetModel:            o.SonnetModel,
+		HaikuModel:             o.HaikuModel,
+		FableModel:             o.FableModel,
+		Opusplan:               o.Opusplan,
+		FallbackModels:         o.FallbackModels,
+		AvailableModels:        o.AvailableModels,
+		EnforceAvailableModels: o.EnforceAvailableModels,
+		Use1M:                  o.Use1M,
+		UseMantle:              o.UseMantle,
+		MantleURL:              o.MantleURL,
+		AuthValidated:          o.AuthValidated,
+		PermissionMode:         o.PermissionMode,
+		AlwaysThinking:         o.AlwaysThinking,
+		ServiceTier:            o.ServiceTier,
 	}
 }
 
@@ -412,6 +429,24 @@ func parseFallbackModels(raw string) ([]string, error) {
 		model := strings.TrimSpace(part)
 		if model == "" {
 			return nil, fmt.Errorf("--fallback-model contains an empty model ID")
+		}
+		models = append(models, model)
+	}
+	return models, nil
+}
+
+func parseAvailableModels(raw string) ([]string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(trimmed, ",")
+	models := make([]string, 0, len(parts))
+	for _, part := range parts {
+		model := strings.TrimSpace(part)
+		if model == "" {
+			return nil, fmt.Errorf("--available-models contains an empty model ID")
 		}
 		models = append(models, model)
 	}
