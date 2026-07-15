@@ -61,6 +61,26 @@ func TestClaude_BuildConfig_EnvHasBedrockModels(t *testing.T) {
 	}
 }
 
+// TestClaude_BuildConfig_AvailableModels verifies that AvailableModels and
+// EnforceAvailableModels are threaded through provider.Options to ConfigPlan.Keys.
+func TestClaude_BuildConfig_AvailableModels(t *testing.T) {
+	p, _ := Get("claude")
+	opts := baseOpts()
+	opts.AvailableModels = []string{"sonnet", "haiku"}
+	opts.EnforceAvailableModels = true
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	got, ok := plan.Keys["availableModels"].([]string)
+	if !ok || len(got) != 2 || got[0] != "sonnet" || got[1] != "haiku" {
+		t.Errorf("expected availableModels=[sonnet haiku], got %#v", plan.Keys["availableModels"])
+	}
+	if plan.Keys["enforceAvailableModels"] != true {
+		t.Errorf("expected enforceAvailableModels=true, got %#v", plan.Keys["enforceAvailableModels"])
+	}
+}
+
 // TestClaude_LaunchSpec pins Claude's runtime injection: the use-bedrock flag +
 // the bearer token env var (what activation.Launch hardcodes today).
 func TestClaude_LaunchSpec(t *testing.T) {

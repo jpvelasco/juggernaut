@@ -37,25 +37,27 @@ type Options struct {
 	// filled from the global default. Mantle providers use this to decide whether
 	// they may auto-switch a model to a region that actually serves it (default)
 	// or must honor the user's explicit choice (and only warn).
-	RegionExplicit bool
-	Effort         string
-	Scope          string
-	Version        string
-	Model          string // friendly model key or override (provider-interpreted)
-	OpusModel      string
-	SonnetModel    string
-	HaikuModel     string
-	FableModel     string
-	Opusplan       bool
-	FallbackModels []string
-	Use1M          bool
-	UseMantle      bool
-	MantleURL      string
-	AuthValidated  bool
-	PermissionMode string
-	AlwaysThinking bool
-	ServiceTier    string
-	Route          string // "mantle" (default) or "native"
+	RegionExplicit         bool
+	Effort                 string
+	Scope                  string
+	Version                string
+	Model                  string // friendly model key or override (provider-interpreted)
+	OpusModel              string
+	SonnetModel            string
+	HaikuModel             string
+	FableModel             string
+	Opusplan               bool
+	FallbackModels         []string
+	AvailableModels        []string
+	EnforceAvailableModels bool
+	Use1M                  bool
+	UseMantle              bool
+	MantleURL              string
+	AuthValidated          bool
+	PermissionMode         string
+	AlwaysThinking         bool
+	ServiceTier            string
+	Route                  string // "mantle" (default) or "native"
 }
 
 // Capability identifies an optional feature a Provider may support, so cmd/ can
