@@ -196,7 +196,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	}
 
 	// Validate that --enforce-available-models requires --available-models to be set.
-	if applyFlags.enforceAvailableModels && (availableModels == nil || len(availableModels) == 0) {
+	if applyFlags.enforceAvailableModels && len(availableModels) == 0 {
 		return fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
 	}
 

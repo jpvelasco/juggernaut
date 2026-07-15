@@ -332,7 +332,8 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
 		"--mode=auto", "--always-thinking", "--effort=max",
-		"--fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6", "--skip-preflight",
+		"--fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6",
+		"--available-models=sonnet,haiku", "--enforce-available-models", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -349,6 +350,7 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 
 	for _, k := range []string{
 		"juggernaut", "env", "model", "modelOverrides", "fallbackModel",
+		"availableModels", "enforceAvailableModels",
 		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions",
 	} {
 		if _, ok := settings[k]; ok {
