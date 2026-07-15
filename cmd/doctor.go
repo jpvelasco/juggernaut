@@ -272,6 +272,14 @@ func checkAutoModeReadiness(r *doctor.Report, scope string, data map[string]any)
 			"could not parse juggernaut block: "+err.Error()+"; re-run `juggernaut apply` to repair")
 		return
 	}
+	// Claude Code's Shift+Tab writes the effective mode straight to the native
+	// top-level permissions.defaultMode without touching juggernaut.meta —
+	// reconcile it the same way apply's own re-apply path does, so AutoModeUsable/
+	// AutoModeAvailable (which gate on Meta.PermissionMode internally) see the
+	// mode that's actually active, not a stale juggernaut-block copy.
+	if mode := effectivePermissionMode(data, block.Meta.PermissionMode); mode != "" {
+		block.Meta.PermissionMode = mode
+	}
 	if block.Meta.PermissionMode != "auto" {
 		return
 	}
@@ -289,18 +297,32 @@ func checkAutoModeReadiness(r *doctor.Report, scope string, data map[string]any)
 		"configure Opus 4.7/4.8 or Sonnet 5 and re-run `juggernaut apply --mode=auto`")
 }
 
+// effectivePermissionMode returns the native top-level permissions.defaultMode
+// if present, falling back to the juggernaut block's own copy otherwise. The
+// native value is authoritative: it's what Claude Code actually reads at
+// runtime, and Shift+Tab writes there directly without updating the
+// juggernaut block — mirrors the reconciliation in apply.go's re-apply path.
+func effectivePermissionMode(data map[string]any, juggernautMode string) string {
+	if perms, ok := data["permissions"].(map[string]any); ok {
+		if dmode, ok := perms["defaultMode"].(string); ok && dmode != "" {
+			return dmode
+		}
+	}
+	return juggernautMode
+}
+
 // autoModeAvailableDetail names which configured tier IS auto-capable when
 // the active Sonnet-tier default isn't, mirroring warnAutoModeModel's guidance.
+// Only Opus is ever named here: IsAutoModeCapableModel's own contract excludes
+// Fable entirely (see its doc comment), and this function is only reached when
+// AutoModeAvailable() is already true with AutoModeUsable() false — i.e. Sonnet
+// isn't capable, so if Opus isn't either, no tier is, and the default applies.
 func autoModeAvailableDetail(block schema.Block) string {
-	switch {
-	case schema.IsAutoModeCapableModel(block.Models.Opus):
+	if schema.IsAutoModeCapableModel(block.Models.Opus) {
 		return "WARN — switch to Opus to reach auto mode (`claude --model opus`)"
-	case schema.IsAutoModeCapableModel(block.Models.Fable):
-		return "WARN — switch to Fable to reach auto mode (`claude --model fable`)"
-	default:
-		return "WARN — auto mode enabled but the active default model can't use it; " +
-			"run `claude --model opus` (or `/model opus`) to reach it"
 	}
+	return "WARN — auto mode enabled but no configured model tier supports it; " +
+		"re-run `juggernaut apply --mode=auto` to reconfigure with a capable model"
 }
 
 func checkSettingsScope(home, scope string, required bool) (doctor.Status, string) {
