@@ -72,6 +72,67 @@ func TestCheckAutoModeReadiness_OKWhenDefaultModelCapable(t *testing.T) {
 	}
 }
 
+func TestCheckAutoModeReadiness_WarnWhenOnlyOpusCapable(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "auto"},
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-8",
+				"sonnet": "global.anthropic.claude-sonnet-4-6", // not auto-capable
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status, got: %s", out)
+	}
+	if !strings.Contains(out, "Opus") {
+		t.Fatalf("expected detail to name Opus as the capable tier, got: %s", out)
+	}
+}
+
+func TestCheckAutoModeReadiness_WarnWhenNoModelCapable(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "auto"},
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-6", // hand-edited to a non-capable model
+				"sonnet": "global.anthropic.claude-sonnet-4-6",
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") {
+		t.Fatalf("expected WARN status, got: %s", out)
+	}
+	if !strings.Contains(out, "no configured model supports auto mode") {
+		t.Fatalf("expected detail to say no model supports auto mode, got: %s", out)
+	}
+}
+
+func TestCheckAutoModeReadiness_AbsentBlockIsNoOp(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": "not-a-map", // malformed
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no-op for malformed juggernaut block, got: %s", r.String())
+	}
+
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"someOtherKey": "value", // juggernaut key entirely absent
+	})
+	if len(r.String()) != 0 {
+		t.Fatalf("expected no-op for missing juggernaut key, got: %s", r.String())
+	}
+}
+
 func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	dir := t.TempDir()
 	name := "claude"
