@@ -170,8 +170,8 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
 		t.Errorf("expected Sonnet default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
-	if _, ok := env["ANTHROPIC_DEFAULT_FABLE_MODEL"]; ok {
-		t.Errorf("Fable default model should be omitted unless configured, got %v", env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
+	if env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5[1m]" {
+		t.Errorf("expected Fable default model to be pinned with [1m], got %v", env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
 	}
 
 	bashrcPath := filepath.Join(home, ".bashrc")

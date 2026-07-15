@@ -94,7 +94,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - **Auth-gated Bedrock flag:** `CLAUDE_CODE_USE_BEDROCK=1` only lands in settings.json when `AuthValidated=true`.
 - **Scope:** `--scope=user` (default) vs `--scope=project`. Grok is always user-scoped — it has no project config concept.
 - **Re-apply preserves existing auth mode** — if `--auth` is omitted and a block already exists, the existing auth mode is read from the block.
-- **`--model` overrides all four model IDs** (opus, sonnet, haiku, fable) when set; `--opus-model`, `--sonnet-model`, `--haiku-model`, `--fable-model` override individually. The embedded default config keeps `models.fable` empty until a Bedrock-accessible Fable ID is configured.
+- **`--model` overrides all four model IDs** (opus, sonnet, haiku, fable) when set; `--opus-model`, `--sonnet-model`, `--haiku-model`, `--fable-model` override individually. `models.fable` defaults to `global.anthropic.claude-fable-5` in the embedded config, verified live against AWS Bedrock's `ListFoundationModels`/`ListInferenceProfiles` APIs (closes #206).
 - **Credential storage:** always the OS keychain via `go-keyring`. Service name: `juggernaut-bedrock`.
 - **`--no-1m-context`:** disables 1M token context window (on by default). `--1m-context` is a hidden no-op kept for script compatibility.
 - **Mantle opt-in:** standard Bedrock preserves inference profile IDs by default; use `--mantle` or `--mantle-url` only when explicitly routing through Mantle. Non-Claude providers (Codex, OpenCode, Grok) route through Mantle unconditionally since Bedrock's native Claude-only API doesn't serve other model families.
