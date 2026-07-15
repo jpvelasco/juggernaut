@@ -2,6 +2,7 @@ package schema_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -277,6 +278,103 @@ func TestBuild_FallbackModelsRejectEmptyEntries(t *testing.T) {
 	_, err := schema.Build(testConfig(), opts)
 	if err == nil {
 		t.Fatal("expected empty fallback model ID to error")
+	}
+}
+
+func TestBuild_AvailableModelsNativeKey(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		AvailableModels: []string{" sonnet ", "claude-opus-4-8", "haiku"},
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	want := []string{"sonnet", "claude-opus-4-8", "haiku"}
+	if !slices.Equal(block.Meta.AvailableModels, want) {
+		t.Errorf("expected meta.availableModels=%v, got %v", want, block.Meta.AvailableModels)
+	}
+	if !slices.Equal(block.NativeKeys().AvailableModels, want) {
+		t.Errorf("expected native availableModels=%v, got %v", want, block.NativeKeys().AvailableModels)
+	}
+}
+
+func TestBuild_AvailableModelsRejectEmptyEntries(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		AvailableModels: []string{"sonnet", " "},
+	}
+	_, err := schema.Build(testConfig(), opts)
+	if err == nil {
+		t.Fatal("expected empty available-models entry to error")
+	}
+}
+
+func TestBuild_AvailableModelsPreservesOrderNoDedup(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		AvailableModels: []string{"haiku", "sonnet", "haiku"},
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	want := []string{"haiku", "sonnet", "haiku"}
+	if !slices.Equal(block.Meta.AvailableModels, want) {
+		t.Errorf("expected order preserved with no dedup, got %v", block.Meta.AvailableModels)
+	}
+}
+
+func TestBuild_EnforceAvailableModelsWritesNativeKey(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		AvailableModels:        []string{"sonnet", "haiku"},
+		EnforceAvailableModels: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if !block.Meta.EnforceAvailableModels {
+		t.Error("expected meta.enforceAvailableModels=true")
+	}
+	if !block.NativeKeys().EnforceAvailableModels {
+		t.Error("expected native enforceAvailableModels=true")
+	}
+}
+
+func TestBuild_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		EnforceAvailableModels: true,
+	}
+	_, err := schema.Build(testConfig(), opts)
+	if err == nil {
+		t.Fatal("expected enforce-without-list to error")
+	}
+	if !strings.Contains(err.Error(), "--enforce-available-models requires --available-models to be set to a non-empty list") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestBuild_EnforceAvailableModelsSucceedsWithNonEmptyList(t *testing.T) {
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Effort: "high",
+		Scope: "user", Version: "4.1.0", AuthValidated: true,
+		AvailableModels:        []string{"sonnet"},
+		EnforceAvailableModels: true,
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if !block.Meta.EnforceAvailableModels {
+		t.Error("expected enforce to succeed with a valid non-empty list")
 	}
 }
 

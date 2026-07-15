@@ -332,7 +332,8 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
 		"--mode=auto", "--always-thinking", "--effort=max",
-		"--fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6", "--skip-preflight",
+		"--fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6",
+		"--available-models=sonnet,haiku", "--enforce-available-models", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -349,6 +350,7 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 
 	for _, k := range []string{
 		"juggernaut", "env", "model", "modelOverrides", "fallbackModel",
+		"availableModels", "enforceAvailableModels",
 		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight", "permissions",
 	} {
 		if _, ok := settings[k]; ok {
@@ -633,6 +635,153 @@ func TestApply_FallbackModelRejectsEmptyEntries(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--fallback-model contains an empty model ID") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestApply_AvailableModelsWritesNativeKeys(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--available-models=sonnet,claude-opus-4-8",
+		"--enforce-available-models",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+
+	available, ok := settings["availableModels"].([]any)
+	if !ok || len(available) != 2 {
+		t.Fatalf("expected availableModels array with two entries, got %#v", settings["availableModels"])
+	}
+	if available[0] != "sonnet" || available[1] != "claude-opus-4-8" {
+		t.Errorf("unexpected availableModels order: %#v", available)
+	}
+	if settings["enforceAvailableModels"] != true {
+		t.Errorf("expected enforceAvailableModels=true, got %#v", settings["enforceAvailableModels"])
+	}
+
+	block := settings["juggernaut"].(map[string]any)
+	meta := block["meta"].(map[string]any)
+	metaAvailable, ok := meta["availableModels"].([]any)
+	if !ok || len(metaAvailable) != 2 {
+		t.Fatalf("expected juggernaut.meta.availableModels with two entries, got %#v", meta["availableModels"])
+	}
+	if meta["enforceAvailableModels"] != true {
+		t.Errorf("expected juggernaut.meta.enforceAvailableModels=true, got %#v", meta["enforceAvailableModels"])
+	}
+}
+
+func TestApply_AvailableModelsRejectsEmptyEntries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--available-models=sonnet,,haiku",
+		"--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected empty --available-models entry to error")
+	}
+	if !strings.Contains(err.Error(), "--available-models contains an empty model ID") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestApply_AvailableModelsTrimsWhitespace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--available-models= sonnet , haiku ",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	available, ok := settings["availableModels"].([]any)
+	if !ok || len(available) != 2 {
+		t.Fatalf("expected availableModels array with two entries, got %#v", settings["availableModels"])
+	}
+	if available[0] != "sonnet" || available[1] != "haiku" {
+		t.Errorf("expected trimmed entries [sonnet haiku], got %#v", available)
+	}
+}
+
+func TestApply_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--enforce-available-models",
+		"--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("expected --enforce-available-models without --available-models to error")
+	}
+	if !strings.Contains(err.Error(), "--enforce-available-models requires --available-models to be set to a non-empty list") {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// The file must not have been written — the error happens before any write.
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if _, statErr := os.Stat(settingsPath); !os.IsNotExist(statErr) {
+		t.Error("settings.json should not be created when validation fails")
+	}
+}
+
+func TestApply_ReApply_AvailableModelsOmittedClearsKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2",
+		"--available-models=sonnet,haiku",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+
+	// Re-apply with no --available-models flag must clear the key, matching
+	// --fallback-model's existing re-apply convention (no preservation).
+	if err := ExecuteArgs([]string{
+		"apply", "--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("re-apply error: %v", err)
+	}
+
+	data := readSettingsJSON(t, home)
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("parsing settings.json: %v", err)
+	}
+	if _, present := settings["availableModels"]; present {
+		t.Errorf("expected availableModels key removed on re-apply without the flag, got %#v", settings["availableModels"])
 	}
 }
 

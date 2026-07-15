@@ -15,24 +15,26 @@ const SchemaVersion = 2
 
 // Options holds all user-supplied apply parameters.
 type Options struct {
-	AuthMode       string
-	Region         string
-	Effort         string
-	Scope          string
-	Version        string
-	OpusModel      string
-	SonnetModel    string
-	HaikuModel     string
-	FableModel     string
-	Opusplan       bool
-	FallbackModels []string
-	Use1M          bool
-	UseMantle      bool
-	MantleURL      string
-	AuthValidated  bool
-	PermissionMode string // "", "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"
-	AlwaysThinking bool
-	ServiceTier    string // "", "default", "flex", "priority"
+	AuthMode               string
+	Region                 string
+	Effort                 string
+	Scope                  string
+	Version                string
+	OpusModel              string
+	SonnetModel            string
+	HaikuModel             string
+	FableModel             string
+	Opusplan               bool
+	FallbackModels         []string
+	AvailableModels        []string
+	EnforceAvailableModels bool
+	Use1M                  bool
+	UseMantle              bool
+	MantleURL              string
+	AuthValidated          bool
+	PermissionMode         string // "", "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"
+	AlwaysThinking         bool
+	ServiceTier            string // "", "default", "flex", "priority"
 }
 
 // Block is the .juggernaut block written to settings.json.
@@ -60,32 +62,36 @@ type ModelOverrides struct {
 
 // Meta holds Juggernaut metadata stored in the block.
 type Meta struct {
-	SchemaVersion  int      `json:"schemaVersion"`
-	Version        string   `json:"version"`
-	ManagedBy      string   `json:"managedBy"`
-	Scope          string   `json:"scope"`
-	AppliedAt      string   `json:"appliedAt"`
-	Opusplan       bool     `json:"opusplan"`
-	Use1M          bool     `json:"use1mContext"`
-	UseMantle      bool     `json:"useMantle"`
-	MantleURL      string   `json:"mantleBaseUrl,omitempty"`
-	Effort         string   `json:"effort"`
-	FallbackModels []string `json:"fallbackModels,omitempty"`
-	PermissionMode string   `json:"permissionMode,omitempty"`
-	AlwaysThinking bool     `json:"alwaysThinkingEnabled,omitempty"`
-	ServiceTier    string   `json:"serviceTier,omitempty"`
+	SchemaVersion          int      `json:"schemaVersion"`
+	Version                string   `json:"version"`
+	ManagedBy              string   `json:"managedBy"`
+	Scope                  string   `json:"scope"`
+	AppliedAt              string   `json:"appliedAt"`
+	Opusplan               bool     `json:"opusplan"`
+	Use1M                  bool     `json:"use1mContext"`
+	UseMantle              bool     `json:"useMantle"`
+	MantleURL              string   `json:"mantleBaseUrl,omitempty"`
+	Effort                 string   `json:"effort"`
+	FallbackModels         []string `json:"fallbackModels,omitempty"`
+	AvailableModels        []string `json:"availableModels,omitempty"`
+	EnforceAvailableModels bool     `json:"enforceAvailableModels,omitempty"`
+	PermissionMode         string   `json:"permissionMode,omitempty"`
+	AlwaysThinking         bool     `json:"alwaysThinkingEnabled,omitempty"`
+	ServiceTier            string   `json:"serviceTier,omitempty"`
 }
 
 // NativeKeys are the top-level settings.json keys Claude Code reads directly.
 type NativeKeys struct {
-	Model                 string            `json:"model,omitempty"`
-	ModelOverrides        map[string]string `json:"modelOverrides,omitempty"`
-	FallbackModel         []string          `json:"fallbackModel,omitempty"`
-	Env                   map[string]string `json:"env"`
-	EffortLevel           string            `json:"effortLevel,omitempty"`
-	AlwaysThinking        bool              `json:"alwaysThinkingEnabled,omitempty"`
-	SkipWebFetchPreflight bool              `json:"skipWebFetchPreflight,omitempty"`
-	Permissions           map[string]any    `json:"permissions,omitempty"`
+	Model                  string            `json:"model,omitempty"`
+	ModelOverrides         map[string]string `json:"modelOverrides,omitempty"`
+	FallbackModel          []string          `json:"fallbackModel,omitempty"`
+	AvailableModels        []string          `json:"availableModels,omitempty"`
+	EnforceAvailableModels bool              `json:"enforceAvailableModels,omitempty"`
+	Env                    map[string]string `json:"env"`
+	EffortLevel            string            `json:"effortLevel,omitempty"`
+	AlwaysThinking         bool              `json:"alwaysThinkingEnabled,omitempty"`
+	SkipWebFetchPreflight  bool              `json:"skipWebFetchPreflight,omitempty"`
+	Permissions            map[string]any    `json:"permissions,omitempty"`
 }
 
 var validEfforts = map[string]bool{
@@ -135,6 +141,13 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	fallbackModels, err := normalizeFallbackModels(opts.FallbackModels)
 	if err != nil {
 		return nil, err
+	}
+	availableModels, err := normalizeAvailableModels(opts.AvailableModels)
+	if err != nil {
+		return nil, err
+	}
+	if opts.EnforceAvailableModels && len(availableModels) == 0 {
+		return nil, fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
 	}
 
 	// Mantle uses anthropic.* model IDs; Bedrock inference profile IDs are not
@@ -206,20 +219,22 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		},
 		Env: env,
 		Meta: Meta{
-			SchemaVersion:  SchemaVersion,
-			Version:        opts.Version,
-			ManagedBy:      "juggernaut",
-			Scope:          opts.Scope,
-			AppliedAt:      time.Now().UTC().Format(time.RFC3339),
-			Opusplan:       opts.Opusplan,
-			Use1M:          opts.Use1M,
-			UseMantle:      opts.UseMantle,
-			MantleURL:      opts.MantleURL,
-			Effort:         opts.Effort,
-			FallbackModels: fallbackModels,
-			PermissionMode: opts.PermissionMode,
-			AlwaysThinking: opts.AlwaysThinking,
-			ServiceTier:    opts.ServiceTier,
+			SchemaVersion:          SchemaVersion,
+			Version:                opts.Version,
+			ManagedBy:              "juggernaut",
+			Scope:                  opts.Scope,
+			AppliedAt:              time.Now().UTC().Format(time.RFC3339),
+			Opusplan:               opts.Opusplan,
+			Use1M:                  opts.Use1M,
+			UseMantle:              opts.UseMantle,
+			MantleURL:              opts.MantleURL,
+			Effort:                 opts.Effort,
+			FallbackModels:         fallbackModels,
+			AvailableModels:        availableModels,
+			EnforceAvailableModels: opts.EnforceAvailableModels,
+			PermissionMode:         opts.PermissionMode,
+			AlwaysThinking:         opts.AlwaysThinking,
+			ServiceTier:            opts.ServiceTier,
 		},
 	}, nil
 }
@@ -320,14 +335,16 @@ func (b *Block) NativeKeys() NativeKeys {
 	}
 
 	return NativeKeys{
-		Model:                 model,
-		ModelOverrides:        nativeModelOverrides(b.Models, b.Meta.Use1M),
-		FallbackModel:         append([]string(nil), b.Meta.FallbackModels...),
-		Env:                   b.Env,
-		EffortLevel:           persistedEffortLevel(b.Meta.Effort),
-		AlwaysThinking:        b.Meta.AlwaysThinking,
-		SkipWebFetchPreflight: true, // always set for Bedrock users
-		Permissions:           permissions,
+		Model:                  model,
+		ModelOverrides:         nativeModelOverrides(b.Models, b.Meta.Use1M),
+		FallbackModel:          append([]string(nil), b.Meta.FallbackModels...),
+		AvailableModels:        append([]string(nil), b.Meta.AvailableModels...),
+		EnforceAvailableModels: b.Meta.EnforceAvailableModels,
+		Env:                    b.Env,
+		EffortLevel:            persistedEffortLevel(b.Meta.Effort),
+		AlwaysThinking:         b.Meta.AlwaysThinking,
+		SkipWebFetchPreflight:  true, // always set for Bedrock users
+		Permissions:            permissions,
 	}
 }
 
@@ -382,6 +399,22 @@ func normalizeFallbackModels(models []string) ([]string, error) {
 		trimmed := strings.TrimSpace(model)
 		if trimmed == "" {
 			return nil, fmt.Errorf("fallback model chain contains an empty model ID")
+		}
+		out = append(out, trimmed)
+	}
+	return out, nil
+}
+
+func normalizeAvailableModels(models []string) ([]string, error) {
+	if len(models) == 0 {
+		return nil, nil
+	}
+
+	out := make([]string, 0, len(models))
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			return nil, fmt.Errorf("available models list contains an empty model ID")
 		}
 		out = append(out, trimmed)
 	}

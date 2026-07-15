@@ -43,6 +43,7 @@ func TestClaude_ManagedKeysMatchLegacy(t *testing.T) {
 	p, _ := Get("claude")
 	want := []string{
 		"env", "model", "modelOverrides", "fallbackModel",
+		"availableModels", "enforceAvailableModels",
 		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight",
 	}
 	got := p.NativeManagedKeys()
