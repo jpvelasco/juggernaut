@@ -54,6 +54,7 @@ var applyFlags struct {
 	mode           string
 	alwaysThinking bool
 	serviceTier    string
+	force          bool
 }
 
 func init() {
@@ -90,6 +91,7 @@ func init() {
 	f.StringVar(&applyFlags.mode, "mode", "", "permission mode: default|acceptEdits|plan|auto|dontAsk|bypassPermissions")
 	f.BoolVar(&applyFlags.alwaysThinking, "always-thinking", false, "enable extended thinking by default")
 	f.StringVar(&applyFlags.serviceTier, "service-tier", "", "Bedrock service tier: default|flex|priority")
+	f.BoolVar(&applyFlags.force, "force", false, "overwrite a config file Juggernaut doesn't manage, even if it already has colliding keys")
 
 	rootCmd.AddCommand(applyCmd)
 }
@@ -211,10 +213,6 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if applyFlags.dryRun {
-		return printApplyDryRun(home, block, prov)
-	}
-
 	provOpts := toProviderOptions(opts)
 	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
 	// not one of Claude's per-tier IDs. Thread the raw flag through so the
@@ -224,6 +222,11 @@ func runApply(_ *cobra.Command, _ []string) error {
 	// default). Mantle providers auto-switch a model to a region that serves it
 	// only when the region was defaulted; an explicit --region is honored.
 	provOpts.RegionExplicit = applyFlags.region != ""
+
+	if applyFlags.dryRun {
+		return printApplyDryRun(home, block, prov, bCfg, provOpts)
+	}
+
 	return commitApply(home, authMode, token, block, prov, bCfg, provOpts)
 }
 
@@ -266,12 +269,28 @@ func resolveOpusplanConflict() error {
 	return nil
 }
 
-func printApplyDryRun(home string, block *schema.Block, prov provider.Provider) error {
+func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
 	fmt.Println("Dry run — no changes written.")
 	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
 		return err
 	}
+
+	plan, err := prov.BuildConfig(bCfg, provOpts)
+	if err != nil {
+		return err
+	}
+	collisions, err := detectForeignCollisions(path, prov, plan)
+	if err != nil {
+		return err
+	}
+	if len(collisions) > 0 && !applyFlags.force {
+		fmt.Printf("Would refuse to apply: %s isn't managed by Juggernaut and already has:\n%s\n"+
+			"Would require --force to overwrite anyway (a backup would still be made before writing)\n",
+			path, formatCollisions(collisions))
+		return nil
+	}
+
 	title := providerDisplayName(prov.Name())
 	fmt.Printf("Would write juggernaut config to %s\n", path)
 	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
@@ -285,13 +304,39 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider) 
 	return nil
 }
 
-func commitApply(home, authMode, token string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
-	if authmode.IsBedrockAPIKey(authMode) && token != "" {
-		if err := keychain.Default().SetWithFallback(token, home); err != nil {
-			return fmt.Errorf("storing API key: %w", err)
-		}
+// detectForeignCollisions checks whether path already holds content Juggernaut
+// doesn't own and, if so, whether any of it collides with the leaves plan is
+// about to write. A config Juggernaut already owns (prov.OwnsConfig) is a
+// re-apply and is never checked — zero new friction for the supported re-apply
+// path ("Juggernaut law": once Juggernaut owns a file, touching its own prior
+// values is not a collision).
+func detectForeignCollisions(path string, prov provider.Provider, plan provider.ConfigPlan) ([]config.Collision, error) {
+	format, err := config.FormatByName(prov.ConfigFormatName())
+	if err != nil {
+		return nil, err
 	}
+	mgr := config.NewManagerWithFormat(path, format)
+	existing, err := mgr.Read()
+	if err != nil {
+		return nil, fmt.Errorf("checking existing configuration: %w", err)
+	}
+	if prov.OwnsConfig(existing) || len(existing) == 0 {
+		return nil, nil
+	}
+	return config.DetectCollisions(existing, plan.Keys, prov.DeepMergeKeys(), prov.OwnedSubKeys()), nil
+}
 
+// formatCollisions renders one line per collision for the refusal error/dry-run
+// report, e.g. `  env.AWS_REGION: "eu-west-1" (foreign value)`.
+func formatCollisions(collisions []config.Collision) string {
+	lines := make([]string, len(collisions))
+	for i, c := range collisions {
+		lines[i] = fmt.Sprintf("  %s: %#v (foreign value)", c.Path, c.Existing)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func commitApply(home, authMode, token string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
 	// The provider owns what to persist. Claude's BuildConfig wraps schema.Build
 	// and reproduces the exact key set commitApply built by hand before — proven
 	// byte-identical by the golden test.
@@ -307,6 +352,25 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if err != nil {
 		return err
 	}
+
+	// Collision detection must run before ANY side effect — including storing
+	// a credential in the OS keychain — so a refused apply changes nothing.
+	collisions, err := detectForeignCollisions(path, prov, plan)
+	if err != nil {
+		return err
+	}
+	if len(collisions) > 0 && !applyFlags.force {
+		return fmt.Errorf("refusing to modify %s — it isn't managed by Juggernaut and already has:\n%s\n"+
+			"run with --force to overwrite anyway (a backup is still made before writing)",
+			path, formatCollisions(collisions))
+	}
+
+	if authmode.IsBedrockAPIKey(authMode) && token != "" {
+		if err := keychain.Default().SetWithFallback(token, home); err != nil {
+			return fmt.Errorf("storing API key: %w", err)
+		}
+	}
+
 	format, err := config.FormatByName(prov.ConfigFormatName())
 	if err != nil {
 		return err
