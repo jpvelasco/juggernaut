@@ -166,6 +166,8 @@ juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8,gl
 juggernaut apply --auth=iam --available-models=sonnet,claude-opus-4-8 --enforce-available-models
 ```
 
+`--available-models`/`--enforce-available-models` write to your user/project `settings.json`, which Claude Code merges with any other non-managed settings the user controls — this curates the `/model` picker, it is not a tamper-resistant restriction. For organization-wide enforcement a user can't bypass, deploy `availableModels`/`enforceAvailableModels` in Claude Code's OS-level managed settings (e.g. `/etc/claude-code/managed-settings.json`) instead; Juggernaut does not write there.
+
 ## Effort Levels
 
 Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, `max`, and `auto`; Claude Code falls back to the highest supported level for the active model. Juggernaut writes fixed persisted levels (`low`, `medium`, `high`, `xhigh`) to both native `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`. Juggernaut defaults to `high`, which matches Sonnet 4.6.
