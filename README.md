@@ -163,6 +163,7 @@ juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-4-8
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
 juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6  # override all model aliases
 juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-4-8 --enforce-available-models
 ```
 
 ## Effort Levels
