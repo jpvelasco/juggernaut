@@ -50,6 +50,28 @@ func TestCheckAutoModeReadiness_SilentWhenNotConfigured(t *testing.T) {
 	}
 }
 
+func TestCheckAutoModeReadiness_OKWhenDefaultModelCapable(t *testing.T) {
+	r := doctor.NewReport()
+	checkAutoModeReadiness(r, "user", map[string]any{
+		"juggernaut": map[string]any{
+			"meta": map[string]any{"permissionMode": "auto"},
+			"modelOverrides": map[string]any{
+				"opus":   "global.anthropic.claude-opus-4-8",
+				"sonnet": "global.anthropic.claude-sonnet-5",
+				"haiku":  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			},
+		},
+	})
+
+	out := r.String()
+	if !strings.Contains(out, "[OK]") {
+		t.Fatalf("expected OK status, got: %s", out)
+	}
+	if !strings.Contains(out, "auto-capable") {
+		t.Fatalf("expected detail to mention auto-capable, got: %s", out)
+	}
+}
+
 func TestClaudeCommandStatus_OKWhenRealClaudeFound(t *testing.T) {
 	dir := t.TempDir()
 	name := "claude"
