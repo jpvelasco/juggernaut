@@ -453,3 +453,29 @@ func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
 		t.Errorf("expected warning about legacy block in %s, got: %v", ps5Host, warnings)
 	}
 }
+
+// TestDoctor_ReportsAutoModeReadiness_EndToEnd verifies checkAutoModeReadiness
+// is actually wired into runDoctor's per-scope loop: a real `apply --mode=auto`
+// followed by `doctor` must surface the auto-mode readiness line.
+func TestDoctor_ReportsAutoModeReadiness_EndToEnd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"doctor"}); err != nil {
+			t.Fatalf("doctor: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "auto-mode readiness") {
+		t.Fatalf("expected doctor output to include auto-mode readiness check, got:\n%s", out)
+	}
+}

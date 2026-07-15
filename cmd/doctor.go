@@ -57,9 +57,11 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		if status, detail := checkSettingsScope(home, scope, required); status != "" {
 			r.Check("settings.json ("+scope+")", status, detail)
 		}
-		if detail, ok := opusplanProblem(readScopeData(home, scope)); ok {
+		scopeData := readScopeData(home, scope)
+		if detail, ok := opusplanProblem(scopeData); ok {
 			r.Check("top-level model ("+scope+")", doctor.Warn, detail)
 		}
+		checkAutoModeReadiness(r, scope, scopeData)
 	}
 
 	token, err := keychain.Default().GetWithFallback(home)
