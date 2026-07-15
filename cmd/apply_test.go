@@ -1126,6 +1126,56 @@ func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
 	}
 }
 
+// TestApply_Fable_WarnsAboutDataRetention: Fable requires opting in to
+// provider_data_share on Bedrock (Anthropic's requirement) and Juggernaut has
+// no way to check the account's actual opt-in status, so apply must always
+// print the warning when Fable is configured — regardless of auth mode or
+// region — rather than silently risk denied runtime calls.
+func TestApply_Fable_WarnsAboutDataRetention(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2",
+			"--fable-model=global.anthropic.claude-fable-5", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "provider_data_share") {
+		t.Errorf("expected Fable data-retention warning, got:\n%s", out)
+	}
+}
+
+// TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention: the embedded
+// bedrock-config.json pins a default Fable model (see #206), so the warning
+// fires even without --fable-model — every apply configures Fable unless the
+// maintainer ships a config without it. schema-layer and provider-layer tests
+// cover the "Fable genuinely unconfigured" case directly; there is no CLI flag
+// to clear a config-pinned Fable default, so that state isn't reachable here.
+func TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "provider_data_share") {
+		t.Errorf("expected Fable data-retention warning with the default config (Fable pinned by default), got:\n%s", out)
+	}
+}
+
 func TestApply_Mantle_WarnsAboutPromptCaching(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

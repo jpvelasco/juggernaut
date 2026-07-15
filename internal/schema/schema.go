@@ -43,6 +43,9 @@ type Block struct {
 	Models ModelOverrides    `json:"modelOverrides"`
 	Env    map[string]string `json:"env"`
 	Meta   Meta              `json:"meta"`
+	// Warnings are actionable heads-ups for apply/doctor output only — never
+	// persisted to settings.json.
+	Warnings []string `json:"-"`
 }
 
 // Auth holds the authentication configuration within the Juggernaut block.
@@ -205,6 +208,11 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		env["ANTHROPIC_BEDROCK_SERVICE_TIER"] = opts.ServiceTier
 	}
 
+	var warnings []string
+	if IsFable5Model(fable) {
+		warnings = append(warnings, FableDataRetentionWarning)
+	}
+
 	return &Block{
 		Auth: Auth{
 			Mode:   opts.AuthMode,
@@ -236,6 +244,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 			AlwaysThinking:         opts.AlwaysThinking,
 			ServiceTier:            opts.ServiceTier,
 		},
+		Warnings: warnings,
 	}, nil
 }
 
@@ -254,6 +263,31 @@ func IsAutoModeCapableModel(modelID string) bool {
 		strings.Contains(normalized, "claude-opus-4-7") ||
 		strings.Contains(normalized, "claude-sonnet-5")
 }
+
+// IsFable5Model reports whether modelID refers to Claude Fable 5, regardless
+// of cross-region inference prefix or the Claude Code [1m] context suffix.
+func IsFable5Model(modelID string) bool {
+	normalized := strings.TrimSuffix(modelID, "[1m]")
+	for _, prefix := range regionalInferencePrefixes {
+		normalized = strings.TrimPrefix(normalized, prefix)
+	}
+	return strings.Contains(normalized, "claude-fable-5")
+}
+
+// FableDataRetentionWarning is shown whenever Fable is configured. AWS's
+// Bedrock model card and abuse-detection docs state that using Claude Fable 5
+// requires opting in to provider_data_share (inputs/outputs retained up to 30
+// days and shared with Anthropic for abuse detection/human review) — a
+// requirement Anthropic imposes, not AWS. There is no AWS API to read an
+// account's current data-retention setting, so Juggernaut cannot verify
+// opt-in status; this warns instead of silently shipping calls that may be
+// denied at runtime. No claim is made about what is or isn't collected beyond
+// what AWS documents — Juggernaut doesn't know and won't guess.
+const FableDataRetentionWarning = "Fable 5 requires opting in to provider_data_share data retention " +
+	"(Anthropic's requirement, not AWS's) — see " +
+	"https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html. Without it, Fable calls " +
+	"may be denied at runtime. Juggernaut cannot check your account's current opt-in status — no AWS " +
+	"API exposes it."
 
 // AutoModeUsable reports whether auto mode will be offered for this block's
 // ACTIVE DEFAULT session model (the Sonnet-tier pin, the account default on

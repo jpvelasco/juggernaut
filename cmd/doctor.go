@@ -62,6 +62,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 			r.Check("top-level model ("+scope+")", doctor.Warn, detail)
 		}
 		checkAutoModeReadiness(r, scope, scopeData)
+		checkFableDataRetention(r, scope, scopeData)
 	}
 
 	token, err := keychain.Default().GetWithFallback(home)
@@ -323,6 +324,30 @@ func autoModeAvailableDetail(block schema.Block) string {
 	}
 	return "WARN — auto mode enabled but no configured model tier supports it; " +
 		"re-run `juggernaut apply --mode=auto` to reconfigure with a capable model"
+}
+
+// checkFableDataRetention warns whenever Fable is configured, on every doctor
+// run — not just at apply time. There is no AWS API to read the account's
+// actual provider_data_share opt-in status (checked live against AWS docs, see
+// schema.FableDataRetentionWarning), so this can never resolve to OK; it exists
+// so the requirement stays visible after the apply-time note has scrolled away.
+func checkFableDataRetention(r *doctor.Report, scope string, data map[string]any) {
+	if data == nil {
+		return
+	}
+	juggernautMap, ok := data["juggernaut"].(map[string]any)
+	if !ok {
+		return
+	}
+	overrides, ok := juggernautMap["modelOverrides"].(map[string]any)
+	if !ok {
+		return
+	}
+	fable, _ := overrides["fable"].(string)
+	if !schema.IsFable5Model(fable) {
+		return
+	}
+	r.Check("fable data retention ("+scope+")", doctor.Warn, schema.FableDataRetentionWarning)
 }
 
 func checkSettingsScope(home, scope string, required bool) (doctor.Status, string) {

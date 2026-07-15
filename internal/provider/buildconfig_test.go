@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 // testConfig is a minimal embedded-style bedrock.Config for provider tests.
@@ -97,6 +98,40 @@ func TestClaude_LaunchSpec(t *testing.T) {
 	// needsBearerToken(authModes). Forcing true breaks Claude+IAM launches.
 	if ls.NeedsToken {
 		t.Error("Claude LaunchSpec.NeedsToken must be false (auth-mode-dependent, not static)")
+	}
+}
+
+// TestClaude_BuildConfig_FableWarning verifies the Fable data-retention
+// warning (schema.FableDataRetentionWarning) surfaces through ConfigPlan.Warnings
+// when Fable is configured, and is absent otherwise — apply.go prints every
+// plan.Warnings entry, so this is how the warning reaches the user.
+func TestClaude_BuildConfig_FableWarning(t *testing.T) {
+	p, _ := Get("claude")
+	cfg := testConfig()
+	cfg.Models.Fable = "global.anthropic.claude-fable-5"
+	plan, err := p.BuildConfig(cfg, baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	found := false
+	for _, w := range plan.Warnings {
+		if w == schema.FableDataRetentionWarning {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected Fable data-retention warning, got %v", plan.Warnings)
+	}
+}
+
+func TestClaude_BuildConfig_NoFableWarningWhenFableNotConfigured(t *testing.T) {
+	p, _ := Get("claude")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if len(plan.Warnings) != 0 {
+		t.Errorf("expected no warnings without Fable configured, got %v", plan.Warnings)
 	}
 }
 
