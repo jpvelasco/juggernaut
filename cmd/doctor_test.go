@@ -341,7 +341,7 @@ func TestCheckProviderConfigScope_CodexOwnedOK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(path)); err != nil {
 		t.Fatal(err)
 	}
 	// Minimal OwnsConfig marker for Codex.
