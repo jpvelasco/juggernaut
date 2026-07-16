@@ -1,11 +1,12 @@
 {
   "name": "juggernaut-bedrock",
   "version": "0.0.0",
-  "description": "Route Claude Code through Amazon Bedrock in one command — IAM, SSO, or API key. Cross-platform CLI for GenAI developers.",
+  "description": "Safe Amazon Bedrock routing for Claude Code, Codex, OpenCode, and Grok — IAM, SSO, or API key. Cross-platform CLI for GenAI developers.",
   "bin": {
     "juggernaut": "./index.js"
   },
   "scripts": {
+    "preinstall": "node preinstall.js",
     "test": "node --test"
   },
   "optionalDependencies": {

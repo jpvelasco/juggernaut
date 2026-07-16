@@ -11,6 +11,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
@@ -312,6 +313,73 @@ func TestCheckSettingsScope_RequiredScopeMissingFails(t *testing.T) {
 	status, detail := checkSettingsScope(home, "user", true)
 	if status != doctor.Fail {
 		t.Fatalf("expected FAIL for missing required scope, got %s (%s)", status, detail)
+	}
+}
+
+func TestCheckProviderConfigScope_CodexMissingRequiredFails(t *testing.T) {
+	home := t.TempDir()
+	prov, err := provider.Get("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, detail := checkProviderConfigScope(prov, home, "user", true)
+	if status != doctor.Fail {
+		t.Fatalf("expected FAIL for missing codex config, got %s (%s)", status, detail)
+	}
+	if !strings.Contains(detail, "--cli=codex") {
+		t.Errorf("expected apply --cli=codex guidance, got %q", detail)
+	}
+}
+
+func TestCheckProviderConfigScope_CodexOwnedOK(t *testing.T) {
+	home := t.TempDir()
+	prov, err := provider.Get("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := prov.ConfigPath(home, "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := safepath.MkdirAll(filepath.Dir(path)); err != nil {
+		t.Fatal(err)
+	}
+	// Minimal OwnsConfig marker for Codex.
+	if err := os.WriteFile(path, []byte("model_provider = \"amazon-bedrock\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status, detail := checkProviderConfigScope(prov, home, "user", true)
+	if status != doctor.OK {
+		t.Fatalf("expected OK for owned codex config, got %s (%s)", status, detail)
+	}
+	if !strings.Contains(detail, "present") {
+		t.Errorf("expected present detail, got %q", detail)
+	}
+}
+
+func TestCliBinaryStatus_WarnWhenMissing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	prov, err := provider.Get("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, detail := cliBinaryStatus(prov)
+	if status != doctor.Warn {
+		t.Fatalf("expected Warn when opencode missing, got %s (%s)", status, detail)
+	}
+	if !strings.Contains(detail, "not found on PATH") {
+		t.Errorf("expected PATH guidance, got %q", detail)
+	}
+}
+
+func TestDoctor_UnknownCLIRejected(t *testing.T) {
+	resetFlags()
+	err := ExecuteArgs([]string{"doctor", "--cli=nonesuch"})
+	if err == nil {
+		t.Fatal("expected error for unknown --cli")
+	}
+	if !strings.Contains(err.Error(), "unknown CLI") {
+		t.Errorf("expected unknown CLI error, got %v", err)
 	}
 }
 

@@ -14,9 +14,9 @@
 
 <h1 align="center">Juggernaut</h1>
 
-<p align="center"><strong>Claude Code → Amazon Bedrock in one command</strong></p>
+<p align="center"><strong>Safe Bedrock routing for coding agents — Claude Code, Codex, OpenCode, and Grok</strong></p>
 
-Single cross-platform binary that configures Claude Code to route through Amazon Bedrock instead of Anthropic's direct API — IAM, SSO, or Bedrock API key auth.
+Single cross-platform binary that configures your coding CLI to route through **Amazon Bedrock** instead of vendor APIs — IAM, SSO, or Bedrock API key auth. Juggernaut is the **safe Bedrock arbiter**: it refuses to clobber foreign config, keeps credentials in the OS keychain, and installs marked shell activation that never overwrites the real CLI binary.
 
 **Install from npm:** [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) — `npm install -g juggernaut-bedrock`
 
@@ -97,7 +97,7 @@ Close and reopen PowerShell after `doctor` is green. This avoids the old `C:\Use
 ## Configure
 
 ```bash
-# IAM / SSO (recommended)
+# IAM / SSO (recommended) — Claude Code is the default --cli
 juggernaut apply --auth=iam
 
 # Bedrock API key (stored securely in OS keychain)
@@ -107,9 +107,33 @@ juggernaut apply --auth=bedrock-api-key
 juggernaut apply
 ```
 
-`juggernaut apply` will not write `CLAUDE_CODE_USE_BEDROCK=1` unless a valid credential source is confirmed.
+`juggernaut apply` will not enable Bedrock routing unless a valid credential source is confirmed (for Claude Code: no `CLAUDE_CODE_USE_BEDROCK=1` without validated auth).
 
-**Common options:**
+### Multi-CLI (`--cli`)
+
+| CLI | Flag | Config path (user scope) |
+|-----|------|---------------------------|
+| Claude Code (default) | `--cli=claude` | `~/.claude/settings.json` |
+| OpenAI Codex | `--cli=codex` | `~/.codex/config.toml` |
+| OpenCode | `--cli=opencode` | `~/.config/opencode/opencode.json` |
+| Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
+
+```bash
+# Codex / OpenCode / Grok route through Mantle and require a Bedrock API key (not IAM)
+juggernaut apply --cli=opencode --auth=bedrock-api-key
+juggernaut apply --cli=codex --auth=bedrock-api-key
+juggernaut apply --cli=grok --auth=bedrock-api-key
+```
+
+Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it.
+
+### Safety defaults
+
+- **Collision detection** — if a target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force` (a backup is still created).
+- **Keychain-only secrets** — Bedrock API keys never go into shell profiles or plaintext config.
+- **No binary overwrite** — Juggernaut never installs over an unknown file matching a managed CLI name.
+
+**Common options (Claude Code):**
 
 ```bash
 juggernaut apply --auth=iam --region=us-east-1
@@ -120,27 +144,30 @@ juggernaut apply --auth=iam --always-thinking       # extended thinking on by de
 juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: default | flex | priority
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
 juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-4-8 --enforce-available-models
 juggernaut apply --auth=iam --mantle                # enable Mantle routing
 juggernaut apply --auth=iam --dry-run               # preview without writing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
+juggernaut apply --auth=iam --force                 # overwrite colliding foreign leaves (backup kept)
 ```
 
 ## Launch
 
 ```bash
-claude
+claude          # after apply --cli=claude (default)
+# or: codex / opencode / grok after the matching --cli apply
 ```
 
-`juggernaut apply` installs a shell function named `claude` in your shell profile. Restart your shell, or source the updated profile, then run Claude normally. Juggernaut never installs over the real `claude` binary.
+`juggernaut apply` installs a marked shell function for the target CLI. Restart your shell, or source the updated profile, then run the CLI normally.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `apply` | Write Juggernaut config to `settings.json` and install shell activation. |
-| `show` | Print the current Juggernaut block from user and project scopes. |
-| `doctor` | Read-only diagnostics for settings, credentials, activation, Claude Code, and legacy v4.2.6 artifacts. |
-| `uninstall` | Remove the Juggernaut block and bearer token. Use `--full` to remove shell activation. |
+| `apply` | Write Juggernaut config for the target `--cli` and install shell activation. |
+| `show` | Print the current Juggernaut-managed config from user and project scopes. |
+| `doctor` | Read-only diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts. Supports `--cli=claude\|codex\|opencode\|grok`. |
+| `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
 | `models check` | Maintainer tool: check `bedrock-config.json`'s pinned models against AWS Bedrock's live catalog; `--write --set-<tier>=<id>` to update a stale pin. |
 | `version` | Print the installed version. |
 
