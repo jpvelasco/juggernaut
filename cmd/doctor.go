@@ -440,6 +440,9 @@ func checkProviderConfigScope(prov provider.Provider, home, scope string, requir
 		return doctor.Fail, err.Error()
 	}
 	mgr := config.NewManagerWithFormat(path, format)
+	// Manager.Read returns (empty map, nil) when the file is missing — same
+	// contract as HasJuggernautBlock — so a missing optional project-scope
+	// config falls through to "not configured" rather than Fail.
 	data, err := mgr.Read()
 	if err != nil {
 		return doctor.Fail, err.Error()

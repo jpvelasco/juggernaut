@@ -119,8 +119,9 @@ juggernaut apply
 | Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
 
 ```bash
-juggernaut apply --cli=opencode --auth=iam
-juggernaut apply --cli=codex --auth=iam
+# Codex / OpenCode / Grok route through Mantle and require a Bedrock API key (not IAM)
+juggernaut apply --cli=opencode --auth=bedrock-api-key
+juggernaut apply --cli=codex --auth=bedrock-api-key
 juggernaut apply --cli=grok --auth=bedrock-api-key
 ```
 

@@ -40,9 +40,9 @@ juggernaut apply --auth=iam
 # Bedrock API key (key stored securely in OS keychain)
 juggernaut apply --auth=bedrock-api-key
 
-# Other coding CLIs
-juggernaut apply --cli=opencode --auth=iam
-juggernaut apply --cli=codex --auth=iam
+# Other coding CLIs (Mantle routes require a Bedrock API key, not IAM)
+juggernaut apply --cli=opencode --auth=bedrock-api-key
+juggernaut apply --cli=codex --auth=bedrock-api-key
 juggernaut apply --cli=grok --auth=bedrock-api-key
 ```
 
