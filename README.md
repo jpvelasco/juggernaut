@@ -141,6 +141,7 @@ claude
 | `show` | Print the current Juggernaut block from user and project scopes. |
 | `doctor` | Read-only diagnostics for settings, credentials, activation, Claude Code, and legacy v4.2.6 artifacts. |
 | `uninstall` | Remove the Juggernaut block and bearer token. Use `--full` to remove shell activation. |
+| `models check` | Maintainer tool: check `bedrock-config.json`'s pinned models against AWS Bedrock's live catalog; `--write --set-<tier>=<id>` to update a stale pin. |
 | `version` | Print the installed version. |
 
 ## Default Models
