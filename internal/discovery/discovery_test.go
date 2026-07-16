@@ -98,6 +98,38 @@ func TestListAnthropicModelsWith_MissingLifecycleDefaultsToUnknownNotEmpty(t *te
 	}
 }
 
+func TestListAnthropicModelsWith_NilModelIdAndProviderNameDefaultToEmpty(t *testing.T) {
+	client := &fakeBedrockClient{
+		foundationModelsOut: &bedrock.ListFoundationModelsOutput{
+			ModelSummaries: []types.FoundationModelSummary{
+				{
+					ModelId:      nil,
+					ProviderName: nil,
+					ModelLifecycle: &types.FoundationModelLifecycle{
+						Status: types.FoundationModelLifecycleStatusActive,
+					},
+				},
+			},
+		},
+	}
+	got, err := listAnthropicModelsWith(context.Background(), client)
+	if err != nil {
+		t.Fatalf("listAnthropicModelsWith: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 model, got %+v", got)
+	}
+	if got[0].ID != "" {
+		t.Errorf("expected empty ID for nil ModelId, got %q", got[0].ID)
+	}
+	if got[0].Provider != "" {
+		t.Errorf("expected empty Provider for nil ProviderName, got %q", got[0].Provider)
+	}
+	if got[0].Status != "ACTIVE" {
+		t.Errorf("expected Status=ACTIVE unaffected by other nil fields, got %q", got[0].Status)
+	}
+}
+
 func TestListAnthropicModelsWith_PropagatesAPIError(t *testing.T) {
 	client := &fakeBedrockClient{foundationModelsErr: errors.New("access denied")}
 	_, err := listAnthropicModelsWith(context.Background(), client)
@@ -139,6 +171,32 @@ func TestListInferenceProfilesWith_EmptyCatalog(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("expected empty result, got %+v", got)
+	}
+}
+
+func TestListInferenceProfilesWith_NilInferenceProfileIdDefaultsToEmpty(t *testing.T) {
+	client := &fakeBedrockClient{
+		inferenceProfilesOut: &bedrock.ListInferenceProfilesOutput{
+			InferenceProfileSummaries: []types.InferenceProfileSummary{
+				{
+					InferenceProfileId: nil,
+					Status:             types.InferenceProfileStatusActive,
+				},
+			},
+		},
+	}
+	got, err := listInferenceProfilesWith(context.Background(), client)
+	if err != nil {
+		t.Fatalf("listInferenceProfilesWith: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 profile, got %+v", got)
+	}
+	if got[0].ID != "" {
+		t.Errorf("expected empty ID for nil InferenceProfileId, got %q", got[0].ID)
+	}
+	if got[0].Status != "ACTIVE" {
+		t.Errorf("expected Status=ACTIVE unaffected, got %q", got[0].Status)
 	}
 }
 

@@ -21,6 +21,26 @@ func testBedrockConfigForModels() *bedrock.Config {
 	}
 }
 
+func TestBareModelID_StripsRegionalPrefixes(t *testing.T) {
+	cases := []struct {
+		id   string
+		want string
+	}{
+		{"global.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"us.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"us-gov.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"eu.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"apac.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := bareModelID(c.id); got != c.want {
+			t.Errorf("bareModelID(%q) = %q, want %q", c.id, got, c.want)
+		}
+	}
+}
+
 func TestBuildModelsReport_AllActiveNoLegacy(t *testing.T) {
 	cfg := testBedrockConfigForModels()
 	anthropic := []discovery.DiscoveredModel{
