@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,6 +21,119 @@ func testBedrockConfigForModels() *bedrock.Config {
 			Haiku:  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 			Fable:  "global.anthropic.claude-fable-5",
 		},
+	}
+}
+
+// profilesForConfig returns inference-profile catalog entries matching cfg pins.
+func profilesForConfig(cfg *bedrock.Config, statusBySuffix map[string]string) []discovery.DiscoveredModel {
+	defaultStatus := "ACTIVE"
+	statusOf := func(id string) string {
+		for suffix, st := range statusBySuffix {
+			if strings.Contains(id, suffix) {
+				return st
+			}
+		}
+		return defaultStatus
+	}
+	out := make([]discovery.DiscoveredModel, 0, 4)
+	for _, id := range []string{cfg.Models.Opus, cfg.Models.Sonnet, cfg.Models.Haiku, cfg.Models.Fable} {
+		out = append(out, discovery.DiscoveredModel{ID: id, Status: statusOf(id), Provider: "Anthropic"})
+	}
+	return out
+}
+
+// activeProfilesForEmbeddedConfig matches the live bedrock-config.json pins used
+// by end-to-end models check tests (which call loadBedrockConfig).
+func activeProfilesForEmbeddedConfig() []discovery.DiscoveredModel {
+	return []discovery.DiscoveredModel{
+		{ID: "global.anthropic.claude-opus-4-8", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-sonnet-5", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-sonnet-4-6", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-fable-5", Status: "ACTIVE", Provider: "Anthropic"},
+	}
+}
+
+func TestPinStatus_PrefixedUsesProfiles(t *testing.T) {
+	profiles := []discovery.DiscoveredModel{{ID: "global.anthropic.claude-opus-4-8", Status: "ACTIVE"}}
+	st, found := pinStatus("global.anthropic.claude-opus-4-8", nil, profiles)
+	if !found || st != "ACTIVE" {
+		t.Fatalf("expected ACTIVE from profiles, got found=%v status=%q", found, st)
+	}
+	// Bare foundation-model catalog alone must not satisfy a prefixed pin.
+	st, found = pinStatus("global.anthropic.claude-opus-4-8", []discovery.DiscoveredModel{
+		{ID: "anthropic.claude-opus-4-8", Status: "ACTIVE"},
+	}, nil)
+	if found {
+		t.Fatalf("prefixed pin must not match foundation models only, got %q", st)
+	}
+}
+
+func TestPinStatus_BareUsesFoundationModels(t *testing.T) {
+	st, found := pinStatus("anthropic.claude-opus-4-8", []discovery.DiscoveredModel{
+		{ID: "anthropic.claude-opus-4-8", Status: "LEGACY"},
+	}, nil)
+	if !found || st != "LEGACY" {
+		t.Fatalf("expected LEGACY from foundation models, got found=%v status=%q", found, st)
+	}
+}
+
+func TestWriteBedrockConfigFile_PreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bedrock-config.json")
+	original := `{
+  "version": "9.9.9",
+  "description": "keep me",
+  "models": {
+    "opus": "global.anthropic.claude-opus-4-8",
+    "sonnet": "global.anthropic.claude-sonnet-4-6",
+    "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "fable": "global.anthropic.claude-fable-5"
+  },
+  "defaults": {"fast_model": "keep-this-too"}
+}
+`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Point findBedrockConfigFile at our temp file via working directory + name
+	// is not how find works — writeBedrockConfigFile uses findBedrockConfigFile().
+	// Exercise the patch logic via a local helper path: re-read after write by
+	// temporarily chdir is fragile; call write with injected path instead by
+	// writing next to a discovered config. Use the real finder only if we
+	// create bedrock-config.json in a temp home and force cwd.
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWD) })
+
+	cfg := testBedrockConfigForModels()
+	cfg.Models.Opus = "global.anthropic.claude-opus-4-9"
+	if err := writeBedrockConfigFile(cfg); err != nil {
+		t.Fatalf("writeBedrockConfigFile: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		t.Fatal(err)
+	}
+	if root["description"] != "keep me" {
+		t.Errorf("description lost: %v", root["description"])
+	}
+	defaults, _ := root["defaults"].(map[string]any)
+	if defaults == nil || defaults["fast_model"] != "keep-this-too" {
+		t.Errorf("defaults lost: %v", root["defaults"])
+	}
+	models, _ := root["models"].(map[string]any)
+	if models["opus"] != "global.anthropic.claude-opus-4-9" {
+		t.Errorf("opus not updated: %v", models["opus"])
 	}
 }
 
@@ -49,7 +165,7 @@ func TestBuildModelsReport_AllActiveNoLegacy(t *testing.T) {
 		{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "anthropic.claude-fable-5", Status: "ACTIVE", Provider: "Anthropic"},
 	}
-	report, anyLegacy := buildModelsReport(cfg, anthropic, nil)
+	report, anyLegacy := buildModelsReport(cfg, anthropic, profilesForConfig(cfg, nil))
 	if anyLegacy {
 		t.Error("expected anyLegacy=false when all tiers are ACTIVE")
 	}
@@ -68,7 +184,7 @@ func TestBuildModelsReport_LegacyTierFlagsAndListsCandidates(t *testing.T) {
 		{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "anthropic.claude-fable-5", Status: "ACTIVE", Provider: "Anthropic"},
 	}
-	report, anyLegacy := buildModelsReport(cfg, anthropic, nil)
+	report, anyLegacy := buildModelsReport(cfg, anthropic, profilesForConfig(cfg, map[string]string{"opus": "LEGACY"}))
 	if !anyLegacy {
 		t.Error("expected anyLegacy=true when opus tier is LEGACY")
 	}
@@ -86,7 +202,7 @@ func TestBuildModelsReport_UnrecognizedModelSurfaced(t *testing.T) {
 		{ID: "anthropic.claude-fable-5", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "anthropic.claude-nova-1", Status: "ACTIVE", Provider: "Anthropic"},
 	}
-	report, _ := buildModelsReport(cfg, anthropic, nil)
+	report, _ := buildModelsReport(cfg, anthropic, profilesForConfig(cfg, nil))
 	if !strings.Contains(report, "unrecognized") {
 		t.Errorf("expected an unrecognized section, got:\n%s", report)
 	}
@@ -105,7 +221,7 @@ func TestBuildModelsReport_DeterministicSortedCandidates(t *testing.T) {
 		{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "anthropic.claude-fable-5", Status: "ACTIVE", Provider: "Anthropic"},
 	}
-	report, _ := buildModelsReport(cfg, anthropic, nil)
+	report, _ := buildModelsReport(cfg, anthropic, profilesForConfig(cfg, map[string]string{"opus": "LEGACY"}))
 	idx410 := strings.Index(report, "anthropic.claude-opus-4-10")
 	idx49 := strings.Index(report, "anthropic.claude-opus-4-9")
 	if idx410 == -1 || idx49 == -1 {
@@ -156,7 +272,7 @@ func TestApplyModelWrites_RejectsNonActiveID(t *testing.T) {
 	anthropic := []discovery.DiscoveredModel{
 		{ID: "anthropic.claude-opus-legacy", Status: "LEGACY"},
 	}
-	if err := applyModelWrites(cfg, sets, anthropic); err == nil {
+	if err := applyModelWrites(cfg, sets, anthropic, nil); err == nil {
 		t.Fatal("expected error when pinning a LEGACY ID")
 	}
 	if cfg.Models.Opus != "global.anthropic.claude-opus-4-8" {
@@ -167,7 +283,7 @@ func TestApplyModelWrites_RejectsNonActiveID(t *testing.T) {
 func TestApplyModelWrites_RejectsUnknownID(t *testing.T) {
 	cfg := testBedrockConfigForModels()
 	sets := map[discovery.Tier]string{discovery.TierOpus: "anthropic.claude-opus-nonexistent"}
-	if err := applyModelWrites(cfg, sets, nil); err == nil {
+	if err := applyModelWrites(cfg, sets, nil, nil); err == nil {
 		t.Fatal("expected error when pinning an unknown ID")
 	}
 }
@@ -181,7 +297,7 @@ func TestApplyModelWrites_AllOrNothingAcrossMultipleTiers(t *testing.T) {
 	anthropic := []discovery.DiscoveredModel{
 		{ID: "anthropic.claude-opus-4-9", Status: "ACTIVE"},
 	}
-	if err := applyModelWrites(cfg, sets, anthropic); err == nil {
+	if err := applyModelWrites(cfg, sets, anthropic, nil); err == nil {
 		t.Fatal("expected error because sonnet entry is invalid")
 	}
 	if cfg.Models.Opus != "global.anthropic.claude-opus-4-8" {
@@ -195,7 +311,7 @@ func TestApplyModelWrites_SucceedsAndMutatesConfig(t *testing.T) {
 	anthropic := []discovery.DiscoveredModel{
 		{ID: "anthropic.claude-opus-4-9", Status: "ACTIVE"},
 	}
-	if err := applyModelWrites(cfg, sets, anthropic); err != nil {
+	if err := applyModelWrites(cfg, sets, anthropic, nil); err != nil {
 		t.Fatalf("applyModelWrites: %v", err)
 	}
 	if cfg.Models.Opus != "anthropic.claude-opus-4-9" {
@@ -214,7 +330,7 @@ func TestRunModelsCheck_EndToEnd_AllActiveExitsClean(t *testing.T) {
 		}, nil
 	}
 	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
-		return nil, nil
+		return activeProfilesForEmbeddedConfig(), nil
 	}
 	defer func() {
 		listAnthropicModels = origAnthropic
@@ -249,7 +365,13 @@ func TestRunModelsCheck_EndToEnd_LegacyTierErrors(t *testing.T) {
 		}, nil
 	}
 	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
-		return nil, nil
+		profiles := activeProfilesForEmbeddedConfig()
+		for i := range profiles {
+			if strings.Contains(profiles[i].ID, "opus") {
+				profiles[i].Status = "LEGACY"
+			}
+		}
+		return profiles, nil
 	}
 	defer func() {
 		listAnthropicModels = origAnthropic
@@ -281,7 +403,7 @@ func TestRunModelsCheck_SetWithoutWrite_PrintsValidationFeedback(t *testing.T) {
 		}, nil
 	}
 	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
-		return nil, nil
+		return activeProfilesForEmbeddedConfig(), nil
 	}
 	defer func() {
 		listAnthropicModels = origAnthropic
@@ -313,7 +435,7 @@ func TestRunModelsCheck_SetWithoutWrite_RejectsInvalidID(t *testing.T) {
 		}, nil
 	}
 	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
-		return nil, nil
+		return activeProfilesForEmbeddedConfig(), nil
 	}
 	defer func() {
 		listAnthropicModels = origAnthropic

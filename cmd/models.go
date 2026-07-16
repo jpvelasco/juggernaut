@@ -77,7 +77,7 @@ func runModelsCheck(_ *cobra.Command, _ []string) error {
 	fmt.Print(report)
 
 	if len(sets) > 0 {
-		if err := applyModelWrites(cfg, sets, anthropic); err != nil {
+		if err := applyModelWrites(cfg, sets, anthropic, profiles); err != nil {
 			return fmt.Errorf("not writing bedrock-config.json: %w", err)
 		}
 		if modelsCheckFlags.write {
@@ -85,6 +85,9 @@ func runModelsCheck(_ *cobra.Command, _ []string) error {
 				return err
 			}
 			fmt.Println("\nbedrock-config.json updated.")
+			// Recompute exit status from the post-write pins so a successful
+			// replacement of a LEGACY pin exits 0 without a second run.
+			_, anyLegacy = buildModelsReport(cfg, anthropic, profiles)
 		} else {
 			// --set-* without --write: print validation feedback for each tier
 			fmt.Println()
@@ -99,7 +102,7 @@ func runModelsCheck(_ *cobra.Command, _ []string) error {
 	}
 
 	if anyLegacy {
-		return fmt.Errorf("one or more pinned tiers is LEGACY in the live catalog — see report above")
+		return fmt.Errorf("one or more pinned tiers is LEGACY in the live catalog - see report above")
 	}
 	return nil
 }
@@ -123,24 +126,15 @@ func tierPin(cfg *bedrock.Config, tier discovery.Tier) string {
 // buildModelsReport is a pure function (no I/O) so it's directly unit
 // testable: given the config and the already-fetched discovery results, it
 // renders the full human-readable report and reports whether any tier is
-// LEGACY. anthropic and inferenceProfiles are both already-normalized
-// discovery.DiscoveredModel slices — inferenceProfiles is currently unused in
-// the report body (the four tiers are all bedrock-runtime model IDs, not
-// inference profile IDs, in this comparison) but is accepted here so a future
-// report enhancement doesn't need to change this function's signature again.
+// LEGACY. Prefixed pins (global./us./…) are verified against the inference
+// profile catalog; bare foundation-model IDs against ListFoundationModels.
 func buildModelsReport(cfg *bedrock.Config, anthropic, inferenceProfiles []discovery.DiscoveredModel) (string, bool) {
-	statusByID := make(map[string]string, len(anthropic))
-	for _, m := range anthropic {
-		statusByID[m.ID] = m.Status
-	}
-
 	var sb strings.Builder
 	anyLegacy := false
 
 	for _, tier := range discovery.AllTiers {
 		pinned := tierPin(cfg, tier)
-		bareID := bareModelID(pinned)
-		status, found := statusByID[bareID]
+		status, found := pinStatus(pinned, anthropic, inferenceProfiles)
 		switch {
 		case !found:
 			fmt.Fprintf(&sb, "%-8s %-50s not found in live catalog\n", tier, pinned)
@@ -172,6 +166,40 @@ func buildModelsReport(cfg *bedrock.Config, anthropic, inferenceProfiles []disco
 	}
 
 	return sb.String(), anyLegacy
+}
+
+// pinStatus resolves a pinned model ID against the right live catalog.
+// Prefixed inference-profile IDs (global./us./eu./…) must match
+// ListInferenceProfiles; bare foundation-model IDs match ListFoundationModels
+// (after stripping a prefix if present on the catalog entry itself).
+func pinStatus(pinned string, anthropic, profiles []discovery.DiscoveredModel) (status string, found bool) {
+	if pinned == "" {
+		return "", false
+	}
+	if hasRegionalPrefix(pinned) {
+		for _, p := range profiles {
+			if p.ID == pinned {
+				return p.Status, true
+			}
+		}
+		return "", false
+	}
+	bare := bareModelID(pinned)
+	for _, m := range anthropic {
+		if m.ID == bare || bareModelID(m.ID) == bare {
+			return m.Status, true
+		}
+	}
+	return "", false
+}
+
+func hasRegionalPrefix(modelID string) bool {
+	for _, prefix := range schema.RegionalInferencePrefixes {
+		if strings.HasPrefix(modelID, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // bareModelID strips a cross-region inference profile prefix so a pinned
@@ -235,23 +263,16 @@ func resolveSetFlags() map[discovery.Tier]string {
 	return sets
 }
 
-// applyModelWrites verifies every entry in sets is ACTIVE in anthropic, then
-// mutates cfg.Models. All-or-nothing: if any entry fails verification, cfg is
-// left completely unchanged and an error is returned naming the first
-// failure encountered (iteration order is AllTiers' stable order, so the
-// error is deterministic across runs).
-func applyModelWrites(cfg *bedrock.Config, sets map[discovery.Tier]string, anthropic []discovery.DiscoveredModel) error {
-	statusByID := make(map[string]string, len(anthropic))
-	for _, m := range anthropic {
-		statusByID[bareModelID(m.ID)] = m.Status
-	}
-
+// applyModelWrites verifies every entry in sets is ACTIVE in the appropriate
+// live catalog, then mutates cfg.Models. All-or-nothing: if any entry fails
+// verification, cfg is left completely unchanged and an error is returned.
+func applyModelWrites(cfg *bedrock.Config, sets map[discovery.Tier]string, anthropic, profiles []discovery.DiscoveredModel) error {
 	for _, tier := range discovery.AllTiers {
 		id, ok := sets[tier]
 		if !ok {
 			continue
 		}
-		status, found := statusByID[bareModelID(id)]
+		status, found := pinStatus(id, anthropic, profiles)
 		if !found {
 			return fmt.Errorf("%s: %q not found in live catalog", tier, id)
 		}
@@ -275,15 +296,30 @@ func applyModelWrites(cfg *bedrock.Config, sets map[discovery.Tier]string, anthr
 	return nil
 }
 
-// writeBedrockConfigFile marshals cfg back to indented JSON and writes it to
-// the same bedrock-config.json path loadBedrockConfig()'s filesystem fallback
-// reads from. Maintainer-only: in an embedded release binary there is no
-// writable bedrock-config.json on disk, so this only makes sense in a
-// development checkout preparing the next release — consistent with the
-// design doc's framing of `models check` as a release-preparation tool.
+// writeBedrockConfigFile patches only the model pin fields in the on-disk
+// bedrock-config.json, preserving unknown top-level keys (description, notes,
+// defaults, …) that the typed bedrock.Config struct does not carry.
 func writeBedrockConfigFile(cfg *bedrock.Config) error {
 	path := findBedrockConfigFile()
-	encoded, err := json.MarshalIndent(cfg, "", "  ")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading %s for write: %w", path, err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return fmt.Errorf("parsing %s for write: %w", path, err)
+	}
+	models, _ := root["models"].(map[string]any)
+	if models == nil {
+		models = map[string]any{}
+	}
+	models["opus"] = cfg.Models.Opus
+	models["sonnet"] = cfg.Models.Sonnet
+	models["haiku"] = cfg.Models.Haiku
+	models["fable"] = cfg.Models.Fable
+	root["models"] = models
+
+	encoded, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding bedrock-config.json: %w", err)
 	}
