@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -50,6 +52,11 @@ var listAnthropicModels = discovery.ListAnthropicModels
 var listInferenceProfiles = discovery.ListInferenceProfiles
 
 func runModelsCheck(_ *cobra.Command, _ []string) error {
+	sets := resolveSetFlags()
+	if modelsCheckFlags.write && len(sets) == 0 {
+		return fmt.Errorf("--write requires at least one --set-<tier>=<id> flag")
+	}
+
 	cfg, err := loadBedrockConfig()
 	if err != nil {
 		return err
@@ -67,6 +74,18 @@ func runModelsCheck(_ *cobra.Command, _ []string) error {
 
 	report, anyLegacy := buildModelsReport(cfg, anthropic, profiles)
 	fmt.Print(report)
+
+	if len(sets) > 0 {
+		if err := applyModelWrites(cfg, sets, anthropic); err != nil {
+			return fmt.Errorf("not writing bedrock-config.json: %w", err)
+		}
+		if modelsCheckFlags.write {
+			if err := writeBedrockConfigFile(cfg); err != nil {
+				return err
+			}
+			fmt.Println("\nbedrock-config.json updated.")
+		}
+	}
 
 	if anyLegacy {
 		return fmt.Errorf("one or more pinned tiers is LEGACY in the live catalog — see report above")
@@ -184,4 +203,81 @@ func unrecognizedModels(models []discovery.DiscoveredModel) []discovery.Discover
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// resolveSetFlags collects every non-empty --set-<tier> flag into a
+// tier→modelID map.
+func resolveSetFlags() map[discovery.Tier]string {
+	sets := map[discovery.Tier]string{}
+	if modelsCheckFlags.setOpus != "" {
+		sets[discovery.TierOpus] = modelsCheckFlags.setOpus
+	}
+	if modelsCheckFlags.setSonnet != "" {
+		sets[discovery.TierSonnet] = modelsCheckFlags.setSonnet
+	}
+	if modelsCheckFlags.setHaiku != "" {
+		sets[discovery.TierHaiku] = modelsCheckFlags.setHaiku
+	}
+	if modelsCheckFlags.setFable != "" {
+		sets[discovery.TierFable] = modelsCheckFlags.setFable
+	}
+	return sets
+}
+
+// applyModelWrites verifies every entry in sets is ACTIVE in anthropic, then
+// mutates cfg.Models. All-or-nothing: if any entry fails verification, cfg is
+// left completely unchanged and an error is returned naming the first
+// failure encountered (iteration order is AllTiers' stable order, so the
+// error is deterministic across runs).
+func applyModelWrites(cfg *bedrock.Config, sets map[discovery.Tier]string, anthropic []discovery.DiscoveredModel) error {
+	statusByID := make(map[string]string, len(anthropic))
+	for _, m := range anthropic {
+		statusByID[bareModelID(m.ID)] = m.Status
+	}
+
+	for _, tier := range discovery.AllTiers {
+		id, ok := sets[tier]
+		if !ok {
+			continue
+		}
+		status, found := statusByID[bareModelID(id)]
+		if !found {
+			return fmt.Errorf("%s: %q not found in live catalog", tier, id)
+		}
+		if status != "ACTIVE" {
+			return fmt.Errorf("%s: %q is %s, not ACTIVE", tier, id, status)
+		}
+	}
+
+	for tier, id := range sets {
+		switch tier {
+		case discovery.TierOpus:
+			cfg.Models.Opus = id
+		case discovery.TierSonnet:
+			cfg.Models.Sonnet = id
+		case discovery.TierHaiku:
+			cfg.Models.Haiku = id
+		case discovery.TierFable:
+			cfg.Models.Fable = id
+		}
+	}
+	return nil
+}
+
+// writeBedrockConfigFile marshals cfg back to indented JSON and writes it to
+// the same bedrock-config.json path loadBedrockConfig()'s filesystem fallback
+// reads from. Maintainer-only: in an embedded release binary there is no
+// writable bedrock-config.json on disk, so this only makes sense in a
+// development checkout preparing the next release — consistent with the
+// design doc's framing of `models check` as a release-preparation tool.
+func writeBedrockConfigFile(cfg *bedrock.Config) error {
+	path := findBedrockConfigFile()
+	encoded, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding bedrock-config.json: %w", err)
+	}
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
 }

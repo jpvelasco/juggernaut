@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -92,5 +93,157 @@ func TestBuildModelsReport_DeterministicSortedCandidates(t *testing.T) {
 	}
 	if idx9 > idx10 {
 		t.Errorf("expected alphabetically sorted candidates (4-10 before 4-9 alphabetically), got:\n%s", report)
+	}
+}
+
+func TestRunModelsCheck_WriteWithoutSetIsError(t *testing.T) {
+	// Explicitly reset the modelsCheckFlags struct fields to clear any state from prior tests
+	modelsCheckFlags.write = false
+	modelsCheckFlags.setOpus = ""
+	modelsCheckFlags.setSonnet = ""
+	modelsCheckFlags.setHaiku = ""
+	modelsCheckFlags.setFable = ""
+
+	err := ExecuteArgs([]string{"models", "check", "--write"})
+	if err == nil {
+		t.Fatal("expected --write without any --set-* to error")
+	}
+	if !strings.Contains(err.Error(), "--write") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestResolveSetFlags_CollectsOnlyNonEmpty(t *testing.T) {
+	resetFlags()
+	modelsCheckFlags.setOpus = "anthropic.claude-opus-4-9"
+	modelsCheckFlags.setFable = ""
+	defer func() {
+		modelsCheckFlags.setOpus = ""
+	}()
+
+	got := resolveSetFlags()
+	if len(got) != 1 {
+		t.Fatalf("expected exactly 1 entry, got %v", got)
+	}
+	if got[discovery.TierOpus] != "anthropic.claude-opus-4-9" {
+		t.Errorf("unexpected entry: %v", got)
+	}
+}
+
+func TestApplyModelWrites_RejectsNonActiveID(t *testing.T) {
+	cfg := testBedrockConfigForModels()
+	sets := map[discovery.Tier]string{discovery.TierOpus: "anthropic.claude-opus-legacy"}
+	anthropic := []discovery.DiscoveredModel{
+		{ID: "anthropic.claude-opus-legacy", Status: "LEGACY"},
+	}
+	if err := applyModelWrites(cfg, sets, anthropic); err == nil {
+		t.Fatal("expected error when pinning a LEGACY ID")
+	}
+	if cfg.Models.Opus != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("cfg must be unchanged on rejection, got %v", cfg.Models.Opus)
+	}
+}
+
+func TestApplyModelWrites_RejectsUnknownID(t *testing.T) {
+	cfg := testBedrockConfigForModels()
+	sets := map[discovery.Tier]string{discovery.TierOpus: "anthropic.claude-opus-nonexistent"}
+	if err := applyModelWrites(cfg, sets, nil); err == nil {
+		t.Fatal("expected error when pinning an unknown ID")
+	}
+}
+
+func TestApplyModelWrites_AllOrNothingAcrossMultipleTiers(t *testing.T) {
+	cfg := testBedrockConfigForModels()
+	sets := map[discovery.Tier]string{
+		discovery.TierOpus:   "anthropic.claude-opus-4-9",   // ACTIVE, valid
+		discovery.TierSonnet: "anthropic.claude-sonnet-bad", // not in catalog
+	}
+	anthropic := []discovery.DiscoveredModel{
+		{ID: "anthropic.claude-opus-4-9", Status: "ACTIVE"},
+	}
+	if err := applyModelWrites(cfg, sets, anthropic); err == nil {
+		t.Fatal("expected error because sonnet entry is invalid")
+	}
+	if cfg.Models.Opus != "global.anthropic.claude-opus-4-8" {
+		t.Error("opus must be UNCHANGED because the batch failed on sonnet — all-or-nothing")
+	}
+}
+
+func TestApplyModelWrites_SucceedsAndMutatesConfig(t *testing.T) {
+	cfg := testBedrockConfigForModels()
+	sets := map[discovery.Tier]string{discovery.TierOpus: "anthropic.claude-opus-4-9"}
+	anthropic := []discovery.DiscoveredModel{
+		{ID: "anthropic.claude-opus-4-9", Status: "ACTIVE"},
+	}
+	if err := applyModelWrites(cfg, sets, anthropic); err != nil {
+		t.Fatalf("applyModelWrites: %v", err)
+	}
+	if cfg.Models.Opus != "anthropic.claude-opus-4-9" {
+		t.Errorf("expected opus updated to anthropic.claude-opus-4-9, got %v", cfg.Models.Opus)
+	}
+}
+
+func TestRunModelsCheck_EndToEnd_AllActiveExitsClean(t *testing.T) {
+	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
+	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{
+			{ID: "anthropic.claude-opus-4-8", Status: "ACTIVE"},
+			{ID: "anthropic.claude-sonnet-5", Status: "ACTIVE"},
+			{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE"},
+			{ID: "anthropic.claude-fable-5", Status: "ACTIVE"},
+		}, nil
+	}
+	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return nil, nil
+	}
+	defer func() {
+		listAnthropicModels = origAnthropic
+		listInferenceProfiles = origProfiles
+	}()
+
+	// Explicitly reset the modelsCheckFlags struct fields that may have been modified by prior tests
+	modelsCheckFlags.write = false
+	modelsCheckFlags.setOpus = ""
+	modelsCheckFlags.setSonnet = ""
+	modelsCheckFlags.setHaiku = ""
+	modelsCheckFlags.setFable = ""
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"models", "check"}); err != nil {
+			t.Fatalf("expected clean exit when all tiers ACTIVE, got: %v", err)
+		}
+	})
+	if !strings.Contains(out, "opus") {
+		t.Errorf("expected report output, got:\n%s", out)
+	}
+}
+
+func TestRunModelsCheck_EndToEnd_LegacyTierErrors(t *testing.T) {
+	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
+	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{
+			{ID: "anthropic.claude-opus-4-8", Status: "LEGACY"},
+			{ID: "anthropic.claude-sonnet-5", Status: "ACTIVE"},
+			{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE"},
+			{ID: "anthropic.claude-fable-5", Status: "ACTIVE"},
+		}, nil
+	}
+	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return nil, nil
+	}
+	defer func() {
+		listAnthropicModels = origAnthropic
+		listInferenceProfiles = origProfiles
+	}()
+
+	// Explicitly reset the modelsCheckFlags struct fields that may have been modified by prior tests
+	modelsCheckFlags.write = false
+	modelsCheckFlags.setOpus = ""
+	modelsCheckFlags.setSonnet = ""
+	modelsCheckFlags.setHaiku = ""
+	modelsCheckFlags.setFable = ""
+
+	if err := ExecuteArgs([]string{"models", "check"}); err == nil {
+		t.Fatal("expected non-zero exit (error) when a tier is LEGACY")
 	}
 }
