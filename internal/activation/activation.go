@@ -454,7 +454,7 @@ func RemoveTargetWithLegacy(path string) (bool, error) {
 	return true, nil
 }
 
-// InstalledTargets returns profile paths currently containing the activation block.
+// InstalledTargets returns profile paths currently containing the Claude activation block.
 // On Windows it checks discovered active targets and POSIX targets.
 func InstalledTargets(home string) []string {
 	return InstalledTargetsWith(home, nil)
@@ -463,6 +463,12 @@ func InstalledTargets(home string) []string {
 // InstalledTargetsWith is like InstalledTargets but accepts a pre-resolved
 // ProfileResolverResult to avoid launching PowerShell.
 func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string {
+	return InstalledTargetsForMarkers(home, psResult, BeginMarker, EndMarker)
+}
+
+// InstalledTargetsForMarkers returns profile paths containing the given
+// begin/end activation markers (any managed CLI).
+func InstalledTargetsForMarkers(home string, psResult *ProfileResolverResult, begin, end string) []string {
 	var paths []string
 
 	if runtime.GOOS == "windows" {
@@ -473,14 +479,14 @@ func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string
 		}
 		for _, target := range result.ActiveTargets {
 			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err == nil && HasBlock(string(data)) {
+			if err == nil && HasBlockWithMarkers(string(data), begin, end) {
 				paths = append(paths, target.Path)
 			}
 		}
 	} else if psResult != nil {
 		for _, target := range psResult.ActiveTargets {
 			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err == nil && HasBlock(string(data)) {
+			if err == nil && HasBlockWithMarkers(string(data), begin, end) {
 				paths = append(paths, target.Path)
 			}
 		}
@@ -488,7 +494,7 @@ func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string
 
 	for _, target := range DefaultTargets(home) {
 		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-		if err == nil && HasBlock(string(data)) {
+		if err == nil && HasBlockWithMarkers(string(data), begin, end) {
 			paths = append(paths, target.Path)
 		}
 	}
@@ -497,7 +503,16 @@ func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string
 
 // HasBlock reports whether content contains a Juggernaut activation block.
 func HasBlock(content string) bool {
-	return strings.Contains(content, BeginMarker) && strings.Contains(content, EndMarker)
+	return HasBlockWithMarkers(content, BeginMarker, EndMarker)
+}
+
+// HasBlockWithMarkers reports whether content contains the given begin/end
+// activation markers (used for multi-CLI doctor/activation checks).
+func HasBlockWithMarkers(content, begin, end string) bool {
+	if begin == "" || end == "" {
+		return false
+	}
+	return strings.Contains(content, begin) && strings.Contains(content, end)
 }
 
 // HasLegacyLauncherBlock reports whether content contains a legacy
@@ -682,6 +697,13 @@ func LaunchWithOptions(opts LaunchOptions) error {
 func ResolveClaudeBinary(pathList string) (string, error) {
 	self, _ := os.Executable()
 	return resolveClaudeBinary(pathList, self)
+}
+
+// ResolveBinary resolves the first real executable among names on PATH,
+// skipping this process's own executable (wrapper recursion guard).
+func ResolveBinary(pathList string, names []string) (string, error) {
+	self, _ := os.Executable()
+	return resolveBinaryFrom(pathList, names, self, nil)
 }
 
 // DefaultBinDir returns the user-local bin directory where broken v4.2.6

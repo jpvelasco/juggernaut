@@ -13,6 +13,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
@@ -26,10 +27,12 @@ var doctorCmd = &cobra.Command{
 var doctorFlags struct {
 	scope   string
 	jsonOut bool
+	cli     string
 }
 
 func init() {
 	doctorCmd.Flags().StringVar(&doctorFlags.scope, "scope", "", "check only user or project scope")
+	doctorCmd.Flags().StringVar(&doctorFlags.cli, "cli", "claude", "coding CLI to diagnose (claude, codex, opencode, grok)")
 	doctorCmd.Flags().BoolVar(&doctorFlags.jsonOut, "json", false, "output as JSON")
 	rootCmd.AddCommand(doctorCmd)
 }
@@ -39,6 +42,12 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	prov, err := provider.Get(doctorFlags.cli)
+	if err != nil {
+		return err
+	}
+	cliName := prov.Name()
+	isClaude := cliName == "claude"
 	r := doctor.NewReport()
 
 	bCfg, err := loadBedrockConfig()
@@ -52,17 +61,27 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	if doctorFlags.scope != "" {
 		scopes = []string{doctorFlags.scope}
 	}
+	// Grok is always user-scoped (ConfigPath ignores scope).
+	if cliName == "grok" {
+		if doctorFlags.scope == "project" {
+			return fmt.Errorf("grok has no project-scope config — omit --scope or use --scope=user")
+		}
+		scopes = []string{"user"}
+	}
 	for _, scope := range scopes {
 		required := scope != "project" || doctorFlags.scope == "project"
-		if status, detail := checkSettingsScope(home, scope, required); status != "" {
-			r.Check("settings.json ("+scope+")", status, detail)
+		label := providerConfigLabel(prov, scope)
+		if status, detail := checkProviderConfigScope(prov, home, scope, required); status != "" {
+			r.Check(label, status, detail)
 		}
-		scopeData := readScopeData(home, scope)
-		if detail, ok := opusplanProblem(scopeData); ok {
-			r.Check("top-level model ("+scope+")", doctor.Warn, detail)
+		scopeData := readProviderScopeData(prov, home, scope)
+		if isClaude {
+			if detail, ok := opusplanProblem(scopeData); ok {
+				r.Check("top-level model ("+scope+")", doctor.Warn, detail)
+			}
+			checkAutoModeReadiness(r, scope, scopeData)
+			checkFableDataRetention(r, scope, scopeData)
 		}
-		checkAutoModeReadiness(r, scope, scopeData)
-		checkFableDataRetention(r, scope, scopeData)
 	}
 
 	token, err := keychain.Default().GetWithFallback(home)
@@ -76,22 +95,36 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		checkKeyExpiry(r, token)
 	}
 
-	checkConnectivity(r, home, token, scopes)
+	// Connectivity reads Claude's juggernaut.auth block; other CLIs store auth differently.
+	if isClaude {
+		checkConnectivity(r, home, token, scopes)
+	}
 
+	begin, end := prov.ActivationMarkers()
+	actLabel := cliName + " activation"
 	// Use the shared resolver to check activation on the effective profiles.
 	if runtime.GOOS == "windows" {
 		psResult := activation.ResolvePowerShellProfiles()
-		healthy, path, warnings := activation.CheckPowerShellActivationWith(home, &psResult)
-		if healthy {
-			r.Check("claude activation", doctor.OK, "active in "+path)
+		if isClaude {
+			// Claude keeps the richer multi-profile warning path.
+			healthy, path, warnings := activation.CheckPowerShellActivationWith(home, &psResult)
+			if healthy {
+				r.Check(actLabel, doctor.OK, "active in "+path)
+			} else {
+				r.Check(actLabel, doctor.Warn, "not active in discovered profiles — run `juggernaut apply` and restart or source your shell")
+			}
+			for _, w := range warnings {
+				r.Check("activation warning", doctor.Warn, w)
+			}
 		} else {
-			r.Check("claude activation", doctor.Warn, "not active in discovered profiles — run `juggernaut apply` and restart or source your shell")
+			activationPaths := activation.InstalledTargetsForMarkers(home, &psResult, begin, end)
+			if len(activationPaths) > 0 {
+				r.Check(actLabel, doctor.OK, "active in "+activationPaths[0])
+			} else {
+				r.Check(actLabel, doctor.Warn, "not active in discovered profiles — run `juggernaut apply --cli="+cliName+"` and restart or source your shell")
+			}
 		}
-		for _, w := range warnings {
-			r.Check("activation warning", doctor.Warn, w)
-		}
-		// Report discovery status (reuse the already-resolved result).
-		// Only emit OK when editions were actually discovered.
+		// PowerShell discovery warnings are Windows-host health, not CLI-specific.
 		if len(psResult.EditionsDiscovered) > 0 {
 			editions := strings.Join(psResult.EditionsDiscovered, ", ")
 			r.Check("powershell discovery", doctor.OK, "editions: "+editions)
@@ -100,17 +133,28 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 			r.Check("powershell discovery", doctor.Warn, w)
 		}
 	} else {
-		activationPaths := activation.InstalledTargets(home)
-		if len(activationPaths) > 0 {
-			r.Check("claude activation", doctor.OK, strings.Join(activationPaths, ", "))
+		var activationPaths []string
+		if isClaude {
+			activationPaths = activation.InstalledTargets(home)
 		} else {
-			r.Check("claude activation", doctor.Warn, "not installed — run `juggernaut apply` and restart or source your shell")
+			activationPaths = activation.InstalledTargetsForMarkers(home, nil, begin, end)
+		}
+		if len(activationPaths) > 0 {
+			r.Check(actLabel, doctor.OK, strings.Join(activationPaths, ", "))
+		} else {
+			hint := "`juggernaut apply`"
+			if !isClaude {
+				hint = "`juggernaut apply --cli=" + cliName + "`"
+			}
+			r.Check(actLabel, doctor.Warn, "not installed — run "+hint+" and restart or source your shell")
 		}
 	}
-	if status, detail := claudeCommandStatus(); status != "" {
-		r.Check("claude binary", status, detail)
+	if status, detail := cliBinaryStatus(prov); status != "" {
+		r.Check(cliName+" binary", status, detail)
 	}
-	legacyArtifactStatus(home, r)
+	if isClaude {
+		legacyArtifactStatus(home, r)
+	}
 	if doctorFlags.jsonOut {
 		out, err := r.JSON()
 		if err != nil {
@@ -133,6 +177,33 @@ func claudeCommandStatus() (doctor.Status, string) {
 		return doctor.Warn, "real Claude Code binary not found on PATH"
 	}
 	return doctor.OK, found
+}
+
+func cliBinaryStatus(prov provider.Provider) (doctor.Status, string) {
+	names := prov.BinaryNames()
+	if len(names) == 0 {
+		return doctor.Warn, "no binary names registered for " + prov.Name()
+	}
+	if prov.Name() == "claude" {
+		return claudeCommandStatus()
+	}
+	found, err := activation.ResolveBinary(os.Getenv("PATH"), names)
+	if err != nil {
+		return doctor.Warn, "real " + names[0] + " binary not found on PATH"
+	}
+	return doctor.OK, found
+}
+
+func providerConfigLabel(prov provider.Provider, scope string) string {
+	path, err := prov.ConfigPath("", scope)
+	if err != nil || path == "" {
+		return prov.Name() + " config (" + scope + ")"
+	}
+	base := path
+	if i := strings.LastIndexAny(path, `/\`); i >= 0 {
+		base = path[i+1:]
+	}
+	return base + " (" + scope + ")"
 }
 
 func legacyArtifactStatus(home string, r *doctor.Report) {
@@ -351,30 +422,55 @@ func checkFableDataRetention(r *doctor.Report, scope string, data map[string]any
 }
 
 func checkSettingsScope(home, scope string, required bool) (doctor.Status, string) {
-	path, err := settingsPath(home, scope)
+	// Back-compat helper for Claude-only call sites / tests.
+	prov, err := provider.Get("claude")
 	if err != nil {
 		return doctor.Fail, err.Error()
 	}
-	mgr := config.NewManager(path)
-	has, err := mgr.HasJuggernautBlock()
-	switch {
-	case err != nil:
+	return checkProviderConfigScope(prov, home, scope, required)
+}
+
+func checkProviderConfigScope(prov provider.Provider, home, scope string, required bool) (doctor.Status, string) {
+	path, err := prov.ConfigPath(home, scope)
+	if err != nil {
 		return doctor.Fail, err.Error()
-	case has:
-		return doctor.OK, "juggernaut block present"
-	case required:
-		return doctor.Fail, "juggernaut block not found — run `juggernaut apply`"
-	default:
-		return doctor.OK, "not configured"
 	}
+	format, err := config.FormatByName(prov.ConfigFormatName())
+	if err != nil {
+		return doctor.Fail, err.Error()
+	}
+	mgr := config.NewManagerWithFormat(path, format)
+	data, err := mgr.Read()
+	if err != nil {
+		return doctor.Fail, err.Error()
+	}
+	if prov.OwnsConfig(data) {
+		return doctor.OK, "juggernaut-managed Bedrock config present"
+	}
+	if required {
+		return doctor.Fail, "juggernaut-managed config not found — run `juggernaut apply --cli=" + prov.Name() + "`"
+	}
+	return doctor.OK, "not configured"
 }
 
 func readScopeData(home, scope string) map[string]any {
-	path, err := settingsPath(home, scope)
+	prov, err := provider.Get("claude")
 	if err != nil {
 		return nil
 	}
-	mgr := config.NewManager(path)
+	return readProviderScopeData(prov, home, scope)
+}
+
+func readProviderScopeData(prov provider.Provider, home, scope string) map[string]any {
+	path, err := prov.ConfigPath(home, scope)
+	if err != nil {
+		return nil
+	}
+	format, err := config.FormatByName(prov.ConfigFormatName())
+	if err != nil {
+		return nil
+	}
+	mgr := config.NewManagerWithFormat(path, format)
 	data, err := mgr.Read()
 	if err != nil {
 		return nil

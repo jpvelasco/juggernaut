@@ -60,6 +60,18 @@ func TestDefaultBinDir_EmptyHomeFallsBack(t *testing.T) {
 	}
 }
 
+func TestHasBlockWithMarkers(t *testing.T) {
+	if !HasBlockWithMarkers("# BEGIN: X\nbody\n# END: X\n", "# BEGIN: X", "# END: X") {
+		t.Fatal("expected markers present")
+	}
+	if HasBlockWithMarkers("# BEGIN: X\nbody\n", "# BEGIN: X", "# END: X") {
+		t.Fatal("expected missing end marker to fail")
+	}
+	if HasBlockWithMarkers("body", "", "# END: X") {
+		t.Fatal("empty begin must fail closed")
+	}
+}
+
 func TestInstalledTargets_ReflectsInstallState(t *testing.T) {
 	home, psResult := setupActivationFixture(t)
 
