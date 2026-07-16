@@ -34,23 +34,29 @@ Upgrading from an older Juggernaut? Install v5 directly with npm; there is no re
 
 ### 4. Configure
 ```bash
-# IAM / SSO (recommended for organizations)
+# IAM / SSO (recommended for organizations) — Claude Code default
 juggernaut apply --auth=iam
 
 # Bedrock API key (key stored securely in OS keychain)
 juggernaut apply --auth=bedrock-api-key
+
+# Other coding CLIs
+juggernaut apply --cli=opencode --auth=iam
+juggernaut apply --cli=codex --auth=iam
+juggernaut apply --cli=grok --auth=bedrock-api-key
 ```
 
 Run without flags for an interactive first-run prompt.
 
-`juggernaut apply` will not write `CLAUDE_CODE_USE_BEDROCK=1` unless a valid credential source is confirmed.
+`juggernaut apply` will not enable Bedrock routing unless a valid credential source is confirmed. If the target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force`.
 
 ### 5. Launch
 ```bash
 claude
+# or codex / opencode / grok after apply --cli=<name>
 ```
 
-Restart your shell, or source the updated profile, then run `claude` normally. Juggernaut installs a shell function and never overwrites the real Claude Code binary.
+Restart your shell, or source the updated profile, then run the CLI normally. Juggernaut installs a marked shell function and never overwrites the real binary.
 
 ## Verify Setup
 
@@ -79,6 +85,9 @@ juggernaut apply --auth=iam --opusplan
 # Auto mode — lets Claude Code auto-approve safe tool calls with background checks
 juggernaut apply --auth=iam --mode=auto
 
+# Curate the /model picker (user/project settings — not OS-managed enforcement)
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-4-8 --enforce-available-models
+
 # Override the subagent/background model
 juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6
 
@@ -87,8 +96,8 @@ juggernaut apply --auth=iam --dry-run
 
 # Show current config
 juggernaut show
-
 ```
+
 
 ## Troubleshooting
 
