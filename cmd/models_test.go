@@ -116,7 +116,7 @@ func TestWriteBedrockConfigFile_PreservesUnknownFields(t *testing.T) {
 	if err := writeBedrockConfigFile(cfg); err != nil {
 		t.Fatalf("writeBedrockConfigFile: %v", err)
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — test reads temp-dir fixture path it just wrote
 	if err != nil {
 		t.Fatal(err)
 	}
