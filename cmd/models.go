@@ -287,7 +287,7 @@ func writeBedrockConfigFile(cfg *bedrock.Config) error {
 	if err != nil {
 		return fmt.Errorf("encoding bedrock-config.json: %w", err)
 	}
-	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o600); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return nil
