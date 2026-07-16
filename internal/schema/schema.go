@@ -256,7 +256,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 // not — the version digits matter, so match the full token, not just "sonnet".
 func IsAutoModeCapableModel(modelID string) bool {
 	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range regionalInferencePrefixes {
+	for _, prefix := range RegionalInferencePrefixes {
 		normalized = strings.TrimPrefix(normalized, prefix)
 	}
 	return strings.Contains(normalized, "claude-opus-4-8") ||
@@ -268,7 +268,7 @@ func IsAutoModeCapableModel(modelID string) bool {
 // of cross-region inference prefix or the Claude Code [1m] context suffix.
 func IsFable5Model(modelID string) bool {
 	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range regionalInferencePrefixes {
+	for _, prefix := range RegionalInferencePrefixes {
 		normalized = strings.TrimPrefix(normalized, prefix)
 	}
 	return strings.Contains(normalized, "claude-fable-5")
@@ -315,14 +315,14 @@ func (b *Block) AutoModeAvailable() bool {
 		IsAutoModeCapableModel(b.Models.Fable)
 }
 
-// regionalInferencePrefixes are the Bedrock cross-region inference profile
+// RegionalInferencePrefixes are the Bedrock cross-region inference profile
 // prefixes stripped to recover the bare provider model ID. Keep this the single
 // source of truth so mantleModelID, supportsClaudeCode1M, and
-// IsAutoModeCapableModel all normalize identically.
-var regionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
+// IsAutoModeCapableModel all normalize identically. Exported for use by cmd/models.go's bareModelID.
+var RegionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
 
 func mantleModelID(model string) string {
-	for _, prefix := range regionalInferencePrefixes {
+	for _, prefix := range RegionalInferencePrefixes {
 		if rest, ok := strings.CutPrefix(model, prefix); ok {
 			return rest
 		}
@@ -339,7 +339,7 @@ func claudeCodeContextModelID(model string, use1M bool) string {
 
 func supportsClaudeCode1M(model string) bool {
 	normalized := strings.TrimSuffix(model, "[1m]")
-	for _, prefix := range regionalInferencePrefixes {
+	for _, prefix := range RegionalInferencePrefixes {
 		normalized = strings.TrimPrefix(normalized, prefix)
 	}
 	return normalized == "opusplan" ||

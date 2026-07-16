@@ -86,12 +86,12 @@ func TestBuildModelsReport_DeterministicSortedCandidates(t *testing.T) {
 		{ID: "anthropic.claude-fable-5", Status: "ACTIVE", Provider: "Anthropic"},
 	}
 	report, _ := buildModelsReport(cfg, anthropic, nil)
-	idx9 := strings.Index(report, "anthropic.claude-opus-4-10")
-	idx10 := strings.Index(report, "anthropic.claude-opus-4-9")
-	if idx9 == -1 || idx10 == -1 {
+	idx410 := strings.Index(report, "anthropic.claude-opus-4-10")
+	idx49 := strings.Index(report, "anthropic.claude-opus-4-9")
+	if idx410 == -1 || idx49 == -1 {
 		t.Fatalf("expected both candidates listed, got:\n%s", report)
 	}
-	if idx9 > idx10 {
+	if idx410 > idx49 {
 		t.Errorf("expected alphabetically sorted candidates (4-10 before 4-9 alphabetically), got:\n%s", report)
 	}
 }
@@ -245,5 +245,63 @@ func TestRunModelsCheck_EndToEnd_LegacyTierErrors(t *testing.T) {
 
 	if err := ExecuteArgs([]string{"models", "check"}); err == nil {
 		t.Fatal("expected non-zero exit (error) when a tier is LEGACY")
+	}
+}
+
+func TestRunModelsCheck_SetWithoutWrite_PrintsValidationFeedback(t *testing.T) {
+	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
+	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{
+			{ID: "anthropic.claude-opus-4-8", Status: "ACTIVE"},
+			{ID: "anthropic.claude-opus-4-9", Status: "ACTIVE"},
+			{ID: "anthropic.claude-sonnet-4-6", Status: "ACTIVE"},
+			{ID: "anthropic.claude-sonnet-5", Status: "ACTIVE"},
+			{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE"},
+			{ID: "anthropic.claude-fable-5", Status: "ACTIVE"},
+		}, nil
+	}
+	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return nil, nil
+	}
+	defer func() {
+		listAnthropicModels = origAnthropic
+		listInferenceProfiles = origProfiles
+	}()
+
+	resetFlags()
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"models", "check", "--set-opus=anthropic.claude-opus-4-9"}); err != nil {
+			t.Fatalf("expected clean exit when --set-opus without --write, got: %v", err)
+		}
+	})
+	if !strings.Contains(out, "opus: anthropic.claude-opus-4-9 is ACTIVE (pass --write to persist)") {
+		t.Errorf("expected validation feedback message, got:\n%s", out)
+	}
+	if strings.Contains(out, "bedrock-config.json updated") {
+		t.Errorf("should NOT persist without --write, but output contains 'updated':\n%s", out)
+	}
+}
+
+func TestRunModelsCheck_SetWithoutWrite_RejectsInvalidID(t *testing.T) {
+	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
+	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{
+			{ID: "anthropic.claude-opus-4-8", Status: "ACTIVE"},
+			{ID: "anthropic.claude-sonnet-4-6", Status: "ACTIVE"},
+			{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE"},
+			{ID: "anthropic.claude-fable-5", Status: "ACTIVE"},
+		}, nil
+	}
+	listInferenceProfiles = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
+		return nil, nil
+	}
+	defer func() {
+		listAnthropicModels = origAnthropic
+		listInferenceProfiles = origProfiles
+	}()
+
+	resetFlags()
+	if err := ExecuteArgs([]string{"models", "check", "--set-opus=anthropic.claude-opus-legacy"}); err == nil {
+		t.Fatal("expected error when --set-opus to an invalid ID, even without --write")
 	}
 }

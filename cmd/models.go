@@ -10,6 +10,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -84,6 +85,16 @@ func runModelsCheck(_ *cobra.Command, _ []string) error {
 				return err
 			}
 			fmt.Println("\nbedrock-config.json updated.")
+		} else {
+			// --set-* without --write: print validation feedback for each tier
+			fmt.Println()
+			for _, tier := range discovery.AllTiers {
+				id, ok := sets[tier]
+				if !ok {
+					continue
+				}
+				fmt.Printf("%s: %s is ACTIVE (pass --write to persist)\n", tier, id)
+			}
 		}
 	}
 
@@ -165,10 +176,10 @@ func buildModelsReport(cfg *bedrock.Config, anthropic, inferenceProfiles []disco
 
 // bareModelID strips a cross-region inference profile prefix so a pinned
 // "global.anthropic.claude-opus-4-8" matches the bare "anthropic.claude-opus-4-8"
-// ListFoundationModels returns. Mirrors the prefix list schema.go's
-// regionalInferencePrefixes already uses elsewhere in this codebase.
+// ListFoundationModels returns. Uses schema.RegionalInferencePrefixes to maintain
+// a single source of truth across the codebase.
 func bareModelID(modelID string) string {
-	for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
+	for _, prefix := range schema.RegionalInferencePrefixes {
 		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
 			return rest
 		}
