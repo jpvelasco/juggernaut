@@ -45,15 +45,25 @@ func TestBlockFor_Codex(t *testing.T) {
 	}
 }
 
-// TestBlockFor_CodexFish/PowerShell smoke-check the other shells name the fn.
+// TestBlockFor_CodexFish/PowerShell smoke-check the other shells name the fn
+// and include multi-CLI fallthrough (same breakage mode as Claude on Windows).
 func TestBlockFor_CodexOtherShells(t *testing.T) {
 	begin, end := "# B", "# E"
 	fish := blockFor(ShellFish, "codex", begin, end)
 	if !strings.Contains(fish, "function codex") {
 		t.Errorf("fish: expected `function codex`, got:\n%s", fish)
 	}
+	if !strings.Contains(fish, "command -q juggernaut") || !strings.Contains(fish, "command codex $argv") {
+		t.Errorf("fish: expected juggernaut check + codex fallthrough, got:\n%s", fish)
+	}
 	ps := blockFor(ShellPowerShell, "codex", begin, end)
 	if !strings.Contains(ps, "function global:codex {") {
 		t.Errorf("powershell: expected `function global:codex {`, got:\n%s", ps)
+	}
+	if !strings.Contains(ps, "Get-Command juggernaut") || !strings.Contains(ps, "CommandType Application") {
+		t.Errorf("powershell: expected resilient juggernaut check, got:\n%s", ps)
+	}
+	if !strings.Contains(ps, "Get-Command codex") || !strings.Contains(ps, "$app.Source") {
+		t.Errorf("powershell: expected Application fallthrough for codex, got:\n%s", ps)
 	}
 }

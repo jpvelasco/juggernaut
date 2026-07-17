@@ -161,6 +161,45 @@ func TestBlocksFallThroughWhenJuggernautMissing(t *testing.T) {
 	if !strings.Contains(ps, "CommandType Application") {
 		t.Fatalf("powershell block must resolve real Application binary:\n%s", ps)
 	}
+	if !strings.Contains(ps, "$app.Source") {
+		t.Fatalf("powershell block must invoke real binary via $app.Source:\n%s", ps)
+	}
+	if !strings.Contains(ps, "throw ") {
+		t.Fatalf("powershell block must throw when neither juggernaut nor CLI exists:\n%s", ps)
+	}
+}
+
+// TestInstallTargetFor_UpgradesLegacyHardFailWrapper ensures re-apply replaces
+// pre-fallthrough wrappers that always called juggernaut (the breakage mode).
+func TestInstallTargetFor_UpgradesLegacyHardFailWrapper(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".bashrc")
+	old := BeginMarker + "\nclaude() {\n  juggernaut launch -- \"$@\"\n}\n" + EndMarker + "\n"
+	if err := safepath.WriteFile(home, path, []byte(old)); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := InstallTargetFor(Target{Path: path, Shell: ShellPOSIX}, claudeCLISpec())
+	if err != nil {
+		t.Fatalf("InstallTargetFor: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected legacy hard-fail wrapper to be replaced")
+	}
+	data, err := safepath.ReadFile(home, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "command -v juggernaut") {
+		t.Fatalf("upgraded block missing juggernaut check:\n%s", got)
+	}
+	if !strings.Contains(got, "command claude \"$@\"") {
+		t.Fatalf("upgraded block missing fallthrough:\n%s", got)
+	}
+	// Bare hard-fail body must not remain as the only path (still appears inside if).
+	if !strings.Contains(got, "if command -v juggernaut") {
+		t.Fatalf("upgraded block must guard juggernaut launch:\n%s", got)
+	}
 }
 
 func TestShouldWritePOSIXTarget_NeverCreatesBareProfile(t *testing.T) {

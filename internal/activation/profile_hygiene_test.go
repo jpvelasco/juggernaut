@@ -35,7 +35,10 @@ func TestUninstallCLIBlocks_ScansMigrationTargets(t *testing.T) {
 		t.Fatalf("expected both active and historical removed, got %v", removed)
 	}
 	for _, p := range []string{active, historical} {
-		data, _ := safepath.ReadFile(filepath.Dir(p), p)
+		data, err := safepath.ReadFile(filepath.Dir(p), p)
+		if err != nil {
+			t.Fatalf("reading %s: %v", p, err)
+		}
 		if strings.Contains(string(data), codexBegin) {
 			t.Errorf("block still present in %s:\n%s", p, data)
 		}

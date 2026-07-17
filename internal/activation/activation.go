@@ -155,8 +155,16 @@ func DefaultTargets(home string) []Target {
 // PATH — never invent a .zshrc/fish config on a machine that only uses
 // PowerShell/Git Bash. Bare ~/.profile is never created from scratch (login
 // shells already source .bashrc via .bash_profile on Git for Windows).
+//
+// Non-NotExist Stat errors (permission, I/O) return true so InstallTargetFor
+// surfaces the real error instead of silently skipping a profile that may
+// still hold a dead wrapper.
 func shouldWritePOSIXTarget(target Target) bool {
-	if _, err := os.Stat(target.Path); err == nil {
+	_, err := os.Stat(target.Path)
+	if err == nil {
+		return true
+	}
+	if !os.IsNotExist(err) {
 		return true
 	}
 	base := filepath.Base(target.Path)
@@ -221,7 +229,7 @@ func blockFor(shell Shell, cli, begin, end string) string {
 			"  } else {",
 			"    $app = Get-Command " + cli + " -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1",
 			"    if ($null -ne $app) { & $app.Source @args } else {",
-			"      Write-Error \"juggernaut is not installed and no '" + cli + "' executable was found on PATH\"",
+			"      throw \"juggernaut is not installed and no '" + cli + "' executable was found on PATH\"",
 			"    }",
 			"  }",
 			"}",
@@ -428,10 +436,7 @@ func uninstallCLIBlocks(home string, opts UninstallOptions) ([]string, error) {
 
 	seen := map[string]bool{}
 	for _, target := range targets {
-		key := target.Path
-		if runtime.GOOS == "windows" {
-			key = strings.ToLower(target.Path)
-		}
+		key := profilePathKey(target.Path)
 		if seen[key] {
 			continue
 		}
@@ -881,7 +886,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 			continue
 		}
 		if err != nil {
-			continue
+			return installed, fmt.Errorf("reading %s for legacy migration: %w", p, err)
 		}
 		content := string(data)
 		changed := false
@@ -905,11 +910,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	// can override or retain a stale duplicate of the global activation).
 	installSet := map[string]bool{}
 	for _, target := range result.InstallTargets {
-		key := target.Path
-		if runtime.GOOS == "windows" {
-			key = strings.ToLower(target.Path)
-		}
-		installSet[key] = true
+		installSet[profilePathKey(target.Path)] = true
 		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
@@ -930,10 +931,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	stalePaths = append(stalePaths, result.MigrationTargets...)
 	seenStale := map[string]bool{}
 	for _, path := range stalePaths {
-		key := path
-		if runtime.GOOS == "windows" {
-			key = strings.ToLower(path)
-		}
+		key := profilePathKey(path)
 		if installSet[key] || seenStale[key] {
 			continue
 		}
@@ -949,6 +947,17 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	}
 
 	return installed, nil
+}
+
+// profilePathKey normalizes a profile path for set membership. On Windows,
+// comparison is case-insensitive after Clean so InstallTargets and
+// MigrationTargets that differ only by casing still match.
+func profilePathKey(path string) string {
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(path)
+	}
+	return path
 }
 
 // UninstallPowerShellActivation removes activation blocks from all discovered

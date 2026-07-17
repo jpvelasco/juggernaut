@@ -83,6 +83,70 @@ func TestInstallPowerShell_StripsStaleCurrentHostBlock(t *testing.T) {
 	}
 }
 
+// TestInstallPowerShell_StripsMigrationOnlyStaleHost: Documents-move scenario —
+// live discovery only sees AllHosts, while a stale wrapper lives solely under
+// MigrationTargets (historical CurrentHost not in ActiveTargets).
+func TestInstallPowerShell_StripsMigrationOnlyStaleHost(t *testing.T) {
+	home := t.TempDir()
+	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "profile.ps1")
+	historicalHost := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	if err := os.MkdirAll(filepath.Dir(allHosts), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(historicalHost), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stale := blockFor(ShellPowerShell, "grok",
+		"# BEGIN: Juggernaut Grok Activation",
+		"# END: Juggernaut Grok Activation")
+	userLine := "# keep me\n"
+	if err := safepath.WriteFile(filepath.Dir(historicalHost), historicalHost,
+		[]byte(userLine+stale+"\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sibling CLI block must survive grok strip.
+	claudeBlk := blockFor(ShellPowerShell, "claude", BeginMarker, EndMarker)
+	if err := safepath.WriteFile(filepath.Dir(historicalHost), historicalHost,
+		[]byte(userLine+claudeBlk+"\n\n"+stale+"\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	psResult := &ProfileResolverResult{
+		ActiveTargets: []Target{
+			{Path: allHosts, Shell: ShellPowerShell},
+		},
+		InstallTargets: []Target{
+			{Path: allHosts, Shell: ShellPowerShell},
+		},
+		MigrationTargets: []string{allHosts, historicalHost},
+	}
+	spec := CLISpec{
+		Name:  "grok",
+		Begin: "# BEGIN: Juggernaut Grok Activation",
+		End:   "# END: Juggernaut Grok Activation",
+	}
+	if _, err := installPowerShellActivationForSpec(home, psResult, spec); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	hostData, err := safepath.ReadFile(filepath.Dir(historicalHost), historicalHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(hostData)
+	if strings.Contains(got, "Juggernaut Grok Activation") {
+		t.Fatalf("migration-only stale grok block not stripped:\n%s", got)
+	}
+	if !strings.Contains(got, BeginMarker) {
+		t.Fatalf("sibling Claude block must survive grok strip:\n%s", got)
+	}
+	if !strings.Contains(got, "# keep me") {
+		t.Fatalf("user content lost:\n%s", got)
+	}
+}
+
 func TestResolveHistoricalTargets_IncludesAllHostsAndCurrentHost(t *testing.T) {
 	docs := filepath.Join("C:", "Users", "x", "Documents")
 	got := resolveHistoricalTargets(docs)
