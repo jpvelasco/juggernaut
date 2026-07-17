@@ -3,7 +3,6 @@ package provider
 import (
 	"fmt"
 	"path/filepath"
-	"runtime"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -22,25 +21,16 @@ import (
 // Chat Completions on /v1 (verified in models-api-compatibility.html), so the
 // provider block is uniform; the OpenAI Responses-only gpt-5.x family is
 // intentionally NOT in the curated set (it needs a different npm package).
-type opencode struct{}
+type opencode struct {
+	BaseProvider
+}
 
 // mantleProviderID is the provider key written into opencode.json.
 const mantleProviderID = "bedrock-mantle"
 
-func (opencode) Name() string { return "opencode" }
-
-func (opencode) BinaryNames() []string {
-	if runtime.GOOS == "windows" {
-		return []string{"opencode.exe", "opencode.cmd", "opencode.bat"}
-	}
-	return []string{"opencode"}
-}
-
-func (opencode) ConfigFormatName() string { return "json" }
-
 // ConfigPath is ~/.config/opencode/opencode.json (user) or ./opencode.json
 // (project).
-func (opencode) ConfigPath(home, scope string) (string, error) {
+func (o opencode) ConfigPath(home, scope string) (string, error) {
 	if scope == "project" {
 		return filepath.Join(".", "opencode.json"), nil
 	}
@@ -48,24 +38,24 @@ func (opencode) ConfigPath(home, scope string) (string, error) {
 }
 
 // NativeManagedKeys are the top-level opencode.json keys Juggernaut owns.
-func (opencode) NativeManagedKeys() []string {
+func (o opencode) NativeManagedKeys() []string {
 	return []string{"model", "provider"}
 }
 
 // DeepMergeKeys: "provider" is a nested map where a user may have their own
 // providers (anthropic, openai, …); merge only our bedrock-mantle entry.
-func (opencode) DeepMergeKeys() []string { return []string{"provider"} }
+func (o opencode) DeepMergeKeys() []string { return []string{"provider"} }
 
 // OwnedSubKeys: uninstall removes only our bedrock-mantle provider from the
 // provider map (the model leaf is removed whole).
-func (opencode) OwnedSubKeys() map[string][]string {
+func (o opencode) OwnedSubKeys() map[string][]string {
 	return map[string][]string{"provider": {mantleProviderID}}
 }
 
 // OwnsConfig recognizes a config Juggernaut wrote by our bedrock-mantle provider
 // under the "provider" map — NOT a plain user opencode.json that merely has a
 // "provider" block for other vendors or a "model" key.
-func (opencode) OwnsConfig(data map[string]any) bool {
+func (o opencode) OwnsConfig(data map[string]any) bool {
 	prov, ok := data["provider"].(map[string]any)
 	if !ok {
 		return false
@@ -74,11 +64,7 @@ func (opencode) OwnsConfig(data map[string]any) bool {
 	return ok
 }
 
-func (opencode) ActivationMarkers() (begin, end string) {
-	return "# BEGIN: Juggernaut OpenCode Activation", "# END: Juggernaut OpenCode Activation"
-}
-
-func (opencode) LaunchSpec() LaunchSpec {
+func (o opencode) LaunchSpec() LaunchSpec {
 	// OpenCode routes via config; the bearer token is injected through the
 	// apiKey {env:...} interpolation, so no static enable flag — but the token
 	// is still required (Mantle).
@@ -87,8 +73,6 @@ func (opencode) LaunchSpec() LaunchSpec {
 		NeedsToken:  true,
 	}
 }
-
-func (opencode) Supports(Capability) bool { return false }
 
 // opencodeCuratedModels maps a friendly key to a verified Mantle model ID. All
 // are Chat Completions on /v1 (see models-api-compatibility.html + mantle-model-
@@ -111,7 +95,7 @@ func opencodeDefaultModel() string { return "gpt-oss-120b" }
 // pointing at Mantle /v1, plus a top-level default model "provider_id/model_id".
 // A curated key resolves to its verified Mantle model ID; any other value is
 // passed through verbatim (BYO) with an "unverified" warning.
-func (opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
 		key = opencodeDefaultModel()
@@ -149,7 +133,7 @@ func (opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, erro
 
 	return ConfigPlan{
 		Keys:        keys,
-		ManagedKeys: opencode{}.NativeManagedKeys(),
+		ManagedKeys: o.NativeManagedKeys(),
 		Warnings:    warnings,
 	}, nil
 }

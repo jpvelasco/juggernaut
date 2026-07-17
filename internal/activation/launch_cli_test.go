@@ -51,8 +51,8 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 		},
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
-			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
-			NeedsToken:  false, // auth mode read from config
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
+			NeedsToken:  false,                      // auth mode read from config
 			ConfigPath:  cfgPath,
 		},
 	})
@@ -111,8 +111,8 @@ func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 		},
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
-			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
-			NeedsToken:  false, // auth mode read from config
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
+			NeedsToken:  false,                      // auth mode read from config
 			ConfigPath:  cfgPath,
 		},
 	})
@@ -164,7 +164,7 @@ func TestLaunchWithOptions_Codex_IAM_NoToken(t *testing.T) {
 		},
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
-			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
 			NeedsToken:  false,
 			ConfigPath:  cfgPath,
 		},
@@ -296,7 +296,7 @@ func TestLaunchWithOptions_Codex_NoConfigFile(t *testing.T) {
 		},
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
-			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
 			NeedsToken:  false,
 			ConfigPath:  filepath.Join(home, "nonexistent", "config.toml"),
 		},
@@ -344,7 +344,7 @@ func TestLaunchWithOptions_Codex_BadConfigFile(t *testing.T) {
 		},
 		Target: LaunchTarget{
 			BinaryNames: []string{codexName},
-			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK",
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
 			NeedsToken:  false,
 			ConfigPath:  cfgPath,
 		},

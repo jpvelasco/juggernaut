@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -232,9 +231,7 @@ func parseDiscoveryOutput(edition string, output []byte) psDiscoveryResult {
 	// Trim BOM and whitespace, handle both LF and CRLF
 	s := strings.TrimSpace(string(output))
 	// Strip UTF-8 BOM if present
-	if strings.HasPrefix(s, "\xef\xbb\xbf") {
-		s = s[3:]
-	}
+	s = strings.TrimPrefix(s, "\xef\xbb\xbf")
 
 	var paths psProfilePaths
 	if err := json.Unmarshal([]byte(s), &paths); err != nil {
@@ -349,57 +346,4 @@ func resolveHomeDir() string {
 		home, _ = os.UserHomeDir()
 	}
 	return home
-}
-
-// containsPathCI checks if a path exists in a list, case-insensitive on Windows.
-func containsPathCI(paths []string, path string) bool {
-	for _, p := range paths {
-		if runtime.GOOS == "windows" {
-			if strings.EqualFold(p, path) {
-				return true
-			}
-		} else if p == path {
-			return true
-		}
-	}
-	return false
-}
-
-// deduplicatePathsCI removes duplicate paths, case-insensitive on Windows.
-func deduplicatePathsCI(paths []string) []string {
-	seen := make(map[string]bool, len(paths))
-	var result []string
-	for _, p := range paths {
-		key := p
-		if runtime.GOOS == "windows" {
-			key = strings.ToLower(p)
-		}
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, p)
-		}
-	}
-	return result
-}
-
-// validateAndCanonicalizePath trims and cleans a path, returning empty string
-// for invalid paths. If baseDir is non-empty, the path must be under baseDir
-// (checked via filepath.Rel) to prevent path traversal attacks from a
-// compromised PowerShell output.
-func validateAndCanonicalizePath(p, baseDir string) string {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return ""
-	}
-	p = filepath.Clean(p)
-	if p == "." {
-		return ""
-	}
-	if baseDir != "" {
-		rel, err := filepath.Rel(baseDir, p)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return ""
-		}
-	}
-	return p
 }

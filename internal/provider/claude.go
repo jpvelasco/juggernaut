@@ -2,7 +2,6 @@ package provider
 
 import (
 	"path/filepath"
-	"runtime"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -15,22 +14,13 @@ import (
 // names from internal/activation/activation.go, and the Bedrock env var
 // (CLAUDE_CODE_USE_BEDROCK=1) from the literal set inside activation.Launch.
 // The provider_test.go pins guard against drift.
-type claude struct{}
-
-func (claude) Name() string { return "claude" }
-
-func (claude) BinaryNames() []string {
-	if runtime.GOOS == "windows" {
-		return []string{"claude.exe", "claude.cmd", "claude.bat"}
-	}
-	return []string{"claude"}
+type claude struct {
+	BaseProvider
 }
-
-func (claude) ConfigFormatName() string { return "json" }
 
 // ConfigPath is ~/.claude/settings.json (user) or ./.claude/settings.json
 // (project) — identical to the pre-abstraction cmd/helpers.settingsPath.
-func (claude) ConfigPath(home, scope string) (string, error) {
+func (c claude) ConfigPath(home, scope string) (string, error) {
 	if scope == "project" {
 		return filepath.Join(".", ".claude", "settings.json"), nil
 	}
@@ -39,7 +29,7 @@ func (claude) ConfigPath(home, scope string) (string, error) {
 
 // OwnsConfig recognizes a Claude config Juggernaut wrote by its managed
 // juggernaut block with managedBy == "juggernaut".
-func (claude) OwnsConfig(data map[string]any) bool {
+func (c claude) OwnsConfig(data map[string]any) bool {
 	block, ok := data["juggernaut"].(map[string]any)
 	if !ok {
 		return false
@@ -53,12 +43,12 @@ func (claude) OwnsConfig(data map[string]any) bool {
 
 // DeepMergeKeys: Claude's managed keys are all whole-value (Juggernaut fully
 // owns env/modelOverrides/etc.), so none are deep-merged.
-func (claude) DeepMergeKeys() []string { return nil }
+func (c claude) DeepMergeKeys() []string { return nil }
 
 // OwnedSubKeys: none — Claude has no deep-merge keys.
-func (claude) OwnedSubKeys() map[string][]string { return nil }
+func (c claude) OwnedSubKeys() map[string][]string { return nil }
 
-func (claude) NativeManagedKeys() []string {
+func (c claude) NativeManagedKeys() []string {
 	return []string{
 		"env",
 		"model",
@@ -72,16 +62,12 @@ func (claude) NativeManagedKeys() []string {
 	}
 }
 
-func (claude) ActivationMarkers() (begin, end string) {
-	return "# BEGIN: Juggernaut Claude Activation", "# END: Juggernaut Claude Activation"
-}
-
 // BuildConfig wraps the existing schema.Build so Claude's persisted config is
 // byte-identical to the pre-abstraction cmd/apply path: it packs the juggernaut
 // block plus every native top-level key exactly as commitApply assembled them.
 // Claude logic is relocated here, not rewritten — the golden-output test guards
 // against drift.
-func (claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	block, err := schema.Build(cfg, toSchemaOptions(opts))
 	if err != nil {
 		return ConfigPlan{}, err
@@ -114,12 +100,12 @@ func (claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 
 	return ConfigPlan{
 		Keys:        keys,
-		ManagedKeys: claude{}.NativeManagedKeys(),
+		ManagedKeys: c.NativeManagedKeys(),
 		Warnings:    block.Warnings,
 	}, nil
 }
 
-func (claude) LaunchSpec() LaunchSpec {
+func (c claude) LaunchSpec() LaunchSpec {
 	return LaunchSpec{
 		TokenEnvVar: bedrockAuthEnvName,
 		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
@@ -128,15 +114,6 @@ func (claude) LaunchSpec() LaunchSpec {
 		// The launcher decides via needsBearerToken(authModes). Forcing true here
 		// would break every Claude+IAM launch with "API key not found".
 		NeedsToken: false,
-	}
-}
-
-func (claude) Supports(c Capability) bool {
-	switch c {
-	case CapAutoMode, Cap1MContext, CapOpusplan, CapThinking, CapServiceTiers, CapEffortLevels, CapNativeAuth:
-		return true
-	default:
-		return false
 	}
 }
 

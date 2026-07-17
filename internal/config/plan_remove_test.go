@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -120,6 +121,68 @@ func TestHasManagedKeys(t *testing.T) {
 	has, _ = empty.HasManagedKeys([]string{"model", "model_provider"})
 	if has {
 		t.Error("expected HasManagedKeys=false when no managed key present")
+	}
+}
+
+func TestHasManagedKeys_EmptyFile(t *testing.T) {
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
+	has, err := m.HasManagedKeys([]string{"model", "env"})
+	if err != nil {
+		t.Fatalf("HasManagedKeys on missing file: %v", err)
+	}
+	if has {
+		t.Error("expected HasManagedKeys=false for empty/missing config")
+	}
+}
+
+func TestHasManagedKeys_PartialMatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := NewManager(path)
+	// Only "model" is present; "env" and "effortLevel" are absent.
+	_ = m.Write(map[string]any{"model": "sonnet", "unrelated": "value"})
+	has, err := m.HasManagedKeys([]string{"env", "model", "effortLevel"})
+	if err != nil {
+		t.Fatalf("HasManagedKeys: %v", err)
+	}
+	if !has {
+		t.Error("expected HasManagedKeys=true when partial key match")
+	}
+}
+
+func TestHasManagedKeys_AllKeysPresent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := NewManager(path)
+	_ = m.Write(map[string]any{"model": "sonnet", "env": map[string]any{"X": "1"}, "effortLevel": "high"})
+	has, err := m.HasManagedKeys([]string{"model", "env", "effortLevel"})
+	if err != nil {
+		t.Fatalf("HasManagedKeys: %v", err)
+	}
+	if !has {
+		t.Error("expected HasManagedKeys=true when all keys present")
+	}
+}
+
+func TestHasManagedKeys_JuggernautBlockShortCircuits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := NewManager(path)
+	// Juggernaut block present but none of the listed keys are.
+	_ = m.Write(map[string]any{"juggernaut": map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}}})
+	has, err := m.HasManagedKeys([]string{"model", "env"})
+	if err != nil {
+		t.Fatalf("HasManagedKeys: %v", err)
+	}
+	if !has {
+		t.Error("expected HasManagedKeys=true when juggernaut block is present")
+	}
+}
+
+func TestHasManagedKeys_InvalidConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	_ = os.WriteFile(path, []byte("{invalid json"), 0o600)
+	m := NewManager(path)
+	_, err := m.HasManagedKeys([]string{"model"})
+	if err == nil {
+		t.Error("expected error for invalid config file")
 	}
 }
 

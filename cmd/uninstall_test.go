@@ -2,29 +2,9 @@ package cmd
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 )
-
-// withStdin replaces os.Stdin with a pipe preloaded with input for the duration
-// of fn, so interactive confirmation prompts can be exercised in tests.
-func withStdin(t *testing.T, input string, fn func()) {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	if _, err := w.WriteString(input); err != nil {
-		t.Fatalf("writing stdin: %v", err)
-	}
-	w.Close()
-
-	orig := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() { os.Stdin = orig })
-	fn()
-}
 
 // TestUninstall_DryRun_PreservesBlock verifies that a dry-run reports intended
 // removals but leaves settings.json untouched and never prints completion.

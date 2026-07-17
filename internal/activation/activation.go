@@ -1191,7 +1191,7 @@ func isLegacyClaudeShim(path string) bool {
 	if runtime.GOOS != "windows" {
 		return false
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G703,G501 -- path is resolved from known config paths, not user input // nosemgrep: go_filesystem_rule-fileread -- path derived from known config paths
 	if err != nil {
 		return false
 	}
@@ -1207,7 +1207,7 @@ func sameExecutable(candidate, self string) bool {
 	if self == "" {
 		return false
 	}
-	candidateInfo, err := os.Stat(candidate)
+	candidateInfo, err := os.Stat(candidate) // #nosec G703 -- candidate is resolved from PATH, not user input
 	if err != nil {
 		return false
 	}
@@ -1219,7 +1219,7 @@ func sameExecutable(candidate, self string) bool {
 }
 
 func isExecutable(path string) bool {
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) // #nosec G703 -- path comes from known config paths, not user input
 	if err != nil || info.IsDir() {
 		return false
 	}
@@ -1384,7 +1384,7 @@ func platformNames() legacyNames {
 // v4.2.6 Juggernaut artifact (legacy shim or symlink to the juggernaut binary).
 func isKnownJuggernautArtifact(path, self string) bool {
 	if runtime.GOOS == "windows" {
-		data, err := os.ReadFile(path) // nosemgrep: gosec.G304-1, go_filesystem_rule-fileread
+		data, err := os.ReadFile(path) // #nosec G703,G501 -- path is resolved from known config paths, not user input // nosemgrep: go_filesystem_rule-fileread -- path derived from known config paths
 		if err != nil {
 			return false
 		}

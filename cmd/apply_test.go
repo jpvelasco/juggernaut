@@ -1,23 +1,18 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/huh"
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
-	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -454,28 +449,6 @@ func TestApply_ReApply_AlwaysThinkingOff_DeletesKey(t *testing.T) {
 	if _, ok := settings["alwaysThinkingEnabled"]; ok {
 		t.Error("alwaysThinkingEnabled should be removed when --always-thinking is not passed on re-apply")
 	}
-}
-
-// setupIsolatedKeychain sets JUGGERNAUT_KEYCHAIN_SERVICE to a short fixed
-// service name and skips the test if the keychain backend is unavailable.
-// The name is intentionally short — macOS security(1) hangs on long names.
-func setupIsolatedKeychain(t *testing.T) *keychain.Store {
-	t.Helper()
-	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-cmd-test")
-	store := keychain.Default()
-	// Probe with a timeout: if Set hangs, the test would block for 10 min.
-	done := make(chan error, 1)
-	go func() { done <- store.Set("probe") }()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Skipf("keychain backend unavailable: %v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Skip("keychain backend timed out")
-	}
-	_ = store.Delete()
-	return store
 }
 
 func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
@@ -981,78 +954,6 @@ func TestCredentialEchoMode_IsEchoNone(t *testing.T) {
 	if credentialEchoMode != huh.EchoMode(textinput.EchoNone) {
 		t.Fatalf("credential prompt must use EchoModeNone, got %v", credentialEchoMode)
 	}
-}
-
-func readSettingsJSON(t *testing.T, home string) []byte {
-	t.Helper()
-	data, err := safepath.ReadFile(home, filepath.Join(home, ".claude", "settings.json"))
-	if err != nil {
-		t.Fatalf("reading settings.json: %v", err)
-	}
-	return data
-}
-
-// setupMockPSRunner sets a mock PowerShell discovery runner on Windows so
-// that command-level tests never touch real PowerShell profiles.
-// It returns a cleanup function that should be deferred.
-func setupMockPSRunner(t *testing.T, home string) {
-	t.Helper()
-	if runtime.GOOS != "windows" {
-		return
-	}
-	psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	runner := &mockApplyCommandRunner{
-		output: map[string][]byte{
-			"pwsh.exe":       mockApplyPSOutput(psProfile, psProfile),
-			"powershell.exe": mockApplyPSOutput(psProfile, psProfile),
-		},
-	}
-	activation.SetPSRunnerForTesting(runner)
-	t.Cleanup(activation.ResetPSRunnerForTesting)
-}
-
-// mockApplyCommandRunner implements activation.discoveryCommandRunner for apply tests.
-type mockApplyCommandRunner struct {
-	output map[string][]byte
-	err    map[string]error
-}
-
-func (m *mockApplyCommandRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
-	if err := m.err[exe]; err != nil {
-		return nil, err
-	}
-	return m.output[exe], nil
-}
-
-func mockApplyPSOutput(allHosts, currentHost string) []byte {
-	data, _ := json.Marshal(map[string]string{
-		"CurrentUserAllHosts":    allHosts,
-		"CurrentUserCurrentHost": currentHost,
-	})
-	return data
-}
-
-// captureStdout runs fn while redirecting os.Stdout and returns what was printed.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	orig := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("closing pipe: %v", err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("reading pipe: %v", err)
-	}
-	return string(out)
 }
 
 // TestApply_AutoMode_EnabledWithDefaultConfig: the default config configures Opus
