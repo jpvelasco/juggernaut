@@ -781,9 +781,7 @@ func TestLaunchCLI_NeedsTokenTrue(t *testing.T) {
 		NeedsToken:  true,
 	})
 	// Will fail because PATH doesn't have test, but shouldn't crash.
-	if err == nil {
-		// Unexpected but not a crash.
-	}
+	_ = err // Expect error — either way, no crash.
 }
 
 // TestLaunchCLI_NeedsTokenFalse covers the no-token path.
@@ -795,7 +793,5 @@ func TestLaunchCLI_NeedsTokenFalse(t *testing.T) {
 		NeedsToken:  false,
 	})
 	// Will fail because PATH doesn't have test.
-	if err == nil {
-		// Unexpected but not a crash.
-	}
+	_ = err // Expect error — either way, no crash.
 }
