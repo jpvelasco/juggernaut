@@ -1885,6 +1885,10 @@ func TestSetNativeDefaultMode_NoExistingPermissions(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResolveCredential_KeychainWarning_NoPreserveKey(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("huh form.Run() hangs on Windows CI without TTY — Linux-only")
+	}
+
 	defer resetFlags()
 	resetFlags()
 	applyFlags.preserveKey = false // default, but be explicit
