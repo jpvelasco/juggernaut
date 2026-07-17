@@ -135,7 +135,7 @@ func TestUninstallWith_RemoveTargetWithLegacyError(t *testing.T) {
 	// Claude uninstall walks DefaultTargets; seed .bashrc as a directory so
 	// RemoveTargetWithLegacy returns a read error.
 	bashrc := filepath.Join(home, ".bashrc")
-	if err := os.Mkdir(bashrc, 0o700); err != nil {
+	if err := safepath.MkdirAll(bashrc); err != nil {
 		t.Fatal(err)
 	}
 	_, err := UninstallWith(home, UninstallOptions{
@@ -199,7 +199,7 @@ func TestInstallPowerShell_MigrationReadError(t *testing.T) {
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(bad, 0o700); err != nil {
+	if err := safepath.MkdirAll(bad); err != nil {
 		t.Fatal(err)
 	}
 	// Migration target is a directory → ReadFile non-NotExist error.
@@ -219,7 +219,7 @@ func TestInstallPowerShell_InstallTargetError(t *testing.T) {
 	home := t.TempDir()
 	// Install target is a directory → InstallTargetFor fails.
 	dir := filepath.Join(home, "ps")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := safepath.MkdirAll(dir); err != nil {
 		t.Fatal(err)
 	}
 	_, err := installPowerShellActivationForSpec(home, &ProfileResolverResult{
@@ -240,7 +240,7 @@ func TestInstallPowerShell_ThirdPassStripError(t *testing.T) {
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(staleDir, 0o700); err != nil {
+	if err := safepath.MkdirAll(staleDir); err != nil {
 		t.Fatal(err)
 	}
 	// Stale dir only in ActiveTargets (not MigrationTargets) so first-pass
