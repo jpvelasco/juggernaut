@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -17,6 +18,11 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
+
+// shellCLINameRE is the only identifier shape we embed into generated shell
+// profiles (function names, `command X`, Get-Command X). Anything else is
+// rejected so a bad CLISpec.Name cannot become shell injection.
+var shellCLINameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
 // bedrockAuthEnvName is the environment variable name (not a secret) that the
 // launcher injects the Bedrock bearer token into by default.
@@ -149,17 +155,111 @@ func DefaultTargets(home string) []Target {
 	}
 }
 
+// statProfile is os.Stat by default; tests replace it to exercise non-NotExist
+// Stat failures (Windows maps many path errors to IsNotExist).
+var statProfile = os.Stat
+
+// shouldWritePOSIXTarget reports whether install should create/update a POSIX
+// or Fish profile. Existing files are always eligible (so re-apply stays
+// idempotent). Missing files are only created when the matching shell is on
+// PATH — never invent a .zshrc/fish config on a machine that only uses
+// PowerShell/Git Bash. Bare ~/.profile is never created from scratch (login
+// shells already source .bashrc via .bash_profile on Git for Windows).
+//
+// Non-NotExist Stat errors (permission, I/O) return true so InstallTargetFor
+// surfaces the real error instead of silently skipping a profile that may
+// still hold a dead wrapper.
+func shouldWritePOSIXTarget(target Target) bool {
+	_, err := statProfile(target.Path)
+	if err == nil {
+		return true
+	}
+	if !os.IsNotExist(err) {
+		return true
+	}
+	base := filepath.Base(target.Path)
+	switch {
+	case base == ".bashrc":
+		return commandOnPATH("bash")
+	case base == ".zshrc":
+		return commandOnPATH("zsh")
+	case base == "config.fish" || target.Shell == ShellFish:
+		return commandOnPATH("fish")
+	case base == ".profile":
+		return false
+	default:
+		return false
+	}
+}
+
+// commandOnPATH reports whether name resolves via exec.LookPath.
+func commandOnPATH(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
 // Block returns the Claude activation block. Retained for back-compat; delegates
 // to the per-CLI generator with Claude's identity.
 func Block(shell Shell) string {
 	return blockFor(shell, "claude", BeginMarker, EndMarker)
 }
 
+// validateCLISpec rejects names/markers that must not be interpolated into
+// shell profiles. CLI names become function identifiers and command tokens;
+// markers must stay single-line so block matching cannot be confused.
+func validateCLISpec(spec CLISpec) error {
+	if err := validateCLIName(spec.Name); err != nil {
+		return err
+	}
+	return validateMarkers(spec.Begin, spec.End)
+}
+
+func validateCLIName(cli string) error {
+	if !shellCLINameRE.MatchString(cli) {
+		return fmt.Errorf("invalid CLI name %q for shell activation (must match %s)", cli, shellCLINameRE.String())
+	}
+	return nil
+}
+
+func validateMarkers(begin, end string) error {
+	if begin == "" || end == "" {
+		return errors.New("activation markers must be non-empty")
+	}
+	if begin == end {
+		return errors.New("activation begin and end markers must differ")
+	}
+	for _, m := range []string{begin, end} {
+		if strings.ContainsAny(m, "\n\r\x00") {
+			return errors.New("activation markers must be single-line")
+		}
+		if len(m) > 200 {
+			return errors.New("activation markers are too long")
+		}
+	}
+	return nil
+}
+
 // blockFor generates a shell activation block that defines a function named
-// `cli`. Claude retains the byte-identical historical `juggernaut launch`
-// delegation. Other CLIs use the newer `launch-cli` command so a pre-multi-CLI
-// binary fails fast instead of silently launching Claude.
+// `cli`. Claude uses the historical `juggernaut launch` command; other CLIs
+// use `launch-cli <cli>` so a pre-multi-CLI binary fails fast instead of
+// silently launching Claude.
+//
+// Every wrapper falls through to the real CLI binary when `juggernaut` is not
+// on PATH. That way an incomplete uninstall (or a PATH without juggernaut)
+// does not break `claude`/`codex`/`grok` with "term not recognized".
+//
+// Callers must pass a name that satisfies validateCLIName. InstallTargetFor
+// enforces this; tests use fixed provider names (claude/codex/…).
 func blockFor(shell Shell, cli, begin, end string) string {
+	// Defense in depth: never interpolate an unvalidated identifier into a
+	// profile that will be eval'd by the user's shell.
+	if err := validateCLIName(cli); err != nil {
+		panic(err)
+	}
+	if err := validateMarkers(begin, end); err != nil {
+		panic(err)
+	}
+
 	launchCommand := "juggernaut launch"
 	if cli != "claude" {
 		launchCommand = "juggernaut launch-cli " + cli
@@ -169,15 +269,28 @@ func blockFor(shell Shell, cli, begin, end string) string {
 		return strings.Join([]string{
 			begin,
 			"function " + cli,
-			"    " + launchCommand + " -- $argv",
+			"    if command -q juggernaut",
+			"        " + launchCommand + " -- $argv",
+			"    else",
+			"        command " + cli + " $argv",
+			"    end",
 			"end",
 			end,
 		}, "\n")
 	case ShellPowerShell:
+		// ApplicationInfo.Path is the executable path. Source is module/command
+		// metadata and is not reliable for Application fallbacks — use Path.
 		return strings.Join([]string{
 			begin,
 			"function global:" + cli + " {",
-			"  " + launchCommand + " -- @args",
+			"  if (Get-Command juggernaut -ErrorAction SilentlyContinue) {",
+			"    " + launchCommand + " -- @args",
+			"  } else {",
+			"    $app = Get-Command " + cli + " -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1",
+			"    if ($null -ne $app -and -not [string]::IsNullOrWhiteSpace($app.Path)) { & $app.Path @args } else {",
+			"      throw \"juggernaut is not installed and no '" + cli + "' executable was found on PATH\"",
+			"    }",
+			"  }",
 			"}",
 			end,
 		}, "\n")
@@ -185,7 +298,11 @@ func blockFor(shell Shell, cli, begin, end string) string {
 		return strings.Join([]string{
 			begin,
 			cli + "() {",
-			"  " + launchCommand + " -- \"$@\"",
+			"  if command -v juggernaut >/dev/null 2>&1; then",
+			"    " + launchCommand + " -- \"$@\"",
+			"  else",
+			"    command " + cli + " \"$@\"",
+			"  fi",
 			"}",
 			end,
 		}, "\n")
@@ -242,6 +359,9 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 	}
 
 	for _, target := range DefaultTargets(home) {
+		if !shouldWritePOSIXTarget(target) {
+			continue
+		}
 		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
@@ -275,6 +395,9 @@ func InstallTarget(target Target) (bool, error) {
 // leaving other CLIs' blocks (matched by their own markers) untouched so they
 // coexist.
 func InstallTargetFor(target Target, spec CLISpec) (bool, error) {
+	if err := validateCLISpec(spec); err != nil {
+		return false, err
+	}
 	base := filepath.Dir(target.Path)
 	data, err := safepath.ReadFile(base, target.Path)
 	if os.IsNotExist(err) {
@@ -353,24 +476,33 @@ func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
 
 // uninstallCLIBlocks removes one non-Claude CLI's activation block (by its
 // markers) from all managed profiles, leaving other CLIs' blocks intact.
+// Scans ActiveTargets, MigrationTargets (historical OneDrive/Documents paths),
+// and POSIX defaults so host-specific or redirected leftovers are cleaned.
 func uninstallCLIBlocks(home string, opts UninstallOptions) ([]string, error) {
 	var removed []string
 	begin, end := opts.Spec.Begin, opts.Spec.End
 
 	targets := DefaultTargets(home)
+	var migration []string
 	if opts.PowerShellResult != nil {
 		targets = append(targets, opts.PowerShellResult.ActiveTargets...)
+		migration = opts.PowerShellResult.MigrationTargets
 	} else if runtime.GOOS == "windows" {
 		r := ResolvePowerShellProfilesScoped(home)
 		targets = append(targets, r.ActiveTargets...)
+		migration = r.MigrationTargets
+	}
+	for _, path := range migration {
+		targets = append(targets, Target{Path: path, Shell: ShellPowerShell})
 	}
 
 	seen := map[string]bool{}
 	for _, target := range targets {
-		if seen[target.Path] {
+		key := profilePathKey(target.Path)
+		if seen[key] {
 			continue
 		}
-		seen[target.Path] = true
+		seen[key] = true
 		ok, err := RemoveTargetForMarkers(target.Path, begin, end)
 		if err != nil {
 			return removed, err
@@ -816,7 +948,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 			continue
 		}
 		if err != nil {
-			continue
+			return installed, fmt.Errorf("reading %s for legacy migration: %w", p, err)
 		}
 		content := string(data)
 		changed := false
@@ -838,7 +970,9 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	// Second pass: install the current block into InstallTargets only
 	// (AllHosts profiles — CurrentHost profiles load after AllHosts and
 	// can override or retain a stale duplicate of the global activation).
+	installSet := map[string]bool{}
 	for _, target := range result.InstallTargets {
+		installSet[profilePathKey(target.Path)] = true
 		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
@@ -848,7 +982,43 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 		}
 	}
 
+	// Third pass: strip this CLI's markers from every non-install path
+	// (CurrentHost + historical Documents trees). Older Juggernaut versions
+	// wrote host-specific blocks; those load AFTER AllHosts and override the
+	// correct wrapper (or break the CLI when juggernaut is gone).
+	stalePaths := make([]string, 0, len(result.ActiveTargets)+len(result.MigrationTargets))
+	for _, target := range result.ActiveTargets {
+		stalePaths = append(stalePaths, target.Path)
+	}
+	stalePaths = append(stalePaths, result.MigrationTargets...)
+	seenStale := map[string]bool{}
+	for _, path := range stalePaths {
+		key := profilePathKey(path)
+		if installSet[key] || seenStale[key] {
+			continue
+		}
+		seenStale[key] = true
+		_, err := RemoveTargetForMarkers(path, spec.Begin, spec.End)
+		if err != nil {
+			return installed, err
+		}
+		// Do not append stripped paths to installed — callers treat that list
+		// as "profiles that received activation" (apply messaging). Cleanup is
+		// intentional side work; counting it as an install misleads users.
+	}
+
 	return installed, nil
+}
+
+// profilePathKey normalizes a profile path for set membership. On Windows,
+// comparison is case-insensitive after Clean so InstallTargets and
+// MigrationTargets that differ only by casing still match.
+func profilePathKey(path string) string {
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(path)
+	}
+	return path
 }
 
 // UninstallPowerShellActivation removes activation blocks from all discovered

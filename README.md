@@ -243,10 +243,16 @@ Juggernaut writes Bedrock settings to `~/.claude/settings.json` (user scope) or 
 ```bash
 # BEGIN: Juggernaut Claude Activation
 claude() {
-  juggernaut launch -- "$@"
+  if command -v juggernaut >/dev/null 2>&1; then
+    juggernaut launch -- "$@"
+  else
+    command claude "$@"
+  fi
 }
 # END: Juggernaut Claude Activation
 ```
+
+If `juggernaut` is not on PATH, the wrapper falls through to the real CLI binary so an incomplete uninstall or PATH skew does not break `claude` / `codex` / `grok`. **Re-running `apply` rewrites the whole marked block** to match the current generator (any edits inside the BEGIN/END markers are replaced; content outside is preserved).
 
 The hidden `juggernaut launch` command reads the Bedrock API key from the OS keychain when your settings use `bedrock-api-key`, sets `AWS_BEARER_TOKEN_BEDROCK` and `CLAUDE_CODE_USE_BEDROCK=1`, resolves the real Anthropic `claude` binary without recursing into Juggernaut, and launches Claude Code with your original arguments.
 

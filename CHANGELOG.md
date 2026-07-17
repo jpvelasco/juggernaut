@@ -4,6 +4,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Shell activation wrappers fall through when `juggernaut` is missing.** Marked profile blocks (bash/zsh/fish/PowerShell) now check for `juggernaut` on PATH and, if absent, invoke the real CLI binary instead of hard-failing with “command not found.” **On re-apply, the entire marked block is rewritten** to the new body (same as prior apply behavior for markers) — existing hard-fail wrappers and any edits *inside* the BEGIN/END markers are replaced silently. Content outside the markers is left alone. PowerShell installs only AllHosts profiles and strips stale host-specific blocks for that CLI; multi-CLI uninstall also scans historical OneDrive/local Documents paths. Apply no longer invents unused POSIX/fish profiles when that shell is not installed.
+
 ## [5.4.0] - 2026-07-16
 
 **Minor release — model governance, foreign-config collision guard, and OSS hardening.**

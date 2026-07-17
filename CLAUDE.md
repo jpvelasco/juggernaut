@@ -85,7 +85,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 - `authmode/` — constants/helpers for auth mode strings (`IAM`, `BedrockAPIKey`). Use `authmode.BedrockAPIKey` (split var) instead of bare string literals to avoid static secret scanner hits.
 - `safepath/` — path containment checks (`JoinUnder`, `withinBase`) and owner-only filesystem helpers (`MkdirAll`, `ReadFile`, `WriteFile` at `0o700`/`0o600`). Use these whenever writing files under a user-controlled base path.
 
-**Activation mode:** shell profiles contain per-CLI marker blocks (e.g. `# BEGIN: Juggernaut Claude Activation` / `# END: Juggernaut Claude Activation`) defining a shell function that delegates to `juggernaut launch -- "$@"` (Claude) or `juggernaut launch-cli <cli> -- "$@"` (others), or shell equivalent. Juggernaut must never install, overwrite, move, symlink over, or delete an unknown file matching a managed CLI's binary name.
+**Activation mode:** shell profiles contain per-CLI marker blocks (e.g. `# BEGIN: Juggernaut Claude Activation` / `# END: Juggernaut Claude Activation`) defining a shell function that delegates to `juggernaut launch -- "$@"` (Claude) or `juggernaut launch-cli <cli> -- "$@"` (others), or shell equivalent. Wrappers fall through to the real CLI binary when `juggernaut` is not on PATH. Apply installs PowerShell AllHosts profiles only and strips stale host-specific blocks for that CLI; multi-CLI uninstall also scans historical OneDrive/local Documents paths. Juggernaut must never install, overwrite, move, symlink over, or delete an unknown file matching a managed CLI's binary name.
 
 ## Key Design Patterns
 
