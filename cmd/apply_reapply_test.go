@@ -1,31 +1,10 @@
 package cmd
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 )
-
-// readJuggernautAuthMode returns the persisted auth.mode from the user-scope
-// settings.json, failing the test if the structure is missing.
-func readJuggernautAuthMode(t *testing.T, home string) string {
-	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	block, ok := settings["juggernaut"].(map[string]any)
-	if !ok {
-		t.Fatal("missing juggernaut block")
-	}
-	auth, ok := block["auth"].(map[string]any)
-	if !ok {
-		t.Fatal("missing auth in juggernaut block")
-	}
-	mode, _ := auth["mode"].(string)
-	return mode
-}
 
 // TestApply_BedrockKey_FlagStoresViaFallback runs a real (non-dry-run) apply
 // with --bedrock-key. This needs no keychain backend: resolveCredential returns

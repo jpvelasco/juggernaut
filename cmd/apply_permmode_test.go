@@ -1,87 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
-	"path/filepath"
 	"testing"
-
-	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
-
-// setNativeDefaultMode rewrites settings.json setting permissions.defaultMode,
-// simulating an external editor (e.g. Claude Code's Shift+Tab) that touches the
-// native key without updating Juggernaut's meta block.
-func setNativeDefaultMode(t *testing.T, home, mode string) {
-	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	perms, ok := settings["permissions"].(map[string]any)
-	if !ok {
-		perms = map[string]any{}
-		settings["permissions"] = perms
-	}
-	perms["defaultMode"] = mode
-	b, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		t.Fatalf("marshaling settings.json: %v", err)
-	}
-	if err := safepath.WriteFile(home, filepath.Join(home, ".claude", "settings.json"), b); err != nil {
-		t.Fatalf("writing settings.json: %v", err)
-	}
-}
-
-// readJuggernautPermissionMode returns the persisted meta.permissionMode from
-// the user-scope settings.json juggernaut block ("" if absent).
-func readJuggernautPermissionMode(t *testing.T, home string) string {
-	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	block, ok := settings["juggernaut"].(map[string]any)
-	if !ok {
-		t.Fatal("missing juggernaut block")
-	}
-	meta, ok := block["meta"].(map[string]any)
-	if !ok {
-		t.Fatal("missing meta in juggernaut block")
-	}
-	mode, _ := meta["permissionMode"].(string)
-	return mode
-}
-
-// readNativeDefaultMode returns the native permissions.defaultMode from
-// settings.json ("" if absent).
-func readNativeDefaultMode(t *testing.T, home string) string {
-	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	perms, ok := settings["permissions"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	mode, _ := perms["defaultMode"].(string)
-	return mode
-}
-
-// readNativeEnvValue returns settings.json env[key] ("" if absent).
-func readNativeEnvValue(t *testing.T, home, key string) string {
-	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	env, ok := settings["env"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	v, _ := env[key].(string)
-	return v
-}
 
 // TestApply_ReapplyWithoutMode_PreservesAutoMode is the regression for #231:
 // applying with --mode=auto then re-applying WITHOUT --mode must preserve the

@@ -3,7 +3,6 @@ package provider
 import (
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -19,21 +18,12 @@ import (
 // uses the standard AWS credential chain — Juggernaut's launch wrapper injects
 // AWS_BEARER_TOKEN_BEDROCK. Unlike Claude Code it has NO "use bedrock" env var
 // — routing lives entirely in the config file.
-type codex struct{}
-
-func (codex) Name() string { return "codex" }
-
-func (codex) BinaryNames() []string {
-	if runtime.GOOS == "windows" {
-		return []string{"codex.exe", "codex.cmd", "codex.bat"}
-	}
-	return []string{"codex"}
+type codex struct {
+	BaseProvider
 }
 
-func (codex) ConfigFormatName() string { return "toml" }
-
 // ConfigPath is ~/.codex/config.toml (user) or ./.codex/config.toml (project).
-func (codex) ConfigPath(home, scope string) (string, error) {
+func (c codex) ConfigPath(home, scope string) (string, error) {
 	if scope == "project" {
 		return filepath.Join(".", ".codex", "config.toml"), nil
 	}
@@ -46,11 +36,11 @@ func (codex) ConfigPath(home, scope string) (string, error) {
 // has a top-level `model` is NOT ours — critical so a first-time
 // `apply --cli=codex` over an existing Codex config still prompts for auth
 // instead of defaulting to iam (Mantle requires a bearer token).
-func (codex) OwnsConfig(data map[string]any) bool {
+func (c codex) OwnsConfig(data map[string]any) bool {
 	return data["model_provider"] == "amazon-bedrock"
 }
 
-func (codex) NativeManagedKeys() []string {
+func (c codex) NativeManagedKeys() []string {
 	return []string{
 		"juggernaut",
 		"model",
@@ -61,18 +51,14 @@ func (codex) NativeManagedKeys() []string {
 
 // DeepMergeKeys: model_providers is a nested [model_providers.<id>] table where a
 // user may have their own providers; merge only our amazon-bedrock entry.
-func (codex) DeepMergeKeys() []string { return []string{"model_providers"} }
+func (c codex) DeepMergeKeys() []string { return []string{"model_providers"} }
 
 // OwnedSubKeys: uninstall removes only the region leaf we wrote under
 // model_providers.amazon-bedrock.aws. Users may configure their own profile or
 // other settings in that sub-table — dot-notation targets the leaf so siblings
 // survive.
-func (codex) OwnedSubKeys() map[string][]string {
+func (c codex) OwnedSubKeys() map[string][]string {
 	return map[string][]string{"model_providers": {"amazon-bedrock.aws.region"}}
-}
-
-func (codex) ActivationMarkers() (begin, end string) {
-	return "# BEGIN: Juggernaut Codex Activation", "# END: Juggernaut Codex Activation"
 }
 
 // codexMantleModel describes one OpenAI-family model reachable through Bedrock
@@ -124,7 +110,7 @@ func codexDefaultModel() string { return "gpt-5.5" }
 //	model_provider = "amazon-bedrock"
 //	[model_providers.amazon-bedrock.aws]
 //	  region = "us-east-1"
-func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
 		key = codexDefaultModel()
@@ -179,12 +165,12 @@ func (codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) 
 
 	return ConfigPlan{
 		Keys:        keys,
-		ManagedKeys: codex{}.NativeManagedKeys(),
+		ManagedKeys: c.NativeManagedKeys(),
 		Warnings:    warnings,
 	}, nil
 }
 
-func (codex) LaunchSpec() LaunchSpec {
+func (c codex) LaunchSpec() LaunchSpec {
 	// Codex has no "use bedrock" flag — routing lives in config.toml.
 	// Token injection is decided at launch time from the stored auth mode:
 	// API key → inject AWS_BEARER_TOKEN_BEDROCK; IAM → SDK credential chain.
@@ -192,8 +178,4 @@ func (codex) LaunchSpec() LaunchSpec {
 		TokenEnvVar: bedrockAuthEnvName,
 		NeedsToken:  false, // auth mode in juggernaut block decides at launch
 	}
-}
-
-func (codex) Supports(c Capability) bool {
-	return c == CapEffortLevels || c == CapNativeAuth
 }

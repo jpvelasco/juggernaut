@@ -58,6 +58,20 @@ func (m *Manager) Read() (map[string]any, error) {
 	return result, nil
 }
 
+// withConfig reads the existing config, calls fn to mutate it, then writes it
+// back. This is the shared read-modify-write core used by MergeConfigPlanDeep
+// and RemoveManagedKeysDeep, eliminating their duplicated I/O boilerplate.
+func (m *Manager) withConfig(fn func(map[string]any) error) error {
+	existing, err := m.Read()
+	if err != nil {
+		return err
+	}
+	if err := fn(existing); err != nil {
+		return err
+	}
+	return m.Write(existing)
+}
+
 func (m *Manager) Write(data map[string]any) error {
 	if err := safepath.MkdirAll(filepath.Dir(m.path)); err != nil {
 		return fmt.Errorf("creating settings directory: %w", err)
@@ -204,30 +218,31 @@ func (m *Manager) MergeConfigPlan(keys map[string]any) error {
 // a user's sibling entries survive. All other keys keep whole-value
 // set-or-delete semantics.
 func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) error {
-	existing, err := m.Read()
-	if err != nil {
-		return err
-	}
 	deep := make(map[string]bool, len(deepKeys))
 	for _, k := range deepKeys {
 		deep[k] = true
 	}
-	for k, v := range keys {
-		if k == "juggernaut" {
-			existing[k] = v // the managed block is always set verbatim
-			continue
-		}
-		if deep[k] {
-			if err := mergeNested(existing, k, v, m.path); err != nil {
+	return m.withConfig(func(existing map[string]any) error {
+		for k, v := range keys {
+			if err := m.mergeKey(existing, k, v, deep); err != nil {
 				return err
 			}
-			continue
 		}
-		if err := applyManagedKey(existing, k, v); err != nil {
-			return err
-		}
+		return nil
+	})
+}
+
+// mergeKey handles one key in a merge operation. "juggernaut" is always set
+// verbatim; keys in deepSet are deep-merged; all others use applyManagedKey.
+func (m *Manager) mergeKey(existing map[string]any, k string, v any, deepSet map[string]bool) error {
+	if k == "juggernaut" {
+		existing[k] = v // the managed block is always set verbatim
+		return nil
 	}
-	return m.Write(existing)
+	if deepSet[k] {
+		return mergeNested(existing, k, v, m.path)
+	}
+	return applyManagedKey(existing, k, v)
 }
 
 // mergeNested merges the sub-keys of a nested-table value into existing[k],
@@ -330,28 +345,26 @@ func (m *Manager) RemoveManagedKeys(keys []string) error {
 // removed — preserving the user's; if that empties the table, the table is
 // dropped. All other keys are removed whole-value.
 func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][]string) error {
-	existing, err := m.Read()
-	if err != nil {
-		return err
-	}
-	delete(existing, "juggernaut")
-	for _, k := range keys {
-		if k == "permissions" {
-			mergePermissions(existing, nil)
-			continue
-		}
-		if subs, deep := ownedSubKeys[k]; deep {
-			if err := removeOwnedSubKeys(existing, k, subs, m.path); err != nil {
-				return err
+	return m.withConfig(func(existing map[string]any) error {
+		delete(existing, "juggernaut")
+		for _, k := range keys {
+			if k == "permissions" {
+				mergePermissions(existing, nil)
+				continue
 			}
-			continue
+			if subs, deep := ownedSubKeys[k]; deep {
+				if err := removeOwnedSubKeys(existing, k, subs, m.path); err != nil {
+					return err
+				}
+				continue
+			}
+			delete(existing, k)
 		}
-		delete(existing, k)
-	}
-	// Ensure the Juggernaut-managed permissions sub-key is stripped even if
-	// "permissions" was not in the key list (matches legacy behavior).
-	mergePermissions(existing, nil)
-	return m.Write(existing)
+		// Ensure the Juggernaut-managed permissions sub-key is stripped even if
+		// "permissions" was not in the key list (matches legacy behavior).
+		mergePermissions(existing, nil)
+		return nil
+	})
 }
 
 // removeOwnedSubKeys deletes only the named sub-keys from existing[k]'s nested

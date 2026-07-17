@@ -10,15 +10,6 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
-// bedrockKeyFlag builds the --bedrock-key flag from a separate literal so no
-// single source line contains a contiguous "--bedrock-key=<value>" token —
-// gitleaks' generic-api-key pattern matches on that shape regardless of the
-// placeholder value used.
-func bedrockKeyFlag() string {
-	const testValue = "test-key-value"
-	return "--bedrock-key=" + testValue
-}
-
 // TestApply_Claude_ForeignConfig_Refuses: a hand-written settings.json (no
 // Juggernaut marker) that already sets a managed key ("model") must cause
 // apply to refuse rather than silently overwrite it.

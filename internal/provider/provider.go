@@ -84,10 +84,35 @@ var registry = map[string]Provider{}
 func register(p Provider) { registry[p.Name()] = p }
 
 func init() {
-	register(claude{})
-	register(codex{})
-	register(opencode{})
-	register(grok{})
+	register(claude{BaseProvider: BaseProvider{
+		name:         "claude",
+		displayName:  "Claude",
+		configFormat: "json",
+		binaryName:   "claude",
+		capabilities: []Capability{
+			CapAutoMode, Cap1MContext, CapOpusplan, CapThinking,
+			CapServiceTiers, CapEffortLevels, CapNativeAuth,
+		},
+	}})
+	register(codex{BaseProvider: BaseProvider{
+		name:         "codex",
+		displayName:  "Codex",
+		configFormat: "toml",
+		binaryName:   "codex",
+		capabilities: []Capability{CapEffortLevels, CapNativeAuth},
+	}})
+	register(opencode{BaseProvider: BaseProvider{
+		name:         "opencode",
+		displayName:  "OpenCode",
+		configFormat: "json",
+		binaryName:   "opencode",
+	}})
+	register(grok{BaseProvider: BaseProvider{
+		name:         "grok",
+		displayName:  "Grok",
+		configFormat: "toml",
+		binaryName:   "grok",
+	}})
 }
 
 // Get resolves a provider by name. An empty name defaults to "claude" so every
