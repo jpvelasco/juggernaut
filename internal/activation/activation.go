@@ -998,14 +998,13 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 			continue
 		}
 		seenStale[key] = true
-		ok, err := RemoveTargetForMarkers(path, spec.Begin, spec.End)
+		_, err := RemoveTargetForMarkers(path, spec.Begin, spec.End)
 		if err != nil {
 			return installed, err
 		}
-		if ok {
-			// Count as a modified profile so apply messaging reflects the cleanup.
-			installed = append(installed, path)
-		}
+		// Do not append stripped paths to installed — callers treat that list
+		// as "profiles that received activation" (apply messaging). Cleanup is
+		// intentional side work; counting it as an install misleads users.
 	}
 
 	return installed, nil

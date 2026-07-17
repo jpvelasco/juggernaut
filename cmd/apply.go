@@ -511,7 +511,7 @@ func installActivation(home string, prov provider.Provider) {
 		fmt.Printf("  ✓ %s shell activation already up to date\n", title)
 		return
 	}
-	fmt.Printf("  ✓ Installed %s activation in %d shell profile(s)\n", title, len(paths))
+	fmt.Printf("  ✓ Updated %s activation in %d shell profile(s)\n", title, len(paths))
 }
 
 // providerDisplayName returns a human-facing CLI name for messages. Falls back
