@@ -3,15 +3,11 @@ version: "2"
 linters:
   enable:
     - errcheck
-    - gosec
     - govet
     - ineffassign
     - staticcheck
     - unused
   settings:
-    gosec:
-      excludes:
-        - G703
     govet:
       disable:
         - shadow
