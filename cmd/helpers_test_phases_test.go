@@ -1901,10 +1901,8 @@ func TestResolveCredential_KeychainWarning_NoPreserveKey(t *testing.T) {
 	// The error comes from form.Run() failing on headless CI — this covers
 	// the keychain warning path (line 277) since preserveKey=false means
 	// the warning is printed instead of returning an error early.
-	// We can't assert the exact error because it depends on the TUI backend.
 	if err == nil {
-		// If the form somehow succeeded (e.g. interactive terminal), the input
-		// would be empty string. This is a valid outcome.
+		t.Log("resolveCredential succeeded on headless CI — form may have returned empty input")
 	}
 }
 
