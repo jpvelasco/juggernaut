@@ -50,6 +50,7 @@ func newBlob(b []byte) windows.DataBlob {
 	if len(b) == 0 {
 		return windows.DataBlob{Size: 0, Data: nil}
 	}
+	// #nosec G115 -- lengths of credential blobs are well under 4GB
 	return windows.DataBlob{Size: uint32(len(b)), Data: &b[0]}
 }
 
@@ -63,7 +64,7 @@ func copyBlob(b *windows.DataBlob) []byte {
 	// unsafe.Slice. This is the same idiom golang.org/x/sys/windows and the
 	// wincred dependency use — there is no unsafe-free way to consume the blob.
 	// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block,go_unsafe_rule-unsafe
-	copy(out, unsafe.Slice(b.Data, b.Size)) //nolint:gosec // required to read the CryptProtectData/CryptUnprotectData DATA_BLOB
+	copy(out, unsafe.Slice(b.Data, b.Size)) // #nosec G103 -- required to read the CryptProtectData/CryptUnprotectData DATA_BLOB
 	return out
 }
 
@@ -73,6 +74,6 @@ func freeBlob(b *windows.DataBlob) {
 		// LocalFree needs the buffer address as a Handle; the only way to obtain
 		// it from the *byte DPAPI returned is unsafe.Pointer. Standard Win32 idiom.
 		// nosemgrep: go.lang.security.audit.unsafe.use-of-unsafe-block,go_unsafe_rule-unsafe
-		_, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(b.Data))) //nolint:gosec // required to free the DPAPI-allocated DATA_BLOB
+		_, _ = windows.LocalFree(windows.Handle(unsafe.Pointer(b.Data))) // #nosec G103 -- required to free the DPAPI-allocated DATA_BLOB
 	}
 }

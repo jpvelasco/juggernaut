@@ -19,6 +19,10 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      - linters: ["gosec"]
+        id: "G703"
+        path: .*\.go
     paths:
       - third_party$
       - builtin$

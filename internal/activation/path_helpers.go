@@ -58,9 +58,3 @@ func validateAndCanonicalizePath(p, baseDir string) string {
 	}
 	return p
 }
-
-// isPathUnderBase checks if a path is under the given base directory.
-func isPathUnderBase(path, base string) bool {
-	rel, err := filepath.Rel(base, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}

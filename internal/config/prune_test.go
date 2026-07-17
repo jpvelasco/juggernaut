@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,5 +94,5 @@ func TestPruneBackups_KeepsNewest(t *testing.T) {
 }
 
 func runeFor(i int) string {
-	return string(rune('0' + i))
+	return fmt.Sprintf("%d", i)
 }

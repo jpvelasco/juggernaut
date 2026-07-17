@@ -15,30 +15,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
-// applyTestEnv creates a fresh test environment with a temp home directory,
-// HOME/USERPROFILE set, and a mock PowerShell runner (on Windows). Call it at
-// the start of any apply test that exercises ExecuteArgs.
-//
-// Returns the temp home path. The caller does not need explicit cleanup —
-// t.TempDir() and t.Setenv are handled automatically.
-func applyTestEnv(t *testing.T) string {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
-	return home
-}
-
-// applyTestEnvWithKeychain is like applyTestEnv but also sets up an isolated
-// keychain service. Use this for tests that store credentials (non-Claude CLIs,
-// --bedrock-key, etc.). Skips the test if the keychain backend is unavailable.
-func applyTestEnvWithKeychain(t *testing.T) (home string, store *keychain.Store) {
-	t.Helper()
-	home = applyTestEnv(t)
-	store = setupIsolatedKeychain(t)
-	return home, store
-}
+// readSettingsJSON reads the user-scope settings.json from the given home
 
 // readSettingsJSON reads the user-scope settings.json from the given home
 // directory, failing the test if it cannot be read.
@@ -178,7 +155,7 @@ func withStdin(t *testing.T, input string, fn func()) {
 	if _, err := w.WriteString(input); err != nil {
 		t.Fatalf("writing stdin: %v", err)
 	}
-	w.Close()
+	_ = w.Close() // best-effort; test validity depends on reader side
 
 	orig := os.Stdin
 	os.Stdin = r

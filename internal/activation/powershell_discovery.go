@@ -231,9 +231,7 @@ func parseDiscoveryOutput(edition string, output []byte) psDiscoveryResult {
 	// Trim BOM and whitespace, handle both LF and CRLF
 	s := strings.TrimSpace(string(output))
 	// Strip UTF-8 BOM if present
-	if strings.HasPrefix(s, "\xef\xbb\xbf") {
-		s = s[3:]
-	}
+	s = strings.TrimPrefix(s, "\xef\xbb\xbf")
 
 	var paths psProfilePaths
 	if err := json.Unmarshal([]byte(s), &paths); err != nil {
