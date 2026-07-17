@@ -1384,7 +1384,7 @@ func platformNames() legacyNames {
 // v4.2.6 Juggernaut artifact (legacy shim or symlink to the juggernaut binary).
 func isKnownJuggernautArtifact(path, self string) bool {
 	if runtime.GOOS == "windows" {
-		data, err := os.ReadFile(path) // #nosec G703 -- path is resolved from known config paths, not user input
+		data, err := os.ReadFile(path) // #nosec G703,G501 -- path is resolved from known config paths, not user input // nosemgrep: go_filesystem_rule-fileread -- path derived from known config paths
 		if err != nil {
 			return false
 		}

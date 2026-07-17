@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gofrs/flock"
@@ -169,6 +170,11 @@ func TestRotateBackup_NoExistingBackups(t *testing.T) {
 	}
 
 	// The backup should contain the previous file content.
+	// Verify the backup exists under our temp dir, then read it.
+	if !strings.HasPrefix(matches[0], dir) {
+		t.Fatalf("backup path %s not under temp dir %s", matches[0], dir)
+	}
+	// nosemgrep: go_filesystem_rule-fileread -- test-only; glob result is within t.TempDir()
 	data, err := os.ReadFile(matches[0])
 	if err != nil {
 		t.Fatalf("Read backup: %v", err)

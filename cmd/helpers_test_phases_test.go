@@ -695,7 +695,7 @@ func TestReportLegacyRecovery_WithActions(t *testing.T) {
 	// prints them.
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Write a shim file matching the v4.2.6 launcher artifact pattern.
@@ -1044,5 +1044,175 @@ func TestFindBedrockConfigFile_DefaultFallback(t *testing.T) {
 	// Since the test binary might be in a dir that has it, accept any non-empty result.
 	if path == "" {
 		t.Fatal("expected non-empty path from findBedrockConfigFile")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// toMap / fromMap
+// ---------------------------------------------------------------------------
+
+func TestToMap_StructToMap(t *testing.T) {
+	type Block struct {
+		ManagedBy string `json:"managedBy"`
+		Version   string `json:"version"`
+	}
+	b := Block{ManagedBy: "juggernaut", Version: "5.4.0"}
+	m, err := toMap(b)
+	if err != nil {
+		t.Fatalf("toMap: %v", err)
+	}
+	if m["managedBy"] != "juggernaut" {
+		t.Errorf("managedBy = %v, want juggernaut", m["managedBy"])
+	}
+	if m["version"] != "5.4.0" {
+		t.Errorf("version = %v, want 5.4.0", m["version"])
+	}
+}
+
+func TestToMap_NilInput(t *testing.T) {
+	m, err := toMap(nil)
+	if err != nil {
+		t.Fatalf("toMap(nil): %v", err)
+	}
+	if m != nil {
+		t.Errorf("toMap(nil) = %v, want nil", m)
+	}
+}
+
+func TestFromMap_MapToStruct(t *testing.T) {
+	type Block struct {
+		ManagedBy string `json:"managedBy"`
+		Version   string `json:"version"`
+	}
+	m := map[string]any{"managedBy": "juggernaut", "version": "5.4.0"}
+	var b Block
+	if err := fromMap(m, &b); err != nil {
+		t.Fatalf("fromMap: %v", err)
+	}
+	if b.ManagedBy != "juggernaut" {
+		t.Errorf("ManagedBy = %v, want juggernaut", b.ManagedBy)
+	}
+	if b.Version != "5.4.0" {
+		t.Errorf("Version = %v, want 5.4.0", b.Version)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// homeDir
+// ---------------------------------------------------------------------------
+
+func TestHomeDir_HOMESet(t *testing.T) {
+	t.Setenv("HOME", "/fake/home")
+	h, err := homeDir()
+	if err != nil {
+		t.Fatalf("homeDir: %v", err)
+	}
+	if h != "/fake/home" {
+		t.Errorf("homeDir = %v, want /fake/home", h)
+	}
+}
+
+func TestHomeDir_USERPROFILESet(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "C:\\Users\\test")
+	h, err := homeDir()
+	if err != nil {
+		t.Fatalf("homeDir: %v", err)
+	}
+	if h != "C:\\Users\\test" {
+		t.Errorf("homeDir = %v, want C:\\Users\\test", h)
+	}
+}
+
+func TestHomeDir_FALLBACK(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	// os.UserHomeDir will return the real home on most systems.
+	// On Windows with USERPROFILE unset, it may fail — that's expected.
+	h, err := homeDir()
+	if err != nil {
+		t.Skipf("homeDir fallback not available on this platform: %v", err)
+	}
+	if h == "" {
+		t.Error("homeDir returned empty string")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// fileExists
+// ---------------------------------------------------------------------------
+
+func TestFileExists_Existing(t *testing.T) {
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "test.txt")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if !fileExists(path) {
+		t.Error("fileExists should return true for existing file")
+	}
+}
+
+func TestFileExists_NotExisting(t *testing.T) {
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "nope.txt")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	if fileExists(path) {
+		t.Error("fileExists should return false for non-existing file")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// installActivation
+// ---------------------------------------------------------------------------
+
+func TestInstallActivation_AlreadyUpToDate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Skip("claude provider not registered")
+	}
+	out := captureStdout(t, func() {
+		installActivation(home, prov)
+	})
+	// With mock, the result is either "up to date" or "updated" depending on
+	// whether the profile already has the activation block.
+	if !strings.Contains(out, "activation") {
+		t.Errorf("expected activation message, got: %s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// warnMantleTradeoffs
+// ---------------------------------------------------------------------------
+
+func TestWarnMantleTradeoffs_BlockNotMantle(t *testing.T) {
+	block := &schema.Block{}
+	out := captureStdout(t, func() {
+		warnMantleTradeoffs(block)
+	})
+	if strings.Contains(out, "Mantle") {
+		t.Errorf("expected no output when Mantle is off, got: %s", out)
+	}
+}
+
+func TestWarnMantleTradeoffs_BlockMantle(t *testing.T) {
+	block := &schema.Block{Meta: schema.Meta{UseMantle: true}}
+	out := captureStdout(t, func() {
+		warnMantleTradeoffs(block)
+	})
+	if !strings.Contains(out, "Mantle") {
+		t.Errorf("expected Mantle warning, got: %s", out)
+	}
+	if !strings.Contains(out, "prompt caching") {
+		t.Errorf("expected prompt caching mention, got: %s", out)
 	}
 }

@@ -64,7 +64,7 @@ func TestWrite_RenameFailure(t *testing.T) {
 		t.Fatalf("JoinUnder: %v", err)
 	}
 	_ = os.MkdirAll(readonlyDir, 0o555)
-	defer func() { _ = os.Chmod(readonlyDir, 0o755) }()
+	defer func() { _ = os.Chmod(readonlyDir, 0o700) }()
 
 	path, err := safepath.JoinUnder(readonlyDir, "settings.json")
 	if err != nil {
