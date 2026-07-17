@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1230,5 +1231,649 @@ func TestWarnMantleTradeoffs_BlockMantle(t *testing.T) {
 	}
 	if !strings.Contains(out, "prompt caching") {
 		t.Errorf("expected prompt caching mention, got: %s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// resolveApplyInputs
+// ---------------------------------------------------------------------------
+
+func TestResolveApplyInputs_MantleOnlyPinsBedrockAPIKey(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+
+	// Grok does NOT support CapNativeAuth — if --auth is omitted,
+	// resolveApplyInputs should auto-pin to bedrock-api-key.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("grok")
+	if err != nil {
+		t.Fatalf("get grok provider: %v", err)
+	}
+
+	authMode, region, _, err := resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	if authMode != authmode.BedrockAPIKey {
+		t.Errorf("authMode = %q, want %q (mantle-only CLI should auto-pin to bedrock-api-key)", authMode, authmode.BedrockAPIKey)
+	}
+	// Region should default from config.
+	if region != bCfg.Defaults.Region {
+		t.Errorf("region = %q, want %q", region, bCfg.Defaults.Region)
+	}
+}
+
+func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// Pre-write a settings.json that Juggernaut owns (has juggernaut block).
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	ownedConfig := `{
+		"juggernaut": {
+			"auth": {"mode": "iam", "region": "us-west-2"},
+			"meta": {"managedBy": "juggernaut"}
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(ownedConfig), 0o600); err != nil {
+		t.Fatalf("write owned config: %v", err)
+	}
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get claude provider: %v", err)
+	}
+
+	// No --auth flag set — should preserve "iam" from existing block.
+	authMode, _, _, err := resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	if authMode != "iam" {
+		t.Errorf("authMode = %q, want 'iam' (preserved from existing config)", authMode)
+	}
+}
+
+func TestResolveApplyInputs_OwnedConfigPreservesPermissionMode(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// Pre-write a settings.json that Juggernaut owns with permission mode in meta.
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	ownedConfig := `{
+		"juggernaut": {
+			"auth": {"mode": "iam", "region": "us-west-2"},
+			"meta": {"managedBy": "juggernaut", "permissionMode": "acceptEdits"}
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(ownedConfig), 0o600); err != nil {
+		t.Fatalf("write owned config: %v", err)
+	}
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get claude provider: %v", err)
+	}
+
+	// No --mode flag set — should preserve "acceptEdits" from meta.
+	_, _, _, err = resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	if applyFlags.mode != "acceptEdits" {
+		t.Errorf("applyFlags.mode = %q, want 'acceptEdits' (preserved from existing meta)", applyFlags.mode)
+	}
+}
+
+func TestResolveApplyInputs_OwnedConfigPreservesNativePermissionMode(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// Pre-write an owned config where permissionMode is set only in the native
+	// permissions.defaultMode (not in meta) — simulating Claude Code's Shift+Tab.
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	ownedConfig := `{
+		"juggernaut": {
+			"auth": {"mode": "iam", "region": "us-west-2"},
+			"meta": {"managedBy": "juggernaut"}
+		},
+		"permissions": {"defaultMode": "plan"}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(ownedConfig), 0o600); err != nil {
+		t.Fatalf("write owned config: %v", err)
+	}
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get claude provider: %v", err)
+	}
+
+	_, _, _, err = resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	// resolveApplyInputs should adopt the native permissions.defaultMode.
+	if applyFlags.mode != "plan" {
+		t.Errorf("applyFlags.mode = %q, want 'plan' (adopted from native permissions.defaultMode)", applyFlags.mode)
+	}
+}
+
+func TestResolveApplyInputs_NonOwnedExplicitAuth(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+	applyFlags.auth = "iam"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	// No existing config file — non-owned, but --auth is explicitly set.
+	// resolveApplyInputs should return immediately with the explicit auth.
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get claude provider: %v", err)
+	}
+
+	authMode, region, _, err := resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	if authMode != "iam" {
+		t.Errorf("authMode = %q, want 'iam' (explicit --auth flag)", authMode)
+	}
+	if region != bCfg.Defaults.Region {
+		t.Errorf("region = %q, want %q", region, bCfg.Defaults.Region)
+	}
+}
+
+func TestResolveApplyInputs_DefaultRegionFromConfig(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+	applyFlags.auth = "iam"
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get claude provider: %v", err)
+	}
+
+	_, region, _, err := resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	if region != bCfg.Defaults.Region {
+		t.Errorf("region = %q, want %q (default from config)", region, bCfg.Defaults.Region)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// installActivation — updated profiles path
+// ---------------------------------------------------------------------------
+
+func TestInstallActivation_UpdatedProfiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Skip("claude provider not registered")
+	}
+
+	// On non-Windows, activation.InstallWith writes to POSIX targets.
+	// Create a .bashrc so shouldWritePOSIXTarget returns true.
+	bashrcPath := filepath.Join(home, ".bashrc")
+	if err := os.WriteFile(bashrcPath, []byte("# existing content\n"), 0o644); err != nil {
+		t.Fatalf("write .bashrc: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		installActivation(home, prov)
+	})
+	// The output should contain either "updated" or "up to date" — both are
+	// valid depending on whether the profile already had the block.
+	if !strings.Contains(out, "activation") {
+		t.Errorf("expected activation message, got: %s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// reportLegacyRecovery — error path
+// ---------------------------------------------------------------------------
+
+func TestReportLegacyRecovery_ErrorPath(t *testing.T) {
+	// Create a bin dir that exists but has no read permissions.
+	home := t.TempDir()
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Make the directory unreadable so RecoverLegacyArtifacts errors.
+	if err := os.Chmod(binDir, 0o000); err != nil {
+		t.Skipf("cannot chmod (not root): %v", err)
+	}
+	defer func() { _ = os.Chmod(binDir, 0o700) }() // restore for cleanup
+
+	// reportLegacyRecovery prints to stderr on error; stdout should be empty.
+	out := captureStdout(t, func() {
+		reportLegacyRecovery(home)
+	})
+	// Stdout should be empty (warnings go to stderr).
+	if out != "" {
+		t.Errorf("expected no stdout output on error, got: %q", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// commitApply — warnings output path
+// ---------------------------------------------------------------------------
+
+func TestCommitApply_WarningsOutput(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, _ := provider.Get("claude")
+
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Scope:         "user",
+		Version:       "5.4.0",
+		Effort:        "high",
+		AuthValidated: true,
+	}
+	block, err := schema.Build(bCfg, opts)
+	if err != nil {
+		t.Fatalf("schema.Build: %v", err)
+	}
+
+	provOpts := provider.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Scope:         "user",
+		Version:       "5.4.0",
+		Effort:        "high",
+		AuthValidated: true,
+	}
+
+	out := captureStdout(t, func() {
+		err = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
+	})
+	if err != nil {
+		t.Fatalf("commitApply: %v", err)
+	}
+	if !strings.Contains(out, "Configuration written successfully.") {
+		t.Fatalf("expected success message, got:\n%s", out)
+	}
+	// schema.Build always emits the Fable data-retention warning (Fable 5 is
+	// pinned by default). The warning should appear in stdout.
+	if !strings.Contains(out, "⚠") {
+		t.Errorf("expected warning output, got:\n%s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// printApplyDryRun — Claude legacy recovery message
+// ---------------------------------------------------------------------------
+
+func TestPrintApplyDryRun_ClaudeLegacyRecovery(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, _ := provider.Get("claude")
+
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Scope:         "user",
+		Version:       "5.4.0",
+		Effort:        "high",
+		AuthValidated: true,
+	}
+	block, err := schema.Build(bCfg, opts)
+	if err != nil {
+		t.Fatalf("schema.Build: %v", err)
+	}
+
+	provOpts := provider.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Scope:         "user",
+		Version:       "5.4.0",
+		Effort:        "high",
+		AuthValidated: true,
+	}
+
+	out := captureStdout(t, func() {
+		err = printApplyDryRun(home, block, prov, bCfg, provOpts)
+	})
+	if err != nil {
+		t.Fatalf("printApplyDryRun: %v", err)
+	}
+	// Claude provider should show the legacy recovery message.
+	if !strings.Contains(out, "Would recover known v4.2.6 launcher artifacts") {
+		t.Fatalf("expected legacy recovery message for claude, got:\n%s", out)
+	}
+}
+
+func TestPrintApplyDryRun_NonClaudeNoLegacyRecovery(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, _ := provider.Get("grok")
+
+	provOpts := provider.Options{
+		AuthMode: authmode.BedrockAPIKey,
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
+	}
+
+	_, err = prov.BuildConfig(bCfg, provOpts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+
+	// Build a minimal block for dry run (grok doesn't use schema.Block).
+	block := &schema.Block{}
+
+	out := captureStdout(t, func() {
+		err = printApplyDryRun(home, block, prov, bCfg, provOpts)
+	})
+	if err != nil {
+		t.Fatalf("printApplyDryRun: %v", err)
+	}
+	// Non-Claude providers must NOT show the legacy recovery message.
+	if strings.Contains(out, "v4.2.6") {
+		t.Errorf("non-claude provider should not show v4.2.6 legacy recovery message, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Would write juggernaut config to") {
+		t.Fatalf("expected 'Would write' message, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Would install Juggernaut Grok activation") {
+		t.Fatalf("expected Grok activation message, got:\n%s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test helper functions from apply_test_helpers.go
+// ---------------------------------------------------------------------------
+
+func TestCaptureStdout_Basic(t *testing.T) {
+	out := captureStdout(t, func() {
+		fmt.Fprint(os.Stdout, "hello world")
+	})
+	if out != "hello world" {
+		t.Errorf("captureStdout = %q, want 'hello world'", out)
+	}
+}
+
+func TestCaptureStdout_MultipleWrites(t *testing.T) {
+	out := captureStdout(t, func() {
+		fmt.Fprint(os.Stdout, "line1\n")
+		fmt.Fprint(os.Stdout, "line2\n")
+	})
+	if out != "line1\nline2\n" {
+		t.Errorf("captureStdout = %q, want 'line1\\nline2\\n'", out)
+	}
+}
+
+func TestCaptureStdout_Empty(t *testing.T) {
+	out := captureStdout(t, func() {
+		// nothing
+	})
+	if out != "" {
+		t.Errorf("captureStdout = %q, want empty", out)
+	}
+}
+
+func TestWithStdin_Basic(t *testing.T) {
+	var readBuf string
+	withStdin(t, "test input\n", func() {
+		buf := make([]byte, 1024)
+		n, err := os.Stdin.Read(buf)
+		if err != nil && err.Error() != "EOF" {
+			t.Fatalf("unexpected read error: %v", err)
+		}
+		readBuf = string(buf[:n])
+	})
+	if readBuf != "test input\n" {
+		t.Errorf("withStdin read = %q, want 'test input\\n'", readBuf)
+	}
+}
+
+func TestWithStdin_Empty(t *testing.T) {
+	var readBuf string
+	withStdin(t, "", func() {
+		buf := make([]byte, 1024)
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			// Empty pipe returns EOF immediately.
+			readBuf = ""
+			return
+		}
+		readBuf = string(buf[:n])
+	})
+	if readBuf != "" {
+		t.Errorf("withStdin read = %q, want empty", readBuf)
+	}
+}
+
+func TestReadJuggernautPermissionMode(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	configData := `{
+		"juggernaut": {
+			"auth": {"mode": "iam"},
+			"meta": {"managedBy": "juggernaut", "permissionMode": "auto"}
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(configData), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	mode := readJuggernautPermissionMode(t, home)
+	if mode != "auto" {
+		t.Errorf("permissionMode = %q, want 'auto'", mode)
+	}
+}
+
+func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	configData := `{
+		"juggernaut": {
+			"auth": {"mode": "iam"},
+			"meta": {"managedBy": "juggernaut"}
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(configData), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	mode := readJuggernautPermissionMode(t, home)
+	if mode != "" {
+		t.Errorf("permissionMode = %q, want empty (not in meta)", mode)
+	}
+}
+
+func TestReadNativeEnvValue(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	configData := `{
+		"env": {
+			"AWS_REGION": "us-east-1",
+			"CLAUDE_CODE_EFFORT_LEVEL": "high"
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(configData), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	val := readNativeEnvValue(t, home, "AWS_REGION")
+	if val != "us-east-1" {
+		t.Errorf("env[AWS_REGION] = %q, want 'us-east-1'", val)
+	}
+}
+
+func TestReadNativeEnvValue_Missing(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	configData := `{"env": {"AWS_REGION": "us-east-1"}}`
+	if err := os.WriteFile(settingsPath, []byte(configData), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+	val := readNativeEnvValue(t, home, "NONEXISTENT_KEY")
+	if val != "" {
+		t.Errorf("env[NONEXISTENT_KEY] = %q, want empty", val)
+	}
+}
+
+func TestSetNativeDefaultMode(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	configData := `{
+		"juggernaut": {
+			"auth": {"mode": "iam"},
+			"meta": {"managedBy": "juggernaut"}
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(configData), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	setNativeDefaultMode(t, home, "bypassPermissions")
+
+	// Verify it was written.
+	mode := readNativeDefaultMode(t, home)
+	if mode != "bypassPermissions" {
+		t.Errorf("permissions.defaultMode = %q, want 'bypassPermissions'", mode)
+	}
+	// The juggernaut block should still be intact.
+	authMode := readJuggernautAuthMode(t, home)
+	if authMode != "iam" {
+		t.Errorf("auth mode changed unexpectedly to %q", authMode)
+	}
+}
+
+func TestSetNativeDefaultMode_NoExistingPermissions(t *testing.T) {
+	home := t.TempDir()
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Config with no permissions block at all.
+	configData := `{"juggernaut": {"auth": {"mode": "iam"}, "meta": {"managedBy": "juggernaut"}}}`
+	if err := os.WriteFile(settingsPath, []byte(configData), 0o600); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	setNativeDefaultMode(t, home, "plan")
+
+	mode := readNativeDefaultMode(t, home)
+	if mode != "plan" {
+		t.Errorf("permissions.defaultMode = %q, want 'plan'", mode)
 	}
 }
