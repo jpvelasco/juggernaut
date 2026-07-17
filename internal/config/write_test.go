@@ -6,11 +6,16 @@ import (
 	"testing"
 
 	"github.com/gofrs/flock"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 func TestWrite_ExistingFileCreatesBackup(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	m := NewManager(path)
 
 	// First write — no backup created (file doesn't exist yet).
@@ -30,12 +35,15 @@ func TestWrite_ExistingFileCreatesBackup(t *testing.T) {
 
 func TestWrite_LockContention(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	lockPath := path + ".lock"
 	fl := flock.New(lockPath)
 
 	// Acquire the lock externally to simulate contention.
-	err := fl.Lock()
+	err = fl.Lock()
 	if err != nil {
 		t.Fatalf("failed to acquire test lock: %v", err)
 	}
@@ -51,13 +59,19 @@ func TestWrite_LockContention(t *testing.T) {
 func TestWrite_RenameFailure(t *testing.T) {
 	// On Windows admin, read-only dirs may still be writable. Skip gracefully.
 	dir := t.TempDir()
-	readonlyDir := filepath.Join(dir, "readonly")
+	readonlyDir, err := safepath.JoinUnder(dir, "readonly")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	_ = os.MkdirAll(readonlyDir, 0o555)
 	defer func() { _ = os.Chmod(readonlyDir, 0o755) }()
 
-	path := filepath.Join(readonlyDir, "settings.json")
+	path, err := safepath.JoinUnder(readonlyDir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	m := NewManager(path)
-	err := m.Write(map[string]any{"k": "v"})
+	err = m.Write(map[string]any{"k": "v"})
 	if err == nil {
 		// If write succeeded, the directory was writable (common on Windows as admin).
 		// The important thing is no crash — just skip the assertion.
@@ -67,11 +81,14 @@ func TestWrite_RenameFailure(t *testing.T) {
 
 func TestWrite_BOMStripping(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 
 	// Write a file with BOM prefix manually.
 	bomData := []byte{0xEF, 0xBB, 0xBF, '{', '}', '\n'}
-	_ = os.WriteFile(path, bomData, 0o600)
+	_ = safepath.WriteFile(dir, path, bomData)
 
 	// Read should strip BOM.
 	m := NewManager(path)
@@ -121,12 +138,17 @@ func TestStripUTF8BOM(t *testing.T) {
 
 func TestCopyFile(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "src.txt")
-	dst := filepath.Join(dir, "dst.txt")
-
-	_ = os.WriteFile(src, []byte("hello"), 0o600)
-	err := copyFile(src, dst)
+	src, err := safepath.JoinUnder(dir, "src.txt")
 	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	dst, err := safepath.JoinUnder(dir, "dst.txt")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+
+	_ = safepath.WriteFile(dir, src, []byte("hello"))
+	if err := copyFile(src, dst); err != nil {
 		t.Fatalf("copyFile: %v", err)
 	}
 	data, _ := os.ReadFile(dst)
@@ -137,7 +159,9 @@ func TestCopyFile(t *testing.T) {
 
 func TestCopyFile_MissingSource(t *testing.T) {
 	dir := t.TempDir()
-	err := copyFile(filepath.Join(dir, "missing.txt"), filepath.Join(dir, "dst.txt"))
+	src, _ := safepath.JoinUnder(dir, "missing.txt")
+	dst, _ := safepath.JoinUnder(dir, "dst.txt")
+	err := copyFile(src, dst)
 	if err == nil {
 		t.Error("expected error for missing source")
 	}

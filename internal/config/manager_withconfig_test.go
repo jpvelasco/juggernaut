@@ -2,9 +2,10 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // withConfig is the unexported read-modify-write core used by MergeConfigPlanDeep
@@ -16,11 +17,15 @@ import (
 // withConfig reads an empty config, the mutation adds keys, and Write persists
 // them. The keys are readable back on a subsequent Read.
 func TestWithConfig_MergeConfigPlanDeep_WritesAndPersists(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "settings.json")
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	m := NewManager(path)
 
 	// No file exists yet — withConfig.Read() returns empty map.
-	err := m.MergeConfigPlanDeep(map[string]any{
+	err = m.MergeConfigPlanDeep(map[string]any{
 		"model": "sonnet",
 		"env":   map[string]any{"AWS_REGION": "us-east-1"},
 	}, nil)
@@ -45,7 +50,11 @@ func TestWithConfig_MergeConfigPlanDeep_WritesAndPersists(t *testing.T) {
 // path: withConfig reads existing config, the mutation deletes managed keys,
 // and Write persists the reduced config.
 func TestWithConfig_RemoveManagedKeysDeep_RemovesAndPersists(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "settings.json")
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	m := NewManager(path)
 
 	// Seed with managed keys plus a user key.
@@ -58,7 +67,7 @@ func TestWithConfig_RemoveManagedKeysDeep_RemovesAndPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := m.RemoveManagedKeysDeep([]string{"model", "env"}, nil)
+	err = m.RemoveManagedKeysDeep([]string{"model", "env"}, nil)
 	if err != nil {
 		t.Fatalf("RemoveManagedKeysDeep: %v", err)
 	}
@@ -86,7 +95,11 @@ func TestWithConfig_RemoveManagedKeysDeep_RemovesAndPersists(t *testing.T) {
 // written — the original config is preserved on disk. This exercises the error
 // propagation path of withConfig (line 68-69 of manager.go).
 func TestWithConfig_MutationError_PreservesExistingConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "config.toml")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	m := NewManagerWithFormat(path, tomlFormat{})
 
 	// Seed with a valid table under "model".
@@ -152,7 +165,11 @@ func TestWithConfig_MutationError_PreservesExistingConfig(t *testing.T) {
 // same rollback behavior through RemoveManagedKeysDeep: when a deep-merge key
 // holds a non-table value, removal errors and the file is left untouched.
 func TestWithConfig_MutationError_RemoveDeep_PreservesExistingConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "config.toml")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 	m := NewManagerWithFormat(path, tomlFormat{})
 
 	// Write a config where "model" is a scalar instead of a table.
@@ -166,7 +183,7 @@ func TestWithConfig_MutationError_RemoveDeep_PreservesExistingConfig(t *testing.
 
 	// RemoveManagedKeysDeep with model as a deep key — removal of sub-keys from
 	// a scalar should error and leave the file untouched.
-	err := m.RemoveManagedKeysDeep([]string{"model"}, map[string][]string{
+	err = m.RemoveManagedKeysDeep([]string{"model"}, map[string][]string{
 		"model": {"bedrock-grok"},
 	})
 	if err == nil {
@@ -196,15 +213,18 @@ func TestWithConfig_MutationError_RemoveDeep_PreservesExistingConfig(t *testing.
 // fails (e.g., invalid JSON), the error propagates without writing anything.
 func TestWithConfig_ReadError_Propagates(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 
 	// Write invalid JSON directly to disk.
-	if err := os.WriteFile(path, []byte("{invalid json}"), 0o600); err != nil {
+	if err := safepath.WriteFile(dir, path, []byte("{invalid json}")); err != nil {
 		t.Fatalf("writing invalid file: %v", err)
 	}
 
 	m := NewManager(path)
-	err := m.MergeConfigPlanDeep(map[string]any{"model": "sonnet"}, nil)
+	err = m.MergeConfigPlanDeep(map[string]any{"model": "sonnet"}, nil)
 	if err == nil {
 		t.Fatal("expected parse error, got nil")
 	}
@@ -224,7 +244,10 @@ func TestWithConfig_ReadError_Propagates(t *testing.T) {
 // missing files, the mutation adds keys, and Write() creates the file.
 func TestWithConfig_CreateFileFromMissing(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 
 	// Confirm the file does not exist.
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -232,7 +255,7 @@ func TestWithConfig_CreateFileFromMissing(t *testing.T) {
 	}
 
 	m := NewManager(path)
-	err := m.MergeConfigPlanDeep(map[string]any{
+	err = m.MergeConfigPlanDeep(map[string]any{
 		"juggernaut": map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}},
 		"model":      "sonnet",
 		"env":        map[string]any{"AWS_REGION": "us-west-2"},
@@ -267,10 +290,13 @@ func TestWithConfig_CreateFileFromMissing(t *testing.T) {
 // through TOML format as well (Codex/Grok use TOML).
 func TestWithConfig_CreateFileFromMissing_TOML(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
+	path, err := safepath.JoinUnder(dir, "config.toml")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
 
 	m := NewManagerWithFormat(path, tomlFormat{})
-	err := m.MergeConfigPlanDeep(map[string]any{
+	err = m.MergeConfigPlanDeep(map[string]any{
 		"model_providers": map[string]any{
 			"amazon-bedrock": map[string]any{
 				"name": "Amazon Bedrock",
