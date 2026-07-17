@@ -1,8 +1,11 @@
 package activation
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // TestBlockFor_ClaudeByteIdentical: the per-CLI block generator must produce
@@ -63,7 +66,41 @@ func TestBlockFor_CodexOtherShells(t *testing.T) {
 	if !strings.Contains(ps, "Get-Command juggernaut") || !strings.Contains(ps, "CommandType Application") {
 		t.Errorf("powershell: expected resilient juggernaut check, got:\n%s", ps)
 	}
-	if !strings.Contains(ps, "Get-Command codex") || !strings.Contains(ps, "$app.Source") {
-		t.Errorf("powershell: expected Application fallthrough for codex, got:\n%s", ps)
+	if !strings.Contains(ps, "Get-Command codex") || !strings.Contains(ps, "$app.Path") {
+		t.Errorf("powershell: expected Application Path fallthrough for codex, got:\n%s", ps)
+	}
+	if strings.Contains(ps, "$app.Source") {
+		t.Errorf("powershell: must not use $app.Source for Application fallback:\n%s", ps)
+	}
+}
+
+// TestInstallTargetFor_RejectsShellInjection rejects CLI names that would be
+// interpolated into generated shell profiles (function names / command tokens).
+func TestInstallTargetFor_RejectsShellInjection(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".bashrc")
+	if err := safepath.WriteFile(home, path, []byte("# seed\n")); err != nil {
+		t.Fatal(err)
+	}
+	evil := []CLISpec{
+		{Name: "claude; rm -rf /", Begin: "# B", End: "# E"},
+		{Name: "x$(id)", Begin: "# B", End: "# E"},
+		{Name: "x`id`", Begin: "# B", End: "# E"},
+		{Name: "../evil", Begin: "# B", End: "# E"},
+		{Name: "ok", Begin: "# B\nevil", End: "# E"},
+		{Name: "ok", Begin: "# B", End: "# B"}, // identical markers
+	}
+	for _, spec := range evil {
+		_, err := InstallTargetFor(Target{Path: path, Shell: ShellPOSIX}, spec)
+		if err == nil {
+			t.Errorf("expected rejection for name=%q begin=%q end=%q", spec.Name, spec.Begin, spec.End)
+		}
+	}
+	// Valid names must still install.
+	ok, err := InstallTargetFor(Target{Path: path, Shell: ShellPOSIX}, CLISpec{
+		Name: "claude", Begin: BeginMarker, End: EndMarker,
+	})
+	if err != nil || !ok {
+		t.Fatalf("valid install failed: changed=%v err=%v", ok, err)
 	}
 }

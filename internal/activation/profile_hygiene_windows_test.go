@@ -3,7 +3,6 @@
 package activation
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,7 +19,7 @@ func TestInstallPowerShell_StripsStaleCurrentHostBlock(t *testing.T) {
 	home := t.TempDir()
 	allHosts := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
 	currentHost := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	if err := os.MkdirAll(filepath.Dir(allHosts), 0o755); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,10 +89,10 @@ func TestInstallPowerShell_StripsMigrationOnlyStaleHost(t *testing.T) {
 	home := t.TempDir()
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "profile.ps1")
 	historicalHost := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	if err := os.MkdirAll(filepath.Dir(allHosts), 0o755); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(historicalHost), 0o755); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(historicalHost)); err != nil {
 		t.Fatal(err)
 	}
 

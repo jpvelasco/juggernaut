@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -17,6 +18,11 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
+
+// shellCLINameRE is the only identifier shape we embed into generated shell
+// profiles (function names, `command X`, Get-Command X). Anything else is
+// rejected so a bad CLISpec.Name cannot become shell injection.
+var shellCLINameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
 // bedrockAuthEnvName is the environment variable name (not a secret) that the
 // launcher injects the Bedrock bearer token into by default.
@@ -194,6 +200,41 @@ func Block(shell Shell) string {
 	return blockFor(shell, "claude", BeginMarker, EndMarker)
 }
 
+// validateCLISpec rejects names/markers that must not be interpolated into
+// shell profiles. CLI names become function identifiers and command tokens;
+// markers must stay single-line so block matching cannot be confused.
+func validateCLISpec(spec CLISpec) error {
+	if err := validateCLIName(spec.Name); err != nil {
+		return err
+	}
+	return validateMarkers(spec.Begin, spec.End)
+}
+
+func validateCLIName(cli string) error {
+	if !shellCLINameRE.MatchString(cli) {
+		return fmt.Errorf("invalid CLI name %q for shell activation (must match %s)", cli, shellCLINameRE.String())
+	}
+	return nil
+}
+
+func validateMarkers(begin, end string) error {
+	if begin == "" || end == "" {
+		return errors.New("activation markers must be non-empty")
+	}
+	if begin == end {
+		return errors.New("activation begin and end markers must differ")
+	}
+	for _, m := range []string{begin, end} {
+		if strings.ContainsAny(m, "\n\r\x00") {
+			return errors.New("activation markers must be single-line")
+		}
+		if len(m) > 200 {
+			return errors.New("activation markers are too long")
+		}
+	}
+	return nil
+}
+
 // blockFor generates a shell activation block that defines a function named
 // `cli`. Claude uses the historical `juggernaut launch` command; other CLIs
 // use `launch-cli <cli>` so a pre-multi-CLI binary fails fast instead of
@@ -202,7 +243,19 @@ func Block(shell Shell) string {
 // Every wrapper falls through to the real CLI binary when `juggernaut` is not
 // on PATH. That way an incomplete uninstall (or a PATH without juggernaut)
 // does not break `claude`/`codex`/`grok` with "term not recognized".
+//
+// Callers must pass a name that satisfies validateCLIName. InstallTargetFor
+// enforces this; tests use fixed provider names (claude/codex/…).
 func blockFor(shell Shell, cli, begin, end string) string {
+	// Defense in depth: never interpolate an unvalidated identifier into a
+	// profile that will be eval'd by the user's shell.
+	if err := validateCLIName(cli); err != nil {
+		panic(err)
+	}
+	if err := validateMarkers(begin, end); err != nil {
+		panic(err)
+	}
+
 	launchCommand := "juggernaut launch"
 	if cli != "claude" {
 		launchCommand = "juggernaut launch-cli " + cli
@@ -221,6 +274,8 @@ func blockFor(shell Shell, cli, begin, end string) string {
 			end,
 		}, "\n")
 	case ShellPowerShell:
+		// ApplicationInfo.Path is the executable path. Source is module/command
+		// metadata and is not reliable for Application fallbacks — use Path.
 		return strings.Join([]string{
 			begin,
 			"function global:" + cli + " {",
@@ -228,7 +283,7 @@ func blockFor(shell Shell, cli, begin, end string) string {
 			"    " + launchCommand + " -- @args",
 			"  } else {",
 			"    $app = Get-Command " + cli + " -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1",
-			"    if ($null -ne $app) { & $app.Source @args } else {",
+			"    if ($null -ne $app -and -not [string]::IsNullOrWhiteSpace($app.Path)) { & $app.Path @args } else {",
 			"      throw \"juggernaut is not installed and no '" + cli + "' executable was found on PATH\"",
 			"    }",
 			"  }",
@@ -336,6 +391,9 @@ func InstallTarget(target Target) (bool, error) {
 // leaving other CLIs' blocks (matched by their own markers) untouched so they
 // coexist.
 func InstallTargetFor(target Target, spec CLISpec) (bool, error) {
+	if err := validateCLISpec(spec); err != nil {
+		return false, err
+	}
 	base := filepath.Dir(target.Path)
 	data, err := safepath.ReadFile(base, target.Path)
 	if os.IsNotExist(err) {

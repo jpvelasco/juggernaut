@@ -161,8 +161,12 @@ func TestBlocksFallThroughWhenJuggernautMissing(t *testing.T) {
 	if !strings.Contains(ps, "CommandType Application") {
 		t.Fatalf("powershell block must resolve real Application binary:\n%s", ps)
 	}
-	if !strings.Contains(ps, "$app.Source") {
-		t.Fatalf("powershell block must invoke real binary via $app.Source:\n%s", ps)
+	// ApplicationInfo.Path is the executable; Source is not reliable for apps.
+	if !strings.Contains(ps, "$app.Path") {
+		t.Fatalf("powershell block must invoke real binary via $app.Path:\n%s", ps)
+	}
+	if strings.Contains(ps, "$app.Source") {
+		t.Fatalf("powershell block must not use $app.Source for Application fallback:\n%s", ps)
 	}
 	if !strings.Contains(ps, "throw ") {
 		t.Fatalf("powershell block must throw when neither juggernaut nor CLI exists:\n%s", ps)
@@ -209,7 +213,7 @@ func TestShouldWritePOSIXTarget_NeverCreatesBareProfile(t *testing.T) {
 		t.Fatal("must not create a brand-new ~/.profile")
 	}
 	// Existing .profile is always eligible.
-	if err := os.WriteFile(profile.Path, []byte("# existing\n"), 0o644); err != nil {
+	if err := os.WriteFile(profile.Path, []byte("# existing\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if !shouldWritePOSIXTarget(profile) {
@@ -239,7 +243,7 @@ func TestInstallWith_DoesNotCreateUnusedShellProfiles(t *testing.T) {
 
 	// Seed only .bashrc so one POSIX target is eligible.
 	bashrc := filepath.Join(home, ".bashrc")
-	if err := os.WriteFile(bashrc, []byte("export FOO=1\n"), 0o644); err != nil {
+	if err := os.WriteFile(bashrc, []byte("export FOO=1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
