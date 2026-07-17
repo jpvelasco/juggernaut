@@ -155,6 +155,10 @@ func DefaultTargets(home string) []Target {
 	}
 }
 
+// statProfile is os.Stat by default; tests replace it to exercise non-NotExist
+// Stat failures (Windows maps many path errors to IsNotExist).
+var statProfile = os.Stat
+
 // shouldWritePOSIXTarget reports whether install should create/update a POSIX
 // or Fish profile. Existing files are always eligible (so re-apply stays
 // idempotent). Missing files are only created when the matching shell is on
@@ -166,7 +170,7 @@ func DefaultTargets(home string) []Target {
 // surfaces the real error instead of silently skipping a profile that may
 // still hold a dead wrapper.
 func shouldWritePOSIXTarget(target Target) bool {
-	_, err := os.Stat(target.Path)
+	_, err := statProfile(target.Path)
 	if err == nil {
 		return true
 	}

@@ -255,9 +255,6 @@ func parseDiscoveryOutput(edition string, output []byte) psDiscoveryResult {
 // to OneDrive. These are used for uninstall/doctor scanning and
 // legacy-block migration.
 func historicalPowerShellTargets() []string {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
 	docs, err := resolveDocumentsFolder()
 	if err != nil {
 		return nil
@@ -295,34 +292,27 @@ func historicalPowerShellTargetsScoped(home string) []string {
 		}
 		paths = append(paths, resolveHistoricalTargets(extra)...)
 	}
-
-	if runtime.GOOS != "windows" {
-		paths = append(paths,
-			filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1"),
-			filepath.Join(home, ".config", "powershell", "profile.ps1"),
-		)
-	}
 	return deduplicatePathsCI(paths)
 }
 
-// pathsEqualCI reports path equality, case-insensitive on Windows.
+// pathsEqualCI reports path equality (case-insensitive). This file is
+// Windows-only (//go:build windows), so EqualFold is always correct.
 func pathsEqualCI(a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
-	a, b = filepath.Clean(a), filepath.Clean(b)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(a, b)
-	}
-	return a == b
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }
 
-// resolveDocumentsFolder uses the Windows Known Folder API (FOLDERID_Documents)
-// to resolve the actual Documents path, which correctly handles OneDrive
-// redirection and other custom folder locations.
-var resolveDocumentsFolder = func() (string, error) {
+// defaultResolveDocumentsFolder uses the Windows Known Folder API
+// (FOLDERID_Documents) so OneDrive redirects and custom Documents locations
+// resolve correctly.
+func defaultResolveDocumentsFolder() (string, error) {
 	return windows.KnownFolderPath(windows.FOLDERID_Documents, windows.KF_FLAG_DEFAULT)
 }
+
+// resolveDocumentsFolder is the active Documents resolver (swappable in tests).
+var resolveDocumentsFolder = defaultResolveDocumentsFolder
 
 // SetResolveDocumentsFolderForTesting replaces the Documents folder resolver
 // (for tests only).
@@ -332,9 +322,7 @@ func SetResolveDocumentsFolderForTesting(fn func() (string, error)) {
 
 // ResetResolveDocumentsFolderForTesting restores the default resolver.
 func ResetResolveDocumentsFolderForTesting() {
-	resolveDocumentsFolder = func() (string, error) {
-		return windows.KnownFolderPath(windows.FOLDERID_Documents, windows.KF_FLAG_DEFAULT)
-	}
+	resolveDocumentsFolder = defaultResolveDocumentsFolder
 }
 
 // resolveHistoricalTargets builds the well-known PowerShell profile paths
