@@ -192,6 +192,7 @@ func TestIsKnownJuggernautArtifact_NonWindowsSymlink(t *testing.T) {
 	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target")
+	self := filepath.Join(dir, "self")
 	link := filepath.Join(dir, "link")
 	if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -199,8 +200,8 @@ func TestIsKnownJuggernautArtifact_NonWindowsSymlink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink not supported: %v", err)
 	}
-	// Link points to a different file — not a known artifact.
-	if isKnownJuggernautArtifact(link, target) {
+	// Link points to target, but self is a different file — not a known artifact.
+	if isKnownJuggernautArtifact(link, self) {
 		t.Error("should not match when symlink target differs from self")
 	}
 }
