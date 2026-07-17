@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -41,6 +42,9 @@ func TestFindBedrockConfigFile_ParentDirFallback(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResolveCredential_TUIPromptError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TUI form blocks on Windows without a real console")
+	}
 	defer resetFlags()
 	resetFlags()
 	applyFlags.preserveKey = false
