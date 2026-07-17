@@ -63,7 +63,7 @@ func TestWrite_RenameFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("JoinUnder: %v", err)
 	}
-	_ = os.MkdirAll(readonlyDir, 0o555)
+	_ = os.MkdirAll(readonlyDir, 0o555) //nolint:gosec // test-only — intentionally read-only dir to test write-failure path
 	defer func() { _ = os.Chmod(readonlyDir, 0o700) }()
 
 	path, err := safepath.JoinUnder(readonlyDir, "settings.json")
@@ -102,7 +102,7 @@ func TestWrite_BOMStripping(t *testing.T) {
 
 	// Re-write should not re-introduce BOM.
 	_ = m.Write(map[string]any{"k": "v"})
-	raw, _ := os.ReadFile(path)
+	raw, _ := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — test reads temp-dir path
 	if len(raw) >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF {
 		t.Error("rewritten file should not contain BOM")
 	}
@@ -151,7 +151,7 @@ func TestCopyFile(t *testing.T) {
 	if err := copyFile(src, dst); err != nil {
 		t.Fatalf("copyFile: %v", err)
 	}
-	data, _ := os.ReadFile(dst)
+	data, _ := os.ReadFile(dst) // nosemgrep: go_filesystem_rule-fileread — test reads temp-dir path
 	if string(data) != "hello" {
 		t.Errorf("copied content = %q, want hello", data)
 	}

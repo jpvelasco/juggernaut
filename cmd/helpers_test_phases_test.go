@@ -775,7 +775,7 @@ func TestCommitApply_CollisionRefusal(t *testing.T) {
 	// Write a settings.json that Juggernaut does NOT own but has env keys
 	// that collide with what commitApply is about to write.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	foreignConfig := `{"env":{"AWS_REGION":"eu-west-1","CUSTOM_VAR":"keep-me"}}`
@@ -964,7 +964,7 @@ func TestPrintApplyDryRun_CollisionsNoForce(t *testing.T) {
 
 	// Write a foreign config with colliding env keys.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	foreignConfig := `{"env":{"AWS_REGION":"eu-west-1"}}`
@@ -1286,7 +1286,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
 
 	// Pre-write a settings.json that Juggernaut owns (has juggernaut block).
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	ownedConfig := `{
@@ -1330,7 +1330,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesPermissionMode(t *testing.T) {
 
 	// Pre-write a settings.json that Juggernaut owns with permission mode in meta.
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	ownedConfig := `{
@@ -1375,7 +1375,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesNativePermissionMode(t *testing.
 	// Pre-write an owned config where permissionMode is set only in the native
 	// permissions.defaultMode (not in meta) — simulating Claude Code's Shift+Tab.
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	ownedConfig := `{
@@ -1488,7 +1488,7 @@ func TestInstallActivation_UpdatedProfiles(t *testing.T) {
 	// On non-Windows, activation.InstallWith writes to POSIX targets.
 	// Create a .bashrc so shouldWritePOSIXTarget returns true.
 	bashrcPath := filepath.Join(home, ".bashrc")
-	if err := os.WriteFile(bashrcPath, []byte("# existing content\n"), 0o644); err != nil {
+	if err := os.WriteFile(bashrcPath, []byte("# existing content\n"), 0o600); err != nil { //nolint:gosec // test-only temp file
 		t.Fatalf("write .bashrc: %v", err)
 	}
 
@@ -1754,7 +1754,7 @@ func TestWithStdin_Empty(t *testing.T) {
 func TestReadJuggernautPermissionMode(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1775,7 +1775,7 @@ func TestReadJuggernautPermissionMode(t *testing.T) {
 func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1796,7 +1796,7 @@ func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
 func TestReadNativeEnvValue(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1817,7 +1817,7 @@ func TestReadNativeEnvValue(t *testing.T) {
 func TestReadNativeEnvValue_Missing(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{"env": {"AWS_REGION": "us-east-1"}}`
@@ -1833,7 +1833,7 @@ func TestReadNativeEnvValue_Missing(t *testing.T) {
 func TestSetNativeDefaultMode(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1863,7 +1863,7 @@ func TestSetNativeDefaultMode(t *testing.T) {
 func TestSetNativeDefaultMode_NoExistingPermissions(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Config with no permissions block at all.
@@ -2051,7 +2051,7 @@ func TestCommitApply_SuccessPath_ActivationInstalled(t *testing.T) {
 
 	// Create a .bashrc so activation.InstallWith finds a POSIX target.
 	bashrcPath := filepath.Join(home, ".bashrc")
-	if err := os.WriteFile(bashrcPath, []byte("# initial content\n"), 0o644); err != nil {
+	if err := os.WriteFile(bashrcPath, []byte("# initial content\n"), 0o600); err != nil { //nolint:gosec // test-only temp file
 		t.Fatalf("write .bashrc: %v", err)
 	}
 
@@ -2123,7 +2123,7 @@ func TestCommitApply_ForceBypassesCollision(t *testing.T) {
 
 	// Write a foreign config with colliding env keys.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	foreignConfig := `{"env":{"AWS_REGION":"eu-west-1"}}`
@@ -2231,7 +2231,7 @@ func TestInstallActivation_ErrorPath(t *testing.T) {
 	// Create a .bashrc as a directory instead of a file — this causes
 	// InstallTargetFor to fail when it tries to read/write it.
 	bashrcPath := filepath.Join(home, ".bashrc")
-	if err := os.MkdirAll(bashrcPath, 0o755); err != nil {
+	if err := os.MkdirAll(bashrcPath, 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir .bashrc as dir: %v", err)
 	}
 
@@ -2287,7 +2287,7 @@ func TestDetectForeignCollisions_ReadError(t *testing.T) {
 	path := filepath.Join(home, "settings.json")
 
 	// Create a file that can't be read (directory instead of file).
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	if err := os.MkdirAll(path, 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir as dir: %v", err)
 	}
 
@@ -2389,7 +2389,7 @@ func TestReadSettingsJSON_FileNotFound(t *testing.T) {
 func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Config with no juggernaut block — readJuggernautAuthMode calls t.Fatal.
@@ -2399,7 +2399,7 @@ func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
 	}
 	// Verify the condition that triggers the helper's fatal:
 	// no "juggernaut" key in the parsed JSON.
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(settingsPath) // nosemgrep: go_filesystem_rule-fileread — test reads temp-dir path it just wrote
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}
@@ -2419,7 +2419,7 @@ func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
 func TestReadJuggernautPermissionMode_NoMetaBlock(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Config with juggernaut block but no meta — readJuggernautPermissionMode
@@ -2429,7 +2429,7 @@ func TestReadJuggernautPermissionMode_NoMetaBlock(t *testing.T) {
 		t.Fatalf("write settings: %v", err)
 	}
 	// Verify the condition that triggers the helper's fatal:
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(settingsPath) // nosemgrep: go_filesystem_rule-fileread — test reads temp-dir path it just wrote
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}
@@ -2537,7 +2537,7 @@ func TestWithStdin_MultiLine(t *testing.T) {
 func TestReadNativeDefaultMode_EmptyStringValue(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	// permissions.defaultMode is an empty string — the helper returns "".
@@ -2558,7 +2558,7 @@ func TestReadNativeDefaultMode_EmptyStringValue(t *testing.T) {
 func TestReadNativeEnvValue_NonStringValue(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	// env key has a numeric value — type assertion to string fails, returns "".
@@ -2629,7 +2629,7 @@ func TestDetectForeignCollisions_TOMLForeignConfig(t *testing.T) {
 [model]
 default = "openai"
 `
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(configData), 0o600); err != nil {

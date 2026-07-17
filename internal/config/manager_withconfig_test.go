@@ -233,7 +233,7 @@ func TestWithConfig_ReadError_Propagates(t *testing.T) {
 	}
 
 	// The file should still contain the original invalid content — no write happened.
-	data, _ := os.ReadFile(path)
+	data, _ := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread — test reads temp-dir path
 	if string(data) != "{invalid json}" {
 		t.Errorf("file should be unchanged, got: %s", data)
 	}

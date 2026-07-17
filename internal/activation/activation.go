@@ -1191,7 +1191,7 @@ func isLegacyClaudeShim(path string) bool {
 	if runtime.GOOS != "windows" {
 		return false
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G703,G501 -- path is resolved from known config paths, not user input // nosemgrep: go_filesystem_rule-fileread -- path derived from known config paths
 	if err != nil {
 		return false
 	}
