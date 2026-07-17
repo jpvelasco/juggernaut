@@ -2,6 +2,34 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [Unreleased]
+
+## [5.4.0] - 2026-07-16
+
+**Minor release — model governance, foreign-config collision guard, and OSS hardening.**
+
+### Added
+
+- **`juggernaut models check` command.** New maintainer-facing release-preparation command that queries AWS Bedrock's live foundation-model and inference-profile catalogs and reports whether each pinned tier (opus/sonnet/haiku/fable) in bedrock-config.json is still ACTIVE. Exits non-zero if any tier is LEGACY (CI/script-friendly pre-release gate). `--write --set-<tier>=<id>` re-verifies the chosen ID is ACTIVE before pinning it.
+- **Fable model ID pinned by default (closes #206).** `models.fable` now defaults to `global.anthropic.claude-fable-5`, verified live against AWS Bedrock's ListFoundationModels/ListInferenceProfiles APIs. `--fable-model` still overrides it.
+- **`--available-models`/`--enforce-available-models` flags.** Writes Claude Code's native `availableModels` (ordered array) and `enforceAvailableModels` (bool) keys for picker curation. Documented as personal curation, not tamper-resistant organizational enforcement — real enforcement requires Claude Code's OS-level managed settings.
+- **Doctor auto-mode readiness check (closes #205).** `doctor` now reports OK/WARN on auto-mode readiness per scope by inspecting the persisted juggernaut block, silent unless `permissionMode=="auto"` is configured.
+- **Foreign-config collision guard ("Juggernaut law").** `apply` now refuses to write into a CLI's config file if any leaf it's about to write already holds a foreign (non-Juggernaut) value, across all providers — bypass with `--force`. A config Juggernaut already owns (re-apply) is unaffected.
+- **`doctor --cli` for multi-harness diagnostics.** Doctor accepts `--cli=claude|codex|opencode|grok` (default claude); Claude-only checks (auto-mode, fable, connectivity, legacy artifacts) stay gated on claude.
+- **npm install guard on Windows.** Preinstall gate refuses `npm install` while `juggernaut.exe` is running, preventing partial/stale installs.
+
+### Fixed
+
+- **Fable data-retention warning.** Since there is no AWS API to check `provider_data_share` opt-in status, `apply` and `doctor` now both warn whenever Fable is configured, since Anthropic requires the opt-in before Fable calls succeed on Bedrock.
+- **Gitleaks false positive on test secret.** Replaced a key-shaped test literal with a non-key-like value to stop tripping the generic-api-key rule.
+
+### Other
+
+- **OSS community docs refreshed.** CONTRIBUTING, PR template, SECURITY.md (with threat model), README/QUICKSTART rewritten for the multi-CLI v5 codebase.
+- **Repo hardening.** Updated GitHub settings docs, CodeQL config, Codacy instructions, and required status checks guidance.
+- **AGENTS.md synced with CLAUDE.md.**
+- **CodeQL action pinned to commit SHA** and bumped 3→4.
+
 ## [5.3.4] - 2026-07-06
 
 **Patch release — Codex IAM support, deep merge hardening, and CI quality gates.**
@@ -1089,7 +1117,9 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.3.3...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.4.0...HEAD
+[5.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.4.0
+[5.3.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.4
 [5.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.3
 [5.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.2
 [5.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.1
