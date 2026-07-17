@@ -78,7 +78,9 @@ func TestInstallTargetFor_ReadError(t *testing.T) {
 
 func TestInstallTargetFor_WriteError(t *testing.T) {
 	home := t.TempDir()
-	// Intermediate path component is a file → MkdirAll/WriteFile fails.
+	// Intermediate path component is a file. On Unix, ReadFile fails first
+	// ("not a directory"); on some platforms WriteFile fails later. Either is
+	// a hard error — the important contract is we do not silently succeed.
 	blocker := filepath.Join(home, "blocker")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -86,10 +88,11 @@ func TestInstallTargetFor_WriteError(t *testing.T) {
 	path := filepath.Join(blocker, "profile.sh")
 	_, err := InstallTargetFor(Target{Path: path, Shell: ShellPOSIX}, claudeCLISpec())
 	if err == nil {
-		t.Fatal("expected write error when parent is a file")
+		t.Fatal("expected error when parent path component is a file")
 	}
-	if !strings.Contains(err.Error(), "writing") {
-		t.Fatalf("expected writing error, got %v", err)
+	msg := err.Error()
+	if !strings.Contains(msg, "reading") && !strings.Contains(msg, "writing") {
+		t.Fatalf("expected reading or writing error, got %v", err)
 	}
 }
 
