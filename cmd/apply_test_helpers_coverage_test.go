@@ -405,7 +405,7 @@ func TestMockPSRunner_RunContext_Error(t *testing.T) {
 func TestMockPSRunner_RunContext_EmptyOutput(t *testing.T) {
 	runner := &mockApplyCommandRunner{
 		output: map[string][]byte{
-			"pwsh.exe": []byte{},
+			"pwsh.exe": {}, // empty output
 		},
 	}
 

@@ -266,7 +266,7 @@ func TestWithConfig_WriteError_Propagates(t *testing.T) {
 	// to Write. The Write will fail because we hold the lock.
 	err = m.MergeConfigPlanDeep(map[string]any{"model": "opus"}, nil)
 	if err == nil {
-		fl.Unlock()
+		_ = fl.Unlock()
 		t.Fatal("expected lock contention error from Write inside withConfig, got nil")
 	}
 
@@ -453,8 +453,8 @@ func TestMergeConfigPlan_ShallowMerge_DeletesKeys(t *testing.T) {
 
 	// Plan deletes model (empty string) and effortLevel (empty string).
 	plan := map[string]any{
-		"juggernaut": map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}},
-		"model":      "",
+		"juggernaut":  map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}},
+		"model":       "",
 		"effortLevel": "",
 	}
 	if err := m.MergeConfigPlan(plan); err != nil {

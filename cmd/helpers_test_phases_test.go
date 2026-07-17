@@ -658,6 +658,7 @@ func TestResolveCredential_BedrockKey_KeychainReturnsToken(t *testing.T) {
 	// without touching the OS keychain backend.
 	home := t.TempDir()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
+	// #nosec G101 — test-only token, not a real credential
 	const testToken = "seeded-token-from-file"
 	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\n"+testToken)); err != nil {
 		t.Fatalf("seeding credential file: %v", err)
@@ -699,7 +700,7 @@ func TestReportLegacyRecovery_WithActions(t *testing.T) {
 	}
 	// Write a shim file matching the v4.2.6 launcher artifact pattern.
 	shimPath := filepath.Join(binDir, "claude.exe")
-	if err := os.WriteFile(shimPath, []byte("#!/bin/sh\nfake"), 0o755); err != nil {
+	if err := os.WriteFile(shimPath, []byte("#!/bin/sh\nfake"), 0o600); err != nil {
 		t.Fatalf("write shim: %v", err)
 	}
 
@@ -1010,7 +1011,7 @@ func TestFindBedrockConfigFile_CurrentDir(t *testing.T) {
 	testDir := t.TempDir()
 	configData := `{"version":"5.4.0","models":{"default":"test","fast":"test","opus":"test","sonnet":"test","haiku":"test","fable":"test"},"environment":{},"environment_bedrock_auth":{},"regions":["us-west-2"],"defaults":{"region":"us-west-2","auth_mode":"iam","model":"test"}}`
 	configPath := filepath.Join(testDir, "bedrock-config.json")
-	if err := os.WriteFile(configPath, []byte(configData), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configData), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
