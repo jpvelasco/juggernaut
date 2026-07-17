@@ -135,6 +135,98 @@ func TestBlocksContainValidDelegation(t *testing.T) {
 	}
 }
 
+func TestBlocksFallThroughWhenJuggernautMissing(t *testing.T) {
+	// Wrappers must not hard-fail when juggernaut is absent — that was the
+	// profile breakage users hit after uninstall or PATH skew.
+	posix := Block(ShellPOSIX)
+	if !strings.Contains(posix, "command -v juggernaut") {
+		t.Fatalf("posix block must check for juggernaut:\n%s", posix)
+	}
+	if !strings.Contains(posix, "command claude \"$@\"") {
+		t.Fatalf("posix block must fall through to real claude:\n%s", posix)
+	}
+
+	fish := Block(ShellFish)
+	if !strings.Contains(fish, "command -q juggernaut") {
+		t.Fatalf("fish block must check for juggernaut:\n%s", fish)
+	}
+	if !strings.Contains(fish, "command claude $argv") {
+		t.Fatalf("fish block must fall through to real claude:\n%s", fish)
+	}
+
+	ps := Block(ShellPowerShell)
+	if !strings.Contains(ps, "Get-Command juggernaut") {
+		t.Fatalf("powershell block must check for juggernaut:\n%s", ps)
+	}
+	if !strings.Contains(ps, "CommandType Application") {
+		t.Fatalf("powershell block must resolve real Application binary:\n%s", ps)
+	}
+}
+
+func TestShouldWritePOSIXTarget_NeverCreatesBareProfile(t *testing.T) {
+	home := t.TempDir()
+	profile := Target{Path: filepath.Join(home, ".profile"), Shell: ShellPOSIX}
+	if shouldWritePOSIXTarget(profile) {
+		t.Fatal("must not create a brand-new ~/.profile")
+	}
+	// Existing .profile is always eligible.
+	if err := os.WriteFile(profile.Path, []byte("# existing\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !shouldWritePOSIXTarget(profile) {
+		t.Fatal("existing .profile must be eligible for update")
+	}
+}
+
+func TestShouldWritePOSIXTarget_SkipsMissingZshWhenNoShell(t *testing.T) {
+	home := t.TempDir()
+	// Point PATH at an empty dir so LookPath cannot find zsh/fish/bash.
+	empty := t.TempDir()
+	t.Setenv("PATH", empty)
+	zsh := Target{Path: filepath.Join(home, ".zshrc"), Shell: ShellPOSIX}
+	if shouldWritePOSIXTarget(zsh) {
+		t.Fatal("must not create .zshrc when zsh is not on PATH")
+	}
+	fish := Target{Path: filepath.Join(home, ".config", "fish", "config.fish"), Shell: ShellFish}
+	if shouldWritePOSIXTarget(fish) {
+		t.Fatal("must not create fish config when fish is not on PATH")
+	}
+}
+
+func TestInstallWith_DoesNotCreateUnusedShellProfiles(t *testing.T) {
+	home := t.TempDir()
+	empty := t.TempDir()
+	t.Setenv("PATH", empty) // no bash/zsh/fish
+
+	// Seed only .bashrc so one POSIX target is eligible.
+	bashrc := filepath.Join(home, ".bashrc")
+	if err := os.WriteFile(bashrc, []byte("export FOO=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := InstallOptions{
+		PowerShellResult: &ProfileResolverResult{}, // skip real PS discovery
+	}
+	installed, err := InstallWith(home, opts)
+	if err != nil {
+		t.Fatalf("InstallWith: %v", err)
+	}
+	// Only .bashrc should be written.
+	for _, p := range installed {
+		if p != bashrc {
+			t.Errorf("unexpected install path %s", p)
+		}
+	}
+	for _, name := range []string{".zshrc", ".profile"} {
+		if _, err := os.Stat(filepath.Join(home, name)); !os.IsNotExist(err) {
+			t.Errorf("must not create %s when shell is absent", name)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "fish", "config.fish")); !os.IsNotExist(err) {
+		t.Error("must not create fish config when fish is absent")
+	}
+}
+
 func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
 	home := t.TempDir()
 	dir := t.TempDir()
@@ -432,29 +524,28 @@ func readTargets(t *testing.T, home string, psResult *ProfileResolverResult) map
 	t.Helper()
 	out := map[string]string{}
 
+	readIfExists := func(path string) {
+		data, err := safepath.ReadFile(filepath.Dir(path), path)
+		if os.IsNotExist(err) {
+			return // install no longer creates every DefaultTargets path
+		}
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		out[path] = string(data)
+	}
+
 	if runtime.GOOS == "windows" && psResult != nil {
 		// On Windows, read from injected PowerShell paths + POSIX targets.
 		for _, target := range psResult.ActiveTargets {
-			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err != nil {
-				t.Fatalf("reading %s: %v", target.Path, err)
-			}
-			out[target.Path] = string(data)
+			readIfExists(target.Path)
 		}
 		for _, target := range DefaultTargets(home) {
-			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err != nil {
-				t.Fatalf("reading %s: %v", target.Path, err)
-			}
-			out[target.Path] = string(data)
+			readIfExists(target.Path)
 		}
 	} else {
 		for _, target := range DefaultTargets(home) {
-			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err != nil {
-				t.Fatalf("reading %s: %v", target.Path, err)
-			}
-			out[target.Path] = string(data)
+			readIfExists(target.Path)
 		}
 	}
 	return out

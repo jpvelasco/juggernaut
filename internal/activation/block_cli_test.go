@@ -37,6 +37,9 @@ func TestBlockFor_Codex(t *testing.T) {
 	if strings.Contains(got, "juggernaut launch codex --") {
 		t.Errorf("version-skew-unsafe launch form must not be emitted:\n%s", got)
 	}
+	if !strings.Contains(got, "command codex \"$@\"") {
+		t.Errorf("codex block must fall through to real codex when juggernaut is missing:\n%s", got)
+	}
 	if strings.Contains(got, "claude") {
 		t.Errorf("codex block must not mention claude:\n%s", got)
 	}

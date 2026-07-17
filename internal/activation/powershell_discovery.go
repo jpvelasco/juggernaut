@@ -116,10 +116,17 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 		}
 	}
 
-	// Historical candidates: hardcoded paths that may still contain a
-	// Juggernaut block even after the user's Documents folder moved to
-	// OneDrive. These are always included for uninstall/doctor scanning
-	// and legacy-block migration.
+	// Primary Documents tree (Known Folder, or $HOME/Documents). Used for
+	// install fallback so we never write activation into every alternate
+	// Documents layout — only the one Windows currently points at.
+	primaryDocs := filepath.Join(home, "Documents")
+	if docs, err := resolveDocumentsFolder(); err == nil && docs != "" {
+		primaryDocs = docs
+	}
+	primaryHistorical := resolveHistoricalTargets(primaryDocs)
+
+	// Full historical set (primary + OneDrive/local alternates) for uninstall
+	// and legacy-block migration only — never for fresh install targets.
 	historical := historicalPowerShellTargetsScoped(home)
 
 	editions := []psEdition{
@@ -166,19 +173,23 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 		}
 	}
 
-	// If no active targets found, fall back to Known Documents paths.
-	// This ensures installation can still proceed when PowerShell is
-	// missing, timed out, or failed to launch.
+	// If no active targets found, fall back to the primary Known Documents
+	// tree only (not every alternate layout). That keeps install focused
+	// while MigrationTargets still cover leftovers elsewhere.
 	if len(result.ActiveTargets) == 0 {
 		result.UsedFallback = true
-		for _, p := range historical {
+		for _, p := range primaryHistorical {
 			if !containsTargetPathCI(result.ActiveTargets, p) {
 				result.ActiveTargets = append(result.ActiveTargets,
 					Target{Path: p, Shell: ShellPowerShell},
 				)
-				result.InstallTargets = append(result.InstallTargets,
-					Target{Path: p, Shell: ShellPowerShell},
-				)
+				// Fallback installs AllHosts profiles only — same policy as
+				// live discovery (never write CurrentHost wrappers).
+				if strings.EqualFold(filepath.Base(p), "profile.ps1") {
+					result.InstallTargets = append(result.InstallTargets,
+						Target{Path: p, Shell: ShellPowerShell},
+					)
+				}
 			}
 		}
 		result.DiscoveryWarnings = append(result.DiscoveryWarnings,
@@ -258,6 +269,10 @@ func historicalPowerShellTargets() []string {
 // the Windows Known Folder API, scoped to the given home directory as a
 // fallback when the Known Folder API is unavailable. These are used for
 // uninstall/doctor scanning and legacy-block migration.
+//
+// When Documents is OneDrive-redirected, stale blocks may still live under
+// the non-redirected $HOME\Documents tree (and vice versa). Both trees are
+// scanned, plus the common OneDrive\Documents layout under $HOME.
 func historicalPowerShellTargetsScoped(home string) []string {
 	if home == "" {
 		return nil
@@ -269,12 +284,37 @@ func historicalPowerShellTargetsScoped(home string) []string {
 	}
 	paths := resolveHistoricalTargets(docs)
 
+	// Also scan non-redirected and common OneDrive layouts so uninstall
+	// never leaves wrappers behind after a Documents move.
+	for _, extra := range []string{
+		filepath.Join(home, "Documents"),
+		filepath.Join(home, "OneDrive", "Documents"),
+	} {
+		if pathsEqualCI(extra, docs) {
+			continue
+		}
+		paths = append(paths, resolveHistoricalTargets(extra)...)
+	}
+
 	if runtime.GOOS != "windows" {
 		paths = append(paths,
 			filepath.Join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1"),
+			filepath.Join(home, ".config", "powershell", "profile.ps1"),
 		)
 	}
-	return paths
+	return deduplicatePathsCI(paths)
+}
+
+// pathsEqualCI reports path equality, case-insensitive on Windows.
+func pathsEqualCI(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 // resolveDocumentsFolder uses the Windows Known Folder API (FOLDERID_Documents)
@@ -298,10 +338,15 @@ func ResetResolveDocumentsFolderForTesting() {
 }
 
 // resolveHistoricalTargets builds the well-known PowerShell profile paths
-// under the given Documents folder.
+// under the given Documents folder. Includes both AllHosts (profile.ps1) and
+// CurrentHost (Microsoft.PowerShell_profile.ps1) for PS 7 and Windows
+// PowerShell 5.1 — older installs wrote CurrentHost blocks that must still
+// be found on uninstall/migrate.
 func resolveHistoricalTargets(docs string) []string {
 	return []string{
+		filepath.Join(docs, "PowerShell", "profile.ps1"),
 		filepath.Join(docs, "PowerShell", "Microsoft.PowerShell_profile.ps1"),
+		filepath.Join(docs, "WindowsPowerShell", "profile.ps1"),
 		filepath.Join(docs, "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"),
 	}
 }

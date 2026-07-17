@@ -1219,16 +1219,21 @@ func TestFallbackInstallation_ActualProfileCreated(t *testing.T) {
 		t.Fatal("expected fallback install targets")
 	}
 
-	// Ensure the AllHosts fallback target is present.
+	// Ensure only AllHosts (profile.ps1) fallback targets are present —
+	// never CurrentHost (Microsoft.PowerShell_profile.ps1), which loads later
+	// and would override or leave stale wrappers.
 	hasAllHosts := false
 	for _, target := range psResult.InstallTargets {
-		if strings.HasSuffix(target.Path, "Microsoft.PowerShell_profile.ps1") {
+		base := filepath.Base(target.Path)
+		if strings.EqualFold(base, "Microsoft.PowerShell_profile.ps1") {
+			t.Errorf("fallback must not install CurrentHost profile: %s", target.Path)
+		}
+		if strings.EqualFold(base, "profile.ps1") {
 			hasAllHosts = true
-			break
 		}
 	}
 	if !hasAllHosts {
-		t.Error("expected AllHosts fallback target in InstallTargets")
+		t.Error("expected AllHosts (profile.ps1) fallback target in InstallTargets")
 	}
 
 	// Now verify that InstallPowerShellActivationWith actually writes the block.
