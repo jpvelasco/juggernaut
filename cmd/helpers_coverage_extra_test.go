@@ -26,7 +26,7 @@ func TestFindBedrockConfigFile_ParentDirFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldWd, _ := os.Getwd()
-	t.Cleanup(func() { os.Chdir(oldWd) })
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 	if err := os.Chdir(sub); err != nil {
 		t.Fatal(err)
 	}
