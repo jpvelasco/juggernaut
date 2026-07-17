@@ -231,8 +231,20 @@ func TestInstallWith_NonWindowsWithPSResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InstallWith: %v", err)
 	}
-	if len(installed) != 1 || installed[0] != profile {
-		t.Errorf("expected [%s], got %v", profile, installed)
+	// On non-Windows, both PowerShell and POSIX targets are installed.
+	if len(installed) == 0 {
+		t.Error("should have installed at least one target")
+	}
+	// Verify the PowerShell profile is among the installed targets.
+	found := false
+	for _, p := range installed {
+		if p == profile {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected %s in installed targets %v", profile, installed)
 	}
 }
 
@@ -256,8 +268,20 @@ func TestUninstallWith_Claude_NonWindowsWithPSResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UninstallWith: %v", err)
 	}
-	if len(removed) != 1 || removed[0] != profile {
-		t.Errorf("expected [%s], got %v", profile, removed)
+	// On non-Windows, both PowerShell and POSIX targets may be removed.
+	if len(removed) == 0 {
+		t.Error("should have removed at least one target")
+	}
+	// Verify the PowerShell profile is among the removed targets.
+	found := false
+	for _, p := range removed {
+		if p == profile {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected %s in removed targets %v", profile, removed)
 	}
 }
 
@@ -484,8 +508,12 @@ func TestSameExecutable_DifferentFiles(t *testing.T) {
 	home := t.TempDir()
 	a := filepath.Join(home, "a")
 	b := filepath.Join(home, "b")
-	os.WriteFile(a, []byte("a"), 0o600)
-	os.WriteFile(b, []byte("b"), 0o600)
+	if err := os.WriteFile(a, []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte("b"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if sameExecutable(a, b) {
 		t.Error("different files should not be same executable")
 	}
@@ -516,7 +544,9 @@ func TestSamePath_Different(t *testing.T) {
 func TestFileExists_Exists(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "test")
-	os.WriteFile(path, []byte("x"), 0o600)
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if !fileExists(path) {
 		t.Error("existing file should return true")
 	}
@@ -577,10 +607,7 @@ func TestLaunchWithOptions_ZeroTargetDefaultsToClaude(t *testing.T) {
 	})
 	// With empty target, it should default to Claude and try to resolve claude binary.
 	// Since PATH is /nonexistent, it will fail with ErrNotFound.
-	if err == nil {
-		// If runner succeeds, that means target defaulted correctly.
-	}
-	// Either way, no crash.
+	_ = err // Expect error or nil — either way, no crash.
 }
 
 // TestLaunchWithOptions_CustomTokenEnvVar covers non-default token env.
@@ -611,9 +638,7 @@ func TestLaunchWithOptions_CustomTokenEnvVar(t *testing.T) {
 	})
 	// This will fail because PATH is /nonexistent, but if it reached the runner,
 	// the token env was set correctly.
-	if err == nil {
-		// Success — token env was set and runner passed.
-	}
+	_ = err // Expect error or nil — either way, no crash.
 }
 
 // TestRunBinary_NotFound covers the binary-not-found path.
@@ -654,7 +679,9 @@ func TestSpecOrClaude_Populated(t *testing.T) {
 func TestInstallTarget_Default(t *testing.T) {
 	home := t.TempDir()
 	bashrc := filepath.Join(home, ".bashrc")
-	os.WriteFile(bashrc, []byte("# existing"), 0o600)
+	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	changed, err := InstallTarget(Target{Path: bashrc, Shell: ShellPOSIX})
 	if err != nil {
 		t.Fatalf("InstallTarget: %v", err)
@@ -669,7 +696,9 @@ func TestRemoveTarget_Default(t *testing.T) {
 	home := t.TempDir()
 	bashrc := filepath.Join(home, ".bashrc")
 	block := Block(ShellPOSIX)
-	os.WriteFile(bashrc, []byte(block), 0o600)
+	if err := os.WriteFile(bashrc, []byte(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	changed, err := RemoveTarget(bashrc)
 	if err != nil {
 		t.Fatalf("RemoveTarget: %v", err)
@@ -701,7 +730,9 @@ func TestInstall_Default(t *testing.T) {
 	}
 	home := t.TempDir()
 	bashrc := filepath.Join(home, ".bashrc")
-	os.WriteFile(bashrc, []byte("# existing"), 0o600)
+	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	// Should not crash even without activation.
 	_, _ = Install(home)
 }
@@ -723,7 +754,9 @@ func TestInstalledTargets_Default(t *testing.T) {
 	home := t.TempDir()
 	bashrc := filepath.Join(home, ".bashrc")
 	block := Block(ShellPOSIX)
-	os.WriteFile(bashrc, []byte(block), 0o600)
+	if err := os.WriteFile(bashrc, []byte(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	paths := InstalledTargets(home)
 	if len(paths) == 0 {
 		t.Error("should find .bashrc with block")
@@ -736,9 +769,7 @@ func TestLaunchCLI_ZeroTarget(t *testing.T) {
 	t.Setenv("HOME", home)
 	// With zero target, it defaults to Claude. PATH is /nonexistent so it fails.
 	err := LaunchCLI(home, []string{}, LaunchTarget{})
-	if err == nil {
-		// If it succeeds, that's unexpected but not a crash.
-	}
+	_ = err // Expect error — either way, no crash.
 }
 
 // TestLaunchCLI_NeedsTokenTrue covers the token-injection path.
