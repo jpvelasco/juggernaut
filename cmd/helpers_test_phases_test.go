@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
@@ -827,6 +828,7 @@ func TestCommitApply_KeychainStorage(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	setupMockPSRunner(t, home)
+	setupIsolatedKeychain(t) // skip if keychain backend hangs (macOS CI)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -857,9 +859,23 @@ func TestCommitApply_KeychainStorage(t *testing.T) {
 	}
 
 	// Pass a non-empty token — commitApply should store it via keychain.SetWithFallback.
-	err = commitApply(home, authmode.BedrockAPIKey, "test-api-key-123", block, prov, bCfg, provOpts)
-	if err != nil {
-		t.Fatalf("commitApply: %v", err)
+	// Wrap in a timeout goroutine: macOS CI's keychain backend can hang non-deterministically
+	// even after the setupIsolatedKeychain probe succeeds.
+	type result struct {
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		done <- result{commitApply(home, authmode.BedrockAPIKey, "test-api-key-123", block, prov, bCfg, provOpts)}
+	}()
+	select {
+	case r := <-done:
+		err = r.err
+		if err != nil {
+			t.Fatalf("commitApply: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Skip("commitApply keychain call timed out (macOS CI)")
 	}
 
 	// Verify the token was stored: read it back from the credential file fallback.
