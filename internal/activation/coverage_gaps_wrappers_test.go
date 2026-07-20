@@ -55,111 +55,114 @@ func defaultLaunchTarget() LaunchTarget {
 	}
 }
 
+func assertEmptyActions(t *testing.T, name string, actions []LegacyAction) {
+	t.Helper()
+	if len(actions) != 0 {
+		t.Errorf("%s: expected no actions in clean dir, got %d", name, len(actions))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Thin wrapper functions — 0% coverage because they delegate to the *With/*For
 // variants which are already tested. These exercises confirm the delegation
 // contracts and cover the lines themselves.
 // ---------------------------------------------------------------------------
 
-func TestInstall_DelegatesToInstallWith(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-	home := t.TempDir()
-	bashrc := filepath.Join(home, ".bashrc")
-	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	installed, err := Install(home)
-	if err != nil {
-		t.Fatalf("Install: %v", err)
-	}
-	// Should have installed the Claude block into .bashrc.
-	found := false
-	for _, p := range installed {
-		if p == bashrc {
-			found = true
-			break
+func TestWrapperDelegation(t *testing.T) {
+	t.Run("Install", func(t *testing.T) {
+		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
+		home := t.TempDir()
+		bashrc := filepath.Join(home, ".bashrc")
+		if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
+			t.Fatal(err)
 		}
-	}
-	if !found {
-		t.Errorf("expected %s in installed targets %v", bashrc, installed)
-	}
-}
-
-func TestUninstall_DelegatesToUninstallWith(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-	home := t.TempDir()
-	bashrc := writeShellBlock(t, home, ".bashrc")
-	removed, err := Uninstall(home)
-	if err != nil {
-		t.Fatalf("Uninstall: %v", err)
-	}
-	found := false
-	for _, p := range removed {
-		if p == bashrc {
-			found = true
-			break
+		installed, err := Install(home)
+		if err != nil {
+			t.Fatalf("Install: %v", err)
 		}
-	}
-	if !found {
-		t.Errorf("expected %s in removed targets %v", bashrc, removed)
-	}
-}
+		found := false
+		for _, p := range installed {
+			if p == bashrc {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %s in installed targets %v", bashrc, installed)
+		}
+	})
 
-func TestInstalledTargets_DelegatesToInstalledTargetsWith(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-	home := t.TempDir()
-	bashrc := writeShellBlock(t, home, ".bashrc")
-	paths := InstalledTargets(home)
-	if len(paths) == 0 {
-		t.Error("should find .bashrc with block")
-	}
-	if len(paths) > 0 && paths[0] != bashrc {
-		t.Errorf("expected %s, got %v", bashrc, paths)
-	}
-}
+	t.Run("Uninstall", func(t *testing.T) {
+		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
+		home := t.TempDir()
+		bashrc := writeShellBlock(t, home, ".bashrc")
+		removed, err := Uninstall(home)
+		if err != nil {
+			t.Fatalf("Uninstall: %v", err)
+		}
+		found := false
+		for _, p := range removed {
+			if p == bashrc {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %s in removed targets %v", bashrc, removed)
+		}
+	})
 
-func TestInstalledTargetsWith_Delegates(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-	home := t.TempDir()
-	writeShellBlock(t, home, ".zshrc")
-	paths := InstalledTargetsWith(home, nil)
-	if len(paths) == 0 {
-		t.Error("should find .zshrc with block")
-	}
-}
+	t.Run("InstalledTargets", func(t *testing.T) {
+		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
+		home := t.TempDir()
+		bashrc := writeShellBlock(t, home, ".bashrc")
+		paths := InstalledTargets(home)
+		if len(paths) == 0 {
+			t.Error("should find .bashrc with block")
+		}
+		if len(paths) > 0 && paths[0] != bashrc {
+			t.Errorf("expected %s, got %v", bashrc, paths)
+		}
+	})
 
-func TestLaunch_DelegatesToLaunchCLI(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	// Launch delegates to LaunchCLI → LaunchWithOptions with RunBinary.
-	// Clear PATH so the binary cannot be found — avoids launching a real CLI process.
-	t.Setenv("PATH", "")
-	err := Launch(home, []string{})
-	if err == nil {
-		t.Error("expected error when no binary found")
-	}
-}
+	t.Run("InstalledTargetsWith", func(t *testing.T) {
+		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
+		home := t.TempDir()
+		writeShellBlock(t, home, ".zshrc")
+		paths := InstalledTargetsWith(home, nil)
+		if len(paths) == 0 {
+			t.Error("should find .zshrc with block")
+		}
+	})
 
-func TestResolveClaudeBinary_Delegates(t *testing.T) {
-	_, err := ResolveClaudeBinary("/nonexistent")
-	if err == nil {
-		t.Error("expected error for nonexistent path")
-	}
-}
+	t.Run("Launch", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("PATH", "")
+		if err := Launch(home, []string{}); err == nil {
+			t.Error("expected error when no binary found")
+		}
+	})
 
-func TestResolveBinary_Delegates(t *testing.T) {
-	_, err := ResolveBinary("/nonexistent", []string{"nonexistent"})
-	if err == nil {
-		t.Error("expected error for nonexistent binary")
-	}
-}
+	t.Run("ResolveClaudeBinary", func(t *testing.T) {
+		if _, err := ResolveClaudeBinary("/nonexistent"); err == nil {
+			t.Error("expected error for nonexistent path")
+		}
+	})
 
-func TestResolvePowerShellProfiles_Delegates(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "Windows requires real PowerShell discovery")
-	r := ResolvePowerShellProfiles()
-	if len(r.ActiveTargets) != 0 {
-		t.Error("should return empty on non-Windows")
-	}
+	t.Run("ResolveBinary", func(t *testing.T) {
+		if _, err := ResolveBinary("/nonexistent", []string{"nonexistent"}); err == nil {
+			t.Error("expected error for nonexistent binary")
+		}
+	})
+
+	t.Run("ResolvePowerShellProfiles", func(t *testing.T) {
+		skipIf(t, runtime.GOOS == "windows", "Windows requires real PowerShell discovery")
+		r := ResolvePowerShellProfiles()
+		if len(r.ActiveTargets) != 0 {
+			t.Error("should return empty on non-Windows")
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -273,38 +276,22 @@ func TestIsKnownJuggernautArtifact_NonWindows(t *testing.T) {
 
 func TestLegacyArtifactDetection_CleanDir(t *testing.T) {
 	home := t.TempDir()
+	assertEmptyActions(t, "DetectLegacyArtifacts", DetectLegacyArtifacts(home))
 
-	// DetectLegacyArtifacts — clean directory
-	actions := DetectLegacyArtifacts(home)
-	if len(actions) != 0 {
-		t.Errorf("DetectLegacyArtifacts: expected no artifacts in clean dir, got %d", len(actions))
-	}
-
-	// RecoverLegacyArtifacts — skip on Windows (uses content-based detection)
-	skipIf(t, runtime.GOOS == "windows", "Windows uses content-based detection")
+	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 	actions, err := RecoverLegacyArtifacts(home)
 	if err != nil {
-		t.Fatalf("RecoverLegacyArtifacts: unexpected error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 0 {
-		t.Errorf("RecoverLegacyArtifacts: expected no actions in clean dir, got %d", len(actions))
-	}
+	assertEmptyActions(t, "RecoverLegacyArtifacts", actions)
 
-	// recoverPlatformArtifacts — skip on Windows
-	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 	actions, err = recoverPlatformArtifacts(t.TempDir(), "", platformNames())
 	if err != nil {
-		t.Fatalf("recoverPlatformArtifacts: unexpected error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(actions) != 0 {
-		t.Errorf("recoverPlatformArtifacts: expected no actions in clean dir, got %d", len(actions))
-	}
+	assertEmptyActions(t, "recoverPlatformArtifacts", actions)
 
-	// detectPlatformArtifacts — clean directory
-	actions = detectPlatformArtifacts(t.TempDir(), "", platformNames())
-	if len(actions) != 0 {
-		t.Errorf("detectPlatformArtifacts: expected no actions in clean dir, got %d", len(actions))
-	}
+	assertEmptyActions(t, "detectPlatformArtifacts", detectPlatformArtifacts(t.TempDir(), "", platformNames()))
 }
 
 // ---------------------------------------------------------------------------
@@ -500,24 +487,47 @@ func TestLaunchWithOptions_ErrorPaths(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// CheckPowerShellActivationWith — healthy with legacy warning
+// Non-Windows helper functions — consolidated subtests
 // ---------------------------------------------------------------------------
 
-func TestCheckPowerShellActivationWith_LegacyWarning(t *testing.T) {
+func TestNonWindowsHelpers(t *testing.T) {
 	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
-	// On non-Windows, CheckPowerShellActivationWith returns healthy=true
-	// immediately. This test verifies the non-Windows path.
-	home := t.TempDir()
-	healthy, path, warnings := CheckPowerShellActivationWith(home, nil)
-	if !healthy {
-		t.Error("should be healthy on non-Windows")
-	}
-	if path != "" {
-		t.Error("path should be empty on non-Windows")
-	}
-	if len(warnings) != 0 {
-		t.Error("warnings should be empty on non-Windows")
-	}
+
+	t.Run("CheckPowerShellActivationWith", func(t *testing.T) {
+		// On non-Windows, returns healthy=true immediately.
+		healthy, path, warnings := CheckPowerShellActivationWith(t.TempDir(), nil)
+		if !healthy {
+			t.Error("should be healthy on non-Windows")
+		}
+		if path != "" {
+			t.Error("path should be empty on non-Windows")
+		}
+		if len(warnings) != 0 {
+			t.Error("warnings should be empty on non-Windows")
+		}
+	})
+
+	t.Run("profilePathKey", func(t *testing.T) {
+		got := profilePathKey("/Users/test/profile.ps1")
+		if got != "/Users/test/profile.ps1" {
+			t.Errorf("profilePathKey = %q, want /Users/test/profile.ps1", got)
+		}
+	})
+
+	t.Run("samePath", func(t *testing.T) {
+		if !samePath("/a/b", "/a/b") {
+			t.Error("same paths should match")
+		}
+		if samePath("/a/b", "/a/c") {
+			t.Error("different paths should not match")
+		}
+	})
+
+	t.Run("isLegacyClaudeShim", func(t *testing.T) {
+		if isLegacyClaudeShim("/some/path") {
+			t.Error("should return false on non-Windows")
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -526,54 +536,15 @@ func TestCheckPowerShellActivationWith_LegacyWarning(t *testing.T) {
 
 func TestPlatformNames(t *testing.T) {
 	names := platformNames()
+	wantClaude := "claude"
 	if runtime.GOOS == "windows" {
-		if names.claude != "claude.cmd" {
-			t.Errorf("expected claude.cmd on Windows, got %q", names.claude)
-		}
-		if len(names.commandNames) == 0 {
-			t.Error("commandNames should not be empty")
-		}
-	} else {
-		if names.claude != "claude" {
-			t.Errorf("expected 'claude' on non-Windows, got %q", names.claude)
-		}
+		wantClaude = "claude.cmd"
 	}
-}
-
-// ---------------------------------------------------------------------------
-// profilePathKey — non-Windows path
-// ---------------------------------------------------------------------------
-
-func TestProfilePathKey_NonWindows(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
-	key := profilePathKey("/Users/test/profile.ps1")
-	if key != "/Users/test/profile.ps1" {
-		t.Errorf("profilePathKey = %q, want /Users/test/profile.ps1", key)
+	if names.claude != wantClaude {
+		t.Errorf("platformNames.claude = %q, want %q", names.claude, wantClaude)
 	}
-}
-
-// ---------------------------------------------------------------------------
-// samePath — non-Windows branch
-// ---------------------------------------------------------------------------
-
-func TestSamePath_NonWindows(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
-	if !samePath("/a/b", "/a/b") {
-		t.Error("same paths should match")
-	}
-	if samePath("/a/b", "/a/c") {
-		t.Error("different paths should not match")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// isLegacyClaudeShim — non-Windows returns false
-// ---------------------------------------------------------------------------
-
-func TestIsLegacyClaudeShim_NonWindows(t *testing.T) {
-	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
-	if isLegacyClaudeShim("/some/path") {
-		t.Error("should return false on non-Windows")
+	if len(names.commandNames) == 0 {
+		t.Error("commandNames should not be empty")
 	}
 }
 
@@ -601,14 +572,14 @@ func TestClaudeLaunchTarget_Fields(t *testing.T) {
 func TestDefaultTargets_Paths(t *testing.T) {
 	home := "/home/user"
 	targets := DefaultTargets(home)
-	if len(targets) != 4 {
-		t.Fatalf("expected 4 targets, got %d", len(targets))
-	}
 	expected := map[string]Shell{
 		filepath.Join(home, ".bashrc"):                        ShellPOSIX,
 		filepath.Join(home, ".zshrc"):                         ShellPOSIX,
 		filepath.Join(home, ".profile"):                       ShellPOSIX,
 		filepath.Join(home, ".config", "fish", "config.fish"): ShellFish,
+	}
+	if len(targets) != len(expected) {
+		t.Fatalf("expected %d targets, got %d", len(expected), len(targets))
 	}
 	for _, tgt := range targets {
 		wantShell, ok := expected[tgt.Path]
