@@ -117,9 +117,10 @@ jobs:
       # enforces the local Linux floor and uploads JUnit for Test Analytics.
       - name: Upload test results to Codecov
         if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3  # v1.2.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v7.0.0
         with:
           use_oidc: true
+          report_type: test_results
           files: ./junit.xml
 
   npm-test:
@@ -129,7 +130,7 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: "24"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('npm/package.json') }}
