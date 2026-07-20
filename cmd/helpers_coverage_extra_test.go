@@ -26,7 +26,10 @@ func TestFindBedrockConfigFile_ParentDirFallback(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "bedrock-config.json"), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	oldWd, _ := os.Getwd()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 	if err := os.Chdir(sub); err != nil {
 		t.Fatal(err)
@@ -46,8 +49,6 @@ func TestResolveCredential_TUIPromptError(t *testing.T) {
 		t.Skip("TUI form blocks on Windows without a real console")
 	}
 	defer resetFlags()
-	resetFlags()
-	applyFlags.preserveKey = false
 
 	home := t.TempDir()
 	// Ensure no credential file exists so the TUI prompt path is taken.
@@ -56,16 +57,12 @@ func TestResolveCredential_TUIPromptError(t *testing.T) {
 	// The TUI form will fail because there's no terminal in tests.
 	// This exercises the form.Run error path.
 	token, err := resolveCredential(authmode.BedrockAPIKey, home)
+	if token != "" {
+		t.Errorf("expected empty token, got %q", token)
+	}
+	// If the form failed (expected in tests without a terminal), verify the error path.
 	if err == nil {
-		// If it somehow succeeded (e.g. CI has a pty), token should be empty.
-		if token != "" {
-			t.Errorf("unexpected token: %q", token)
-		}
-	} else {
-		// The error path from form.Run is exercised.
-		if token != "" {
-			t.Errorf("expected empty token on error, got %q", token)
-		}
+		t.Log("TUI form succeeded unexpectedly (CI may have a pty) — token is empty, which is acceptable")
 	}
 }
 
@@ -75,7 +72,6 @@ func TestResolveCredential_TUIPromptError(t *testing.T) {
 
 func TestPrintApplyDryRun_NonClaudeProvider(t *testing.T) {
 	defer resetFlags()
-	resetFlags()
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -109,5 +105,9 @@ func TestPrintApplyDryRun_NonClaudeProvider(t *testing.T) {
 	// Non-Claude providers should NOT mention legacy recovery.
 	if strings.Contains(out, "v4.2.6") {
 		t.Error("non-Claude provider should not mention v4.2.6 recovery")
+	}
+	// Should mention Codex-specific config path.
+	if !strings.Contains(out, "config.toml") {
+		t.Error("expected codex config.toml path in output")
 	}
 }

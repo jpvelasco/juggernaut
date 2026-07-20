@@ -131,9 +131,9 @@ func TestInstalledTargetsWith_Delegates(t *testing.T) {
 func TestLaunch_DelegatesToLaunchCLI(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// Launch delegates to LaunchCLI with zero target (Claude default).
-	// With an empty PATH it will fail to find the binary — that's fine;
-	// we only need to confirm the delegation path runs.
+	// Launch delegates to LaunchCLI → LaunchWithOptions with RunBinary.
+	// Clear PATH so the binary cannot be found — avoids launching a real CLI process.
+	t.Setenv("PATH", "")
 	err := Launch(home, []string{})
 	if err == nil {
 		t.Error("expected error when no binary found")
@@ -190,15 +190,8 @@ func TestResolveBinaryFrom_SelfPathsSkip(t *testing.T) {
 
 func TestDefaultBinDir_UserProfileFallback(t *testing.T) {
 	// When home is empty, DefaultBinDir consults HOME then USERPROFILE.
-	origHome := os.Getenv("HOME")
-	origUP := os.Getenv("USERPROFILE")
-	t.Cleanup(func() {
-		os.Setenv("HOME", origHome)
-		os.Setenv("USERPROFILE", origUP)
-	})
-
-	os.Setenv("HOME", "")
-	os.Setenv("USERPROFILE", "/tmp/up-home")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "/tmp/up-home")
 	got := DefaultBinDir("")
 	want := filepath.Join("/tmp/up-home", ".local", "bin")
 	if got != want {
