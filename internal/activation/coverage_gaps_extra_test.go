@@ -94,6 +94,30 @@ func TestRemoveTargetForMarkers_FileNotExist(t *testing.T) {
 	}
 }
 
+// TestRemoveTargetForMarkers_WriteError covers the writeProfile error path.
+func TestRemoveTargetForMarkers_WriteError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows write-permission semantics differ")
+	}
+	home := t.TempDir()
+	profile := filepath.Join(home, "profile")
+	block := blockFor(ShellPOSIX, "claude", BeginMarker, EndMarker)
+	if err := os.WriteFile(profile, []byte(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Make the file read-only so writeProfile fails.
+	if err := os.Chmod(profile, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := RemoveTargetForMarkers(profile, BeginMarker, EndMarker)
+	if err == nil {
+		t.Error("expected write error")
+	}
+	if changed {
+		t.Error("should not report changed on write error")
+	}
+}
+
 // TestRemoveTargetWithLegacy_FileNotExist covers the IsNotExist path.
 func TestRemoveTargetWithLegacy_FileNotExist(t *testing.T) {
 	ok, err := RemoveTargetWithLegacy(filepath.Join(t.TempDir(), "nonexistent"))
@@ -102,6 +126,30 @@ func TestRemoveTargetWithLegacy_FileNotExist(t *testing.T) {
 	}
 	if ok {
 		t.Error("should return false for nonexistent file")
+	}
+}
+
+// TestRemoveTargetWithLegacy_WriteError covers the writeProfile error path.
+func TestRemoveTargetWithLegacy_WriteError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows write-permission semantics differ")
+	}
+	home := t.TempDir()
+	profile := filepath.Join(home, "profile")
+	block := blockFor(ShellPOSIX, "claude", BeginMarker, EndMarker)
+	if err := os.WriteFile(profile, []byte(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Make the file read-only so writeProfile fails.
+	if err := os.Chmod(profile, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := RemoveTargetWithLegacy(profile)
+	if err == nil {
+		t.Error("expected write error")
+	}
+	if changed {
+		t.Error("should not report changed on write error")
 	}
 }
 
