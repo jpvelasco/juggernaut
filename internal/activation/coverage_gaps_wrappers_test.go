@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 )
 
 // ---------------------------------------------------------------------------
@@ -213,8 +215,8 @@ func TestMiscHelpers(t *testing.T) {
 		if len(tgt.BinaryNames) == 0 {
 			t.Error("BinaryNames should not be empty")
 		}
-		if tgt.TokenEnvVar != bedrockAuthEnvName {
-			t.Errorf("TokenEnvVar = %q, want %q", tgt.TokenEnvVar, bedrockAuthEnvName)
+		if tgt.TokenEnvVar != authmode.BedrockAuthEnvName {
+			t.Errorf("TokenEnvVar = %q, want %q", tgt.TokenEnvVar, authmode.BedrockAuthEnvName)
 		}
 		if tgt.StaticEnv["CLAUDE_CODE_USE_BEDROCK"] != "1" {
 			t.Error("StaticEnv should contain CLAUDE_CODE_USE_BEDROCK=1")
@@ -401,7 +403,7 @@ func TestLaunchWithOptions(t *testing.T) {
 			},
 			Target: LaunchTarget{
 				BinaryNames: []string{claudeName},
-				TokenEnvVar: bedrockAuthEnvName,
+				TokenEnvVar: authmode.BedrockAuthEnvName,
 				StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
 				NeedsToken:  false,
 			},

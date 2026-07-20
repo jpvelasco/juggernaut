@@ -16,8 +16,6 @@ import (
 )
 
 // readSettingsJSON reads the user-scope settings.json from the given home
-
-// readSettingsJSON reads the user-scope settings.json from the given home
 // directory, failing the test if it cannot be read.
 func readSettingsJSON(t *testing.T, home string) []byte {
 	t.Helper()
@@ -172,35 +170,14 @@ func setupMockPSRunner(t *testing.T, home string) {
 		return
 	}
 	psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
-	runner := &mockApplyCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
-			"pwsh.exe":       mockApplyPSOutput(psProfile, psProfile),
-			"powershell.exe": mockApplyPSOutput(psProfile, psProfile),
+			"pwsh.exe":       mockPSOutputJSON(psProfile, psProfile),
+			"powershell.exe": mockPSOutputJSON(psProfile, psProfile),
 		},
 	}
 	activation.SetPSRunnerForTesting(runner)
 	t.Cleanup(activation.ResetPSRunnerForTesting)
-}
-
-// mockApplyCommandRunner implements activation.discoveryCommandRunner for apply tests.
-type mockApplyCommandRunner struct {
-	output map[string][]byte
-	err    map[string]error
-}
-
-func (m *mockApplyCommandRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
-	if err := m.err[exe]; err != nil {
-		return nil, err
-	}
-	return m.output[exe], nil
-}
-
-func mockApplyPSOutput(allHosts, currentHost string) []byte {
-	data, _ := json.Marshal(map[string]string{
-		"CurrentUserAllHosts":    allHosts,
-		"CurrentUserCurrentHost": currentHost,
-	})
-	return data
 }
 
 // setupIsolatedKeychain sets JUGGERNAUT_KEYCHAIN_SERVICE to a short fixed
@@ -232,4 +209,63 @@ func setupIsolatedKeychain(t *testing.T) *keychain.Store {
 func bedrockKeyFlag() string {
 	const testValue = "test-key-value"
 	return "--bedrock-key=" + testValue
+}
+
+// ---------------------------------------------------------------------------
+// Shared test setup helpers
+// ---------------------------------------------------------------------------
+
+// setupApplyTest creates a temp home directory, sets HOME/USERPROFILE env vars,
+// and installs a mock PS runner on Windows. Returns the temp home path.
+// This is the standard first step for any test that calls ExecuteArgs for apply.
+func setupApplyTest(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	setupMockPSRunner(t, home)
+	return home
+}
+
+// setupApplyTestWithReset is like setupApplyTest but also resets and defers
+// Cobra flag state. Use for tests that directly manipulate applyFlags or call
+// commitApply/printApplyDryRun.
+func setupApplyTestWithReset(t *testing.T) string {
+	t.Helper()
+	defer resetFlags()
+	resetFlags()
+	return setupApplyTest(t)
+}
+
+// ---------------------------------------------------------------------------
+// mockPSRunner (unified) — replaces mockApplyCommandRunner and mockDoctorCommandRunner
+// ---------------------------------------------------------------------------
+
+// mockPSRunner is a unified activation.discoveryCommandRunner used across all
+// test files. It replaces the separate mockApplyCommandRunner and
+// mockDoctorCommandRunner types.
+type mockPSRunner struct {
+	output map[string][]byte
+	err    map[string]error
+	counts map[string]int // optional: tracks invocation counts
+}
+
+func (m *mockPSRunner) RunContext(_ context.Context, exe string, _ []string) ([]byte, error) {
+	if m.counts != nil {
+		m.counts[exe]++
+	}
+	if err := m.err[exe]; err != nil {
+		return nil, err
+	}
+	return m.output[exe], nil
+}
+
+// mockPSOutputJSON builds the JSON response for a PowerShell profile discovery
+// call. Replaces both mockApplyPSOutput and mockPSOutput.
+func mockPSOutputJSON(allHosts, currentHost string) []byte {
+	data, _ := json.Marshal(map[string]string{
+		"CurrentUserAllHosts":    allHosts,
+		"CurrentUserCurrentHost": currentHost,
+	})
+	return data
 }

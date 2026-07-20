@@ -36,10 +36,7 @@ func containsStr(haystack, needle string) bool {
 func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
 	for _, cli := range []string{"opencode", "grok"} {
 		t.Run(cli, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
-			setupMockPSRunner(t, home)
+			_ = setupApplyTest(t)
 
 			err := ExecuteArgs([]string{
 				"apply", "--cli=" + cli, "--auth=iam",
@@ -60,10 +57,7 @@ func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
 // verifies the TOML config lands at ~/.codex/config.toml with the correct
 // amazon-bedrock provider shape.
 func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
@@ -109,10 +103,7 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 // current Codex is Responses-only and gpt-oss — Chat-only on Mantle — is no
 // longer a valid Codex model.)
 func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
@@ -140,10 +131,7 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 // is the whole point of the honest-passthrough design and was previously
 // computed but never printed.
 func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
@@ -162,10 +150,7 @@ func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
 // TestApply_OpenCode_CuratedModel_NoWarning: a curated model writes cleanly with
 // no passthrough warning.
 func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
@@ -187,10 +172,7 @@ func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
 
 // TestUninstall_Codex_DryRun exercises the codex uninstall path without writing.
 func TestUninstall_Codex_DryRun(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
@@ -214,10 +196,7 @@ func TestUninstall_Codex_DryRun(t *testing.T) {
 // required a Claude meta marker that Codex configs never write, so uninstall
 // no-opped and left the Bedrock provider configured.
 func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
@@ -249,10 +228,7 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 // TestApply_Codex_IAM_Allowed: Codex now supports IAM via the AWS SDK credential
 // chain, so apply --cli=codex --auth=iam must succeed (not rejected).
 func TestApply_Codex_IAM_Allowed(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=codex", "--auth=iam",

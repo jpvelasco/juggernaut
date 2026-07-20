@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -423,9 +421,7 @@ func TestDoctor_ActivationUnhealthy_NoActivationInDiscoveredProfile(t *testing.T
 		t.Skip("Windows only")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setupApplyTest(t)
 
 	// Real discovered profile has no activation block
 	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -439,9 +435,9 @@ func TestDoctor_ActivationUnhealthy_NoActivationInDiscoveredProfile(t *testing.T
 	}
 
 	// Set up mock discovery
-	runner := &mockDoctorCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
-			"pwsh.exe": mockPSOutput(realProfile, realProfile),
+			"pwsh.exe": mockPSOutputJSON(realProfile, realProfile),
 		},
 		err: map[string]error{
 			"powershell.exe": os.ErrNotExist,
@@ -462,9 +458,7 @@ func TestDoctor_ActivationHealthy_AfterInstall(t *testing.T) {
 		t.Skip("Windows only")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setupApplyTest(t)
 
 	realProfile := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(realProfile)); err != nil {
@@ -476,9 +470,9 @@ func TestDoctor_ActivationHealthy_AfterInstall(t *testing.T) {
 		t.Fatalf("writing file: %v", err)
 	}
 
-	runner := &mockDoctorCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
-			"pwsh.exe": mockPSOutput(realProfile, realProfile),
+			"pwsh.exe": mockPSOutputJSON(realProfile, realProfile),
 		},
 		err: map[string]error{
 			"powershell.exe": os.ErrNotExist,
@@ -506,42 +500,6 @@ func TestDoctor_ActivationHealthy_AfterInstall(t *testing.T) {
 	}
 }
 
-// mockDoctorCommandRunner implements activation.discoveryCommandRunner for doctor tests.
-type mockDoctorCommandRunner struct {
-	output map[string][]byte
-	err    map[string]error
-}
-
-func (m *mockDoctorCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
-	if err := m.err[exe]; err != nil {
-		return nil, err
-	}
-	return m.output[exe], nil
-}
-
-func mockPSOutput(allHosts, currentHost string) []byte {
-	data, _ := json.Marshal(map[string]string{
-		"CurrentUserAllHosts":    allHosts,
-		"CurrentUserCurrentHost": currentHost,
-	})
-	return data
-}
-
-// countingCommandRunner tracks how many times each executable is invoked.
-type countingCommandRunner struct {
-	counts map[string]int
-	output map[string][]byte
-	err    map[string]error
-}
-
-func (c *countingCommandRunner) RunContext(ctx context.Context, exe string, args []string) ([]byte, error) {
-	c.counts[exe]++
-	if err := c.err[exe]; err != nil {
-		return nil, err
-	}
-	return c.output[exe], nil
-}
-
 func TestDoctor_DiscoveryCalledOncePerEdition(t *testing.T) {
 	// Regression: doctor previously resolved profiles twice — once in doctor.go
 	// and again inside CheckPowerShellActivation. With the fix, the resolver
@@ -550,9 +508,7 @@ func TestDoctor_DiscoveryCalledOncePerEdition(t *testing.T) {
 		t.Skip("Windows only")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setupApplyTest(t)
 
 	allHosts := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
@@ -562,10 +518,10 @@ func TestDoctor_DiscoveryCalledOncePerEdition(t *testing.T) {
 		t.Fatalf("writing file: %v", err)
 	}
 
-	runner := &countingCommandRunner{
+	runner := &mockPSRunner{
 		counts: make(map[string]int),
 		output: map[string][]byte{
-			"pwsh.exe": mockPSOutput(allHosts, allHosts),
+			"pwsh.exe": mockPSOutputJSON(allHosts, allHosts),
 		},
 		err: map[string]error{
 			"powershell.exe": os.ErrNotExist,
@@ -595,9 +551,7 @@ func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
 		t.Skip("Windows only")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := setupApplyTest(t)
 
 	// PS7 AllHosts: has the current activation block (healthy)
 	ps7All := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -622,10 +576,10 @@ func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
 	}
 
 	// Mock discovery: PS7 returns AllHosts, PS5.1 returns CurrentHost
-	runner := &mockDoctorCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
-			"pwsh.exe":       mockPSOutput(ps7All, ps7All),
-			"powershell.exe": mockPSOutput(ps5Host, ps5Host),
+			"pwsh.exe":       mockPSOutputJSON(ps7All, ps7All),
+			"powershell.exe": mockPSOutputJSON(ps5Host, ps5Host),
 		},
 	}
 	activation.SetPSRunnerForTesting(runner)
@@ -654,10 +608,7 @@ func TestDoctor_MultiProfileLegacyOverride_DetectsWarning(t *testing.T) {
 // is actually wired into runDoctor's per-scope loop: a real `apply --mode=auto`
 // followed by `doctor` must surface the auto-mode readiness line.
 func TestDoctor_ReportsAutoModeReadiness_EndToEnd(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",

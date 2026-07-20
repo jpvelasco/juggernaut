@@ -3,6 +3,7 @@ package provider
 import (
 	"path/filepath"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
@@ -107,7 +108,7 @@ func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, erro
 
 func (c claude) LaunchSpec() LaunchSpec {
 	return LaunchSpec{
-		TokenEnvVar: bedrockAuthEnvName,
+		TokenEnvVar: authmode.BedrockAuthEnvName,
 		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
 		// NeedsToken is false: Claude's token requirement is auth-mode-dependent
 		// (IAM/SSO use SigV4 and need NO bearer token; only bedrock-api-key does).

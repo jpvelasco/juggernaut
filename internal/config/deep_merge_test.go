@@ -249,16 +249,18 @@ func TestMergeNested_RecursivePreservesUserSubKeys(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	aws, _ := ab["aws"].(map[string]any)
+	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock.aws missing")
+	}
+	awsMap := aws.(map[string]any)
 	// User's profile must survive the recursive merge.
-	if aws["profile"] != "my-sso-profile" {
-		t.Errorf("user profile lost after merge: %v", aws)
+	if awsMap["profile"] != "my-sso-profile" {
+		t.Errorf("user profile lost after merge: %v", awsMap)
 	}
 	// Juggernaut's region should be written.
-	if aws["region"] != "us-east-1" {
-		t.Errorf("region not updated: %v", aws)
+	if awsMap["region"] != "us-east-1" {
+		t.Errorf("region not updated: %v", awsMap)
 	}
 }
 
@@ -289,15 +291,18 @@ func TestRemoveOwnedSubKeys_DotNotation(t *testing.T) {
 		t.Fatalf("RemoveManagedKeysDeep: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
+	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock missing")
+	}
+	abMap := ab.(map[string]any)
 	// aws sub-table should be removed.
-	if _, ok := ab["aws"]; ok {
+	if _, hasAws := abMap["aws"]; hasAws {
 		t.Error("aws sub-table should be removed")
 	}
 	// Sibling keys under amazon-bedrock must survive.
-	if ab["name"] != "Amazon Bedrock (Mantle)" {
-		t.Errorf("sibling name lost: %v", ab)
+	if abMap["name"] != "Amazon Bedrock (Mantle)" {
+		t.Errorf("sibling name lost: %v", abMap)
 	}
 }
 
@@ -323,9 +328,11 @@ func TestRemoveOwnedSubKeys_DotNotationMissingIntermediate(t *testing.T) {
 		t.Fatalf("should not error when intermediate key is missing: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	if ab["name"] != "Amazon Bedrock (Mantle)" {
+	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock missing")
+	}
+	if ab.(map[string]any)["name"] != "Amazon Bedrock (Mantle)" {
 		t.Error("sibling name must survive")
 	}
 }
@@ -355,12 +362,15 @@ func TestRemoveOwnedSubKeys_DotNotationMissingDeepIntermediate(t *testing.T) {
 		t.Fatalf("should not error when deep intermediate is missing: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	if ab["name"] != "Amazon Bedrock (Mantle)" {
+	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock missing")
+	}
+	abMap := ab.(map[string]any)
+	if abMap["name"] != "Amazon Bedrock (Mantle)" {
 		t.Error("sibling name must survive")
 	}
-	if ab["region"] != "us-east-1" {
+	if abMap["region"] != "us-east-1" {
 		t.Error("sibling region must survive")
 	}
 }
@@ -429,10 +439,12 @@ func TestMergeNestedPrefix_RecursionGuard(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	if ab["aws"] != "flat-string" {
-		t.Errorf("scalar should replace map (guard skipped recursion), got %v", ab["aws"])
+	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock missing")
+	}
+	if ab.(map[string]any)["aws"] != "flat-string" {
+		t.Errorf("scalar should replace map (guard skipped recursion), got %v", ab.(map[string]any)["aws"])
 	}
 
 	// Reverse: existing is a scalar, incoming is a map — guard skips recursion,
@@ -455,13 +467,11 @@ func TestMergeNestedPrefix_RecursionGuard(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ = m.Read()
-	mp, _ = got["model_providers"].(map[string]any)
-	ab, _ = mp["amazon-bedrock"].(map[string]any)
-	aws, ok := ab["aws"].(map[string]any)
+	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
 	if !ok {
-		t.Fatalf("incoming map should replace scalar, got %T", ab["aws"])
+		t.Fatal("model_providers.amazon-bedrock.aws missing")
 	}
-	if aws["region"] != "us-east-1" {
+	if aws.(map[string]any)["region"] != "us-east-1" {
 		t.Errorf("map replacement incorrect: %v", aws)
 	}
 }
@@ -520,10 +530,12 @@ func TestMergeNestedPrefix_RecursiveScalarOverrideMap(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	if ab["aws"] != "override-scalar" {
-		t.Errorf("scalar should override map, got %v", ab["aws"])
+	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock.aws missing")
+	}
+	if aws != "override-scalar" {
+		t.Errorf("scalar should override map, got %v", aws)
 	}
 }
 
@@ -564,18 +576,20 @@ func TestMergeNestedPrefix_DeeperRecursivePreservesUserSubKeys(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	aws, _ := ab["aws"].(map[string]any)
-	creds, _ := aws["credentials"].(map[string]any)
-	if creds["profile"] != "my-sso-profile" {
-		t.Errorf("user profile lost at deep level: %v", creds)
+	creds, ok := readNested(got, "model_providers", "amazon-bedrock", "aws", "credentials")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock.aws.credentials missing")
 	}
-	if creds["region"] != "us-east-1" {
-		t.Errorf("region not overridden at deep level: %v", creds)
+	credsMap := creds.(map[string]any)
+	if credsMap["profile"] != "my-sso-profile" {
+		t.Errorf("user profile lost at deep level: %v", credsMap)
 	}
-	if ab["name"] != "Amazon Bedrock (Mantle)" {
-		t.Errorf("sibling name lost: %v", ab)
+	if credsMap["region"] != "us-east-1" {
+		t.Errorf("region not overridden at deep level: %v", credsMap)
+	}
+	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	if !ok || ab.(map[string]any)["name"] != "Amazon Bedrock (Mantle)" {
+		t.Errorf("sibling name lost")
 	}
 }
 
@@ -606,16 +620,19 @@ func TestRemoveOwnedSubKeys_DotNotationPreservesSiblings(t *testing.T) {
 		t.Fatalf("RemoveManagedKeysDeep: %v", err)
 	}
 	got, _ := m.Read()
-	mp, _ := got["model_providers"].(map[string]any)
-	ab, _ := mp["amazon-bedrock"].(map[string]any)
-	aws, _ := ab["aws"].(map[string]any)
-	if _, ok := aws["region"]; ok {
+	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	if !ok {
+		t.Fatal("model_providers.amazon-bedrock.aws missing")
+	}
+	awsMap := aws.(map[string]any)
+	if _, hasRegion := awsMap["region"]; hasRegion {
 		t.Error("region should be removed")
 	}
-	if aws["profile"] != "my-profile" {
+	if awsMap["profile"] != "my-profile" {
 		t.Error("sibling profile must survive")
 	}
-	if ab["name"] != "Amazon Bedrock (Mantle)" {
+	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	if !ok || ab.(map[string]any)["name"] != "Amazon Bedrock (Mantle)" {
 		t.Error("sibling name must survive")
 	}
 }

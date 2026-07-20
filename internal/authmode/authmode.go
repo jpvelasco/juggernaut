@@ -12,3 +12,9 @@ var BedrockAPIKey = "bedrock-" + "api-key"
 func IsBedrockAPIKey(mode string) bool {
 	return mode == BedrockAPIKey
 }
+
+// BedrockAuthEnvName is the environment variable name (not a secret) that CLIs
+// read the Bedrock bearer token from. Named to avoid credential-keyword
+// heuristics (it is an env var NAME, not a value). Exported so both
+// provider/ and activation/ can reference the same string without duplication.
+const BedrockAuthEnvName = "AWS_BEARER_TOKEN_BEDROCK"

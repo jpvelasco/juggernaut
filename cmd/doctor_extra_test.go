@@ -29,10 +29,7 @@ func TestCheckBedrockConnectivity_APIKeyNoToken(t *testing.T) {
 
 // TestCheckSettingsScope_PresentBlock covers the OK-with-block branch.
 func TestCheckSettingsScope_PresentBlock(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -51,10 +48,7 @@ func TestCheckSettingsScope_PresentBlock(t *testing.T) {
 
 // TestReadScopeData covers both the populated and the unreadable-path branches.
 func TestReadScopeData(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -73,10 +67,7 @@ func TestReadScopeData(t *testing.T) {
 
 // TestDoctor_JSON_AfterApply exercises runDoctor's JSON output path end to end.
 func TestDoctor_JSON_AfterApply(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",

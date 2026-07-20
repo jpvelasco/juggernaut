@@ -45,10 +45,7 @@ func normalizeSettings(t *testing.T, raw []byte, home string) string {
 }
 
 func TestGolden_ClaudeApply_SettingsUnchanged(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// A representative apply exercising many managed keys/paths.
 	if err := ExecuteArgs([]string{

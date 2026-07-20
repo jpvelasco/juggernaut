@@ -14,10 +14,7 @@ import (
 // Juggernaut marker) that already sets a managed key ("model") must cause
 // apply to refuse rather than silently overwrite it.
 func TestApply_Claude_ForeignConfig_Refuses(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {
@@ -55,10 +52,7 @@ func TestApply_Claude_ForeignConfig_Refuses(t *testing.T) {
 // TestApply_Claude_ForeignConfig_Force_Overwrites: --force bypasses the
 // refusal and proceeds, still rotating a backup of the foreign file.
 func TestApply_Claude_ForeignConfig_Force_Overwrites(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {
@@ -93,10 +87,7 @@ func TestApply_Claude_ForeignConfig_Force_Overwrites(t *testing.T) {
 // foreign file that has content but NONE of it collides with Juggernaut's
 // managed keys must apply cleanly without --force.
 func TestApply_Claude_ForeignConfig_NoCollidingKeys_ProceedsWithoutForce(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {
@@ -125,10 +116,7 @@ func TestApply_Claude_ForeignConfig_NoCollidingKeys_ProceedsWithoutForce(t *test
 // TestApply_Claude_ForeignConfig_EnvSiblingSurvives: a user's own env var
 // sitting alongside what Juggernaut writes must never trigger a refusal.
 func TestApply_Claude_ForeignConfig_EnvSiblingSurvives(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {
@@ -150,10 +138,7 @@ func TestApply_Claude_ForeignConfig_EnvSiblingSurvives(t *testing.T) {
 // user's own allow/deny permission rules must not trigger a refusal even
 // though Juggernaut also writes into "permissions".
 func TestApply_Claude_ForeignConfig_PermissionsRulesSurviveNoForceNeeded(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {
@@ -182,10 +167,7 @@ func TestApply_Claude_ForeignConfig_PermissionsRulesSurviveNoForceNeeded(t *test
 // the fixture indistinguishable from a legitimate re-apply), so this collides
 // on a different owned leaf (models.default) instead.
 func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // apply --bedrock-key stores a real credential; skip if backend hangs (macOS CI)
 
 	grokDir := filepath.Join(home, ".grok")
@@ -226,10 +208,7 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 // TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded: a user's
 // own sibling model profile in Grok's [model] table must never collide.
 func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // apply proceeds and stores a real credential; skip if backend hangs (macOS CI)
 
 	grokDir := filepath.Join(home, ".grok")
@@ -266,10 +245,7 @@ func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing
 // normally make it look unowned — here we simulate a user who independently
 // set up their own amazon-bedrock region without Juggernaut's marker).
 func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	codexDir := filepath.Join(home, ".codex")
 	if err := safepath.MkdirAll(codexDir); err != nil {
@@ -298,10 +274,7 @@ func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
 // (making the fixture indistinguishable from a legitimate re-apply), so this
 // uses the sibling "model" key instead.
 func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	opencodeDir := filepath.Join(home, ".config", "opencode")
 	if err := safepath.MkdirAll(opencodeDir); err != nil {
@@ -336,10 +309,7 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 // must surface the same refusal information without writing anything or
 // creating a backup.
 func TestApply_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {
@@ -381,10 +351,7 @@ func TestApply_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T
 // though the file necessarily already has Juggernaut's own managed keys
 // populated (which would otherwise look like collisions).
 func TestApply_ReApply_OwnedConfig_NoNewFriction(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -412,10 +379,7 @@ func TestApply_ReApply_OwnedConfig_NoNewFriction(t *testing.T) {
 func TestApply_ReApply_OwnedConfig_NoNewFriction_NonClaudeProviders(t *testing.T) {
 	for _, cli := range []string{"codex", "grok", "opencode"} {
 		t.Run(cli, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
-			setupMockPSRunner(t, home)
+			_ = setupApplyTest(t)
 			setupIsolatedKeychain(t) // stores a real credential; skip if backend hangs (macOS CI)
 
 			if err := ExecuteArgs([]string{
@@ -447,10 +411,7 @@ func TestApply_ForeignConfig_Force_AllProviders(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.cli, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
-			setupMockPSRunner(t, home)
+			home := setupApplyTest(t)
 			setupIsolatedKeychain(t) // --force proceeds and stores a real credential; skip if backend hangs (macOS CI)
 
 			dir := filepath.Join(home, c.dir)
@@ -485,10 +446,7 @@ func TestApply_ForeignConfig_Force_AllProviders(t *testing.T) {
 // be silently treated as "empty, no collision, safe to proceed" — the read
 // failure inside detectForeignCollisions must propagate.
 func TestApply_Claude_ForeignConfig_MalformedJSON_ErrorsNotSilentlyIgnored(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	claudeDir := filepath.Join(home, ".claude")
 	if err := safepath.MkdirAll(claudeDir); err != nil {

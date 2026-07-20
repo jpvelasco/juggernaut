@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -69,7 +70,7 @@ func (o opencode) LaunchSpec() LaunchSpec {
 	// apiKey {env:...} interpolation, so no static enable flag — but the token
 	// is still required (Mantle).
 	return LaunchSpec{
-		TokenEnvVar: bedrockAuthEnvName,
+		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  true,
 	}
 }
@@ -122,7 +123,7 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 				"name": "Amazon Bedrock (Mantle)",
 				"options": map[string]any{
 					"baseURL": baseURL,
-					"apiKey":  "{env:" + bedrockAuthEnvName + "}",
+					"apiKey":  "{env:" + authmode.BedrockAuthEnvName + "}",
 				},
 				"models": map[string]any{
 					modelID: map[string]any{"name": modelID},

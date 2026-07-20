@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
@@ -175,7 +176,7 @@ func (c codex) LaunchSpec() LaunchSpec {
 	// Token injection is decided at launch time from the stored auth mode:
 	// API key → inject AWS_BEARER_TOKEN_BEDROCK; IAM → SDK credential chain.
 	return LaunchSpec{
-		TokenEnvVar: bedrockAuthEnvName,
+		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  false, // auth mode in juggernaut block decides at launch
 	}
 }

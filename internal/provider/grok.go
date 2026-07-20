@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -85,7 +86,7 @@ func (g grok) LaunchSpec() LaunchSpec {
 	// the token. NeedsToken stays true: the shared token is still injected as an
 	// env var (harmless), and apply's Mantle-only IAM guard keys off NeedsToken.
 	return LaunchSpec{
-		TokenEnvVar: bedrockAuthEnvName,
+		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  true,
 	}
 }
