@@ -11,15 +11,58 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+func skipIf(t *testing.T, cond bool, msg string) {
+	t.Helper()
+	if cond {
+		t.Skip(msg)
+	}
+}
+
+func writeShellBlock(t *testing.T, home, filename string) string {
+	t.Helper()
+	path := filepath.Join(home, filename)
+	block := Block(ShellPOSIX)
+	if err := os.WriteFile(path, []byte(block), 0o600); err != nil {
+		t.Fatalf("writeShellBlock(%s): %v", path, err)
+	}
+	return path
+}
+
+func createClaudeDir(t *testing.T, home string) string {
+	t.Helper()
+	d := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(d, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for directories, test under t.TempDir()
+		t.Fatalf("createClaudeDir: %v", err)
+	}
+	return d
+}
+
+func mustMarshalJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func defaultLaunchTarget() LaunchTarget {
+	return LaunchTarget{
+		BinaryNames: []string{"test"},
+		NeedsToken:  true,
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Thin wrapper functions — 0% coverage because they delegate to the *With/*For
 // variants which are already tested. These exercises confirm the delegation
 // contracts and cover the lines themselves.
 // ---------------------------------------------------------------------------
 
 func TestInstall_DelegatesToInstallWith(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("requires POSIX targets")
-	}
+	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
 	home := t.TempDir()
 	bashrc := filepath.Join(home, ".bashrc")
 	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
@@ -43,15 +86,9 @@ func TestInstall_DelegatesToInstallWith(t *testing.T) {
 }
 
 func TestUninstall_DelegatesToUninstallWith(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("requires POSIX targets")
-	}
+	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
 	home := t.TempDir()
-	bashrc := filepath.Join(home, ".bashrc")
-	block := Block(ShellPOSIX)
-	if err := os.WriteFile(bashrc, []byte(block), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	bashrc := writeShellBlock(t, home, ".bashrc")
 	removed, err := Uninstall(home)
 	if err != nil {
 		t.Fatalf("Uninstall: %v", err)
@@ -69,15 +106,9 @@ func TestUninstall_DelegatesToUninstallWith(t *testing.T) {
 }
 
 func TestInstalledTargets_DelegatesToInstalledTargetsWith(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("requires POSIX targets")
-	}
+	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
 	home := t.TempDir()
-	bashrc := filepath.Join(home, ".bashrc")
-	block := Block(ShellPOSIX)
-	if err := os.WriteFile(bashrc, []byte(block), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	bashrc := writeShellBlock(t, home, ".bashrc")
 	paths := InstalledTargets(home)
 	if len(paths) == 0 {
 		t.Error("should find .bashrc with block")
@@ -88,15 +119,9 @@ func TestInstalledTargets_DelegatesToInstalledTargetsWith(t *testing.T) {
 }
 
 func TestInstalledTargetsWith_Delegates(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("requires POSIX targets")
-	}
+	skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
 	home := t.TempDir()
-	zshrc := filepath.Join(home, ".zshrc")
-	block := Block(ShellPOSIX)
-	if err := os.WriteFile(zshrc, []byte(block), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeShellBlock(t, home, ".zshrc")
 	paths := InstalledTargetsWith(home, nil)
 	if len(paths) == 0 {
 		t.Error("should find .zshrc with block")
@@ -130,9 +155,7 @@ func TestResolveBinary_Delegates(t *testing.T) {
 }
 
 func TestResolvePowerShellProfiles_Delegates(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows requires real PowerShell discovery")
-	}
+	skipIf(t, runtime.GOOS == "windows", "Windows requires real PowerShell discovery")
 	r := ResolvePowerShellProfiles()
 	if len(r.ActiveTargets) != 0 {
 		t.Error("should return empty on non-Windows")
@@ -187,112 +210,117 @@ func TestDefaultBinDir_UserProfileFallback(t *testing.T) {
 // isKnownJuggernautArtifact — non-Windows symlink paths
 // ---------------------------------------------------------------------------
 
-func TestIsKnownJuggernautArtifact_NonWindowsSymlink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink test for non-Windows")
-	}
-	dir := t.TempDir()
-	target := filepath.Join(dir, "target")
-	self := filepath.Join(dir, "self")
-	link := filepath.Join(dir, "link")
-	if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(target, link); err != nil {
-		t.Skipf("symlink not supported: %v", err)
-	}
-	// Link points to target, but self is a different file — not a known artifact.
-	if isKnownJuggernautArtifact(link, self) {
-		t.Error("should not match when symlink target differs from self")
-	}
-}
+func TestIsKnownJuggernautArtifact_NonWindows(t *testing.T) {
+	skipIf(t, runtime.GOOS == "windows", "symlink test for non-Windows")
 
-func TestIsKnownJuggernautArtifact_NonWindowsEmptySelf(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink test for non-Windows")
+	tests := []struct {
+		name     string
+		setup    func(dir string) (link, self string)
+		wantTrue bool
+	}{
+		{
+			name: "symlink target differs from self",
+			setup: func(dir string) (string, string) {
+				target := filepath.Join(dir, "target")
+				self := filepath.Join(dir, "self")
+				link := filepath.Join(dir, "link")
+				if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, link); err != nil {
+					t.Skipf("symlink not supported: %v", err)
+				}
+				return link, self
+			},
+			wantTrue: false,
+		},
+		{
+			name: "empty self",
+			setup: func(dir string) (string, string) {
+				target := filepath.Join(dir, "target")
+				link := filepath.Join(dir, "link")
+				if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, link); err != nil {
+					t.Skipf("symlink not supported: %v", err)
+				}
+				return link, ""
+			},
+			wantTrue: false,
+		},
+		{
+			name: "regular file not symlink",
+			setup: func(dir string) (string, string) {
+				path := filepath.Join(dir, "regular")
+				if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return path, "/some/self"
+			},
+			wantTrue: false,
+		},
 	}
-	dir := t.TempDir()
-	target := filepath.Join(dir, "target")
-	link := filepath.Join(dir, "link")
-	if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(target, link); err != nil {
-		t.Skipf("symlink not supported: %v", err)
-	}
-	// Empty self — cannot confirm same file.
-	if isKnownJuggernautArtifact(link, "") {
-		t.Error("should return false with empty self")
-	}
-}
 
-func TestIsKnownJuggernautArtifact_NonWindowsReadlinkError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink test for non-Windows")
-	}
-	// A regular file is not a symlink — Readlink fails.
-	dir := t.TempDir()
-	path := filepath.Join(dir, "regular")
-	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if isKnownJuggernautArtifact(path, "/some/self") {
-		t.Error("regular file should not be a known artifact")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			link, self := tc.setup(dir)
+			got := isKnownJuggernautArtifact(link, self)
+			if got != tc.wantTrue {
+				t.Errorf("isKnownJuggernautArtifact(%q, %q) = %v, want %v", link, self, got, tc.wantTrue)
+			}
+		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// RecoverLegacyArtifacts — error path
+// Legacy artifact detection — clean directory (no artifacts expected)
 // ---------------------------------------------------------------------------
 
-func TestRecoverLegacyArtifacts_ReadError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows uses content-based detection")
-	}
-	// On non-Windows, recovery checks for symlinks. A directory as binDir
-	// should not crash, and recoverPlatformArtifacts iterates commandNames
-	// looking for symlinks. With no matching artifacts, it returns empty.
+func TestLegacyArtifactDetection_CleanDir(t *testing.T) {
 	home := t.TempDir()
-	actions, err := RecoverLegacyArtifacts(home)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// No artifacts expected in a clean temp dir.
-	if len(actions) != 0 {
-		t.Errorf("expected no actions in clean dir, got %d", len(actions))
-	}
-}
 
-// ---------------------------------------------------------------------------
-// DetectLegacyArtifacts — clean directory
-// ---------------------------------------------------------------------------
-
-func TestDetectLegacyArtifacts_CleanDir(t *testing.T) {
-	home := t.TempDir()
+	// DetectLegacyArtifacts — clean directory
 	actions := DetectLegacyArtifacts(home)
 	if len(actions) != 0 {
-		t.Errorf("expected no artifacts in clean dir, got %d", len(actions))
+		t.Errorf("DetectLegacyArtifacts: expected no artifacts in clean dir, got %d", len(actions))
+	}
+
+	// RecoverLegacyArtifacts — skip on Windows (uses content-based detection)
+	skipIf(t, runtime.GOOS == "windows", "Windows uses content-based detection")
+	actions, err := RecoverLegacyArtifacts(home)
+	if err != nil {
+		t.Fatalf("RecoverLegacyArtifacts: unexpected error: %v", err)
+	}
+	if len(actions) != 0 {
+		t.Errorf("RecoverLegacyArtifacts: expected no actions in clean dir, got %d", len(actions))
+	}
+
+	// recoverPlatformArtifacts — skip on Windows
+	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
+	actions, err = recoverPlatformArtifacts(t.TempDir(), "", platformNames())
+	if err != nil {
+		t.Fatalf("recoverPlatformArtifacts: unexpected error: %v", err)
+	}
+	if len(actions) != 0 {
+		t.Errorf("recoverPlatformArtifacts: expected no actions in clean dir, got %d", len(actions))
+	}
+
+	// detectPlatformArtifacts — clean directory
+	actions = detectPlatformArtifacts(t.TempDir(), "", platformNames())
+	if len(actions) != 0 {
+		t.Errorf("detectPlatformArtifacts: expected no actions in clean dir, got %d", len(actions))
 	}
 }
 
 // ---------------------------------------------------------------------------
-// authModes — error path when settings.json is unreadable
+// authModes — empty config path
 // ---------------------------------------------------------------------------
 
-func TestAuthModes_ReadError(t *testing.T) {
-	// authModes reads project-scope first. Create ./.claude/settings.json as
-	// a directory to force a read error.
-	tmpDir := t.TempDir()
-	_ = tmpDir
-	// Use a home where .claude/settings.json doesn't exist — the first path
-	// (./) will fail. We need to control cwd, which is not safe in tests,
-	// so we create a home where both paths lead to readable (empty) files.
+func TestAuthModes_EmptyConfig(t *testing.T) {
 	home := t.TempDir()
-	// Write an empty settings.json so it parses but has no juggernaut block.
-	claudeDir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for directories, test under t.TempDir()
-		t.Fatal(err)
-	}
+	claudeDir := createClaudeDir(t, home)
 	settingsPath := filepath.Join(claudeDir, "settings.json")
 	if err := os.WriteFile(settingsPath, []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
@@ -316,10 +344,7 @@ func TestLaunchWithOptions_ManagedIAM_NoToken(t *testing.T) {
 	home := t.TempDir()
 
 	// Seed a settings.json with an IAM juggernaut block so authModes returns ["iam"].
-	claudeDir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for directories, test under t.TempDir()
-		t.Fatal(err)
-	}
+	claudeDir := createClaudeDir(t, home)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{"mode": "iam"},
@@ -420,127 +445,64 @@ func TestLaunchWithOptions_ExpiredKeyWarning(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// LaunchWithOptions — TokenGetter returns error
+// LaunchWithOptions — error / default fallback paths (table-driven)
 // ---------------------------------------------------------------------------
 
-func TestLaunchWithOptions_TokenGetterError(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: "/nonexistent",
-		Target: LaunchTarget{
-			BinaryNames: []string{"test"},
-			NeedsToken:  true,
+func TestLaunchWithOptions_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       LaunchOptions
+		wantErr    bool
+		errContain string
+	}{
+		{
+			name:       "tokenGetter returns error",
+			opts:       LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget(), TokenGetter: func() (string, error) { return "", os.ErrNotExist }},
+			wantErr:    true,
+			errContain: "reading Bedrock API key",
 		},
-		TokenGetter: func() (string, error) {
-			return "", os.ErrNotExist
+		{
+			name:       "tokenGetter returns empty token",
+			opts:       LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget(), TokenGetter: func() (string, error) { return "", nil }},
+			wantErr:    true,
+			errContain: "not found in keychain",
 		},
-	})
-	if err == nil {
-		t.Fatal("expected error when TokenGetter fails")
+		{
+			name:    "default Warner (no crash)",
+			opts:    LaunchOptions{Home: "", Path: "/nonexistent", Target: LaunchTarget{BinaryNames: []string{"test"}, NeedsToken: false}},
+			wantErr: true, // no binary found
+		},
+		{
+			name:    "default TokenGetter (no crash)",
+			opts:    LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget()}, // TokenGetter nil — defaults to keychain
+			wantErr: true,
+		},
+		{
+			name:    "default Path from environment",
+			opts:    LaunchOptions{Home: "", Path: "", Target: LaunchTarget{BinaryNames: []string{"this-binary-does-not-exist-xyz"}, NeedsToken: false}},
+			wantErr: true,
+		},
 	}
-	if !strings.Contains(err.Error(), "reading Bedrock API key") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
 
-// ---------------------------------------------------------------------------
-// LaunchWithOptions — TokenGetter returns empty token
-// ---------------------------------------------------------------------------
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			opts := tc.opts
+			opts.Home = home
 
-func TestLaunchWithOptions_EmptyToken(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: "/nonexistent",
-		Target: LaunchTarget{
-			BinaryNames: []string{"test"},
-			NeedsToken:  true,
-		},
-		TokenGetter: func() (string, error) {
-			return "", nil
-		},
-	})
-	if err == nil {
-		t.Fatal("expected error when token is empty")
-	}
-	if !strings.Contains(err.Error(), "not found in keychain") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// LaunchWithOptions — default Warner
-// ---------------------------------------------------------------------------
-
-func TestLaunchWithOptions_DefaultWarner(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	// With no Warner set, the default writes to stderr. We can't easily
-	// capture stderr here, but we verify the default Warner is set
-	// by confirming no nil pointer panic when the warner path is hit.
-	// Use NeedsToken=false + empty token getter to avoid the token path.
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: "/nonexistent",
-		Target: LaunchTarget{
-			BinaryNames: []string{"test"},
-			NeedsToken:  false,
-		},
-	})
-	// Expected to fail (no binary), but no crash.
-	if err == nil {
-		t.Error("expected error when no binary found")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// LaunchWithOptions — default TokenGetter and Runner
-// ---------------------------------------------------------------------------
-
-func TestLaunchWithOptions_DefaultTokenGetter(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: "/nonexistent",
-		Target: LaunchTarget{
-			BinaryNames: []string{"test"},
-			NeedsToken:  true,
-		},
-		// TokenGetter is nil — should default to keychain.GetWithFallback
-	})
-	// Will fail — either token not found or binary not found.
-	// The important thing is the default TokenGetter path runs without panic.
-	if err == nil {
-		t.Error("expected error")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// LaunchWithOptions — PATH default from environment
-// ---------------------------------------------------------------------------
-
-func TestLaunchWithOptions_DefaultPath(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	// Path is empty — should default to os.Getenv("PATH")
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		// Path intentionally empty
-		Target: LaunchTarget{
-			BinaryNames: []string{"this-binary-does-not-exist-xyz"},
-			NeedsToken:  false,
-		},
-	})
-	if err == nil {
-		t.Error("expected error when binary not found")
+			err := LaunchWithOptions(opts)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				if tc.errContain != "" && !strings.Contains(err.Error(), tc.errContain) {
+					t.Errorf("expected error containing %q, got: %v", tc.errContain, err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 
@@ -549,9 +511,7 @@ func TestLaunchWithOptions_DefaultPath(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCheckPowerShellActivationWith_LegacyWarning(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("non-Windows only")
-	}
+	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 	// On non-Windows, CheckPowerShellActivationWith returns healthy=true
 	// immediately. This test verifies the non-Windows path.
 	home := t.TempDir()
@@ -568,29 +528,22 @@ func TestCheckPowerShellActivationWith_LegacyWarning(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// platformNames — Windows branch
+// platformNames — verify per-platform
 // ---------------------------------------------------------------------------
 
-func TestPlatformNames_Windows(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows only")
-	}
+func TestPlatformNames(t *testing.T) {
 	names := platformNames()
-	if names.claude != "claude.cmd" {
-		t.Errorf("expected claude.cmd on Windows, got %q", names.claude)
-	}
-	if len(names.commandNames) == 0 {
-		t.Error("commandNames should not be empty")
-	}
-}
-
-func TestPlatformNames_NonWindows(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("non-Windows only")
-	}
-	names := platformNames()
-	if names.claude != "claude" {
-		t.Errorf("expected 'claude' on non-Windows, got %q", names.claude)
+		if names.claude != "claude.cmd" {
+			t.Errorf("expected claude.cmd on Windows, got %q", names.claude)
+		}
+		if len(names.commandNames) == 0 {
+			t.Error("commandNames should not be empty")
+		}
+	} else {
+		if names.claude != "claude" {
+			t.Errorf("expected 'claude' on non-Windows, got %q", names.claude)
+		}
 	}
 }
 
@@ -599,9 +552,7 @@ func TestPlatformNames_NonWindows(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestProfilePathKey_NonWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("non-Windows only")
-	}
+	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 	key := profilePathKey("/Users/test/profile.ps1")
 	if key != "/Users/test/profile.ps1" {
 		t.Errorf("profilePathKey = %q, want /Users/test/profile.ps1", key)
@@ -609,43 +560,11 @@ func TestProfilePathKey_NonWindows(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// recoverPlatformArtifacts — rename error path
-// ---------------------------------------------------------------------------
-
-func TestRecoverPlatformArtifacts_RenameError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("non-Windows only")
-	}
-	// On non-Windows, recoverPlatformArtifacts checks for symlinks.
-	// A clean temp dir has no artifacts — returns empty actions.
-	actions, err := recoverPlatformArtifacts(t.TempDir(), "", platformNames())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(actions) != 0 {
-		t.Errorf("expected no actions in clean dir, got %d", len(actions))
-	}
-}
-
-// ---------------------------------------------------------------------------
-// detectPlatformArtifacts — clean directory
-// ---------------------------------------------------------------------------
-
-func TestDetectPlatformArtifacts_Clean(t *testing.T) {
-	actions := detectPlatformArtifacts(t.TempDir(), "", platformNames())
-	if len(actions) != 0 {
-		t.Errorf("expected no artifacts in clean dir, got %d", len(actions))
-	}
-}
-
-// ---------------------------------------------------------------------------
-// samePath — Windows case-insensitive (skip on non-Windows)
+// samePath — non-Windows branch
 // ---------------------------------------------------------------------------
 
 func TestSamePath_NonWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("non-Windows only")
-	}
+	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 	if !samePath("/a/b", "/a/b") {
 		t.Error("same paths should match")
 	}
@@ -659,9 +578,7 @@ func TestSamePath_NonWindows(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestIsLegacyClaudeShim_NonWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("non-Windows only")
-	}
+	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 	if isLegacyClaudeShim("/some/path") {
 		t.Error("should return false on non-Windows")
 	}
@@ -710,17 +627,4 @@ func TestDefaultTargets_Paths(t *testing.T) {
 			t.Errorf("shell for %s = %s, want %s", tgt.Path, tgt.Shell, wantShell)
 		}
 	}
-}
-
-// ---------------------------------------------------------------------------
-// findBedrockConfigFile — additional fallback paths
-// ---------------------------------------------------------------------------
-
-func mustMarshalJSON(v any) []byte {
-	// Helper — panic on error since this is test-only with literal maps.
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }
