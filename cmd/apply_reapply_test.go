@@ -12,10 +12,7 @@ import (
 // fallback when the OS keychain is unavailable (as on headless CI). It covers
 // the resolveCredential flag path and commitApply's API-key storage branch.
 func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	// commitApply calls SetWithFallback, which reaches the real OS keychain on
 	// macOS (security(1) can hang). Use the probed/isolated store so the test
 	// skips gracefully when the backend is unavailable rather than timing out.
@@ -51,10 +48,7 @@ func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
 // design pattern: re-applying without --auth reads the auth mode back from the
 // existing block (exercises the has-block branch of resolveApplyInputs).
 func TestApply_ReapplyWithoutAuth_PreservesExistingMode(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// First apply pins IAM.
 	if err := ExecuteArgs([]string{

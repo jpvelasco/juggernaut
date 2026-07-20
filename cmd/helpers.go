@@ -104,6 +104,36 @@ func fromMap(m map[string]any, v any) error {
 // breaks on Windows (keystrokes are silently dropped by the TUI input loop).
 const credentialEchoMode huh.EchoMode = huh.EchoMode(textinput.EchoNone)
 
+// ---- Shared config helpers ----
+
+// readProviderConfig reads a provider's config file for the given scope.
+// Returns (nil, nil) when the file does not exist.
+func readProviderConfig(prov provider.Provider, home, scope string) (map[string]any, error) {
+	path, err := prov.ConfigPath(home, scope)
+	if err != nil {
+		return nil, err
+	}
+	format, err := config.FormatByName(prov.ConfigFormatName())
+	if err != nil {
+		return nil, err
+	}
+	mgr := config.NewManagerWithFormat(path, format)
+	data, err := mgr.Read()
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// resolvedScopes returns the scopes to operate on, respecting an optional
+// single-scope filter. When filter is empty, both user and project are returned.
+func resolvedScopes(filter string) []string {
+	if filter != "" {
+		return []string{filter}
+	}
+	return []string{"user", "project"}
+}
+
 // ---- Apply phase helpers (extracted from apply.go for size reduction) ----
 
 // toProviderOptions maps the cmd-built schema.Options onto the CLI-neutral
@@ -162,18 +192,7 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 	}
 	opusplan = applyFlags.opusplan
 
-	path, herr := prov.ConfigPath(home, applyFlags.scope)
-	if herr != nil {
-		err = herr
-		return
-	}
-	format, herr := config.FormatByName(prov.ConfigFormatName())
-	if herr != nil {
-		err = herr
-		return
-	}
-	mgr := config.NewManagerWithFormat(path, format)
-	existing, herr := mgr.Read()
+	existing, herr := readProviderConfig(prov, home, applyFlags.scope)
 	if herr != nil {
 		err = fmt.Errorf("checking existing configuration: %w", herr)
 		return
@@ -316,7 +335,7 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 	if err != nil {
 		return err
 	}
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, applyFlags.scope, prov, plan)
 	if err != nil {
 		return err
 	}
@@ -340,19 +359,14 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 	return nil
 }
 
-// detectForeignCollisions checks whether path already holds content Juggernaut
-// doesn't own and, if so, whether any of it collides with the leaves plan is
-// about to write. A config Juggernaut already owns (prov.OwnsConfig) is a
-// re-apply and is never checked — zero new friction for the supported re-apply
+// detectForeignCollisions checks whether the provider's config file already holds
+// content Juggernaut doesn't own and, if so, whether any of it collides with the
+// leaves plan is about to write. A config Juggernaut already owns (prov.OwnsConfig)
+// is a re-apply and is never checked — zero new friction for the supported re-apply
 // path ("Juggernaut law": once Juggernaut owns a file, touching its own prior
 // values is not a collision).
-func detectForeignCollisions(path string, prov provider.Provider, plan provider.ConfigPlan) ([]config.Collision, error) {
-	format, err := config.FormatByName(prov.ConfigFormatName())
-	if err != nil {
-		return nil, err
-	}
-	mgr := config.NewManagerWithFormat(path, format)
-	existing, err := mgr.Read()
+func detectForeignCollisions(home, scope string, prov provider.Provider, plan provider.ConfigPlan) ([]config.Collision, error) {
+	existing, err := readProviderConfig(prov, home, scope)
 	if err != nil {
 		return nil, fmt.Errorf("checking existing configuration: %w", err)
 	}
@@ -388,7 +402,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 
 	// Collision detection must run before ANY side effect — including storing
 	// a credential in the OS keychain — so a refused apply changes nothing.
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, applyFlags.scope, prov, plan)
 	if err != nil {
 		return err
 	}

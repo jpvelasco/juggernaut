@@ -7,10 +7,7 @@ import (
 )
 
 func TestShow_Text_AfterApply(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -33,10 +30,7 @@ func TestShow_Text_AfterApply(t *testing.T) {
 }
 
 func TestShow_JSON_AfterApply(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -60,10 +54,7 @@ func TestShow_JSON_AfterApply(t *testing.T) {
 }
 
 func TestShow_NotConfigured(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{"show", "--scope=user"}); err != nil {

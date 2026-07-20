@@ -24,10 +24,6 @@ import (
 // rejected so a bad CLISpec.Name cannot become shell injection.
 var shellCLINameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
-// bedrockAuthEnvName is the environment variable name (not a secret) that the
-// launcher injects the Bedrock bearer token into by default.
-const bedrockAuthEnvName = "AWS_BEARER_TOKEN_BEDROCK"
-
 const (
 	BeginMarker = "# BEGIN: Juggernaut Claude Activation"
 	EndMarker   = "# END: Juggernaut Claude Activation"
@@ -136,7 +132,7 @@ func claudeLaunchTarget() LaunchTarget {
 	}
 	return LaunchTarget{
 		BinaryNames: names,
-		TokenEnvVar: bedrockAuthEnvName,
+		TokenEnvVar: authmode.BedrockAuthEnvName,
 		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
 		NeedsToken:  false, // determined by auth mode, not the target
 	}
@@ -398,20 +394,19 @@ func InstallTargetFor(target Target, spec CLISpec) (bool, error) {
 	if err := validateCLISpec(spec); err != nil {
 		return false, err
 	}
-	base := filepath.Dir(target.Path)
-	data, err := safepath.ReadFile(base, target.Path)
-	if os.IsNotExist(err) {
+	data, notFound, err := readProfile(target.Path)
+	if notFound {
 		data = nil
 	} else if err != nil {
-		return false, fmt.Errorf("reading %s: %w", target.Path, err)
+		return false, err
 	}
 	block := blockFor(target.Shell, spec.Name, spec.Begin, spec.End)
 	next := upsertBlockWithMarkers(string(data), block, spec.Begin, spec.End)
 	if string(data) == next {
 		return false, nil
 	}
-	if err := safepath.WriteFile(base, target.Path, []byte(next)); err != nil {
-		return false, fmt.Errorf("writing %s: %w", target.Path, err)
+	if err := writeProfile(target.Path, []byte(next)); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -514,6 +509,29 @@ func uninstallCLIBlocks(home string, opts UninstallOptions) ([]string, error) {
 	return removed, nil
 }
 
+// readProfile reads a shell profile file. Returns nil data and a notFound flag
+// when the file does not exist (so callers can decide to create or skip).
+func readProfile(path string) (data []byte, notFound bool, err error) {
+	base := filepath.Dir(path)
+	data, err = safepath.ReadFile(base, path)
+	if os.IsNotExist(err) {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return data, false, nil
+}
+
+// writeProfile atomically writes the updated content to the profile path.
+func writeProfile(path string, content []byte) error {
+	base := filepath.Dir(path)
+	if err := safepath.WriteFile(base, path, content); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
+}
+
 // RemoveTarget removes the Claude activation block from a profile.
 func RemoveTarget(path string) (bool, error) {
 	return RemoveTargetForMarkers(path, BeginMarker, EndMarker)
@@ -523,20 +541,16 @@ func RemoveTarget(path string) (bool, error) {
 // profile, leaving other CLIs' blocks untouched (uses the matched-span remover
 // so an orphaned marker never deletes trailing content).
 func RemoveTargetForMarkers(path, begin, end string) (bool, error) {
-	base := filepath.Dir(path)
-	data, err := safepath.ReadFile(base, path)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("reading %s: %w", path, err)
+	data, notFound, err := readProfile(path)
+	if notFound || err != nil {
+		return false, err
 	}
 	next, found := removeBlockWithMarkers(normalizeNewlines(string(data)), begin, end)
 	if !found {
 		return false, nil
 	}
-	if err := safepath.WriteFile(base, path, []byte(next)); err != nil {
-		return false, fmt.Errorf("writing %s: %w", path, err)
+	if err := writeProfile(path, []byte(next)); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -545,13 +559,9 @@ func RemoveTargetForMarkers(path, begin, end string) (bool, error) {
 // or Bedrock blocks from a profile. This is used by full uninstall to ensure
 // no Juggernaut-related blocks remain.
 func RemoveTargetWithLegacy(path string) (bool, error) {
-	base := filepath.Dir(path)
-	data, err := safepath.ReadFile(base, path)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("reading %s: %w", path, err)
+	data, notFound, err := readProfile(path)
+	if notFound || err != nil {
+		return false, err
 	}
 	content := string(data)
 	changed := false
@@ -580,8 +590,8 @@ func RemoveTargetWithLegacy(path string) (bool, error) {
 	if !changed {
 		return false, nil
 	}
-	if err := safepath.WriteFile(base, path, []byte(content)); err != nil {
-		return false, fmt.Errorf("writing %s: %w", path, err)
+	if err := writeProfile(path, []byte(content)); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -764,7 +774,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	}
 	tokenEnvVar := target.TokenEnvVar
 	if tokenEnvVar == "" {
-		tokenEnvVar = bedrockAuthEnvName
+		tokenEnvVar = authmode.BedrockAuthEnvName
 	}
 
 	env := os.Environ()
@@ -961,7 +971,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 			changed = true
 		}
 		if changed {
-			if err := safepath.WriteFile(base, p, []byte(content)); err != nil {
+			if err := writeProfile(p, []byte(content)); err != nil {
 				return installed, fmt.Errorf("migrating legacy block in %s: %w", p, err)
 			}
 		}
@@ -1010,15 +1020,11 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	return installed, nil
 }
 
-// profilePathKey normalizes a profile path for set membership. On Windows,
-// comparison is case-insensitive after Clean so InstallTargets and
-// MigrationTargets that differ only by casing still match.
+// profilePathKey normalizes a profile path for set membership. Delegates to
+// pathKey so InstallTargets and MigrationTargets that differ only by casing
+// still match.
 func profilePathKey(path string) string {
-	path = filepath.Clean(path)
-	if runtime.GOOS == "windows" {
-		return strings.ToLower(path)
-	}
-	return path
+	return pathKey(path)
 }
 
 // UninstallPowerShellActivation removes activation blocks from all discovered
@@ -1338,21 +1344,6 @@ func unsetEnv(env []string, key string) []string {
 		}
 	}
 	return out
-}
-
-// containsTargetPathCI checks if a path exists in a []Target,
-// case-insensitive on Windows.
-func containsTargetPathCI(targets []Target, path string) bool {
-	for _, t := range targets {
-		if runtime.GOOS == "windows" {
-			if strings.EqualFold(t.Path, path) {
-				return true
-			}
-		} else if t.Path == path {
-			return true
-		}
-	}
-	return false
 }
 
 // legacyNames holds platform-specific file names for v4.2.6 artifacts.

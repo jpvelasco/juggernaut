@@ -367,11 +367,11 @@ func TestSetNativeDefaultMode_OverwritesExisting(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// mockApplyCommandRunner.RunContext
+// mockPSRunner.RunContext
 // ---------------------------------------------------------------------------
 
 func TestMockPSRunner_RunContext_Success(t *testing.T) {
-	runner := &mockApplyCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
 			"pwsh.exe": []byte(`{"CurrentUserAllHosts":"/p","CurrentUserCurrentHost":"/p"}`),
 		},
@@ -387,7 +387,7 @@ func TestMockPSRunner_RunContext_Success(t *testing.T) {
 }
 
 func TestMockPSRunner_RunContext_Error(t *testing.T) {
-	runner := &mockApplyCommandRunner{
+	runner := &mockPSRunner{
 		err: map[string]error{
 			"pwsh.exe": fmt.Errorf("powershell not found"),
 		},
@@ -403,7 +403,7 @@ func TestMockPSRunner_RunContext_Error(t *testing.T) {
 }
 
 func TestMockPSRunner_RunContext_EmptyOutput(t *testing.T) {
-	runner := &mockApplyCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
 			"pwsh.exe": {}, // empty output
 		},
@@ -419,7 +419,7 @@ func TestMockPSRunner_RunContext_EmptyOutput(t *testing.T) {
 }
 
 func TestMockPSRunner_RunContext_UnknownExe(t *testing.T) {
-	runner := &mockApplyCommandRunner{
+	runner := &mockPSRunner{
 		output: map[string][]byte{
 			"pwsh.exe": []byte(`{"CurrentUserAllHosts":"/p"}`),
 		},

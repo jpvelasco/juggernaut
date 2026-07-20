@@ -148,28 +148,28 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	modelSection, ok := plan.Keys["model"].(map[string]any)
+	bg, ok := nestedMapChain(plan.Keys, "model", grokModelName)
 	if !ok {
-		t.Fatalf("[model] table missing: %T", plan.Keys["model"])
+		t.Fatalf("[model.%s] missing", grokModelName)
 	}
-	bg, ok := modelSection["bedrock-grok"].(map[string]any)
+	bgMap, ok := bg.(map[string]any)
 	if !ok {
-		t.Fatalf("[model.bedrock-grok] missing: %v", modelSection)
+		t.Fatalf("[model.%s] not a map: %T", grokModelName, bg)
 	}
-	if bg["model"] != "xai.grok-4.3" {
-		t.Errorf("model = %v, want xai.grok-4.3", bg["model"])
+	if bgMap["model"] != "xai.grok-4.3" {
+		t.Errorf("model = %v, want xai.grok-4.3", bgMap["model"])
 	}
-	if base, _ := bg["base_url"].(string); base != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
+	if base, _ := bgMap["base_url"].(string); base != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
 		t.Errorf("base_url = %q, want .../openai/v1", base)
 	}
-	if _, hasEnvKey := bg["env_key"]; hasEnvKey {
-		t.Errorf("env_key must NOT be set (it keeps Grok's login flow alive); got %v", bg["env_key"])
+	if _, hasEnvKey := bgMap["env_key"]; hasEnvKey {
+		t.Errorf("env_key must NOT be set (it keeps Grok's login flow alive); got %v", bgMap["env_key"])
 	}
-	if bg["api_backend"] != "responses" {
-		t.Errorf("api_backend = %v, want responses", bg["api_backend"])
+	if bgMap["api_backend"] != "responses" {
+		t.Errorf("api_backend = %v, want responses", bgMap["api_backend"])
 	}
-	models, ok := plan.Keys["models"].(map[string]any)
-	if !ok || models["default"] != "bedrock-grok" {
+	modelsDefault, ok := nestedMapChain(plan.Keys, "models", "default")
+	if !ok || modelsDefault != "bedrock-grok" {
 		t.Errorf("[models].default = %v, want bedrock-grok", plan.Keys["models"])
 	}
 	if err := plan.Validate(); err != nil {
@@ -186,15 +186,19 @@ func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	auth, ok := plan.Keys["auth"].(map[string]any)
+	auth, ok := nestedMapChain(plan.Keys, "auth")
 	if !ok {
-		t.Fatalf("[auth] block missing: %T", plan.Keys["auth"])
+		t.Fatalf("[auth] block missing")
 	}
-	if cmd, _ := auth["auth_provider_command"].(string); !strings.Contains(cmd, "auth-token") {
-		t.Errorf("auth_provider_command = %v, want it to invoke `juggernaut auth-token`", auth["auth_provider_command"])
+	authMap, ok := auth.(map[string]any)
+	if !ok {
+		t.Fatalf("[auth] not a map: %T", auth)
 	}
-	if auth["auth_provider_label"] != "Bedrock" {
-		t.Errorf("auth_provider_label = %v, want Bedrock", auth["auth_provider_label"])
+	if cmd, _ := authMap["auth_provider_command"].(string); !strings.Contains(cmd, "auth-token") {
+		t.Errorf("auth_provider_command = %v, want it to invoke `juggernaut auth-token`", authMap["auth_provider_command"])
+	}
+	if authMap["auth_provider_label"] != "Bedrock" {
+		t.Errorf("auth_provider_label = %v, want Bedrock", authMap["auth_provider_label"])
 	}
 	// "auth" must be a managed key so uninstall removes it.
 	found := false
@@ -220,8 +224,12 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig should not fail on an unlisted region: %v", err)
 	}
-	bg := plan.Keys["model"].(map[string]any)[grokModelName].(map[string]any)
-	if base := bg["base_url"].(string); strings.Contains(base, "eu-west-1") {
+	bg, ok := nestedMapChain(plan.Keys, "model", grokModelName)
+	if !ok {
+		t.Fatalf("[model.%s] missing", grokModelName)
+	}
+	bgMap := bg.(map[string]any)
+	if base := bgMap["base_url"].(string); strings.Contains(base, "eu-west-1") {
 		t.Errorf("base_url must not use the non-serving region eu-west-1, got %q", base)
 	}
 	if len(plan.Warnings) == 0 {
@@ -230,8 +238,12 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	// us-west-2 IS a known grok-4.3 region → kept, silent.
 	opts.Region = "us-west-2"
 	plan, _ = p.BuildConfig(testConfig(), opts)
-	bg = plan.Keys["model"].(map[string]any)[grokModelName].(map[string]any)
-	if base := bg["base_url"].(string); !strings.Contains(base, "us-west-2") {
+	bg, ok = nestedMapChain(plan.Keys, "model", grokModelName)
+	if !ok {
+		t.Fatalf("[model.%s] missing", grokModelName)
+	}
+	bgMap = bg.(map[string]any)
+	if base := bgMap["base_url"].(string); !strings.Contains(base, "us-west-2") {
 		t.Errorf("us-west-2 serves grok-4.3 and must be kept, got %q", base)
 	}
 	if len(plan.Warnings) != 0 {

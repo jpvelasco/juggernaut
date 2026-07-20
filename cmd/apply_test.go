@@ -18,10 +18,7 @@ import (
 )
 
 func TestApply_StorageFlagUnrecognized(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--storage=profile", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -35,10 +32,7 @@ func TestApply_StorageFlagUnrecognized(t *testing.T) {
 }
 
 func TestApply_DryRun_IAM(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply",
@@ -58,10 +52,7 @@ func TestApply_DryRun_IAM(t *testing.T) {
 }
 
 func TestApply_DryRun_BedrockAPIKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply",
@@ -87,10 +78,7 @@ func TestApply_DryRun_BedrockAPIKey(t *testing.T) {
 // closed stdin (EOF); if the prompt fired it would error, and a dry-run must
 // never prompt at all. The command must succeed and write nothing.
 func TestApply_DryRun_BedrockAPIKey_NoPromptWithoutKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	var err error
 	withStdin(t, "", func() { // closed stdin: a prompt here would fail, not hang
@@ -112,10 +100,7 @@ func TestApply_DryRun_BedrockAPIKey_NoPromptWithoutKey(t *testing.T) {
 }
 
 func TestApply_WritesSettings_IAM(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -180,10 +165,7 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 }
 
 func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -213,10 +195,7 @@ func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
 }
 
 func TestApply_DefaultMantleDisabledPreservesInferenceProfiles(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -248,10 +227,7 @@ func TestApply_DefaultMantleDisabledPreservesInferenceProfiles(t *testing.T) {
 }
 
 func TestApply_MantleFlagStripsInferenceProfilePrefix(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply",
@@ -279,10 +255,7 @@ func TestApply_MantleFlagStripsInferenceProfilePrefix(t *testing.T) {
 }
 
 func TestApply_ModelFlag_OverridesAll(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	const customModel = "custom.model.id"
 	if err := ExecuteArgs([]string{
@@ -318,10 +291,7 @@ func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 }
 
 func TestUninstall_RemovesBlock(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Apply with all new flags to ensure they get cleaned up.
 	if err := ExecuteArgs([]string{
@@ -355,10 +325,7 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 }
 
 func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	bashrc := filepath.Join(home, ".bashrc")
 	if err := safepath.WriteFile(home, bashrc, []byte("export KEEP=1\n")); err != nil {
@@ -384,10 +351,7 @@ func TestUninstallFull_RemovesActivationBlock(t *testing.T) {
 }
 
 func TestApply_ReApply_PermissionMode_Preserved(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// First apply sets mode=auto.
 	if err := ExecuteArgs([]string{
@@ -422,10 +386,7 @@ func TestApply_ReApply_PermissionMode_Preserved(t *testing.T) {
 }
 
 func TestApply_ReApply_AlwaysThinkingOff_DeletesKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// First apply with --always-thinking.
 	if err := ExecuteArgs([]string{
@@ -452,10 +413,7 @@ func TestApply_ReApply_AlwaysThinkingOff_DeletesKey(t *testing.T) {
 }
 
 func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	store := setupIsolatedKeychain(t)
 
 	// Pre-seed the keychain (simulates post-migration state).
@@ -479,10 +437,7 @@ func TestApply_BedrockKey_FromKeychainNoReprompt(t *testing.T) {
 }
 
 func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 	store := setupIsolatedKeychain(t)
 	t.Cleanup(func() { _ = store.Delete() })
 
@@ -502,10 +457,7 @@ func TestApply_PreserveKey_ErrorsIfKeychainEmpty(t *testing.T) {
 }
 
 func TestApply_PermissionMode_AutoSetsBedrockEnvVar(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
@@ -534,10 +486,7 @@ func TestApply_PermissionMode_AutoSetsBedrockEnvVar(t *testing.T) {
 }
 
 func TestApply_PermissionMode_InvalidErrors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--mode=bogus", "--skip-preflight",
@@ -548,10 +497,7 @@ func TestApply_PermissionMode_InvalidErrors(t *testing.T) {
 }
 
 func TestApply_FableAndFallbackWritesNativeKeys(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	const fableModel = "custom.fable.model"
 	if err := ExecuteArgs([]string{
@@ -593,10 +539,7 @@ func TestApply_FableAndFallbackWritesNativeKeys(t *testing.T) {
 }
 
 func TestApply_FallbackModelRejectsEmptyEntries(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -612,10 +555,7 @@ func TestApply_FallbackModelRejectsEmptyEntries(t *testing.T) {
 }
 
 func TestApply_AvailableModelsWritesNativeKeys(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -655,10 +595,7 @@ func TestApply_AvailableModelsWritesNativeKeys(t *testing.T) {
 }
 
 func TestApply_AvailableModelsRejectsEmptyEntries(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -674,10 +611,7 @@ func TestApply_AvailableModelsRejectsEmptyEntries(t *testing.T) {
 }
 
 func TestApply_AvailableModelsTrimsWhitespace(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -702,10 +636,7 @@ func TestApply_AvailableModelsTrimsWhitespace(t *testing.T) {
 }
 
 func TestApply_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -727,10 +658,7 @@ func TestApply_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
 }
 
 func TestApply_ReApply_AvailableModelsOmittedClearsKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -759,10 +687,7 @@ func TestApply_ReApply_AvailableModelsOmittedClearsKey(t *testing.T) {
 }
 
 func TestApply_ServiceTier_WritesEnvVar(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--service-tier=flex", "--skip-preflight",
@@ -782,10 +707,7 @@ func TestApply_ServiceTier_WritesEnvVar(t *testing.T) {
 }
 
 func TestApply_AlwaysThinking_WritesNativeKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--always-thinking", "--skip-preflight",
@@ -804,10 +726,7 @@ func TestApply_AlwaysThinking_WritesNativeKey(t *testing.T) {
 }
 
 func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--effort=medium", "--skip-preflight",
@@ -826,10 +745,7 @@ func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
 }
 
 func TestApply_MaxEffortUsesEnvOnly(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--effort=max", "--skip-preflight",
@@ -852,10 +768,7 @@ func TestApply_MaxEffortUsesEnvOnly(t *testing.T) {
 }
 
 func TestApply_EffortAutoUsesEnvOnly(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--effort=auto", "--skip-preflight"})
 	if err != nil {
@@ -877,10 +790,7 @@ func TestApply_EffortAutoUsesEnvOnly(t *testing.T) {
 }
 
 func TestApply_EffortUltracodeInvalid(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{"apply", "--auth=iam", "--region=us-west-2", "--effort=ultracode", "--skip-preflight"})
 	if err == nil {
@@ -892,10 +802,7 @@ func TestApply_EffortUltracodeInvalid(t *testing.T) {
 }
 
 func TestApply_SkipWebFetchPreflight_AlwaysSet(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -961,10 +868,7 @@ func TestCredentialEchoMode_IsEchoNone(t *testing.T) {
 // so --mode=auto ENABLES auto mode and prints the "enabled / how to reach it" info
 // — NOT the incapable-model warning. This is the fix for JP's case.
 func TestApply_AutoMode_EnabledWithDefaultConfig(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -986,10 +890,7 @@ func TestApply_AutoMode_EnabledWithDefaultConfig(t *testing.T) {
 // non-capable one → auto can't be enabled → the warning fires and the enable var
 // is absent.
 func TestApply_AutoMode_WarnsWhenNoCapableModel(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1009,10 +910,7 @@ func TestApply_AutoMode_WarnsWhenNoCapableModel(t *testing.T) {
 }
 
 func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1033,10 +931,7 @@ func TestApply_NonAutoMode_NoAutoModeWarning(t *testing.T) {
 // print the warning when Fable is configured — regardless of auth mode or
 // region — rather than silently risk denied runtime calls.
 func TestApply_Fable_WarnsAboutDataRetention(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1059,10 +954,7 @@ func TestApply_Fable_WarnsAboutDataRetention(t *testing.T) {
 // cover the "Fable genuinely unconfigured" case directly; there is no CLI flag
 // to clear a config-pinned Fable default, so that state isn't reachable here.
 func TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1078,10 +970,7 @@ func TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention(t *testing.T) {
 }
 
 func TestApply_Mantle_WarnsAboutPromptCaching(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1097,10 +986,7 @@ func TestApply_Mantle_WarnsAboutPromptCaching(t *testing.T) {
 }
 
 func TestApply_MantleURL_WarnsAboutPromptCaching(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1117,10 +1003,7 @@ func TestApply_MantleURL_WarnsAboutPromptCaching(t *testing.T) {
 }
 
 func TestApply_MantleDryRun_WarnsAboutPromptCaching(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1140,10 +1023,7 @@ func TestApply_MantleDryRun_WarnsAboutPromptCaching(t *testing.T) {
 }
 
 func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
@@ -1159,10 +1039,7 @@ func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
 }
 
 func TestUninstall_Codex_PreservesSharedToken(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	// Uninstalling a non-Claude CLI must NOT remove the shared bearer token,
 	// even with --full (that would break a still-configured Claude).
@@ -1179,10 +1056,7 @@ func TestUninstall_Codex_PreservesSharedToken(t *testing.T) {
 }
 
 func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	out := captureStdout(t, func() {
@@ -1200,10 +1074,7 @@ func TestApply_Codex_NoClaudeWarnings(t *testing.T) {
 }
 
 func TestApply_CodexDryRun_ReapplySkipsPromptWhenCodexConfigExists(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	codexDir := filepath.Join(home, ".codex")
 	if err := safepath.MkdirAll(codexDir); err != nil {
@@ -1234,10 +1105,7 @@ func TestApply_ClaudeDryRun_ReapplySkipsPromptWhenClaudeConfigExists(t *testing.
 	// provider through resolveApplyInputs) must NOT break Claude's own detection.
 	// A first apply writes ~/.claude/settings.json; a second dry-run with closed
 	// stdin must skip the prompt (detect existing config) and return cleanly.
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=claude", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -1337,10 +1205,7 @@ func TestResolveApplyInputs_ReadError_Propagates(t *testing.T) {
 }
 
 func TestApply_UnknownCLI_Errors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--cli=nonesuch", "--skip-preflight",
@@ -1357,10 +1222,7 @@ func TestApply_UnknownCLI_Errors(t *testing.T) {
 }
 
 func TestApply_DefaultCLI_IsClaude_StillWrites(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// No --cli flag: must behave exactly as before (Claude), writing settings.json.
 	if err := ExecuteArgs([]string{
@@ -1374,10 +1236,7 @@ func TestApply_DefaultCLI_IsClaude_StillWrites(t *testing.T) {
 }
 
 func TestApply_ExplicitClaudeCLI_Works(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--cli=claude", "--skip-preflight",
@@ -1390,10 +1249,7 @@ func TestApply_ExplicitClaudeCLI_Works(t *testing.T) {
 }
 
 func TestApply_NoMantle_NoMantleWarning(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{

@@ -6,14 +6,33 @@ import (
 	"strings"
 )
 
+// pathKey normalizes a path for set membership. On Windows, comparison is
+// case-insensitive after Clean so paths that differ only by casing still match.
+func pathKey(path string) string {
+	path = filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(path)
+	}
+	return path
+}
+
 // containsPathCI checks if a path exists in a list, case-insensitive on Windows.
 func containsPathCI(paths []string, path string) bool {
+	key := pathKey(path)
 	for _, p := range paths {
-		if runtime.GOOS == "windows" {
-			if strings.EqualFold(p, path) {
-				return true
-			}
-		} else if p == path {
+		if pathKey(p) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// containsTargetPathCI checks if a path exists in a []Target,
+// case-insensitive on Windows.
+func containsTargetPathCI(targets []Target, path string) bool {
+	key := pathKey(path)
+	for _, t := range targets {
+		if pathKey(t.Path) == key {
 			return true
 		}
 	}
@@ -25,10 +44,7 @@ func deduplicatePathsCI(paths []string) []string {
 	seen := make(map[string]bool, len(paths))
 	var result []string
 	for _, p := range paths {
-		key := p
-		if runtime.GOOS == "windows" {
-			key = strings.ToLower(p)
-		}
+		key := pathKey(p)
 		if !seen[key] {
 			seen[key] = true
 			result = append(result, p)

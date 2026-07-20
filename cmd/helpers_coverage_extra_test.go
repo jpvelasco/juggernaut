@@ -73,10 +73,7 @@ func TestResolveCredential_TUIPromptError(t *testing.T) {
 func TestPrintApplyDryRun_NonClaudeProvider(t *testing.T) {
 	defer resetFlags()
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {

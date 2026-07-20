@@ -8,10 +8,7 @@ import (
 // applying with --mode=auto then re-applying WITHOUT --mode must preserve the
 // auto permission mode and its CLAUDE_CODE_ENABLE_AUTO_MODE env var.
 func TestApply_ReapplyWithoutMode_PreservesAutoMode(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// First apply pins auto mode.
 	if err := ExecuteArgs([]string{
@@ -53,10 +50,7 @@ func TestApply_ReapplyWithoutMode_PreservesAutoMode(t *testing.T) {
 // routine re-apply that omits --mode. Previously mergePermissions deleted the
 // native defaultMode whenever Juggernaut had no --mode opinion.
 func TestApply_ReapplyPreservesExternallySetMode(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// First apply with no permission mode (Juggernaut asserts nothing).
 	if err := ExecuteArgs([]string{
@@ -89,10 +83,7 @@ func TestApply_ReapplyPreservesExternallySetMode(t *testing.T) {
 // in when --mode is omitted: an explicit --mode=default must still override an
 // externally-set auto mode (and clear its env var).
 func TestApply_ExplicitModeOverridesExternalMode(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",

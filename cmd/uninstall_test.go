@@ -9,10 +9,7 @@ import (
 // TestUninstall_DryRun_PreservesBlock verifies that a dry-run reports intended
 // removals but leaves settings.json untouched and never prints completion.
 func TestUninstall_DryRun_PreservesBlock(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -50,10 +47,7 @@ func TestUninstall_DryRun_PreservesBlock(t *testing.T) {
 // TestUninstall_ScopeFilter verifies --scope=user only touches the user-scope
 // settings and prints a scoped removal message.
 func TestUninstall_ScopeFilter(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -83,10 +77,7 @@ func TestUninstall_ScopeFilter(t *testing.T) {
 
 // TestUninstall_ConfirmYes exercises the interactive prompt accepting "y".
 func TestUninstall_ConfirmYes(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -119,10 +110,7 @@ func TestUninstall_ConfirmYes(t *testing.T) {
 
 // TestUninstall_ConfirmAbort exercises the prompt being declined (anything but y).
 func TestUninstall_ConfirmAbort(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -161,10 +149,7 @@ func TestUninstall_ConfirmAbort(t *testing.T) {
 // or a closed pipe) is treated as a decline: the uninstall aborts and the block
 // survives. Covers the scanner.Scan()==false EOF branch of confirmUninstallAborted.
 func TestUninstall_EOFAborts(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -201,10 +186,7 @@ func TestUninstall_EOFAborts(t *testing.T) {
 // TestUninstall_NothingInstalled is a clean no-op: uninstall on a fresh home
 // should succeed and still print completion without errors.
 func TestUninstall_NothingInstalled(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {

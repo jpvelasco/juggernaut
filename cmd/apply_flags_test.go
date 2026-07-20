@@ -26,10 +26,7 @@ func TestApply_RejectsBareFlagShapedArgument(t *testing.T) {
 // TestApply_NoOpusplanConflict verifies --no-opusplan cannot be combined with
 // --opusplan (mirrors the --no-mantle conflict guard).
 func TestApply_NoOpusplanConflict(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -46,10 +43,7 @@ func TestApply_NoOpusplanConflict(t *testing.T) {
 // TestApply_NoOpusplanAloneIsNoop verifies --no-opusplan by itself is accepted
 // (opusplan defaults off, so disabling it is a harmless no-op).
 func TestApply_NoOpusplanAloneIsNoop(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -62,10 +56,7 @@ func TestApply_NoOpusplanAloneIsNoop(t *testing.T) {
 // TestApply_SkipPreflightAccepted verifies --skip-preflight remains accepted as
 // a no-op so existing scripts/CI passing it do not break.
 func TestApply_SkipPreflightAccepted(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	if err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
@@ -93,10 +84,7 @@ func TestApply_RejectsNonFlagArgument(t *testing.T) {
 
 // TestApply_ValidateArgsEmptyArgs passes through without error (the happy path).
 func TestApply_ValidateArgsEmptyArgs(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	// apply with no positional args — validateApplyArgs must return nil.
 	if err := ExecuteArgs([]string{

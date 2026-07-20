@@ -90,10 +90,7 @@ func confirmUninstallAborted() (aborted bool, err error) {
 }
 
 func uninstallScopes() []string {
-	if uninstallFlags.scope != "" {
-		return []string{uninstallFlags.scope}
-	}
-	return []string{"user", "project"}
+	return resolvedScopes(uninstallFlags.scope)
 }
 
 func uninstallSettingsBlocks(home string, prov provider.Provider) {
@@ -164,13 +161,5 @@ func uninstallActivationFull(home string, prov provider.Provider) {
 	if prov.Name() != "claude" {
 		return
 	}
-	binDir := activation.DefaultBinDir(home)
-	actions, err := activation.RecoverLegacyArtifacts(binDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy artifacts: %v\n", err)
-		return
-	}
-	for _, a := range actions {
-		fmt.Printf("  ✓ %s: %s\n", a.Action, a.Path)
-	}
+	reportLegacyRecovery(home)
 }

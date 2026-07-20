@@ -270,12 +270,13 @@ func TestResolveOpusplanConflict_BothSet(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDetectForeignCollisions_NoFile(t *testing.T) {
+	home := t.TempDir()
 	prov, err := provider.Get("claude")
 	if err != nil {
 		t.Fatalf("get provider: %v", err)
 	}
 	// A nonexistent file is treated as empty by the config manager — no collisions.
-	collisions, err := detectForeignCollisions("/nonexistent/path/settings.json", prov, provider.ConfigPlan{Keys: map[string]any{"env": map[string]any{}}})
+	collisions, err := detectForeignCollisions(home, "user", prov, provider.ConfigPlan{Keys: map[string]any{"env": map[string]any{}}})
 	if err != nil {
 		t.Fatalf("unexpected error for nonexistent file: %v", err)
 	}
@@ -286,15 +287,18 @@ func TestDetectForeignCollisions_NoFile(t *testing.T) {
 
 func TestDetectForeignCollisions_EmptyFile(t *testing.T) {
 	home := t.TempDir()
-	path := filepath.Join(home, "settings.json")
+	prov, _ := provider.Get("claude")
+	path, _ := prov.ConfigPath(home, "user")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { //nolint:gosec // test-only temp dir
+		t.Fatalf("mkdir: %v", err)
+	}
 	// Empty file — no collisions.
 	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
-	prov, _ := provider.Get("claude")
 	envKeys := map[string]any{"env": map[string]any{"FOO": "bar"}}
-	collisions, err := detectForeignCollisions(path, prov, provider.ConfigPlan{Keys: envKeys})
+	collisions, err := detectForeignCollisions(home, "user", prov, provider.ConfigPlan{Keys: envKeys})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -305,20 +309,23 @@ func TestDetectForeignCollisions_EmptyFile(t *testing.T) {
 
 func TestDetectForeignCollisions_ForeignEnvKey(t *testing.T) {
 	home := t.TempDir()
-	path := filepath.Join(home, "settings.json")
+	prov, _ := provider.Get("claude")
+	path, _ := prov.ConfigPath(home, "user")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { //nolint:gosec // test-only temp dir
+		t.Fatalf("mkdir: %v", err)
+	}
 	// A config that Juggernaut does NOT own (no juggernaut block) but has an env key.
 	configData := `{"env":{"AWS_REGION":"eu-west-1"}}`
 	if err := os.WriteFile(path, []byte(configData), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
-	prov, _ := provider.Get("claude")
 	plan := provider.ConfigPlan{
 		Keys: map[string]any{
 			"env": map[string]any{"AWS_REGION": "us-west-2"},
 		},
 	}
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, "user", prov, plan)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -335,20 +342,23 @@ func TestDetectForeignCollisions_ForeignEnvKey(t *testing.T) {
 
 func TestDetectForeignCollisions_OwnedConfig_NoCollisions(t *testing.T) {
 	home := t.TempDir()
-	path := filepath.Join(home, "settings.json")
+	prov, _ := provider.Get("claude")
+	path, _ := prov.ConfigPath(home, "user")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { //nolint:gosec // test-only temp dir
+		t.Fatalf("mkdir: %v", err)
+	}
 	// A config that Juggernaut owns — re-apply, so no collision check.
 	configData := `{"juggernaut":{"auth":{"mode":"iam","region":"us-west-2"}}}`
 	if err := os.WriteFile(path, []byte(configData), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
-	prov, _ := provider.Get("claude")
 	plan := provider.ConfigPlan{
 		Keys: map[string]any{
 			"env": map[string]any{"AWS_REGION": "us-west-2", "CLAUDE_CODE_USE_BEDROCK": "1"},
 		},
 	}
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, "user", prov, plan)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -359,20 +369,23 @@ func TestDetectForeignCollisions_OwnedConfig_NoCollisions(t *testing.T) {
 
 func TestDetectForeignCollisions_ForeignPermissionKey(t *testing.T) {
 	home := t.TempDir()
-	path := filepath.Join(home, "settings.json")
+	prov, _ := provider.Get("claude")
+	path, _ := prov.ConfigPath(home, "user")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { //nolint:gosec // test-only temp dir
+		t.Fatalf("mkdir: %v", err)
+	}
 	// A config without juggernaut block but with permissions.defaultMode set by someone else.
 	configData := `{"permissions":{"defaultMode":"acceptEdits"}}`
 	if err := os.WriteFile(path, []byte(configData), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
-	prov, _ := provider.Get("claude")
 	plan := provider.ConfigPlan{
 		Keys: map[string]any{
 			"permissions": map[string]any{"defaultMode": "auto"},
 		},
 	}
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, "user", prov, plan)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -736,10 +749,7 @@ func TestCommitApply_PlanValidationError(t *testing.T) {
 	// schema.Build fails for unsupported region; commitApply calls BuildConfig
 	// internally (which calls schema.Build for claude). We verify that an
 	// invalid region causes a plan error before reaching disk writes.
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -767,10 +777,7 @@ func TestCommitApply_CollisionRefusal(t *testing.T) {
 	resetFlags()
 	applyFlags.force = false
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Write a settings.json that Juggernaut does NOT own but has env keys
 	// that collide with what commitApply is about to write.
@@ -824,13 +831,7 @@ func TestCommitApply_CollisionRefusal(t *testing.T) {
 }
 
 func TestCommitApply_KeychainStorage(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 	setupIsolatedKeychain(t) // skip if keychain backend hangs (macOS CI)
 
 	bCfg, err := loadBedrockConfig()
@@ -896,13 +897,7 @@ func TestCommitApply_KeychainStorage(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestPrintApplyDryRun_NoCollisions(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -957,10 +952,7 @@ func TestPrintApplyDryRun_CollisionsNoForce(t *testing.T) {
 	resetFlags()
 	applyFlags.force = false
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Write a foreign config with colliding env keys.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
@@ -1191,10 +1183,7 @@ func TestFileExists_NotExisting(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestInstallActivation_AlreadyUpToDate(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	prov, err := provider.Get("claude")
 	if err != nil {
 		t.Skip("claude provider not registered")
@@ -1247,10 +1236,7 @@ func TestResolveApplyInputs_MantleOnlyPinsBedrockAPIKey(t *testing.T) {
 
 	// Grok does NOT support CapNativeAuth — if --auth is omitted,
 	// resolveApplyInputs should auto-pin to bedrock-api-key.
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -1279,10 +1265,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
 	resetFlags()
 	applyFlags.scope = "user"
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Pre-write a settings.json that Juggernaut owns (has juggernaut block).
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
@@ -1323,10 +1306,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesPermissionMode(t *testing.T) {
 	resetFlags()
 	applyFlags.scope = "user"
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Pre-write a settings.json that Juggernaut owns with permission mode in meta.
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
@@ -1367,10 +1347,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesNativePermissionMode(t *testing.
 	resetFlags()
 	applyFlags.scope = "user"
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Pre-write an owned config where permissionMode is set only in the native
 	// permissions.defaultMode (not in meta) — simulating Claude Code's Shift+Tab.
@@ -1414,10 +1391,7 @@ func TestResolveApplyInputs_NonOwnedExplicitAuth(t *testing.T) {
 	applyFlags.scope = "user"
 	applyFlags.auth = "iam"
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// No existing config file — non-owned, but --auth is explicitly set.
 	// resolveApplyInputs should return immediately with the explicit auth.
@@ -1448,10 +1422,7 @@ func TestResolveApplyInputs_DefaultRegionFromConfig(t *testing.T) {
 	applyFlags.scope = "user"
 	applyFlags.auth = "iam"
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -1476,10 +1447,7 @@ func TestResolveApplyInputs_DefaultRegionFromConfig(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestInstallActivation_UpdatedProfiles(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 	prov, err := provider.Get("claude")
 	if err != nil {
 		t.Skip("claude provider not registered")
@@ -1534,13 +1502,7 @@ func TestReportLegacyRecovery_ErrorPath(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommitApply_WarningsOutput(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -1591,13 +1553,7 @@ func TestCommitApply_WarningsOutput(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestPrintApplyDryRun_ClaudeLegacyRecovery(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -1640,13 +1596,7 @@ func TestPrintApplyDryRun_ClaudeLegacyRecovery(t *testing.T) {
 }
 
 func TestPrintApplyDryRun_NonClaudeNoLegacyRecovery(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
@@ -2045,13 +1995,7 @@ func TestReportLegacyRecovery_LegacyLauncherRemoved(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommitApply_SuccessPath_ActivationInstalled(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 
 	// Create a .bashrc so activation.InstallWith finds a POSIX target.
 	bashrcPath := filepath.Join(home, ".bashrc")
@@ -2120,10 +2064,7 @@ func TestCommitApply_ForceBypassesCollision(t *testing.T) {
 	resetFlags()
 	applyFlags.force = true
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Write a foreign config with colliding env keys.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
@@ -2179,13 +2120,7 @@ func TestCommitApply_ForceBypassesCollision(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommitApply_NonClaudeNoWarnings(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 	setupIsolatedKeychain(t)
 
 	bCfg, err := loadBedrockConfig()
@@ -2227,10 +2162,7 @@ func TestCommitApply_NonClaudeNoWarnings(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestInstallActivation_ErrorPath(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTest(t)
 
 	// Create a .bashrc as a directory instead of a file — this causes
 	// InstallTargetFor to fail when it tries to read/write it.
@@ -2263,7 +2195,6 @@ func TestDetectForeignCollisions_TOMLProvider(t *testing.T) {
 
 	// Grok is always user-scoped and uses TOML.
 	prov, _ := provider.Get("grok")
-	path, _ := prov.ConfigPath(home, "user")
 
 	// No existing config file — TOML provider, no collisions.
 	plan := provider.ConfigPlan{
@@ -2273,7 +2204,7 @@ func TestDetectForeignCollisions_TOMLProvider(t *testing.T) {
 			},
 		},
 	}
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, "user", prov, plan)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2288,16 +2219,16 @@ func TestDetectForeignCollisions_TOMLProvider(t *testing.T) {
 
 func TestDetectForeignCollisions_ReadError(t *testing.T) {
 	home := t.TempDir()
-	path := filepath.Join(home, "settings.json")
+	prov, _ := provider.Get("claude")
+	path, _ := prov.ConfigPath(home, "user")
 
 	// Create a file that can't be read (directory instead of file).
 	if err := os.MkdirAll(path, 0o700); err != nil { //nolint:gosec // test-only temp dir
 		t.Fatalf("mkdir as dir: %v", err)
 	}
 
-	prov, _ := provider.Get("claude")
 	plan := provider.ConfigPlan{Keys: map[string]any{"env": map[string]any{}}}
-	_, err := detectForeignCollisions(path, prov, plan)
+	_, err := detectForeignCollisions(home, "user", prov, plan)
 	if err == nil {
 		t.Fatal("expected error when config path is a directory")
 	}
@@ -2647,7 +2578,7 @@ default = "openai"
 			},
 		},
 	}
-	collisions, err := detectForeignCollisions(path, prov, plan)
+	collisions, err := detectForeignCollisions(home, "user", prov, plan)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2663,13 +2594,7 @@ default = "openai"
 // ---------------------------------------------------------------------------
 
 func TestCommitApply_AutoModeWarning(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	home := setupApplyTestWithReset(t)
 
 	bCfg, err := loadBedrockConfig()
 	if err != nil {

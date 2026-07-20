@@ -8,10 +8,7 @@ import (
 // TestApply_NoMantleConflict verifies --no-mantle cannot be combined with
 // --mantle (exercises the error branch of resolveMantle).
 func TestApply_NoMantleConflict(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",
@@ -27,10 +24,7 @@ func TestApply_NoMantleConflict(t *testing.T) {
 
 // TestApply_NoMantleConflictWithURL verifies the same guard for --mantle-url.
 func TestApply_NoMantleConflictWithURL(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupMockPSRunner(t, home)
+	_ = setupApplyTest(t)
 
 	err := ExecuteArgs([]string{
 		"apply", "--auth=iam", "--region=us-west-2",

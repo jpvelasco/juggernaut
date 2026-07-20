@@ -120,22 +120,26 @@ func TestOpenCode_BuildConfig_Curated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	prov, ok := plan.Keys["provider"].(map[string]any)
+	bm, ok := nestedMapChain(plan.Keys, "provider", "bedrock-mantle")
 	if !ok {
-		t.Fatalf("provider block missing: %T", plan.Keys["provider"])
+		t.Fatalf("provider.bedrock-mantle missing")
 	}
-	bm, ok := prov["bedrock-mantle"].(map[string]any)
+	bmMap, ok := bm.(map[string]any)
 	if !ok {
-		t.Fatalf("bedrock-mantle provider missing: %v", prov)
+		t.Fatalf("bedrock-mantle provider not a map: %T", bm)
 	}
-	if bm["npm"] != "@ai-sdk/openai-compatible" {
-		t.Errorf("npm = %v, want @ai-sdk/openai-compatible", bm["npm"])
+	if bmMap["npm"] != "@ai-sdk/openai-compatible" {
+		t.Errorf("npm = %v, want @ai-sdk/openai-compatible", bmMap["npm"])
 	}
-	optsMap, _ := bm["options"].(map[string]any)
-	if base, _ := optsMap["baseURL"].(string); base != "https://bedrock-mantle.us-west-2.api.aws/v1" {
+	optsMap, ok := nestedMapChain(bmMap, "options")
+	if !ok {
+		t.Fatalf("options missing under bedrock-mantle")
+	}
+	optsNested := optsMap.(map[string]any)
+	if base, _ := optsNested["baseURL"].(string); base != "https://bedrock-mantle.us-west-2.api.aws/v1" {
 		t.Errorf("baseURL = %q, want .../v1", base)
 	}
-	if api, _ := optsMap["apiKey"].(string); api != "{env:AWS_BEARER_TOKEN_BEDROCK}" {
+	if api, _ := optsNested["apiKey"].(string); api != "{env:AWS_BEARER_TOKEN_BEDROCK}" {
 		t.Errorf("apiKey = %q, want {env:AWS_BEARER_TOKEN_BEDROCK}", api)
 	}
 	// top-level model must be provider_id/model_id
