@@ -20,7 +20,7 @@ func TestFindBedrockConfigFile_ParentDirFallback(t *testing.T) {
 	// When bedrock-config.json exists in the parent directory.
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")
-	if err := os.MkdirAll(sub, 0o700); err != nil { //nolint:gosec // test
+	if err := os.MkdirAll(sub, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for directories, test under t.TempDir()
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "bedrock-config.json"), []byte("{}"), 0o600); err != nil {
