@@ -11,14 +11,9 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
-	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
-	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
-	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
-
-// readSettingsJSON reads the user-scope settings.json from the given home
 
 // readSettingsJSON reads the user-scope settings.json from the given home
 // directory, failing the test if it cannot be read.
@@ -240,83 +235,6 @@ func setupApplyTestWithReset(t *testing.T) string {
 	defer resetFlags()
 	resetFlags()
 	return setupApplyTest(t)
-}
-
-// buildClaudeBlockAndOpts creates a schema.Block and matching provider.Options
-// from the embedded bedrock config. Returns (block, provOpts, bCfg) or skips
-// the test if the embedded config is unavailable. Use the optional optsFn to
-// override default schema.Options fields.
-func buildClaudeBlockAndOpts(t *testing.T, optsFn func(*schema.Options)) (*schema.Block, provider.Options, *bedrock.Config) {
-	t.Helper()
-	bCfg, err := loadBedrockConfig()
-	if err != nil {
-		t.Skipf("no bedrock config: %v", err)
-	}
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
-	}
-	if optsFn != nil {
-		optsFn(&opts)
-	}
-	block, err := schema.Build(bCfg, opts)
-	if err != nil {
-		t.Fatalf("schema.Build: %v", err)
-	}
-	provOpts := provider.Options{
-		AuthMode:       opts.AuthMode,
-		Region:         opts.Region,
-		Scope:          opts.Scope,
-		Version:        opts.Version,
-		Effort:         opts.Effort,
-		AuthValidated:  opts.AuthValidated,
-		PermissionMode: opts.PermissionMode,
-	}
-	return block, provOpts, bCfg
-}
-
-// defaultClaudeBlockAndOpts returns a standard IAM block, provider options, and
-// bedrock config for claude tests. Convenience wrapper around
-// buildClaudeBlockAndOpts with no overrides.
-func defaultClaudeBlockAndOpts(t *testing.T) (*schema.Block, provider.Options, *bedrock.Config) {
-	t.Helper()
-	return buildClaudeBlockAndOpts(t, nil)
-}
-
-// writeSettingsFile creates the .claude/settings.json directory and writes the
-// given JSON string. Convenience wrapper to avoid the mkdir + writeFile boilerplate.
-func writeSettingsFile(t *testing.T, home, jsonStr string) {
-	t.Helper()
-	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(settingsPath, []byte(jsonStr), 0o600); err != nil {
-		t.Fatalf("write settings: %v", err)
-	}
-}
-
-// writeOwnedClaudeConfig pre-writes a settings.json that Juggernaut owns
-// (has a juggernaut block with auth and meta). Optional extra top-level keys
-// can be merged in via extraKeys.
-func writeOwnedClaudeConfig(t *testing.T, home string, extraKeys ...map[string]any) {
-	t.Helper()
-	base := `{"juggernaut":{"auth":{"mode":"iam","region":"us-west-2"},"meta":{"managedBy":"juggernaut"}}}`
-	var settings map[string]any
-	if err := json.Unmarshal([]byte(base), &settings); err != nil {
-		t.Fatalf("unmarshal base config: %v", err)
-	}
-	for _, extra := range extraKeys {
-		for k, v := range extra {
-			settings[k] = v
-		}
-	}
-	data, _ := json.MarshalIndent(settings, "", "  ")
-	writeSettingsFile(t, home, string(data))
 }
 
 // ---------------------------------------------------------------------------
