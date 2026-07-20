@@ -166,40 +166,84 @@ func TestWrapperDelegation(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// resolveBinaryFrom — SelfPaths skip path (Windows staged launch scenario)
+// Miscellaneous helpers — resolveBinaryFrom, DefaultBinDir, platformNames, etc.
 // ---------------------------------------------------------------------------
 
-func TestResolveBinaryFrom_SelfPathsSkip(t *testing.T) {
-	// Create a temp dir with a fake binary, then pass it as a SelfPath
-	// to confirm it gets skipped.
-	dir := t.TempDir()
-	binPath := filepath.Join(dir, "test-bin")
-	if runtime.GOOS == "windows" {
-		binPath += ".exe"
-	}
-	if err := os.WriteFile(binPath, []byte("fake"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+func TestMiscHelpers(t *testing.T) {
+	t.Run("ResolveBinaryFrom_SelfPathsSkip", func(t *testing.T) {
+		dir := t.TempDir()
+		binPath := filepath.Join(dir, "test-bin")
+		if runtime.GOOS == "windows" {
+			binPath += ".exe"
+		}
+		if err := os.WriteFile(binPath, []byte("fake"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resolveBinaryFrom(dir, []string{filepath.Base(binPath)}, "", []string{binPath}); err == nil {
+			t.Error("expected error when the only candidate is in SelfPaths")
+		}
+	})
 
-	_, err := resolveBinaryFrom(dir, []string{filepath.Base(binPath)}, "", []string{binPath})
-	if err == nil {
-		t.Error("expected error when the only candidate is in SelfPaths")
-	}
-}
+	t.Run("DefaultBinDir_UserProfileFallback", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "/tmp/up-home")
+		got := DefaultBinDir("")
+		want := filepath.Join("/tmp/up-home", ".local", "bin")
+		if got != want {
+			t.Errorf("DefaultBinDir = %q, want %q", got, want)
+		}
+	})
 
-// ---------------------------------------------------------------------------
-// DefaultBinDir — env fallback paths
-// ---------------------------------------------------------------------------
+	t.Run("PlatformNames", func(t *testing.T) {
+		names := platformNames()
+		wantClaude := "claude"
+		if runtime.GOOS == "windows" {
+			wantClaude = "claude.cmd"
+		}
+		if names.claude != wantClaude {
+			t.Errorf("platformNames.claude = %q, want %q", names.claude, wantClaude)
+		}
+		if len(names.commandNames) == 0 {
+			t.Error("commandNames should not be empty")
+		}
+	})
 
-func TestDefaultBinDir_UserProfileFallback(t *testing.T) {
-	// When home is empty, DefaultBinDir consults HOME then USERPROFILE.
-	t.Setenv("HOME", "")
-	t.Setenv("USERPROFILE", "/tmp/up-home")
-	got := DefaultBinDir("")
-	want := filepath.Join("/tmp/up-home", ".local", "bin")
-	if got != want {
-		t.Errorf("DefaultBinDir = %q, want %q", got, want)
-	}
+	t.Run("ClaudeLaunchTarget", func(t *testing.T) {
+		tgt := claudeLaunchTarget()
+		if len(tgt.BinaryNames) == 0 {
+			t.Error("BinaryNames should not be empty")
+		}
+		if tgt.TokenEnvVar != bedrockAuthEnvName {
+			t.Errorf("TokenEnvVar = %q, want %q", tgt.TokenEnvVar, bedrockAuthEnvName)
+		}
+		if tgt.StaticEnv["CLAUDE_CODE_USE_BEDROCK"] != "1" {
+			t.Error("StaticEnv should contain CLAUDE_CODE_USE_BEDROCK=1")
+		}
+	})
+
+	t.Run("DefaultTargets", func(t *testing.T) {
+		home := "/home/user"
+		targets := DefaultTargets(home)
+		expected := map[string]Shell{
+			filepath.Join(home, ".bashrc"):                        ShellPOSIX,
+			filepath.Join(home, ".zshrc"):                         ShellPOSIX,
+			filepath.Join(home, ".profile"):                       ShellPOSIX,
+			filepath.Join(home, ".config", "fish", "config.fish"): ShellFish,
+		}
+		if len(targets) != len(expected) {
+			t.Fatalf("expected %d targets, got %d", len(expected), len(targets))
+		}
+		for _, tgt := range targets {
+			wantShell, ok := expected[tgt.Path]
+			if !ok {
+				t.Errorf("unexpected target path: %s", tgt.Path)
+				continue
+			}
+			if tgt.Shell != wantShell {
+				t.Errorf("shell for %s = %s, want %s", tgt.Path, tgt.Shell, wantShell)
+			}
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -316,174 +360,157 @@ func TestAuthModes_EmptyConfig(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// LaunchWithOptions — managed IAM path (static env set, no token)
+// LaunchWithOptions — IAM, expired key, and error paths
 // ---------------------------------------------------------------------------
 
-func TestLaunchWithOptions_ManagedIAM_NoToken(t *testing.T) {
-	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-	home := t.TempDir()
-
-	// Seed a settings.json with an IAM juggernaut block so authModes returns ["iam"].
-	claudeDir := createClaudeDir(t, home)
-	settings := map[string]any{
-		"juggernaut": map[string]any{
-			"auth": map[string]any{"mode": "iam"},
-			"meta": map[string]any{"managedBy": "juggernaut"},
-		},
-	}
-	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), mustMarshalJSON(settings), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	realDir := t.TempDir()
-	claudeName := "claude"
-	if runtime.GOOS == "windows" {
-		claudeName = "claude.exe"
-	}
-	writeExecutableFile(t, realDir, filepath.Join(realDir, claudeName), "real claude")
-
-	tokenCalled := false
-	var gotEnv []string
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Args: []string{"--version"},
-		Path: realDir,
-		TokenGetter: func() (string, error) {
-			tokenCalled = true
-			return "", nil
-		},
-		Runner: func(_ string, _ []string, env []string) error {
-			gotEnv = env
-			return nil
-		},
-		Target: LaunchTarget{
-			BinaryNames: []string{claudeName},
-			TokenEnvVar: bedrockAuthEnvName,
-			StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
-			NeedsToken:  false,
-		},
-	})
-	if err != nil {
-		t.Fatalf("launch: %v", err)
-	}
-	if tokenCalled {
-		t.Error("IAM auth must NOT call TokenGetter")
-	}
-	// Static env should be set because managed=true.
-	if envValue(gotEnv, "CLAUDE_CODE_USE_BEDROCK") != "1" {
-		t.Errorf("expected CLAUDE_CODE_USE_BEDROCK=1, env=%v", gotEnv)
-	}
-	// Token env should be unset.
-	if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "" {
-		t.Errorf("IAM auth must NOT inject bearer token, env=%v", gotEnv)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// LaunchWithOptions — expired key warning path
-// ---------------------------------------------------------------------------
-
-func TestLaunchWithOptions_ExpiredKeyWarning(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	// An expired short-term key: the short-term prefix + base64 presigned URL
-	// issued in 2020 with a 1h window. The prefix is split to avoid tripping
-	// the secret scanner on this test fixture.
-	expiredURL := "https://bedrock.amazonaws.com/?Action=CallWithBearerToken" +
-		"&X-Amz-Date=20200101T000000Z&X-Amz-Expires=3600"
-	expiredKey := "bedrock-" + "api-key-" + base64.StdEncoding.EncodeToString([]byte(expiredURL))
-
-	warned := ""
-	err := LaunchWithOptions(LaunchOptions{
-		Home: home,
-		Path: "/nonexistent",
-		Target: LaunchTarget{
-			BinaryNames: []string{"test"},
-			NeedsToken:  true,
-		},
-		TokenGetter: func() (string, error) {
-			return expiredKey, nil
-		},
-		Warner: func(msg string) {
-			warned = msg
-		},
-		Runner: func(path string, args []string, env []string) error {
-			return nil
-		},
-	})
-	// Will fail because PATH is /nonexistent, but the warning path should
-	// have been exercised before the binary resolution.
-	_ = err
-	// The key might not actually be expired depending on the embedded timestamp,
-	// so we only check that it didn't crash. The Warner callback proves the path ran.
-	if warned != "" {
-		if !strings.Contains(warned, "expired") {
-			t.Errorf("warning should mention expired, got: %s", warned)
+func TestLaunchWithOptions(t *testing.T) {
+	t.Run("ManagedIAM_NoToken", func(t *testing.T) {
+		t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
+		home := t.TempDir()
+		claudeDir := createClaudeDir(t, home)
+		settings := map[string]any{
+			"juggernaut": map[string]any{
+				"auth": map[string]any{"mode": "iam"},
+				"meta": map[string]any{"managedBy": "juggernaut"},
+			},
 		}
-	}
-}
+		if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), mustMarshalJSON(settings), 0o600); err != nil {
+			t.Fatal(err)
+		}
 
-// ---------------------------------------------------------------------------
-// LaunchWithOptions — error / default fallback paths (table-driven)
-// ---------------------------------------------------------------------------
+		realDir := t.TempDir()
+		claudeName := "claude"
+		if runtime.GOOS == "windows" {
+			claudeName = "claude.exe"
+		}
+		writeExecutableFile(t, realDir, filepath.Join(realDir, claudeName), "real claude")
 
-func TestLaunchWithOptions_ErrorPaths(t *testing.T) {
-	tests := []struct {
-		name       string
-		opts       LaunchOptions
-		wantErr    bool
-		errContain string
-	}{
-		{
-			name:       "tokenGetter returns error",
-			opts:       LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget(), TokenGetter: func() (string, error) { return "", os.ErrNotExist }},
-			wantErr:    true,
-			errContain: "reading Bedrock API key",
-		},
-		{
-			name:       "tokenGetter returns empty token",
-			opts:       LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget(), TokenGetter: func() (string, error) { return "", nil }},
-			wantErr:    true,
-			errContain: "not found in keychain",
-		},
-		{
-			name:    "default Warner (no crash)",
-			opts:    LaunchOptions{Home: "", Path: "/nonexistent", Target: LaunchTarget{BinaryNames: []string{"test"}, NeedsToken: false}},
-			wantErr: true, // no binary found
-		},
-		{
-			name:    "default TokenGetter (no crash)",
-			opts:    LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget()}, // TokenGetter nil — defaults to keychain
-			wantErr: true,
-		},
-		{
-			name:    "default Path from environment",
-			opts:    LaunchOptions{Home: "", Path: "", Target: LaunchTarget{BinaryNames: []string{"this-binary-does-not-exist-xyz"}, NeedsToken: false}},
-			wantErr: true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			opts := tc.opts
-			opts.Home = home
-
-			err := LaunchWithOptions(opts)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error")
-				}
-				if tc.errContain != "" && !strings.Contains(err.Error(), tc.errContain) {
-					t.Errorf("expected error containing %q, got: %v", tc.errContain, err)
-				}
-			} else if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+		tokenCalled := false
+		var gotEnv []string
+		err := LaunchWithOptions(LaunchOptions{
+			Home: home,
+			Args: []string{"--version"},
+			Path: realDir,
+			TokenGetter: func() (string, error) {
+				tokenCalled = true
+				return "", nil
+			},
+			Runner: func(_ string, _ []string, env []string) error {
+				gotEnv = env
+				return nil
+			},
+			Target: LaunchTarget{
+				BinaryNames: []string{claudeName},
+				TokenEnvVar: bedrockAuthEnvName,
+				StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
+				NeedsToken:  false,
+			},
 		})
-	}
+		if err != nil {
+			t.Fatalf("launch: %v", err)
+		}
+		if tokenCalled {
+			t.Error("IAM auth must NOT call TokenGetter")
+		}
+		if envValue(gotEnv, "CLAUDE_CODE_USE_BEDROCK") != "1" {
+			t.Errorf("expected CLAUDE_CODE_USE_BEDROCK=1, env=%v", gotEnv)
+		}
+		if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "" {
+			t.Errorf("IAM auth must NOT inject bearer token, env=%v", gotEnv)
+		}
+	})
+
+	t.Run("ExpiredKeyWarning", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+
+		expiredURL := "https://bedrock.amazonaws.com/?Action=CallWithBearerToken" +
+			"&X-Amz-Date=20200101T000000Z&X-Amz-Expires=3600"
+		expiredKey := "bedrock-" + "api-key-" + base64.StdEncoding.EncodeToString([]byte(expiredURL))
+
+		warned := ""
+		err := LaunchWithOptions(LaunchOptions{
+			Home: home,
+			Path: "/nonexistent",
+			Target: LaunchTarget{
+				BinaryNames: []string{"test"},
+				NeedsToken:  true,
+			},
+			TokenGetter: func() (string, error) {
+				return expiredKey, nil
+			},
+			Warner: func(msg string) {
+				warned = msg
+			},
+			Runner: func(path string, args []string, env []string) error {
+				return nil
+			},
+		})
+		_ = err
+		if warned != "" {
+			if !strings.Contains(warned, "expired") {
+				t.Errorf("warning should mention expired, got: %s", warned)
+			}
+		}
+	})
+
+	t.Run("ErrorPaths", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			opts       LaunchOptions
+			wantErr    bool
+			errContain string
+		}{
+			{
+				name:       "tokenGetter returns error",
+				opts:       LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget(), TokenGetter: func() (string, error) { return "", os.ErrNotExist }},
+				wantErr:    true,
+				errContain: "reading Bedrock API key",
+			},
+			{
+				name:       "tokenGetter returns empty token",
+				opts:       LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget(), TokenGetter: func() (string, error) { return "", nil }},
+				wantErr:    true,
+				errContain: "not found in keychain",
+			},
+			{
+				name:    "default Warner (no crash)",
+				opts:    LaunchOptions{Home: "", Path: "/nonexistent", Target: LaunchTarget{BinaryNames: []string{"test"}, NeedsToken: false}},
+				wantErr: true,
+			},
+			{
+				name:    "default TokenGetter (no crash)",
+				opts:    LaunchOptions{Home: "", Path: "/nonexistent", Target: defaultLaunchTarget()},
+				wantErr: true,
+			},
+			{
+				name:    "default Path from environment",
+				opts:    LaunchOptions{Home: "", Path: "", Target: LaunchTarget{BinaryNames: []string{"this-binary-does-not-exist-xyz"}, NeedsToken: false}},
+				wantErr: true,
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				home := t.TempDir()
+				t.Setenv("HOME", home)
+				opts := tc.opts
+				opts.Home = home
+
+				err := LaunchWithOptions(opts)
+				if tc.wantErr {
+					if err == nil {
+						t.Fatal("expected error")
+					}
+					if tc.errContain != "" && !strings.Contains(err.Error(), tc.errContain) {
+						t.Errorf("expected error containing %q, got: %v", tc.errContain, err)
+					}
+				} else if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -494,7 +521,6 @@ func TestNonWindowsHelpers(t *testing.T) {
 	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
 
 	t.Run("CheckPowerShellActivationWith", func(t *testing.T) {
-		// On non-Windows, returns healthy=true immediately.
 		healthy, path, warnings := CheckPowerShellActivationWith(t.TempDir(), nil)
 		if !healthy {
 			t.Error("should be healthy on non-Windows")
@@ -528,67 +554,4 @@ func TestNonWindowsHelpers(t *testing.T) {
 			t.Error("should return false on non-Windows")
 		}
 	})
-}
-
-// ---------------------------------------------------------------------------
-// platformNames — verify per-platform
-// ---------------------------------------------------------------------------
-
-func TestPlatformNames(t *testing.T) {
-	names := platformNames()
-	wantClaude := "claude"
-	if runtime.GOOS == "windows" {
-		wantClaude = "claude.cmd"
-	}
-	if names.claude != wantClaude {
-		t.Errorf("platformNames.claude = %q, want %q", names.claude, wantClaude)
-	}
-	if len(names.commandNames) == 0 {
-		t.Error("commandNames should not be empty")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// claudeLaunchTarget — verify fields
-// ---------------------------------------------------------------------------
-
-func TestClaudeLaunchTarget_Fields(t *testing.T) {
-	tgt := claudeLaunchTarget()
-	if len(tgt.BinaryNames) == 0 {
-		t.Error("BinaryNames should not be empty")
-	}
-	if tgt.TokenEnvVar != bedrockAuthEnvName {
-		t.Errorf("TokenEnvVar = %q, want %q", tgt.TokenEnvVar, bedrockAuthEnvName)
-	}
-	if tgt.StaticEnv["CLAUDE_CODE_USE_BEDROCK"] != "1" {
-		t.Error("StaticEnv should contain CLAUDE_CODE_USE_BEDROCK=1")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// DefaultTargets — verify expected paths
-// ---------------------------------------------------------------------------
-
-func TestDefaultTargets_Paths(t *testing.T) {
-	home := "/home/user"
-	targets := DefaultTargets(home)
-	expected := map[string]Shell{
-		filepath.Join(home, ".bashrc"):                        ShellPOSIX,
-		filepath.Join(home, ".zshrc"):                         ShellPOSIX,
-		filepath.Join(home, ".profile"):                       ShellPOSIX,
-		filepath.Join(home, ".config", "fish", "config.fish"): ShellFish,
-	}
-	if len(targets) != len(expected) {
-		t.Fatalf("expected %d targets, got %d", len(expected), len(targets))
-	}
-	for _, tgt := range targets {
-		wantShell, ok := expected[tgt.Path]
-		if !ok {
-			t.Errorf("unexpected target path: %s", tgt.Path)
-			continue
-		}
-		if tgt.Shell != wantShell {
-			t.Errorf("shell for %s = %s, want %s", tgt.Path, tgt.Shell, wantShell)
-		}
-	}
 }
