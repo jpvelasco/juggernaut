@@ -447,10 +447,11 @@ func TestLaunchWithOptions(t *testing.T) {
 			},
 		})
 		_ = err
-		if warned != "" {
-			if !strings.Contains(warned, "expired") {
-				t.Errorf("warning should mention expired, got: %s", warned)
-			}
+		// The 2020 key is permanently expired; the warning must fire.
+		if warned == "" {
+			t.Error("expected expiry warning for a 2020 key, but Warner was never called")
+		} else if !strings.Contains(warned, "expired") {
+			t.Errorf("warning should mention expired, got: %s", warned)
 		}
 	})
 
