@@ -31,10 +31,7 @@ func runShow(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	scopes := []string{"user", "project"}
-	if showFlags.scope != "" {
-		scopes = []string{showFlags.scope}
-	}
+	scopes := resolvedScopes(showFlags.scope)
 
 	results := map[string]any{}
 	for _, scope := range scopes {

@@ -107,20 +107,31 @@ func runModelsCheck(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// tierPin returns the currently pinned model ID for tier from cfg.
-func tierPin(cfg *bedrock.Config, tier discovery.Tier) string {
+// tierModelPtr returns a pointer to the model string field for the given tier,
+// or nil if the tier is unknown. Used by both tierPin (read) and
+// applyModelWrites (write) so the tier↔field mapping lives in one place.
+func tierModelPtr(m *bedrock.ModelSet, tier discovery.Tier) *string {
 	switch tier {
 	case discovery.TierOpus:
-		return cfg.Models.Opus
+		return &m.Opus
 	case discovery.TierSonnet:
-		return cfg.Models.Sonnet
+		return &m.Sonnet
 	case discovery.TierHaiku:
-		return cfg.Models.Haiku
+		return &m.Haiku
 	case discovery.TierFable:
-		return cfg.Models.Fable
+		return &m.Fable
 	default:
+		return nil
+	}
+}
+
+// tierPin returns the currently pinned model ID for tier from cfg.
+func tierPin(cfg *bedrock.Config, tier discovery.Tier) string {
+	p := tierModelPtr(&cfg.Models, tier)
+	if p == nil {
 		return ""
 	}
+	return *p
 }
 
 // buildModelsReport is a pure function (no I/O) so it's directly unit
@@ -282,15 +293,8 @@ func applyModelWrites(cfg *bedrock.Config, sets map[discovery.Tier]string, anthr
 	}
 
 	for tier, id := range sets {
-		switch tier {
-		case discovery.TierOpus:
-			cfg.Models.Opus = id
-		case discovery.TierSonnet:
-			cfg.Models.Sonnet = id
-		case discovery.TierHaiku:
-			cfg.Models.Haiku = id
-		case discovery.TierFable:
-			cfg.Models.Fable = id
+		if p := tierModelPtr(&cfg.Models, tier); p != nil {
+			*p = id
 		}
 	}
 	return nil

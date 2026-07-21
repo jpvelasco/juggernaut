@@ -106,9 +106,10 @@ const credentialEchoMode huh.EchoMode = huh.EchoMode(textinput.EchoNone)
 
 // ---- Shared config helpers ----
 
-// readProviderConfig reads a provider's config file for the given scope.
-// Returns (nil, nil) when the file does not exist.
-func readProviderConfig(prov provider.Provider, home, scope string) (map[string]any, error) {
+// newProviderManager resolves the config path and format for a provider and
+// returns a ready-to-use Manager. Both read and write paths use this so the
+// ConfigPath → FormatByName → NewManagerWithFormat sequence lives in one place.
+func newProviderManager(prov provider.Provider, home, scope string) (*config.Manager, error) {
 	path, err := prov.ConfigPath(home, scope)
 	if err != nil {
 		return nil, err
@@ -117,12 +118,17 @@ func readProviderConfig(prov provider.Provider, home, scope string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	mgr := config.NewManagerWithFormat(path, format)
-	data, err := mgr.Read()
+	return config.NewManagerWithFormat(path, format), nil
+}
+
+// readProviderConfig reads a provider's config file for the given scope.
+// Returns (nil, nil) when the file does not exist.
+func readProviderConfig(prov provider.Provider, home, scope string) (map[string]any, error) {
+	mgr, err := newProviderManager(prov, home, scope)
 	if err != nil {
 		return nil, err
 	}
-	return data, nil
+	return mgr.Read()
 }
 
 // resolvedScopes returns the scopes to operate on, respecting an optional
@@ -418,11 +424,10 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		}
 	}
 
-	format, err := config.FormatByName(prov.ConfigFormatName())
+	mgr, err := newProviderManager(prov, home, applyFlags.scope)
 	if err != nil {
 		return err
 	}
-	mgr := config.NewManagerWithFormat(path, format)
 	if err := mgr.MergeConfigPlanDeep(plan.Keys, prov.DeepMergeKeys()); err != nil {
 		return err
 	}
