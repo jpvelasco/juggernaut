@@ -61,3 +61,27 @@ func WriteFile(base, filePath string, data []byte) error {
 	}
 	return os.WriteFile(safe, data, filePerm)
 }
+
+// HomeDir resolves the user's home directory from HOME, USERPROFILE (Windows),
+// or the OS default. HOME is checked first on all platforms so WSL/Git Bash
+// on Windows returns the Linux home when set.
+func HomeDir() (string, error) {
+	if h := os.Getenv("HOME"); h != "" {
+		return h, nil
+	}
+	if h := os.Getenv("USERPROFILE"); h != "" {
+		return h, nil
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return h, nil
+}
+
+// HomeDirOrEmpty resolves the user's home directory like HomeDir but returns
+// an empty string on error instead of an error.
+func HomeDirOrEmpty() string {
+	h, _ := HomeDir()
+	return h
+}

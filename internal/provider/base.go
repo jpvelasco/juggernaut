@@ -67,9 +67,25 @@ func (b BaseProvider) Supports(c Capability) bool {
 	return false
 }
 
+// checkModelPreconditions runs common pre-checks on a catalog entry before
+// a provider evaluates source-specific compatibility. Returns a rejection if
+// the model is inactive or unavailable to the account; returns nil otherwise.
+func checkModelPreconditions(model CatalogModel) ModelSupport {
+	if model.Status != "ACTIVE" {
+		return ModelSupport{Reason: "model is not ACTIVE"}
+	}
+	if !model.IsAvailable() {
+		return ModelSupport{Reason: "model is not available to this AWS account"}
+	}
+	return ModelSupport{}
+}
+
 // SupportsModel defaults to rejecting catalog entries. Each concrete provider
 // opts into exactly the endpoint and model families its client can speak.
 func (b BaseProvider) SupportsModel(model CatalogModel) ModelSupport {
+	if s := checkModelPreconditions(model); s.Reason != "" {
+		return s
+	}
 	return ModelSupport{Reason: "provider has no compatibility rule for " + model.Source}
 }
 

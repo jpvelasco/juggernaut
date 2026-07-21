@@ -858,13 +858,7 @@ func ResolveBinary(pathList string, names []string) (string, error) {
 // artifacts may exist.
 func DefaultBinDir(home string) string {
 	if home == "" {
-		home = os.Getenv("HOME")
-	}
-	if home == "" {
-		home = os.Getenv("USERPROFILE")
-	}
-	if home == "" {
-		home, _ = os.UserHomeDir()
+		home = safepath.HomeDirOrEmpty()
 	}
 	path, err := safepath.JoinUnder(home, ".local", "bin")
 	if err != nil {

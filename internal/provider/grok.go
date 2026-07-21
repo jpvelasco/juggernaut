@@ -157,14 +157,11 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 }
 
 func (g grok) SupportsModel(model CatalogModel) ModelSupport {
+	if s := checkModelPreconditions(model); s.Reason != "" {
+		return s
+	}
 	if model.Source != "mantle" {
 		return ModelSupport{Reason: "Grok routes through Mantle"}
-	}
-	if model.Status != "ACTIVE" {
-		return ModelSupport{Reason: "model is not ACTIVE"}
-	}
-	if !model.IsAvailable() {
-		return ModelSupport{Reason: "model is not available to this AWS account"}
 	}
 	if !strings.HasPrefix(model.ID, "xai.grok-") {
 		return ModelSupport{Reason: "the Grok client supports xAI Grok models"}
