@@ -98,7 +98,11 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 		{ID: "qwen.qwen3-coder-next", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
 		{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
-	if err := discovery.SaveCachedModels(home, "us-west-2", []discovery.Source{discovery.SourceMantle}, models, when); err != nil {
+	credentialScope, err := discovery.CredentialScope(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := discovery.SaveCachedModels(home, "111122223333", credentialScope, "us-west-2", []discovery.Source{discovery.SourceMantle}, models, when); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +129,7 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 	if strings.Contains(got, "openai.gpt-5.5") {
 		t.Errorf("OpenCode list included Responses-only model:\n%s", got)
 	}
-	if !strings.Contains(got, "3 models; refreshed 2026-07-20T12:00:00Z") {
+	if !strings.Contains(got, "3 models for AWS account 111122223333; refreshed 2026-07-20T12:00:00Z") {
 		t.Errorf("missing summary:\n%s", got)
 	}
 }

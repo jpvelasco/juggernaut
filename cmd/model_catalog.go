@@ -41,6 +41,8 @@ var modelsListFlags struct {
 // These functions are variables so command tests never call real AWS.
 var listFoundationCatalog = discovery.ListFoundationModels
 var listMantleCatalog = discovery.ListMantleModels
+var catalogCallerAccount = discovery.CallerAccount
+var catalogCredentialScope = discovery.CredentialScope
 var catalogNow = time.Now
 
 func init() {
@@ -67,19 +69,23 @@ func runModelsRefresh(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	accountID, credentialScope, err := catalogIdentity(cmd.Context(), home, modelsRefreshFlags.region)
+	if err != nil {
+		return err
+	}
 	models, err := refreshCatalog(cmd.Context(), modelsRefreshFlags.region, sources, "")
 	if err != nil {
 		return err
 	}
 	refreshedAt := catalogNow()
-	if err := discovery.SaveCachedModels(home, modelsRefreshFlags.region, sources, models, refreshedAt); err != nil {
+	if err := discovery.SaveCachedModels(home, accountID, credentialScope, modelsRefreshFlags.region, sources, models, refreshedAt); err != nil {
 		return err
 	}
 	path, err := discovery.CachePath(home)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Cached %d models for %s in %s\n", len(models), modelsRefreshFlags.region, path)
+	fmt.Fprintf(cmd.OutOrStdout(), "Cached %d models for AWS account %s in %s at %s\n", len(models), accountID, modelsRefreshFlags.region, path)
 	return nil
 }
 
@@ -93,21 +99,27 @@ func runModelsList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	credentialScope, err := catalogCredentialScope(home)
+	if err != nil {
+		return err
+	}
 	var snapshot discovery.RegionCatalog
 	var found bool
 	if modelsListFlags.refresh {
+		accountID, accountErr := catalogCallerAccount(cmd.Context(), modelsListFlags.region)
+		if accountErr != nil {
+			return accountErr
+		}
 		models, refreshErr := refreshCatalog(cmd.Context(), modelsListFlags.region, sources, "")
 		if refreshErr != nil {
 			return refreshErr
 		}
 		refreshedAt := catalogNow()
-		if err := discovery.SaveCachedModels(home, modelsListFlags.region, sources, models, refreshedAt); err != nil {
+		if err := discovery.SaveCachedModels(home, accountID, credentialScope, modelsListFlags.region, sources, models, refreshedAt); err != nil {
 			return err
 		}
-		snapshot, found, err = discovery.LoadCachedModels(home, modelsListFlags.region)
-	} else {
-		snapshot, found, err = discovery.LoadCachedModels(home, modelsListFlags.region)
 	}
+	snapshot, found, err = discovery.LoadCachedModels(home, credentialScope, modelsListFlags.region)
 	if err != nil {
 		return err
 	}
@@ -164,7 +176,7 @@ func runModelsList(cmd *cobra.Command, _ []string) error {
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("writing model list: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "\n%d models; refreshed %s\n", count, snapshot.RefreshedAt.Format(time.RFC3339))
+	fmt.Fprintf(cmd.OutOrStdout(), "\n%d models for AWS account %s; refreshed %s\n", count, snapshot.AccountID, snapshot.RefreshedAt.Format(time.RFC3339))
 	return nil
 }
 
@@ -226,8 +238,24 @@ func toProviderCatalogModel(model discovery.DiscoveredModel) provider.CatalogMod
 	}
 }
 
+func catalogIdentity(ctx context.Context, home, region string) (accountID, credentialScope string, err error) {
+	credentialScope, err = catalogCredentialScope(home)
+	if err != nil {
+		return "", "", err
+	}
+	accountID, err = catalogCallerAccount(ctx, region)
+	if err != nil {
+		return "", "", err
+	}
+	return accountID, credentialScope, nil
+}
+
 func cachedProviderModels(home, region string) ([]provider.CatalogModel, error) {
-	snapshot, found, err := discovery.LoadCachedModels(home, region)
+	credentialScope, err := catalogCredentialScope(home)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, found, err := discovery.LoadCachedModels(home, credentialScope, region)
 	if err != nil || !found {
 		return nil, err
 	}

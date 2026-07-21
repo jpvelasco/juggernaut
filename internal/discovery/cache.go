@@ -12,18 +12,24 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
-const catalogCacheVersion = 1
+const catalogCacheVersion = 2
 
 // RegionCatalog is one account-visible catalog snapshot. It is cached so
 // apply remains deterministic and offline unless the user explicitly refreshes.
 type RegionCatalog struct {
+	AccountID   string            `json:"account_id"`
 	RefreshedAt time.Time         `json:"refreshed_at"`
 	Models      []DiscoveredModel `json:"models"`
 }
 
-type catalogCache struct {
-	Version int                      `json:"version"`
+type accountCatalog struct {
 	Regions map[string]RegionCatalog `json:"regions"`
+}
+
+type catalogCache struct {
+	Version  int                       `json:"version"`
+	Accounts map[string]accountCatalog `json:"accounts"`
+	Bindings map[string]string         `json:"bindings"`
 }
 
 // CachePath returns the owner-local catalog cache path.
@@ -31,25 +37,40 @@ func CachePath(home string) (string, error) {
 	return safepath.JoinUnder(home, ".juggernaut", "model-catalog.json")
 }
 
-// LoadCachedModels loads a region snapshot. A missing cache or region is not an
-// error and returns found=false.
-func LoadCachedModels(home, region string) (snapshot RegionCatalog, found bool, err error) {
+// LoadCachedModels loads the region snapshot associated with the current local
+// AWS credential scope. A missing cache, binding, account, or region returns
+// found=false.
+func LoadCachedModels(home, credentialScope, region string) (snapshot RegionCatalog, found bool, err error) {
 	cache, found, err := loadCache(home)
 	if err != nil || !found {
 		return RegionCatalog{}, false, err
 	}
-	snapshot, found = cache.Regions[region]
+	accountID, found := cache.Bindings[credentialScope]
+	if !found {
+		return RegionCatalog{}, false, nil
+	}
+	account, found := cache.Accounts[accountID]
+	if !found {
+		return RegionCatalog{}, false, nil
+	}
+	snapshot, found = account.Regions[region]
 	return snapshot, found, nil
 }
 
-// SaveCachedModels replaces only the refreshed sources for one region,
-// retaining snapshots from other endpoints and regions.
+// SaveCachedModels replaces only the refreshed sources for one account and
+// region, retaining snapshots from other endpoints, accounts, and regions.
 func SaveCachedModels(
-	home, region string,
+	home, accountID, credentialScope, region string,
 	sources []Source,
 	models []DiscoveredModel,
 	refreshedAt time.Time,
 ) error {
+	if accountID == "" {
+		return fmt.Errorf("catalog cache account ID cannot be empty")
+	}
+	if credentialScope == "" {
+		return fmt.Errorf("catalog cache credential scope cannot be empty")
+	}
 	if region == "" {
 		return fmt.Errorf("catalog cache region cannot be empty")
 	}
@@ -62,10 +83,17 @@ func SaveCachedModels(
 		return err
 	}
 	if !found {
-		cache = catalogCache{Version: catalogCacheVersion, Regions: map[string]RegionCatalog{}}
+		cache = catalogCache{Version: catalogCacheVersion}
 	}
-	if cache.Regions == nil {
-		cache.Regions = map[string]RegionCatalog{}
+	if cache.Accounts == nil {
+		cache.Accounts = map[string]accountCatalog{}
+	}
+	if cache.Bindings == nil {
+		cache.Bindings = map[string]string{}
+	}
+	account := cache.Accounts[accountID]
+	if account.Regions == nil {
+		account.Regions = map[string]RegionCatalog{}
 	}
 
 	touched := make(map[Source]bool, len(sources))
@@ -73,7 +101,7 @@ func SaveCachedModels(
 		touched[source] = true
 	}
 	merged := make([]DiscoveredModel, 0, len(models))
-	if previous, ok := cache.Regions[region]; ok {
+	if previous, ok := account.Regions[region]; ok {
 		for _, model := range previous.Models {
 			if !touched[model.Source] {
 				merged = append(merged, model)
@@ -91,7 +119,13 @@ func SaveCachedModels(
 		}
 		return merged[i].ID < merged[j].ID
 	})
-	cache.Regions[region] = RegionCatalog{RefreshedAt: refreshedAt.UTC(), Models: merged}
+	account.Regions[region] = RegionCatalog{
+		AccountID:   accountID,
+		RefreshedAt: refreshedAt.UTC(),
+		Models:      merged,
+	}
+	cache.Accounts[accountID] = account
+	cache.Bindings[credentialScope] = accountID
 
 	encoded, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {

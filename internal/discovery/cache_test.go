@@ -8,14 +8,19 @@ import (
 	"time"
 )
 
+const (
+	testAccount = "111122223333"
+	testScope   = "profile-a"
+)
+
 func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 	home := t.TempDir()
-	if _, found, err := LoadCachedModels(home, "us-west-2"); err != nil || found {
+	if _, found, err := LoadCachedModels(home, testScope, "us-west-2"); err != nil || found {
 		t.Fatalf("missing cache = found %v, err %v; want false, nil", found, err)
 	}
 
 	mantleTime := time.Date(2026, 7, 20, 12, 0, 0, 0, time.FixedZone("offset", 3600))
-	if err := SaveCachedModels(home, "us-west-2", []Source{SourceMantle}, []DiscoveredModel{
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceMantle}, []DiscoveredModel{
 		{ID: "zai.glm-5", Source: SourceMantle, Status: "ACTIVE"},
 		{ID: "moonshotai.kimi-k2.5", Source: SourceMantle, Status: "ACTIVE"},
 	}, mantleTime); err != nil {
@@ -23,16 +28,19 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 	}
 
 	nativeTime := mantleTime.Add(time.Hour)
-	if err := SaveCachedModels(home, "us-west-2", []Source{SourceFoundation, SourceProfile}, []DiscoveredModel{
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceFoundation, SourceProfile}, []DiscoveredModel{
 		{ID: "anthropic.claude-opus", Source: SourceFoundation, Status: "ACTIVE"},
 		{ID: "global.anthropic.claude-opus", Source: SourceProfile, Status: "ACTIVE"},
 	}, nativeTime); err != nil {
 		t.Fatalf("saving native cache: %v", err)
 	}
 
-	snapshot, found, err := LoadCachedModels(home, "us-west-2")
+	snapshot, found, err := LoadCachedModels(home, testScope, "us-west-2")
 	if err != nil || !found {
 		t.Fatalf("loading merged cache = found %v, err %v", found, err)
+	}
+	if snapshot.AccountID != testAccount {
+		t.Errorf("AccountID = %q, want %q", snapshot.AccountID, testAccount)
 	}
 	if !snapshot.RefreshedAt.Equal(nativeTime.UTC()) {
 		t.Errorf("RefreshedAt = %s, want %s", snapshot.RefreshedAt, nativeTime.UTC())
@@ -47,12 +55,12 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 		}
 	}
 
-	if err := SaveCachedModels(home, "us-east-1", []Source{SourceMantle}, []DiscoveredModel{
+	if err := SaveCachedModels(home, testAccount, testScope, "us-east-1", []Source{SourceMantle}, []DiscoveredModel{
 		{ID: "openai.gpt-5.5", Source: SourceMantle},
 	}, nativeTime); err != nil {
 		t.Fatalf("saving second region: %v", err)
 	}
-	if _, found, err := LoadCachedModels(home, "us-west-2"); err != nil || !found {
+	if _, found, err := LoadCachedModels(home, testScope, "us-west-2"); err != nil || !found {
 		t.Fatalf("second region overwrote first: found %v, err %v", found, err)
 	}
 
@@ -71,22 +79,60 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 	}
 }
 
+func TestCatalogCache_IsolatesAccountsAndRebindsCredentialScope(t *testing.T) {
+	home := t.TempDir()
+	when := time.Now()
+	modelA := []DiscoveredModel{{ID: "account-a-model", Source: SourceMantle}}
+	modelB := []DiscoveredModel{{ID: "account-b-model", Source: SourceMantle}}
+
+	if err := SaveCachedModels(home, "account-a", "scope-a", "us-west-2", []Source{SourceMantle}, modelA, when); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCachedModels(home, "account-b", "scope-b", "us-west-2", []Source{SourceMantle}, modelB, when); err != nil {
+		t.Fatal(err)
+	}
+	for scope, want := range map[string]string{"scope-a": "account-a-model", "scope-b": "account-b-model"} {
+		snapshot, found, err := LoadCachedModels(home, scope, "us-west-2")
+		if err != nil || !found || len(snapshot.Models) != 1 || snapshot.Models[0].ID != want {
+			t.Errorf("scope %q snapshot = %+v, found %v, err %v; want %q", scope, snapshot, found, err, want)
+		}
+	}
+	if _, found, err := LoadCachedModels(home, "unknown-scope", "us-west-2"); err != nil || found {
+		t.Errorf("unknown scope = found %v, err %v; want false, nil", found, err)
+	}
+
+	if err := SaveCachedModels(home, "account-b", "scope-a", "us-west-2", []Source{SourceMantle}, modelB, when); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, found, err := LoadCachedModels(home, "scope-a", "us-west-2")
+	if err != nil || !found || snapshot.AccountID != "account-b" || snapshot.Models[0].ID != "account-b-model" {
+		t.Fatalf("rebound scope snapshot = %+v, found %v, err %v", snapshot, found, err)
+	}
+}
+
 func TestCatalogCache_RejectsInvalidInputsAndVersion(t *testing.T) {
 	home := t.TempDir()
-	if err := SaveCachedModels(home, "", []Source{SourceMantle}, nil, time.Now()); err == nil {
+	validSources := []Source{SourceMantle}
+	if err := SaveCachedModels(home, "", testScope, "us-west-2", validSources, nil, time.Now()); err == nil {
+		t.Fatal("expected empty-account error")
+	}
+	if err := SaveCachedModels(home, testAccount, "", "us-west-2", validSources, nil, time.Now()); err == nil {
+		t.Fatal("expected empty-scope error")
+	}
+	if err := SaveCachedModels(home, testAccount, testScope, "", validSources, nil, time.Now()); err == nil {
 		t.Fatal("expected empty-region error")
 	}
-	if err := SaveCachedModels(home, "us-west-2", nil, nil, time.Now()); err == nil {
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", nil, nil, time.Now()); err == nil {
 		t.Fatal("expected empty-sources error")
 	}
-	if err := SaveCachedModels(home, "us-west-2", []Source{SourceMantle}, nil, time.Now()); err != nil {
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", validSources, nil, time.Now()); err != nil {
 		t.Fatalf("creating valid cache: %v", err)
 	}
 	path, _ := CachePath(home)
-	if err := os.WriteFile(path, []byte(`{"version":99,"regions":{}}`), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"version":99,"accounts":{},"bindings":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := LoadCachedModels(home, "us-west-2")
+	_, _, err := LoadCachedModels(home, testScope, "us-west-2")
 	if err == nil || !strings.Contains(err.Error(), "unsupported model catalog cache version 99") {
 		t.Fatalf("version error = %v", err)
 	}

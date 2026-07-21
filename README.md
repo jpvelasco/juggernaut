@@ -190,7 +190,7 @@ juggernaut models refresh --region=us-east-1 --source=mantle
 juggernaut models list --region=us-east-1 --source=native
 ```
 
-The account/region inventory is stored at `~/.juggernaut/model-catalog.json` with owner-only permissions. `apply` reads the matching cached region and never makes an implicit network call, so configuration remains deterministic and works offline. Run `models refresh` again when AWS adds models or the account's access changes; `models list --refresh` combines both steps.
+The inventory is partitioned by AWS account and region at `~/.juggernaut/model-catalog.json` with owner-only permissions. The current profile or environment credential selection is bound to the caller account during refresh, so switching accounts cannot reuse another account's inventory. `apply` reads the matching cached account/region and never makes an implicit network call, so configuration remains deterministic and works offline. Run `models refresh` again when AWS adds models or the account's access changes; `models list --refresh` combines both steps.
 
 Each provider filters the live inventory by what its client protocol can use: Claude Code accepts native Anthropic models and inference profiles, Codex accepts Mantle GPT-5 models, OpenCode accepts general OpenAI-compatible Mantle models, and Grok accepts Mantle xAI Grok models. This small compatibility policy prevents Juggernaut from advertising a model to a client that cannot speak its API while avoiding a maintained model roster. Explicit `--model` selections remain supported and receive an actionable warning when a relevant cached catalog says they are unavailable.
 
@@ -311,7 +311,8 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "bedrock:ListFoundationModels",
     "bedrock:GetFoundationModelAvailability",
     "bedrock:ListInferenceProfiles",
-    "bedrock-mantle:ListModels"
+    "bedrock-mantle:ListModels",
+    "sts:GetCallerIdentity"
   ],
   "Resource": "*"
 }

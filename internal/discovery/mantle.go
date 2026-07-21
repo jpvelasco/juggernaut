@@ -25,7 +25,7 @@ type requestSigner func(context.Context, *http.Request) error
 
 // ListMantleModels queries the account- and region-specific Mantle Models API.
 // A bearer token is used when supplied; otherwise the request is SigV4-signed
-// with the default AWS credential chain and service name "bedrock".
+// with the default AWS credential chain and service name "bedrock-mantle".
 func ListMantleModels(ctx context.Context, region, bearerToken string) ([]DiscoveredModel, error) {
 	endpoint := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/v1/models", region)
 
@@ -42,7 +42,7 @@ func ListMantleModels(ctx context.Context, region, bearerToken string) ([]Discov
 		sign = func(ctx context.Context, req *http.Request) error {
 			emptyHash := sha256.Sum256(nil)
 			payloadHash := hex.EncodeToString(emptyHash[:])
-			return v4.NewSigner().SignHTTP(ctx, creds, req, payloadHash, "bedrock", region, time.Now())
+			return v4.NewSigner().SignHTTP(ctx, creds, req, payloadHash, "bedrock-mantle", region, time.Now())
 		}
 	}
 
@@ -115,7 +115,10 @@ func listMantleModelsWith(
 			status = "ACTIVE"
 		}
 		if status == "" {
-			status = "UNKNOWN"
+			// Mantle implements the OpenAI-compatible model-list shape, where
+			// presence in the account-scoped response is the availability signal
+			// and lifecycle status is normally omitted.
+			status = "ACTIVE"
 		}
 		provider := model.OwnedBy
 		if provider == "" {

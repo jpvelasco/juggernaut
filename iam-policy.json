@@ -21,7 +21,8 @@
         "bedrock:ListFoundationModels",
         "bedrock:GetFoundationModelAvailability",
         "bedrock:ListInferenceProfiles",
-        "bedrock-mantle:ListModels"
+        "bedrock-mantle:ListModels",
+        "sts:GetCallerIdentity"
       ],
       "Resource": "*"
     },

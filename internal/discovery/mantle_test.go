@@ -51,8 +51,8 @@ func TestListMantleModelsWith_BearerAndModelMapping(t *testing.T) {
 	}) {
 		t.Errorf("first model = %+v", models[0])
 	}
-	if models[1].Status != "UNKNOWN" || models[1].Provider != "zai" {
-		t.Errorf("fallback mapping = %+v, want UNKNOWN status and zai provider", models[1])
+	if models[1].Status != "ACTIVE" || models[1].Provider != "zai" {
+		t.Errorf("fallback mapping = %+v, want ACTIVE status and zai provider", models[1])
 	}
 }
 
