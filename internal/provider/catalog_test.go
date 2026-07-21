@@ -26,6 +26,10 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 		{"opencode", catalogModel("openai.gpt-5.6", "mantle"), false},
 		{"grok", catalogModel("xai.grok-4.4", "mantle"), true},
 		{"grok", catalogModel("moonshotai.kimi-k2.5", "mantle"), false},
+		{"claude", catalogModel("anthropic.claude-opus-4-8", "mantle"), false},
+		{"codex", catalogModel("openai.gpt-5.6", "foundation"), false},
+		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), false},
+		{"grok", catalogModel("xai.grok-4.4", "foundation"), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.cli+"/"+tt.model.ID, func(t *testing.T) {
@@ -35,6 +39,36 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 				t.Fatalf("SupportsCatalogModel(%+v) = %+v, want supported=%v", tt.model, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestProviders_CatalogSources(t *testing.T) {
+	tests := []struct {
+		cli  string
+		want string
+	}{
+		{cli: "claude", want: "foundation,profile"},
+		{cli: "codex", want: "mantle"},
+		{cli: "opencode", want: "mantle"},
+		{cli: "grok", want: "mantle"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.cli, func(t *testing.T) {
+			p, err := Get(tt.cli)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(CatalogSourcesFor(p), ","); got != tt.want {
+				t.Fatalf("CatalogSourcesFor(%q) = %q, want %q", tt.cli, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCodexModel_AcceptsRawDiscoveredID(t *testing.T) {
+	model, ok := codexModel("openai.gpt-5.7")
+	if !ok || model.ModelID != "openai.gpt-5.7" {
+		t.Fatalf("codexModel(raw ID) = %+v, %v", model, ok)
 	}
 }
 

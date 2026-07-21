@@ -15,14 +15,20 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
+type stsClient interface {
+	GetCallerIdentity(context.Context, *sts.GetCallerIdentityInput, ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
+}
+
+var makeSTSClient = func(cfg aws.Config) stsClient { return sts.NewFromConfig(cfg) }
+
 // CallerAccount returns the AWS account selected by the default credential
 // chain. It is called only during an explicit catalog refresh.
 func CallerAccount(ctx context.Context, region string) (string, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return "", fmt.Errorf("loading AWS configuration: %w", err)
 	}
-	result, err := sts.NewFromConfig(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	result, err := makeSTSClient(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return "", fmt.Errorf("getting AWS caller identity: %w", err)
 	}

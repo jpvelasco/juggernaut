@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 )
 
 type httpDoerFunc func(*http.Request) (*http.Response, error)
@@ -19,6 +22,79 @@ func mantleResponse(status int, body string) *http.Response {
 		StatusCode: status,
 		Status:     http.StatusText(status),
 		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func TestListMantleModels_PublicEntryPoint(t *testing.T) {
+	originalLoadConfig := loadDefaultAWSConfig
+	originalHTTPClient := mantleHTTPClient
+	t.Cleanup(func() {
+		loadDefaultAWSConfig = originalLoadConfig
+		mantleHTTPClient = originalHTTPClient
+	})
+
+	const region = "us-test-1"
+	mantleHTTPClient = httpDoerFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.String() != "https://bedrock-mantle.us-test-1.api.aws/v1/models" {
+			t.Fatalf("endpoint = %q", req.URL.String())
+		}
+		if req.Header.Get("Authorization") != "Bearer secret" {
+			t.Fatalf("Authorization = %q, want bearer token", req.Header.Get("Authorization"))
+		}
+		return mantleResponse(http.StatusOK, `{"data":[{"id":"qwen.qwen3-coder-next"}]}`), nil
+	})
+	loadDefaultAWSConfig = func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+		t.Fatal("bearer-token discovery must not load AWS credentials")
+		return aws.Config{}, nil
+	}
+	models, err := ListMantleModels(context.Background(), region, "secret")
+	if err != nil {
+		t.Fatalf("ListMantleModels with bearer token: %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "qwen.qwen3-coder-next" {
+		t.Fatalf("models = %+v", models)
+	}
+
+	configErr := errors.New("no AWS configuration")
+	loadDefaultAWSConfig = func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+		return aws.Config{}, configErr
+	}
+	if _, err := ListMantleModels(context.Background(), region, ""); !errors.Is(err, configErr) {
+		t.Fatalf("configuration error = %v, want wrapped %v", err, configErr)
+	}
+
+	credentialErr := errors.New("credentials unavailable")
+	loadDefaultAWSConfig = func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+		return aws.Config{Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+			return aws.Credentials{}, credentialErr
+		})}, nil
+	}
+	if _, err := ListMantleModels(context.Background(), region, ""); !errors.Is(err, credentialErr) {
+		t.Fatalf("credential error = %v, want wrapped %v", err, credentialErr)
+	}
+
+	loadDefaultAWSConfig = func(_ context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+		options := config.LoadOptions{}
+		for _, optFn := range optFns {
+			if err := optFn(&options); err != nil {
+				return aws.Config{}, err
+			}
+		}
+		if options.Region != region {
+			t.Fatalf("AWS region = %q, want %q", options.Region, region)
+		}
+		return aws.Config{Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+			return aws.Credentials{AccessKeyID: "AKID", SecretAccessKey: "secret", SessionToken: "session"}, nil
+		})}, nil
+	}
+	mantleHTTPClient = httpDoerFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasPrefix(req.Header.Get("Authorization"), "AWS4-HMAC-SHA256") {
+			t.Fatalf("request was not SigV4-signed: %v", req.Header)
+		}
+		return mantleResponse(http.StatusOK, `{"data":[]}`), nil
+	})
+	if _, err := ListMantleModels(context.Background(), region, ""); err != nil {
+		t.Fatalf("ListMantleModels with SigV4: %v", err)
 	}
 }
 

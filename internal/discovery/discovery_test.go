@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrock"
 	"github.com/aws/aws-sdk-go-v2/service/bedrock/types"
 )
@@ -48,6 +50,97 @@ func (f *fakeBedrockClient) ListInferenceProfiles(_ context.Context, in *bedrock
 }
 
 func strPtr(s string) *string { return &s }
+
+func TestPublicBedrockDiscovery_UsesConfiguredRegion(t *testing.T) {
+	originalLoadConfig := loadDefaultAWSConfig
+	originalMakeClient := makeBedrockClient
+	t.Cleanup(func() {
+		loadDefaultAWSConfig = originalLoadConfig
+		makeBedrockClient = originalMakeClient
+	})
+
+	const region = "us-test-1"
+	loadDefaultAWSConfig = func(_ context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+		options := config.LoadOptions{}
+		for _, optFn := range optFns {
+			if err := optFn(&options); err != nil {
+				return aws.Config{}, err
+			}
+		}
+		return aws.Config{Region: options.Region}, nil
+	}
+	client := &fakeBedrockClient{
+		foundationModelsOut: &bedrock.ListFoundationModelsOutput{ModelSummaries: []types.FoundationModelSummary{{
+			ModelId:        strPtr("anthropic.claude-opus-4-8"),
+			ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive},
+		}}},
+		foundationAvailabilityOut: map[string]*bedrock.GetFoundationModelAvailabilityOutput{
+			"anthropic.claude-opus-4-8": {
+				AgreementAvailability:   &types.AgreementAvailability{Status: types.AgreementStatusAvailable},
+				AuthorizationStatus:     types.AuthorizationStatusAuthorized,
+				EntitlementAvailability: types.EntitlementAvailabilityAvailable,
+				RegionAvailability:      types.RegionAvailabilityAvailable,
+			},
+		},
+		inferenceProfilesOut: &bedrock.ListInferenceProfilesOutput{InferenceProfileSummaries: []types.InferenceProfileSummary{{
+			InferenceProfileId: strPtr("global.anthropic.claude-opus-4-8"),
+			Status:             types.InferenceProfileStatusActive,
+		}}},
+	}
+	makeBedrockClient = func(cfg aws.Config) bedrockClient {
+		if cfg.Region != region {
+			t.Fatalf("AWS region = %q, want %q", cfg.Region, region)
+		}
+		return client
+	}
+
+	tests := []struct {
+		name string
+		list func(context.Context, string) ([]DiscoveredModel, error)
+	}{
+		{name: "anthropic", list: ListAnthropicModels},
+		{name: "foundation", list: ListFoundationModels},
+		{name: "profiles", list: ListInferenceProfiles},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models, err := tt.list(context.Background(), region)
+			if err != nil {
+				t.Fatalf("public discovery call: %v", err)
+			}
+			if len(models) != 1 {
+				t.Fatalf("models = %+v, want one result", models)
+			}
+		})
+	}
+}
+
+func TestPublicBedrockDiscovery_PropagatesConfigErrors(t *testing.T) {
+	originalLoadConfig := loadDefaultAWSConfig
+	t.Cleanup(func() { loadDefaultAWSConfig = originalLoadConfig })
+
+	configErr := errors.New("configuration unavailable")
+	loadDefaultAWSConfig = func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+		return aws.Config{}, configErr
+	}
+
+	tests := []struct {
+		name string
+		list func(context.Context, string) ([]DiscoveredModel, error)
+	}{
+		{name: "anthropic", list: ListAnthropicModels},
+		{name: "foundation", list: ListFoundationModels},
+		{name: "profiles", list: ListInferenceProfiles},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.list(context.Background(), "us-test-1")
+			if !errors.Is(err, configErr) {
+				t.Fatalf("error = %v, want wrapped %v", err, configErr)
+			}
+		})
+	}
+}
 
 func TestListAnthropicModelsWith_MapsActiveAndLegacy(t *testing.T) {
 	client := &fakeBedrockClient{
@@ -92,6 +185,8 @@ func TestListAvailableFoundationModelsWith_MapsAccountAvailability(t *testing.T)
 			ModelSummaries: []types.FoundationModelSummary{
 				{ModelId: strPtr("available"), ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive}},
 				{ModelId: strPtr("blocked"), ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive}},
+				{ModelId: strPtr("unknown"), ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive}},
+				{ModelId: nil, ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive}},
 			},
 		},
 		foundationAvailabilityOut: map[string]*bedrock.GetFoundationModelAvailabilityOutput{
@@ -107,6 +202,7 @@ func TestListAvailableFoundationModelsWith_MapsAccountAvailability(t *testing.T)
 				EntitlementAvailability: types.EntitlementAvailabilityAvailable,
 				RegionAvailability:      types.RegionAvailabilityAvailable,
 			},
+			"unknown": nil,
 		},
 	}
 
@@ -114,8 +210,16 @@ func TestListAvailableFoundationModelsWith_MapsAccountAvailability(t *testing.T)
 	if err != nil {
 		t.Fatalf("listAvailableFoundationModelsWith: %v", err)
 	}
-	if len(got) != 2 || got[0].Availability != "AVAILABLE" || got[1].Availability != "NOT_AVAILABLE" {
+	if len(got) != 4 || got[0].Availability != "AVAILABLE" || got[1].Availability != "NOT_AVAILABLE" || got[2].Availability != "UNKNOWN" || got[3].Availability != "UNKNOWN" {
 		t.Fatalf("unexpected availability mapping: %+v", got)
+	}
+}
+
+func TestListAvailableFoundationModelsWith_PropagatesListError(t *testing.T) {
+	listErr := errors.New("listing denied")
+	client := &fakeBedrockClient{foundationModelsErr: listErr}
+	if _, err := listAvailableFoundationModelsWith(context.Background(), client); !errors.Is(err, listErr) {
+		t.Fatalf("error = %v, want wrapped %v", err, listErr)
 	}
 }
 

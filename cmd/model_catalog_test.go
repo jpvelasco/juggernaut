@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,28 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
 	"github.com/spf13/cobra"
 )
+
+type errorWriter struct {
+	err error
+}
+
+func (w errorWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
+func writeMalformedCatalogCache(t *testing.T, home string) {
+	t.Helper()
+	path, err := discovery.CachePath(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestParseCatalogSources(t *testing.T) {
 	tests := []struct {
@@ -244,6 +268,40 @@ func TestModelsRefresh_CachesAllSources(t *testing.T) {
 	}
 }
 
+func TestModelsRefresh_PropagatesDiscoveryAndCacheErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	origFlags := modelsRefreshFlags
+	origMantle := listMantleCatalog
+	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
+	t.Cleanup(func() {
+		modelsRefreshFlags = origFlags
+		listMantleCatalog = origMantle
+		catalogCallerAccount, catalogCredentialScope = origAccount, origScope
+	})
+	modelsRefreshFlags.region = "us-west-2"
+	modelsRefreshFlags.source = "mantle"
+	catalogCallerAccount = func(context.Context, string) (string, error) { return "111122223333", nil }
+	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+
+	discoveryErr := errors.New("discovery failed")
+	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+		return nil, discoveryErr
+	}
+	if err := runModelsRefresh(&cobra.Command{}, nil); !errors.Is(err, discoveryErr) {
+		t.Fatalf("discovery error = %v, want %v", err, discoveryErr)
+	}
+
+	writeMalformedCatalogCache(t, home)
+	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{{ID: "zai.glm-5", Source: discovery.SourceMantle}}, nil
+	}
+	if err := runModelsRefresh(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
+		t.Fatalf("cache error = %v", err)
+	}
+}
+
 func TestModelsList_RefreshesAndListsWithoutCLIFilter(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -281,6 +339,119 @@ func TestModelsList_RefreshesAndListsWithoutCLIFilter(t *testing.T) {
 	if !strings.Contains(got, "SOURCE") || !strings.Contains(got, "zai.glm-5") ||
 		!strings.Contains(got, "1 models for AWS account 444455556666") {
 		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	origFlags := modelsListFlags
+	origMantle := listMantleCatalog
+	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
+	t.Cleanup(func() {
+		modelsListFlags = origFlags
+		listMantleCatalog = origMantle
+		catalogCallerAccount, catalogCredentialScope = origAccount, origScope
+	})
+	modelsListFlags.region = "us-west-2"
+	modelsListFlags.source = "invalid"
+	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "invalid catalog source") {
+		t.Fatalf("source error = %v", err)
+	}
+
+	modelsListFlags.source = "mantle"
+	scopeErr := errors.New("scope failed")
+	catalogCredentialScope = func(string) (string, error) { return "", scopeErr }
+	if err := runModelsList(&cobra.Command{}, nil); !errors.Is(err, scopeErr) {
+		t.Fatalf("scope error = %v, want %v", err, scopeErr)
+	}
+
+	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+	modelsListFlags.refresh = true
+	catalogCallerAccount = func(context.Context, string) (string, error) { return "111122223333", nil }
+	discoveryErr := errors.New("discovery failed")
+	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+		return nil, discoveryErr
+	}
+	if err := runModelsList(&cobra.Command{}, nil); !errors.Is(err, discoveryErr) {
+		t.Fatalf("refresh error = %v, want %v", err, discoveryErr)
+	}
+
+	writeMalformedCatalogCache(t, home)
+	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{{ID: "zai.glm-5", Source: discovery.SourceMantle}}, nil
+	}
+	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
+		t.Fatalf("refresh cache error = %v", err)
+	}
+
+	modelsListFlags.refresh = false
+	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
+		t.Fatalf("load cache error = %v", err)
+	}
+}
+
+func TestModelsList_FiltersSourcesAndPropagatesWriterErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	when := time.Date(2026, 7, 20, 17, 0, 0, 0, time.UTC)
+	models := []discovery.DiscoveredModel{
+		{ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "global.anthropic.claude-sonnet-5", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "anthropic.claude-sonnet-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+	}
+	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{
+		discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle,
+	}, models, when); err != nil {
+		t.Fatal(err)
+	}
+
+	origFlags := modelsListFlags
+	origScope := catalogCredentialScope
+	t.Cleanup(func() {
+		modelsListFlags = origFlags
+		catalogCredentialScope = origScope
+	})
+	modelsListFlags.region = "us-west-2"
+	modelsListFlags.source = "native"
+	modelsListFlags.cli = ""
+	modelsListFlags.refresh = false
+	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+
+	var output bytes.Buffer
+	command := &cobra.Command{}
+	command.SetOut(&output)
+	if err := runModelsList(command, nil); err != nil {
+		t.Fatal(err)
+	}
+	got := output.String()
+	if strings.Contains(got, "zai.glm-5") {
+		t.Fatalf("native source listing included Mantle model:\n%s", got)
+	}
+	for _, id := range []string{"anthropic.claude-sonnet-5", "global.anthropic.claude-sonnet-5"} {
+		if !strings.Contains(got, id) {
+			t.Errorf("native source listing omitted %q:\n%s", id, got)
+		}
+	}
+
+	writeErr := errors.New("output failed")
+	command.SetOut(errorWriter{err: writeErr})
+	if err := runModelsList(command, nil); !errors.Is(err, writeErr) {
+		t.Fatalf("writer error = %v, want %v", err, writeErr)
+	}
+}
+
+func TestApply_ReportsMalformedModelCatalog(t *testing.T) {
+	home := setupApplyTest(t)
+	writeMalformedCatalogCache(t, home)
+
+	err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--dry-run", "--skip-preflight",
+	})
+	if err == nil || !strings.Contains(err.Error(), "loading cached model catalog") ||
+		!strings.Contains(err.Error(), "parsing model-catalog.json") {
+		t.Fatalf("apply cache error = %v", err)
 	}
 }
 

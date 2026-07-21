@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrock"
 )
@@ -39,14 +40,19 @@ type bedrockClient interface {
 	ListInferenceProfiles(ctx context.Context, params *bedrock.ListInferenceProfilesInput, optFns ...func(*bedrock.Options)) (*bedrock.ListInferenceProfilesOutput, error)
 }
 
+// AWS construction is kept behind package variables so tests can exercise the
+// public discovery entry points without contacting AWS.
+var loadDefaultAWSConfig = config.LoadDefaultConfig
+var makeBedrockClient = func(cfg aws.Config) bedrockClient { return bedrock.NewFromConfig(cfg) }
+
 // newClient builds a real Bedrock client for region using the default AWS
 // credential chain (IAM/SSO/env — whatever the caller already has configured).
-func newClient(ctx context.Context, region string) (*bedrock.Client, error) {
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+func newClient(ctx context.Context, region string) (bedrockClient, error) {
+	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, fmt.Errorf("loading AWS config: %w", err)
 	}
-	return bedrock.NewFromConfig(cfg), nil
+	return makeBedrockClient(cfg), nil
 }
 
 // ListAnthropicModels queries Bedrock's live foundation-model catalog,

@@ -23,6 +23,8 @@ type httpDoer interface {
 
 type requestSigner func(context.Context, *http.Request) error
 
+var mantleHTTPClient httpDoer = http.DefaultClient
+
 // ListMantleModels queries the account- and region-specific Mantle Models API.
 // A bearer token is used when supplied; otherwise the request is SigV4-signed
 // with the default AWS credential chain and service name "bedrock-mantle".
@@ -31,7 +33,7 @@ func ListMantleModels(ctx context.Context, region, bearerToken string) ([]Discov
 
 	var sign requestSigner
 	if bearerToken == "" {
-		cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+		cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
 		if err != nil {
 			return nil, fmt.Errorf("loading AWS config: %w", err)
 		}
@@ -46,7 +48,7 @@ func ListMantleModels(ctx context.Context, region, bearerToken string) ([]Discov
 		}
 	}
 
-	return listMantleModelsWith(ctx, endpoint, bearerToken, http.DefaultClient, sign)
+	return listMantleModelsWith(ctx, endpoint, bearerToken, mantleHTTPClient, sign)
 }
 
 func listMantleModelsWith(
