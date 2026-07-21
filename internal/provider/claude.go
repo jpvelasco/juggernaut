@@ -2,12 +2,31 @@ package provider
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
+
+func (c claude) SupportsModel(model CatalogModel) ModelSupport {
+	if model.Status != "ACTIVE" {
+		return ModelSupport{Reason: "model is not ACTIVE"}
+	}
+	if !model.IsAvailable() {
+		return ModelSupport{Reason: "model is not available to this AWS account"}
+	}
+	if model.Source != "foundation" && model.Source != "profile" {
+		return ModelSupport{Reason: "Claude uses native Bedrock models and inference profiles"}
+	}
+	if !strings.Contains(model.ID, "anthropic.claude-") {
+		return ModelSupport{Reason: "Claude Code supports Anthropic Claude models"}
+	}
+	return ModelSupport{Supported: true, Reason: "native Claude model"}
+}
+
+func (c claude) CatalogSources() []string { return []string{"foundation", "profile"} }
 
 // claude is the Claude Code provider. Every value here is transcribed from the
 // pre-abstraction sources so behavior is byte-identical: NativeManagedKeys from

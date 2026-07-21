@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -16,12 +17,10 @@ import (
 // {env:VAR}). Unlike Codex it has no "use bedrock" env var — routing lives in the
 // config; the bearer token is injected via the apiKey env interpolation.
 //
-// Because OpenCode targets ANY compatible model, it uses a curated tier of
-// live-/table-verified Mantle models plus a --model passthrough for any other
-// Mantle id (with an "unverified" warning). The curated coding models all speak
-// Chat Completions on /v1 (verified in models-api-compatibility.html), so the
-// provider block is uniform; the OpenAI Responses-only gpt-5.x family is
-// intentionally NOT in the curated set (it needs a different npm package).
+// OpenCode targets any Mantle model compatible with Chat Completions. Juggernaut
+// injects the account's cached live inventory instead of maintaining a roster.
+// Mantle currently omits protocol metadata, so the compatibility rule is broad
+// with a narrow exclusion for the known Responses-only OpenAI GPT-5 family.
 type opencode struct {
 	BaseProvider
 }
@@ -75,11 +74,9 @@ func (o opencode) LaunchSpec() LaunchSpec {
 	}
 }
 
-// opencodeCuratedModels maps a friendly key to a verified Mantle model ID. All
-// are Chat Completions on /v1 (see models-api-compatibility.html + mantle-model-
-// matrix). Popular coding models across vendors, reflecting OpenCode's
-// model-agnostic design.
-var opencodeCuratedModels = map[string]string{
+// opencodeModelAliases are convenience spellings, not an availability roster.
+// The live account/region catalog remains authoritative.
+var opencodeModelAliases = map[string]string{
 	"gpt-oss-120b":  "openai.gpt-oss-120b",
 	"gpt-oss-20b":   "openai.gpt-oss-20b",
 	"glm-4.7":       "zai.glm-4.7",
@@ -94,8 +91,9 @@ func opencodeDefaultModel() string { return "gpt-oss-120b" }
 
 // BuildConfig writes OpenCode's config: a custom OpenAI-compatible provider block
 // pointing at Mantle /v1, plus a top-level default model "provider_id/model_id".
-// A curated key resolves to its verified Mantle model ID; any other value is
-// passed through verbatim (BYO) with an "unverified" warning.
+// A convenience alias resolves to a Mantle model ID; any other value is passed
+// through verbatim. Every compatible discovered model is added to the provider
+// block so OpenCode's model picker can use the account's actual inventory.
 func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
@@ -103,15 +101,27 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 	}
 
 	var warnings []string
-	modelID, curated := opencodeCuratedModels[key]
-	if !curated {
+	modelID, aliased := opencodeModelAliases[key]
+	if !aliased {
 		// Passthrough: treat the given value as a raw Mantle model ID. Honest
 		// about the risk — we haven't verified its API/path.
 		modelID = key
 		warnings = append(warnings, fmt.Sprintf(
-			"model %q is not in the curated set — writing it verbatim as a Mantle model. "+
+			"model %q is not a known convenience alias — writing it verbatim as a Mantle model. "+
 				"It may use a different API/path than Chat Completions and fail at runtime; "+
 				"verify against the model card if it doesn't work.", key))
+	}
+
+	models := map[string]any{modelID: map[string]any{"name": modelID}}
+	for _, discovered := range opts.ModelCatalog {
+		if support := o.SupportsModel(discovered); support.Supported {
+			models[discovered.ID] = map[string]any{"name": discovered.ID}
+		}
+	}
+	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, o); hasMantleCatalog && !selectedAvailable {
+		warnings = append(warnings, fmt.Sprintf(
+			"model %q was not returned as ACTIVE and available by Mantle in %s; it remains configured for explicit use",
+			modelID, opts.Region))
 	}
 
 	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/v1", opts.Region)
@@ -125,9 +135,7 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 					"baseURL": baseURL,
 					"apiKey":  "{env:" + authmode.BedrockAuthEnvName + "}",
 				},
-				"models": map[string]any{
-					modelID: map[string]any{"name": modelID},
-				},
+				"models": models,
 			},
 		},
 	}
@@ -138,3 +146,21 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 		Warnings:    warnings,
 	}, nil
 }
+
+func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
+	if model.Source != "mantle" {
+		return ModelSupport{Reason: "OpenCode's Bedrock provider routes through Mantle"}
+	}
+	if model.Status != "ACTIVE" {
+		return ModelSupport{Reason: "model is not ACTIVE"}
+	}
+	if !model.IsAvailable() {
+		return ModelSupport{Reason: "model is not available to this AWS account"}
+	}
+	if strings.HasPrefix(model.ID, "openai.gpt-5.") {
+		return ModelSupport{Reason: "GPT-5 on Mantle requires the Responses API"}
+	}
+	return ModelSupport{Supported: true, Reason: "Mantle Chat-compatible candidate"}
+}
+
+func (o opencode) CatalogSources() []string { return []string{"mantle"} }

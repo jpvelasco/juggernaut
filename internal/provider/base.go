@@ -67,6 +67,15 @@ func (b BaseProvider) Supports(c Capability) bool {
 	return false
 }
 
+// SupportsModel defaults to rejecting catalog entries. Each concrete provider
+// opts into exactly the endpoint and model families its client can speak.
+func (b BaseProvider) SupportsModel(model CatalogModel) ModelSupport {
+	return ModelSupport{Reason: "provider has no compatibility rule for " + model.Source}
+}
+
+// CatalogSources returns no endpoints by default.
+func (b BaseProvider) CatalogSources() []string { return nil }
+
 // DisplayName returns the human-facing CLI name for messages.
 func (b BaseProvider) DisplayName() string {
 	if b.displayName != "" {

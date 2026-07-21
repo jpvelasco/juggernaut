@@ -6,14 +6,25 @@
       "Effect": "Allow",
       "Action": [
         "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream",
-        "bedrock:ListInferenceProfiles"
+        "bedrock:InvokeModelWithResponseStream"
       ],
       "Resource": [
         "arn:aws:bedrock:*:*:inference-profile/*",
         "arn:aws:bedrock:*:*:application-inference-profile/*",
         "arn:aws:bedrock:*::foundation-model/*"
       ]
+    },
+    {
+      "Sid": "AllowModelDiscovery",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:ListFoundationModels",
+        "bedrock:GetFoundationModelAvailability",
+        "bedrock:ListInferenceProfiles",
+        "bedrock-mantle:ListModels",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "AllowMarketplaceSubscription",

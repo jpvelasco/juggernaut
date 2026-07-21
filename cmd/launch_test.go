@@ -126,8 +126,8 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 }
 
 // TestApply_OpenCode_PassthroughModel_PrintsWarning locks in that provider
-// ConfigPlan.Warnings are surfaced to the user. An unverified (passthrough)
-// OpenCode model must print the "not in the curated set" heads-up — the warning
+// ConfigPlan.Warnings are surfaced to the user. A raw (passthrough)
+// OpenCode model must print the "not a known convenience alias" heads-up — the warning
 // is the whole point of the honest-passthrough design and was previously
 // computed but never printed.
 func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
@@ -142,7 +142,7 @@ func TestApply_OpenCode_PassthroughModel_PrintsWarning(t *testing.T) {
 			t.Fatalf("apply: %v", err)
 		}
 	})
-	if !strings.Contains(out, "curated set") {
+	if !strings.Contains(out, "known convenience alias") {
 		t.Errorf("expected passthrough (unverified) model warning, got:\n%s", out)
 	}
 }
@@ -161,7 +161,7 @@ func TestApply_OpenCode_CuratedModel_NoWarning(t *testing.T) {
 			t.Fatalf("apply: %v", err)
 		}
 	})
-	if strings.Contains(out, "curated set") {
+	if strings.Contains(out, "known convenience alias") {
 		t.Errorf("curated model must not warn, got:\n%s", out)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".config", "opencode", "opencode.json"))

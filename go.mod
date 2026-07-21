@@ -4,8 +4,10 @@ go 1.26.5
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/aws/aws-sdk-go-v2 v1.42.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.30
 	github.com/aws/aws-sdk-go-v2/service/bedrock v1.65.1
+	github.com/aws/aws-sdk-go-v2/service/sts v1.44.1
 	github.com/charmbracelet/huh v1.0.0
 	github.com/gofrs/flock v0.13.0
 	github.com/spf13/cobra v1.10.2
@@ -14,7 +16,6 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.42.1 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.29 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.30 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.30 // indirect
@@ -25,7 +26,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/signin v1.4.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.32.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.44.1 // indirect
 	github.com/aws/smithy-go v1.27.3 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
