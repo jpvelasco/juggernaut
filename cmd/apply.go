@@ -225,13 +225,9 @@ func runApply(_ *cobra.Command, _ []string) error {
 	// default). Mantle providers auto-switch a model to a region that serves it
 	// only when the region was defaulted; an explicit --region is honored.
 	provOpts.RegionExplicit = applyFlags.region != ""
-	provOpts.ModelCatalog, err = cachedProviderModels(home, region)
+	provOpts.ModelCatalog, provOpts.RefreshedSources, err = cachedProviderCatalog(home, region)
 	if err != nil {
 		return fmt.Errorf("loading cached model catalog: %w", err)
-	}
-	provOpts.RefreshedSources, err = cachedProviderSources(home, region)
-	if err != nil {
-		return fmt.Errorf("loading cached model sources: %w", err)
 	}
 
 	if applyFlags.dryRun {

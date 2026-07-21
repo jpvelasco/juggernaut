@@ -146,7 +146,7 @@ func TestCachedProviderModels_LoadError(t *testing.T) {
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 
 	// No cache saved — LoadCachedModels returns found=false, err=nil.
-	_, err := cachedProviderModels(home, "us-west-2")
+	_, _, err := cachedProviderCatalog(home, "us-west-2")
 	if err != nil {
 		t.Fatalf("expected nil error for missing cache, got %v", err)
 	}
@@ -262,7 +262,7 @@ func TestCatalogProviderModels_MapsAllFields(t *testing.T) {
 		models, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	got, err := cachedProviderModels(home, "us-west-2")
+	got, _, err := cachedProviderCatalog(home, "us-west-2")
 	if err != nil || len(got) != 3 {
 		t.Fatalf("models = %+v, err %v", got, err)
 	}
@@ -577,5 +577,50 @@ func TestModelsRefresh_HomeDirError(t *testing.T) {
 	err := runModelsRefresh(&cobra.Command{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "home") {
 		t.Fatalf("expected home error, got %v", err)
+	}
+}
+
+func TestCachedProviderSources_ReturnsSources(t *testing.T) {
+	home := t.TempDir()
+	origScope := catalogCredentialScope
+	t.Cleanup(func() { catalogCredentialScope = origScope })
+	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+
+	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
+		[]discovery.Source{discovery.SourceMantle},
+		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceMantle}},
+		time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_, got, err := cachedProviderCatalog(home, "us-west-2")
+	if err != nil || len(got) != 1 || got[0] != "mantle" {
+		t.Fatalf("sources = %+v, err %v", got, err)
+	}
+}
+
+func TestCachedProviderSources_NoCache(t *testing.T) {
+	home := t.TempDir()
+	origScope := catalogCredentialScope
+	t.Cleanup(func() { catalogCredentialScope = origScope })
+	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+
+	// No cache saved — found=false returns nil.
+	_, sources, err := cachedProviderCatalog(home, "us-west-2")
+	if err != nil {
+		t.Fatalf("expected nil error for missing cache, got %v", err)
+	}
+	if len(sources) != 0 {
+		t.Fatalf("expected empty sources, got %+v", sources)
+	}
+}
+
+func TestCachedProviderSources_ScopeError(t *testing.T) {
+	home := t.TempDir()
+	origScope := catalogCredentialScope
+	t.Cleanup(func() { catalogCredentialScope = origScope })
+	catalogCredentialScope = func(string) (string, error) { return "", errors.New("scope unavailable") }
+
+	if _, _, err := cachedProviderCatalog(home, "us-west-2"); err == nil || !strings.Contains(err.Error(), "scope unavailable") {
+		t.Fatalf("expected scope error, got %v", err)
 	}
 }
