@@ -146,14 +146,11 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 }
 
 func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
+	if s := checkModelPreconditions(model); s.Reason != "" {
+		return s
+	}
 	if model.Source != "mantle" {
 		return ModelSupport{Reason: "OpenCode's Bedrock provider routes through Mantle"}
-	}
-	if model.Status != "ACTIVE" {
-		return ModelSupport{Reason: "model is not ACTIVE"}
-	}
-	if !model.IsAvailable() {
-		return ModelSupport{Reason: "model is not available to this AWS account"}
 	}
 	if strings.HasPrefix(model.ID, "openai.gpt-5.") {
 		return ModelSupport{Reason: "GPT-5 on Mantle requires the Responses API"}

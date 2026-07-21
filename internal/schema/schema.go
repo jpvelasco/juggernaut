@@ -248,6 +248,16 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}, nil
 }
 
+// normalizeModelID strips the [1m] context suffix and regional inference
+// prefixes from a model ID, recovering the bare provider model identifier.
+func normalizeModelID(modelID string) string {
+	normalized := strings.TrimSuffix(modelID, "[1m]")
+	for _, prefix := range RegionalInferencePrefixes {
+		normalized = strings.TrimPrefix(normalized, prefix)
+	}
+	return normalized
+}
+
 // IsAutoModeCapableModel reports whether modelID is a model that can use auto
 // permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7, or Opus
 // 4.8. Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified against
@@ -255,10 +265,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 // 4.7, and Opus 4.8"). Note claude-sonnet-5 is capable while claude-sonnet-4-6 is
 // not — the version digits matter, so match the full token, not just "sonnet".
 func IsAutoModeCapableModel(modelID string) bool {
-	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range RegionalInferencePrefixes {
-		normalized = strings.TrimPrefix(normalized, prefix)
-	}
+	normalized := normalizeModelID(modelID)
 	return strings.Contains(normalized, "claude-opus-4-8") ||
 		strings.Contains(normalized, "claude-opus-4-7") ||
 		strings.Contains(normalized, "claude-sonnet-5")
@@ -267,11 +274,7 @@ func IsAutoModeCapableModel(modelID string) bool {
 // IsFable5Model reports whether modelID refers to Claude Fable 5, regardless
 // of cross-region inference prefix or the Claude Code [1m] context suffix.
 func IsFable5Model(modelID string) bool {
-	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range RegionalInferencePrefixes {
-		normalized = strings.TrimPrefix(normalized, prefix)
-	}
-	return strings.Contains(normalized, "claude-fable-5")
+	return strings.Contains(normalizeModelID(modelID), "claude-fable-5")
 }
 
 // FableDataRetentionWarning is shown whenever Fable is configured. AWS's
@@ -338,10 +341,7 @@ func claudeCodeContextModelID(model string, use1M bool) string {
 }
 
 func supportsClaudeCode1M(model string) bool {
-	normalized := strings.TrimSuffix(model, "[1m]")
-	for _, prefix := range RegionalInferencePrefixes {
-		normalized = strings.TrimPrefix(normalized, prefix)
-	}
+	normalized := normalizeModelID(model)
 	return normalized == "opusplan" ||
 		strings.Contains(normalized, "claude-fable-5") ||
 		strings.Contains(normalized, "claude-opus-4-8") ||

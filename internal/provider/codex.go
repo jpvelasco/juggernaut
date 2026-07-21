@@ -188,14 +188,11 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 }
 
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
+	if s := checkModelPreconditions(model); s.Reason != "" {
+		return s
+	}
 	if model.Source != "mantle" {
 		return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
-	}
-	if model.Status != "ACTIVE" {
-		return ModelSupport{Reason: "model is not ACTIVE"}
-	}
-	if !model.IsAvailable() {
-		return ModelSupport{Reason: "model is not available to this AWS account"}
 	}
 	if !strings.HasPrefix(model.ID, "openai.gpt-5.") {
 		return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}

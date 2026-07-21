@@ -6,13 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"golang.org/x/sys/windows"
 )
 
@@ -338,12 +338,5 @@ func resolveHistoricalTargets(docs string) []string {
 
 // resolveHomeDir returns the user's home directory from environment or OS.
 func resolveHomeDir() string {
-	home := os.Getenv("HOME")
-	if home == "" {
-		home = os.Getenv("USERPROFILE")
-	}
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	return home
+	return safepath.HomeDirOrEmpty()
 }

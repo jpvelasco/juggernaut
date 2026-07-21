@@ -11,11 +11,8 @@ import (
 )
 
 func (c claude) SupportsModel(model CatalogModel) ModelSupport {
-	if model.Status != "ACTIVE" {
-		return ModelSupport{Reason: "model is not ACTIVE"}
-	}
-	if !model.IsAvailable() {
-		return ModelSupport{Reason: "model is not available to this AWS account"}
+	if s := checkModelPreconditions(model); s.Reason != "" {
+		return s
 	}
 	if model.Source != "foundation" && model.Source != "profile" {
 		return ModelSupport{Reason: "Claude uses native Bedrock models and inference profiles"}
