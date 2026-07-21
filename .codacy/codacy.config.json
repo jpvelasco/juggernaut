@@ -172,7 +172,7 @@
     },
     {
       "toolId": "shellcheck",
-      "localConfigurationFile": "F:\\source\\juggernaut\\.shellcheckrc",
+      "localConfigurationFile": ".shellcheckrc",
       "patterns": [
         {
           "patternId": "shellcheck_SC2326"
@@ -4350,7 +4350,7 @@
     },
     {
       "toolId": "markdownlint",
-      "localConfigurationFile": "F:\\source\\juggernaut\\.markdownlint.json",
+      "localConfigurationFile": ".markdownlint.json",
       "useLocalConfigurationFile": true,
       "patterns": []
     },
