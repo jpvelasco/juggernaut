@@ -1,10 +1,10 @@
 # juggernaut-bedrock
 
-**Claude Code → Amazon Bedrock in one command.**
+**Safe Bedrock routing for coding agents — Claude Code, Codex, OpenCode, and Grok.**
 
-Juggernaut is a cross-platform CLI that wires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) to [Amazon Bedrock](https://aws.amazon.com/bedrock/) instead of Anthropic's direct API. Install Claude Code with Anthropic's installer, run one `apply`, then keep typing `claude`.
+Juggernaut is a cross-platform CLI that wires your coding CLI to [Amazon Bedrock](https://aws.amazon.com/bedrock/) instead of vendor APIs. One `apply`, then keep typing `claude`, `codex`, `opencode`, or `grok`.
 
-Built for developers shipping with GenAI today: IAM and SSO for teams, API keys for solo runs, and a `doctor` command when something's off.
+Built for developers shipping with GenAI today: IAM and SSO for teams, API keys for solo runs, collision detection that refuses to clobber foreign config, and a `doctor` command when something's off.
 
 <p align="center">
   <a href="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml"><img src="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -16,7 +16,6 @@ Built for developers shipping with GenAI today: IAM and SSO for teams, API keys 
 ## Install
 
 ```bash
-curl -fsSL https://claude.ai/install.sh | bash
 npm install -g juggernaut-bedrock
 ```
 
@@ -42,16 +41,32 @@ Using a Bedrock API key from an old Windows v3 install? See the Windows v3 API-k
 ## Quickstart
 
 ```bash
-# 1. Install Claude Code and Juggernaut (above)
-
-# 2. Configure - IAM/SSO (recommended) or interactive prompt
+# 1. Configure — IAM/SSO (recommended) or interactive prompt
 juggernaut apply --auth=iam
 
-# 3. Restart/source your shell, then launch Claude Code
+# 2. Restart/source your shell, then launch your CLI
 claude
 ```
 
 Bedrock API key auth? Run `juggernaut apply --auth=bedrock-api-key`; credentials land in your OS keychain, not your shell history.
+
+## Multi-CLI Support
+
+| CLI | Flag | Config path (user scope) |
+|-----|------|---------------------------|
+| Claude Code (default) | `--cli=claude` | `~/.claude/settings.json` |
+| OpenAI Codex | `--cli=codex` | `~/.codex/config.toml` |
+| OpenCode | `--cli=opencode` | `~/.config/opencode/opencode.json` |
+| Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
+
+```bash
+# Codex supports IAM/SSO or Bedrock API key; OpenCode and Grok require a Bedrock API key
+juggernaut apply --cli=codex --auth=iam
+juggernaut apply --cli=opencode --auth=bedrock-api-key
+juggernaut apply --cli=grok --auth=bedrock-api-key
+```
+
+Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one does not remove it.
 
 ## What it does
 
@@ -61,20 +76,20 @@ juggernaut apply --auth=iam
 
 That one command:
 
-1. **Writes** Bedrock config to `~/.claude/settings.json` (or project scope)
-2. **Sets** model IDs, region, effort level, permission mode, and `CLAUDE_CODE_USE_BEDROCK=1` — only after credentials check out
-3. **Installs** a marked shell activation block with a `claude` function that delegates to `juggernaut launch`
+1. **Writes** Bedrock config to the target CLI's config file (user or project scope)
+2. **Sets** model IDs, region, effort level, permission mode, and routing env vars — only after credentials validate
+3. **Installs** a marked shell activation block that delegates to `juggernaut launch`
 
-No overwriting the real Claude Code binary. No copying API keys into env vars.
+No overwriting the real CLI binary. No copying API keys into env vars. A backup is made before every write.
 
 ## Why Bedrock?
 
-| | Direct Anthropic API | Amazon Bedrock |
+| | Direct Vendor API | Amazon Bedrock |
 |---|---------------------|----------------|
 | **Billing** | Separate account | Your AWS bill |
 | **Auth** | API keys | IAM, SSO, roles |
-| **Region** | Anthropic infra | Your chosen AWS region |
-| **Compliance** | Anthropic certs | SOC, HIPAA, FedRAMP via AWS |
+| **Region** | Vendor infra | Your chosen AWS region |
+| **Compliance** | Vendor certs | SOC, HIPAA, FedRAMP via AWS |
 | **Network** | Public internet | VPC endpoints, PrivateLink |
 
 ## Auth modes
@@ -90,11 +105,28 @@ No overwriting the real Claude Code binary. No copying API keys into env vars.
 
 | Command | What it does |
 |---------|--------------|
-| `apply` | Configure Bedrock + install shell activation |
+| `apply` | Configure Bedrock for the target `--cli` and install shell activation |
 | `show` | Print your current Juggernaut config |
-| `doctor` | Diagnostics for settings, credentials, activation, Claude Code, and legacy v4.2.6 artifacts |
-| `uninstall` | Remove config and token; `--full` also removes shell activation |
+| `doctor` | Diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts |
+| `uninstall` | Remove managed config and token; `--full` also removes shell activation |
+| `models refresh` | Discover account/region model inventory from Bedrock and Mantle |
+| `models list` | List cached model inventory, optionally filtered by CLI compatibility |
+| `models check` | Maintainer tool: verify pinned models against live AWS catalog |
 | `version` | Print installed version (`--json` for machines) |
+
+### Account model discovery
+
+Discover what models your AWS account actually exposes in a given region:
+
+```bash
+# Query native Bedrock plus Mantle /v1/models endpoint
+juggernaut models refresh --region=us-west-2
+
+# See what's compatible with a specific CLI
+juggernaut models list --region=us-west-2 --cli=opencode
+```
+
+The inventory is cached per account/region at `~/.juggernaut/model-catalog.json`. `apply` reads this cache without network calls — deterministic and offline-friendly.
 
 ## Default models
 
@@ -102,12 +134,10 @@ No overwriting the real Claude Code binary. No copying API keys into env vars.
 |------|-------|--------------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
 | **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
-| **Fable alias** | Claude Fable 5 | Configure with `--fable-model=<bedrock-fable-model-id>` |
+| **Fable** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
-Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables, and does the same for the configured Fable alias when it matches Claude Code's Fable ID. Claude Code strips the suffix before provider calls. Use `--no-1m-context` to opt out.
-
-Fable is exposed as an opt-in Claude Code alias. Pass `--fable-model` with a model ID that is available in your Bedrock account and region; Juggernaut does not pin a default Fable ID until one is configured.
+Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Use `--no-1m-context` to opt out.
 
 Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
 Override one tier: `juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>`
@@ -141,17 +171,28 @@ juggernaut apply --auth=iam --mode=auto
 
 Auto mode on Bedrock requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — Juggernaut sets this automatically.
 
+## Safety features
+
+- **Collision detection** — if a target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force`. A backup is always created.
+- **Keychain-only secrets** — Bedrock API keys never go into shell profiles or plaintext config.
+- **No binary overwrite** — Juggernaut never installs over an unknown file matching a managed CLI name.
+- **Graceful fallthrough** — if `juggernaut` is not on PATH, activation wrappers fall through to the real CLI binary.
+
 ## Other options
 
 ```bash
---always-thinking       # enable extended thinking by default (alwaysThinkingEnabled)
---service-tier=flex     # Bedrock service tier: default | flex | priority
---fable-model=<id>      # override Claude Code Fable alias
---fallback-model=a,b    # write Claude Code native fallbackModel chain
---opusplan              # route /plan to Opus 4.8, execution to Sonnet 4.6
---mode=auto             # auto-approve safe tool calls with background checks
---mantle                # enable Mantle routing
---scope=project         # write to ./.claude/settings.json instead of ~/.claude/
+--always-thinking           # enable extended thinking by default
+--service-tier=flex         # Bedrock service tier: default | flex | priority
+--fable-model=<id>          # override Fable alias
+--fallback-model=a,b        # write native fallbackModel chain
+--available-models=a,b      # curate the /model picker
+--enforce-available-models  # restrict picker to listed models
+--opusplan                  # route /plan to Opus 4.8, execution to Sonnet 4.6
+--effort=high               # low | medium | high | xhigh | max | auto
+--mode=auto                 # auto-approve safe tool calls
+--mantle                    # enable Mantle routing (Claude only)
+--scope=project             # write to project scope instead of user scope
+--force                     # overwrite colliding foreign leaves (backup kept)
 ```
 
 ## Troubleshooting
@@ -166,7 +207,7 @@ Common fixes: complete Anthropic model access in the Bedrock console (403), refr
 
 ## Documentation
 
-Full docs, IAM policy, migration guide, and platform notes:
+Full docs, IAM policy, multi-CLI details, model discovery, and platform notes:
 
 **[github.com/jpvelasco/juggernaut](https://github.com/jpvelasco/juggernaut)**
 
@@ -174,4 +215,4 @@ Full docs, IAM policy, migration guide, and platform notes:
 
 MIT — see [LICENSE](https://github.com/jpvelasco/juggernaut/blob/main/LICENSE).
 
-Juggernaut is an independent tool, not affiliated with Anthropic or Amazon Web Services.
+Juggernaut is an independent tool, not affiliated with Anthropic, Amazon Web Services, OpenAI, or xAI.

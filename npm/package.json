@@ -19,12 +19,15 @@
   "os": ["darwin", "linux", "win32"],
   "cpu": ["x64", "arm64"],
   "keywords": [
-    "claude",
-    "claude-code",
     "bedrock",
     "amazon-bedrock",
     "aws",
+    "claude",
+    "claude-code",
     "anthropic",
+    "codex",
+    "opencode",
+    "grok",
     "genai",
     "ai-coding",
     "llm",
@@ -32,6 +35,7 @@
     "cli",
     "iam",
     "sso",
+    "mantle",
     "developer-tools"
   ],
   "engines": {

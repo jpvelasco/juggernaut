@@ -4,9 +4,30 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-07-21
+
+**Minor release — account model discovery, npm docs, and codebase simplification.**
+
+### Added
+
+- **Account model discovery via `models refresh`/`models list`.** `models refresh --region=<region>` explicitly resolves the STS caller account, queries native Bedrock and Mantle `/v1/models` catalogs, and writes an owner-only cache partitioned by account and region at `~/.juggernaut/model-catalog.json`. A non-secret credential fingerprint binds the cache to the resolved account, preventing cross-account reuse. `models list [--cli=<provider>]` shows the cached inventory filtered by provider protocol compatibility. `apply` reads the matching cached account/region without network I/O — deterministic and offline-friendly.
+
 ### Changed
 
-- **Shell activation wrappers fall through when `juggernaut` is missing.** Marked profile blocks (bash/zsh/fish/PowerShell) now check for `juggernaut` on PATH and, if absent, invoke the real CLI binary instead of hard-failing with “command not found.” **On re-apply, the entire marked block is rewritten** to the new body (same as prior apply behavior for markers) — existing hard-fail wrappers and any edits *inside* the BEGIN/END markers are replaced silently. Content outside the markers is left alone. PowerShell installs only AllHosts profiles and strips stale host-specific blocks for that CLI; multi-CLI uninstall also scans historical OneDrive/local Documents paths. Apply no longer invents unused POSIX/fish profiles when that shell is not installed.
+- **Shell activation wrappers fall through when `juggernaut` is missing.** Marked profile blocks now check for `juggernaut` on PATH and, if absent, invoke the real CLI binary instead of hard-failing. Re-apply rewrites the entire marked block to the new body.
+- **npm README rewritten for v5 multi-CLI.** The npm-published `README.md` now covers all four CLIs (Claude, Codex, OpenCode, Grok), the `models` command, collision detection, and all current flags. Package keywords updated to include `codex`, `opencode`, `grok`, and `mantle`.
+
+### Fixed
+
+- **Go toolchain bumped to 1.26.5 (closes #295).** `go.mod` now requires Go 1.26.5.
+- **CI Go version derived from `go.mod` instead of hardcoded.** Build and test jobs read the Go version from `toolchain` in `go.mod`, so CI stays in sync with the module.
+- **Codacy config uses repo-relative paths.** `codacy.config.json` paths are relative to the repo root, fixing local analysis on non-CI hosts.
+
+### Other
+
+- **Major codebase simplification.** Multiple refactor passes deduplicated model validation (`ValidateModelList` → `schema`), model ID normalization (`SupportsModel` guards), home dir resolution, `toMap` (single `provider.ToMap`), and `warnf` helper across `cmd/`, `activation/`, and `provider/` packages. Complexity reduced, coverage improved, and structural duplication eliminated.
+- **GitHub Actions migrated to node24.** All CI workflows now use Node 24; `setup-node` and `setup-go` bumped to v7.
+- **Codacy config migrated to `codacy-analysis-cli` format.** `codacy.config.json` now uses the newer CLI config schema.
 
 ## [5.4.0] - 2026-07-16
 

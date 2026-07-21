@@ -75,7 +75,7 @@
       "scope": "user",
       "use1mContext": true,
       "useMantle": false,
-      "version": "5.4.0"
+      "version": "5.5.0"
     },
     "modelOverrides": {
       "fable": "global.anthropic.claude-fable-5",
