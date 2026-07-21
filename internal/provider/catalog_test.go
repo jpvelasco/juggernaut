@@ -97,6 +97,57 @@ func TestProviders_RejectInactiveAndUnavailableCatalogModels(t *testing.T) {
 	}
 }
 
+func TestCheckModelPreconditions(t *testing.T) {
+	// Active and available — passes through
+	s := checkModelPreconditions(CatalogModel{ID: "x", Source: "mantle", Status: "ACTIVE", Availability: "AVAILABLE"})
+	if s.Reason != "" {
+		t.Fatalf("expected pass-through, got: %s", s.Reason)
+	}
+
+	// Inactive — rejected
+	s = checkModelPreconditions(CatalogModel{ID: "x", Source: "mantle", Status: "LEGACY", Availability: "AVAILABLE"})
+	if s.Reason != "model is not ACTIVE" {
+		t.Fatalf("expected inactive rejection, got: %s", s.Reason)
+	}
+
+	// Unavailable — rejected
+	s = checkModelPreconditions(CatalogModel{ID: "x", Source: "mantle", Status: "ACTIVE", Availability: "NOT_AVAILABLE"})
+	if s.Reason != "model is not available to this AWS account" {
+		t.Fatalf("expected unavailable rejection, got: %s", s.Reason)
+	}
+}
+
+func TestBaseProvider_SupportsModel(t *testing.T) {
+	base := newTestProvider("test", "", "json", "test", nil)
+
+	// Active mantle model — falls through to "no compatibility rule"
+	s := base.SupportsModel(catalogModel("x", "mantle"))
+	if s.Supported {
+		t.Fatalf("expected rejection, got supported")
+	}
+	if !strings.Contains(s.Reason, "mantle") {
+		t.Fatalf("expected source in reason, got: %s", s.Reason)
+	}
+
+	// Inactive — rejected by pre-check
+	s = base.SupportsModel(CatalogModel{ID: "x", Source: "mantle", Status: "LEGACY"})
+	if s.Supported {
+		t.Fatalf("expected rejection for inactive")
+	}
+	if s.Reason != "model is not ACTIVE" {
+		t.Fatalf("expected inactive reason, got: %s", s.Reason)
+	}
+
+	// Unavailable — rejected by pre-check
+	s = base.SupportsModel(CatalogModel{ID: "x", Source: "mantle", Status: "ACTIVE", Availability: "NOT_AVAILABLE"})
+	if s.Supported {
+		t.Fatalf("expected rejection for unavailable")
+	}
+	if s.Reason != "model is not available to this AWS account" {
+		t.Fatalf("expected unavailable reason, got: %s", s.Reason)
+	}
+}
+
 type providerWithoutCatalog struct{ Provider }
 
 func TestCatalogProviderFallbacks(t *testing.T) {

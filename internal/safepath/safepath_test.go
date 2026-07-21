@@ -3,6 +3,7 @@ package safepath_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -75,4 +76,61 @@ func TestReadFile_RejectsOutsideBase(t *testing.T) {
 	if _, err := safepath.ReadFile(base, outside); err == nil {
 		t.Fatal("expected read outside base to fail")
 	}
+}
+
+func TestHomeDir_PrefersHOME(t *testing.T) {
+	t.Setenv("HOME", "/tmp/test-home")
+	t.Setenv("USERPROFILE", "/tmp/test-userprofile")
+	got, err := safepath.HomeDir()
+	if err != nil {
+		t.Fatalf("HomeDir: %v", err)
+	}
+	if got != "/tmp/test-home" {
+		t.Errorf("HomeDir = %q, want HOME value", got)
+	}
+}
+
+func TestHomeDir_FallsBackToUserProfile(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "/tmp/test-userprofile")
+	got, err := safepath.HomeDir()
+	if err != nil {
+		t.Fatalf("HomeDir: %v", err)
+	}
+	if got != "/tmp/test-userprofile" {
+		t.Errorf("HomeDir = %q, want USERPROFILE value", got)
+	}
+}
+
+func TestHomeDir_BothEmpty(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	got, err := safepath.HomeDir()
+	if err != nil {
+		// os.UserHomeDir may fail or return the real home; either is fine
+		if got == "" && !strings.Contains(err.Error(), "could not determine home directory") {
+			t.Errorf("unexpected error: %v", err)
+		}
+		return
+	}
+	if got == "" {
+		t.Error("expected non-empty path from UserHomeDir fallback")
+	}
+}
+
+func TestHomeDirOrEmpty(t *testing.T) {
+	t.Setenv("HOME", "/tmp/test-home")
+	got := safepath.HomeDirOrEmpty()
+	if got != "/tmp/test-home" {
+		t.Errorf("HomeDirOrEmpty = %q, want /tmp/test-home", got)
+	}
+}
+
+func TestHomeDirOrEmpty_NoErrorOnMissing(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	// Should return empty string without returning an error (the function swallows errors)
+	got := safepath.HomeDirOrEmpty()
+	// If UserHomeDir works, it returns the real home; if not, empty string — both acceptable
+	_ = got
 }
