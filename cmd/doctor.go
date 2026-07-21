@@ -57,10 +57,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("bedrock-config.json", doctor.OK, "loaded (v"+bCfg.Version+")")
 	}
 
-	scopes := []string{"user", "project"}
-	if doctorFlags.scope != "" {
-		scopes = []string{doctorFlags.scope}
-	}
+	scopes := resolvedScopes(doctorFlags.scope)
 	// Grok is always user-scoped (ConfigPath ignores scope).
 	if cliName == "grok" {
 		if doctorFlags.scope == "project" {

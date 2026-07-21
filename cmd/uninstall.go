@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
-	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/spf13/cobra"
@@ -100,17 +99,11 @@ func uninstallSettingsBlocks(home string, prov provider.Provider) {
 }
 
 func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
-	path, err := prov.ConfigPath(home, scope)
+	mgr, err := newProviderManager(prov, home, scope)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: invalid %s config path: %v\n", scope, err)
+		fmt.Fprintf(os.Stderr, "Warning: %s config: %v\n", scope, err)
 		return
 	}
-	format, err := config.FormatByName(prov.ConfigFormatName())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
-		return
-	}
-	mgr := config.NewManagerWithFormat(path, format)
 	has, err := mgr.HasManagedKeys(prov.NativeManagedKeys())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not check %s scope: %v\n", scope, err)
