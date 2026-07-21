@@ -149,15 +149,15 @@ func TestUninstallWith_RemoveTargetWithLegacyError(t *testing.T) {
 	}
 }
 
-func TestProfilePathKey_Clean(t *testing.T) {
+func TestPathKey_Clean(t *testing.T) {
 	// Smoke: key is stable under Clean; on Windows casing folds.
-	a := profilePathKey(filepath.Join("C:", "Users", "X", "a.ps1"))
-	b := profilePathKey(filepath.Join("C:", "Users", "X", "a.ps1"))
+	a := pathKey(filepath.Join("C:", "Users", "X", "a.ps1"))
+	b := pathKey(filepath.Join("C:", "Users", "X", "a.ps1"))
 	if a != b {
 		t.Fatalf("keys differ: %q vs %q", a, b)
 	}
 	if runtime.GOOS == "windows" {
-		upper := profilePathKey(filepath.Join("C:", "USERS", "X", "A.PS1"))
+		upper := pathKey(filepath.Join("C:", "USERS", "X", "A.PS1"))
 		if upper != strings.ToLower(upper) {
 			t.Fatalf("windows key should be lowercased: %q", upper)
 		}

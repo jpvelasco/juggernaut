@@ -177,10 +177,8 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	if regionMsg != "" {
 		warnings = append(warnings, fmt.Sprintf("%s: %s", m.ModelID, regionMsg))
 	}
-	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, m.ModelID, c, opts.RefreshedSources); hasMantleCatalog && !selectedAvailable {
-		warnings = append(warnings, fmt.Sprintf(
-			"model %q was not returned as ACTIVE and available by Mantle in %s; refresh the catalog or select a listed model",
-			m.ModelID, region))
+	if w := catalogUnavailableWarning(opts.ModelCatalog, m.ModelID, region, "refresh the catalog or select a listed model", c, opts.RefreshedSources); w != "" {
+		warnings = append(warnings, w)
 	}
 	return ConfigPlan{
 		Keys:        keys,

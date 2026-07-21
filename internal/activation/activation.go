@@ -493,7 +493,7 @@ func uninstallCLIBlocks(home string, opts UninstallOptions) ([]string, error) {
 
 	seen := map[string]bool{}
 	for _, target := range targets {
-		key := profilePathKey(target.Path)
+		key := pathKey(target.Path)
 		if seen[key] {
 			continue
 		}
@@ -657,38 +657,44 @@ func HasBlockWithMarkers(content, begin, end string) bool {
 	return strings.Contains(content, begin) && strings.Contains(content, end)
 }
 
+// HasLegacyBlock reports whether content contains both begin and end markers.
+func HasLegacyBlock(content, begin, end string) bool {
+	return strings.Contains(content, begin) && strings.Contains(content, end)
+}
+
 // HasLegacyLauncherBlock reports whether content contains a legacy
 // "# BEGIN: Juggernaut Launcher" block.
 func HasLegacyLauncherBlock(content string) bool {
-	return strings.Contains(content, LegacyLauncherBegin) && strings.Contains(content, LegacyLauncherEnd)
+	return HasLegacyBlock(content, LegacyLauncherBegin, LegacyLauncherEnd)
 }
 
 // HasLegacyBedrockBlock reports whether content contains a legacy
 // "# BEGIN: Claude Code Bedrock Configuration" block.
 func HasLegacyBedrockBlock(content string) bool {
-	return strings.Contains(content, LegacyBedrockBegin) && strings.Contains(content, LegacyBedrockEnd)
+	return HasLegacyBlock(content, LegacyBedrockBegin, LegacyBedrockEnd)
+}
+
+// removeLegacyBlock removes a legacy block from content. It only removes the
+// block if both the begin and end markers are present; an orphaned begin marker
+// is left untouched.
+func removeLegacyBlock(content, begin, end string) (string, bool) {
+	content = normalizeNewlines(content)
+	if !strings.Contains(content, end) {
+		return content, false
+	}
+	return removeBlockWithMarkers(content, begin, end)
 }
 
 // removeLegacyLauncherBlock removes a legacy "# BEGIN: Juggernaut Launcher"
-// block from content. It only removes the block if both the begin and end
-// markers are present; an orphaned begin marker is left untouched.
+// block from content.
 func removeLegacyLauncherBlock(content string) (string, bool) {
-	content = normalizeNewlines(content)
-	if !strings.Contains(content, LegacyLauncherEnd) {
-		return content, false
-	}
-	return removeBlockWithMarkers(content, LegacyLauncherBegin, LegacyLauncherEnd)
+	return removeLegacyBlock(content, LegacyLauncherBegin, LegacyLauncherEnd)
 }
 
 // removeLegacyBedrockBlock removes a legacy "# BEGIN: Claude Code Bedrock
-// Configuration" block from content. It only removes the block if both the
-// begin and end markers are present; an orphaned begin marker is left untouched.
+// Configuration" block from content.
 func removeLegacyBedrockBlock(content string) (string, bool) {
-	content = normalizeNewlines(content)
-	if !strings.Contains(content, LegacyBedrockEnd) {
-		return content, false
-	}
-	return removeBlockWithMarkers(content, LegacyBedrockBegin, LegacyBedrockEnd)
+	return removeLegacyBlock(content, LegacyBedrockBegin, LegacyBedrockEnd)
 }
 
 // removeBlockWithMarkers removes blocks delimited by begin and end markers.
@@ -982,7 +988,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	// can override or retain a stale duplicate of the global activation).
 	installSet := map[string]bool{}
 	for _, target := range result.InstallTargets {
-		installSet[profilePathKey(target.Path)] = true
+		installSet[pathKey(target.Path)] = true
 		changed, err := InstallTargetFor(target, spec)
 		if err != nil {
 			return installed, err
@@ -1003,7 +1009,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	stalePaths = append(stalePaths, result.MigrationTargets...)
 	seenStale := map[string]bool{}
 	for _, path := range stalePaths {
-		key := profilePathKey(path)
+		key := pathKey(path)
 		if installSet[key] || seenStale[key] {
 			continue
 		}
@@ -1018,13 +1024,6 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 	}
 
 	return installed, nil
-}
-
-// profilePathKey normalizes a profile path for set membership. Delegates to
-// pathKey so InstallTargets and MigrationTargets that differ only by casing
-// still match.
-func profilePathKey(path string) string {
-	return pathKey(path)
 }
 
 // UninstallPowerShellActivation removes activation blocks from all discovered

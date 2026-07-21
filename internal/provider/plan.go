@@ -116,6 +116,20 @@ func catalogSelectionState(models []CatalogModel, selectedID string, p CatalogPr
 	return hasRelevantSource, selectedAvailable
 }
 
+// catalogUnavailableWarning returns a warning message when the provider's
+// catalog is present but the selected model was not returned as available.
+// The suffix parameter allows providers to customize the action text.
+// Returns an empty string when the catalog is absent or the model is available.
+func catalogUnavailableWarning(models []CatalogModel, selectedID, region, suffix string, p CatalogProvider, refreshedSources []string) string {
+	hasRelevant, selectedAvailable := catalogSelectionState(models, selectedID, p, refreshedSources)
+	if !hasRelevant || selectedAvailable {
+		return ""
+	}
+	return fmt.Sprintf(
+		"model %q was not returned as ACTIVE and available by Mantle in %s; %s",
+		selectedID, region, suffix)
+}
+
 // Capability identifies an optional feature a Provider may support, so cmd/ can
 // gate CLI-specific flags without hardcoding per-CLI knowledge.
 type Capability int

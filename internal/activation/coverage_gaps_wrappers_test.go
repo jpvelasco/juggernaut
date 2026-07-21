@@ -536,10 +536,10 @@ func TestNonWindowsHelpers(t *testing.T) {
 		}
 	})
 
-	t.Run("profilePathKey", func(t *testing.T) {
-		got := profilePathKey("/Users/test/profile.ps1")
+	t.Run("pathKey", func(t *testing.T) {
+		got := pathKey("/Users/test/profile.ps1")
 		if got != "/Users/test/profile.ps1" {
-			t.Errorf("profilePathKey = %q, want /Users/test/profile.ps1", got)
+			t.Errorf("pathKey = %q, want /Users/test/profile.ps1", got)
 		}
 	})
 
