@@ -27,6 +27,12 @@ func SetEmbeddedConfig(data []byte) {
 	embeddedConfigBytes = data
 }
 
+// warnf prints a formatted warning to stderr. All non-error warnings in the
+// cmd package use this instead of bare fmt.Fprintf(os.Stderr, "Warning: …").
+func warnf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "Warning: "+format+"\n", args...)
+}
+
 // loadBedrockConfig loads bedrock config, preferring the embedded bytes.
 // Falls back to filesystem for tests and development builds.
 func loadBedrockConfig() (*bedrock.Config, error) {
@@ -287,7 +293,7 @@ func resolveCredential(authMode string, home string) (string, error) {
 		if applyFlags.preserveKey {
 			return "", fmt.Errorf("reading existing key: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Warning: could not read keychain (will prompt for key): %v\n", err)
+		warnf("could not read keychain (will prompt for key): %v", err)
 	} else if token != "" {
 		return token, nil
 	}
@@ -479,7 +485,7 @@ func installActivation(home string, prov provider.Provider) {
 		Spec: activation.CLISpec{Name: prov.Name(), Begin: begin, End: end},
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not install shell activation: %v\n", err)
+		warnf("could not install shell activation: %v", err)
 		return
 	}
 	title := providerDisplayName(prov.Name())
@@ -510,7 +516,7 @@ func reportLegacyRecovery(home string) {
 	binDir := activation.DefaultBinDir(home)
 	actions, err := activation.RecoverLegacyArtifacts(binDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not recover legacy artifacts: %v\n", err)
+		warnf("could not recover legacy artifacts: %v", err)
 		return
 	}
 	for _, a := range actions {

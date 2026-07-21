@@ -101,12 +101,12 @@ func uninstallSettingsBlocks(home string, prov provider.Provider) {
 func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 	mgr, err := newProviderManager(prov, home, scope)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %s config: %v\n", scope, err)
+		warnf("%s config: %v", scope, err)
 		return
 	}
 	has, err := mgr.HasManagedKeys(prov.NativeManagedKeys())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not check %s scope: %v\n", scope, err)
+		warnf("could not check %s scope: %v", scope, err)
 		return
 	}
 	if !has {
@@ -117,7 +117,7 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 		return
 	}
 	if err := mgr.RemoveManagedKeysDeep(prov.NativeManagedKeys(), prov.OwnedSubKeys()); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not remove %s block: %v\n", scope, err)
+		warnf("could not remove %s block: %v", scope, err)
 		return
 	}
 	fmt.Printf("  ✓ Removed juggernaut block from %s %s config\n", scope, prov.Name())
@@ -125,7 +125,7 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 
 func removeKeychainToken(home string) {
 	if err := keychain.Default().DeleteWithFallback(home); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not remove keychain entry: %v\n", err)
+		warnf("could not remove keychain entry: %v", err)
 		return
 	}
 	fmt.Println("  ✓ Removed bearer token from keychain")
@@ -145,7 +145,7 @@ func uninstallActivationFull(home string, prov provider.Provider) {
 		Spec: activation.CLISpec{Name: prov.Name(), Begin: begin, End: end},
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not remove shell activation: %v\n", err)
+		warnf("could not remove shell activation: %v", err)
 	} else if len(removed) > 0 {
 		fmt.Printf("  ✓ Removed %s activation from %d shell profile(s)\n", title, len(removed))
 	}
