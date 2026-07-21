@@ -167,7 +167,7 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 			AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
 		},
 	}
-	blockMap, err := toMapViaJSON(juggernautBlock)
+	blockMap, err := ToMap(juggernautBlock)
 	if err != nil {
 		return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
 	}

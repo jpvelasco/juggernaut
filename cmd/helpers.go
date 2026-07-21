@@ -70,13 +70,9 @@ func settingsPath(homeDir, scope string) (string, error) {
 	return safepath.JoinUnder(homeDir, ".claude", "settings.json")
 }
 
+// toMap delegates to the single shared implementation in internal/provider.
 func toMap(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("serializing block: %w", err)
-	}
-	var m map[string]any
-	return m, json.Unmarshal(b, &m)
+	return provider.ToMap(v)
 }
 
 // fromMap is the reverse of toMap: it JSON round-trips a generic map into the
