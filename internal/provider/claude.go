@@ -91,7 +91,7 @@ func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, erro
 	}
 	native := block.NativeKeys()
 
-	blockMap, err := toMapViaJSON(block)
+	blockMap, err := ToMap(block)
 	if err != nil {
 		return ConfigPlan{}, err
 	}

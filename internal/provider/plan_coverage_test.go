@@ -5,23 +5,23 @@ import (
 	"testing"
 )
 
-func TestToMapViaJSON_MarshalError(t *testing.T) {
+func TestToMap_MarshalError(t *testing.T) {
 	// Channel values cannot be marshaled to JSON, exercising the marshal error path.
 	ch := make(chan int)
-	_, err := toMapViaJSON(ch)
+	_, err := ToMap(ch)
 	if err == nil || !strings.Contains(err.Error(), "serializing block") {
 		t.Fatalf("expected marshal error, got %v", err)
 	}
 }
 
-func TestToMapViaJSON_Success(t *testing.T) {
+func TestToMap_Success(t *testing.T) {
 	type block struct {
 		Model  string `json:"model"`
 		Region string `json:"region"`
 	}
-	got, err := toMapViaJSON(block{Model: "sonnet", Region: "us-west-2"})
+	got, err := ToMap(block{Model: "sonnet", Region: "us-west-2"})
 	if err != nil {
-		t.Fatalf("toMapViaJSON: %v", err)
+		t.Fatalf("ToMap: %v", err)
 	}
 	if got["model"] != "sonnet" || got["region"] != "us-west-2" {
 		t.Fatalf("unexpected map: %+v", got)

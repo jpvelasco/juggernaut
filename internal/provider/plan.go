@@ -5,9 +5,11 @@ import (
 	"fmt"
 )
 
-// toMapViaJSON serializes a struct to a generic map via JSON round-trip (mirrors
-// cmd.toMap), so a typed block becomes ConfigPlan.Keys content.
-func toMapViaJSON(v any) (map[string]any, error) {
+// ToMap serializes any value to a generic map via JSON round-trip.
+// Used by providers to turn typed structs into ConfigPlan.Keys content.
+// cmd/helpers.go delegates to this function — there should be only one
+// implementation across the project.
+func ToMap(v any) (map[string]any, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("serializing block: %w", err)
