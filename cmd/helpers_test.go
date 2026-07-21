@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,5 +163,24 @@ func TestFileExists(t *testing.T) {
 	}
 	if fileExists(filepath.Join(dir, "absent")) {
 		t.Error("fileExists should report false for a missing file")
+	}
+}
+
+func TestWarnf_WritesToStderr(t *testing.T) {
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	defer func() { os.Stderr = old; r.Close(); w.Close() }()
+
+	warnf("hello %s", "world")
+	w.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	got := string(data)
+	if want := "Warning: hello world\n"; got != want {
+		t.Errorf("warnf output = %q, want %q", got, want)
 	}
 }

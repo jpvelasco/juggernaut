@@ -3,9 +3,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	xwindows "github.com/charmbracelet/x/windows"
 	"golang.org/x/sys/windows"
 )
@@ -19,6 +16,6 @@ func flushConsoleInput() {
 		return
 	}
 	if err := xwindows.FlushConsoleInputBuffer(conin); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not flush console input buffer: %v\n", err)
+		warnf("could not flush console input buffer: %v", err)
 	}
 }
