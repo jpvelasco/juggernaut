@@ -63,6 +63,27 @@ func TestProviders_RejectInactiveAndUnavailableCatalogModels(t *testing.T) {
 	}
 }
 
+type providerWithoutCatalog struct{ Provider }
+
+func TestCatalogProviderFallbacks(t *testing.T) {
+	base := newTestProvider("minimal", "", "json", "minimal", nil)
+	model := catalogModel("example.model", "mantle")
+	if support := base.SupportsModel(model); support.Supported || !strings.Contains(support.Reason, "mantle") {
+		t.Fatalf("base support = %+v", support)
+	}
+	if sources := base.CatalogSources(); sources != nil {
+		t.Fatalf("base sources = %v", sources)
+	}
+
+	provider := providerWithoutCatalog{Provider: base}
+	if support := SupportsCatalogModel(provider, model); support.Supported || !strings.Contains(support.Reason, "does not expose") {
+		t.Fatalf("fallback support = %+v", support)
+	}
+	if sources := CatalogSourcesFor(provider); sources != nil {
+		t.Fatalf("fallback sources = %v", sources)
+	}
+}
+
 func TestOpenCode_BuildConfigAddsCompatibleLiveCatalog(t *testing.T) {
 	p, _ := Get("opencode")
 	opts := baseOpts()

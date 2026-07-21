@@ -301,6 +301,42 @@ func TestCachedProviderModels_MapsCachedInventory(t *testing.T) {
 	}
 }
 
+func TestModelCatalogCommands_PropagateIdentityAndProviderErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	origRefreshFlags, origListFlags := modelsRefreshFlags, modelsListFlags
+	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
+	t.Cleanup(func() {
+		modelsRefreshFlags, modelsListFlags = origRefreshFlags, origListFlags
+		catalogCallerAccount, catalogCredentialScope = origAccount, origScope
+	})
+	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+	catalogCallerAccount = func(context.Context, string) (string, error) { return "", errors.New("identity denied") }
+
+	modelsRefreshFlags.region, modelsRefreshFlags.source = "us-west-2", "mantle"
+	if err := runModelsRefresh(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "identity denied") {
+		t.Fatalf("refresh identity error = %v", err)
+	}
+
+	modelsListFlags.region, modelsListFlags.source, modelsListFlags.refresh = "us-west-2", "mantle", true
+	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "identity denied") {
+		t.Fatalf("list identity error = %v", err)
+	}
+
+	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{discovery.SourceMantle}, nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	modelsListFlags.cli, modelsListFlags.refresh = "unknown", false
+	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "unknown CLI") {
+		t.Fatalf("provider error = %v", err)
+	}
+
+	catalogCredentialScope = func(string) (string, error) { return "", errors.New("scope unavailable") }
+	if _, err := cachedProviderModels(home, "us-west-2"); err == nil || !strings.Contains(err.Error(), "scope unavailable") {
+		t.Fatalf("cached provider scope error = %v", err)
+	}
+}
+
 func TestResetFlags_ResetsNestedModelCommands(t *testing.T) {
 	if err := modelsRefreshCmd.Flags().Set("source", "mantle"); err != nil {
 		t.Fatal(err)
