@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 const (
@@ -165,7 +167,7 @@ func TestCatalogCache_MissingAccountAndReadFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(path)); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(`{"version":2,"accounts":{},"bindings":{"profile-a":"missing-account"}}`), 0o600); err != nil {
@@ -178,7 +180,7 @@ func TestCatalogCache_MissingAccountAndReadFailure(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path, 0o700); err != nil {
+	if err := safepath.MkdirAll(path); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := LoadCachedModels(home, testScope, "us-west-2"); err == nil || !strings.Contains(err.Error(), "reading model catalog cache") {

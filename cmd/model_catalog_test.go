@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +29,7 @@ func writeMalformedCatalogCache(t *testing.T, home string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(path)); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
