@@ -60,8 +60,8 @@ Bedrock API key auth? Run `juggernaut apply --auth=bedrock-api-key`; credentials
 | Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
 
 ```bash
-# Codex, OpenCode, and Grok route through Mantle and require a Bedrock API key
-juggernaut apply --cli=codex --auth=bedrock-api-key
+# Codex supports IAM/SSO or Bedrock API key; OpenCode and Grok require a Bedrock API key
+juggernaut apply --cli=codex --auth=iam
 juggernaut apply --cli=opencode --auth=bedrock-api-key
 juggernaut apply --cli=grok --auth=bedrock-api-key
 ```
