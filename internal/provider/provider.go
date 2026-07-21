@@ -78,6 +78,34 @@ type Provider interface {
 	Supports(Capability) bool
 }
 
+// CatalogProvider is an optional extension implemented by providers that can
+// classify dynamically discovered models. Keeping discovery outside Provider's
+// required surface preserves compatibility with lightweight test and external
+// provider implementations.
+type CatalogProvider interface {
+	SupportsModel(CatalogModel) ModelSupport
+	CatalogSources() []string
+}
+
+// SupportsCatalogModel asks a provider to classify a catalog entry. Providers
+// without the optional catalog extension reject entries by default.
+func SupportsCatalogModel(p Provider, model CatalogModel) ModelSupport {
+	catalogProvider, ok := p.(CatalogProvider)
+	if !ok {
+		return ModelSupport{Reason: "provider does not expose model compatibility metadata"}
+	}
+	return catalogProvider.SupportsModel(model)
+}
+
+// CatalogSourcesFor returns the discovery sources relevant to a provider.
+func CatalogSourcesFor(p Provider) []string {
+	catalogProvider, ok := p.(CatalogProvider)
+	if !ok {
+		return nil
+	}
+	return catalogProvider.CatalogSources()
+}
+
 // registry holds every known provider by name.
 var registry = map[string]Provider{}
 

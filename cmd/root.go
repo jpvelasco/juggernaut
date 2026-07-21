@@ -35,10 +35,15 @@ func ExecuteArgs(args []string) error {
 
 // resetFlags resets all subcommand flags to their defaults between test runs.
 func resetFlags() {
-	for _, sub := range rootCmd.Commands() {
-		sub.Flags().VisitAll(func(f *pflag.Flag) {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		})
+	resetCommandFlags(rootCmd)
+}
+
+func resetCommandFlags(cmd *cobra.Command) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	})
+	for _, sub := range cmd.Commands() {
+		resetCommandFlags(sub)
 	}
 }

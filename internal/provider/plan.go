@@ -53,6 +53,52 @@ type Options struct {
 	AlwaysThinking         bool
 	ServiceTier            string
 	Route                  string // "mantle" (default) or "native"
+	// ModelCatalog is the cached or freshly discovered account/region inventory.
+	// Providers decide which entries their client protocol can actually use.
+	ModelCatalog []CatalogModel
+}
+
+// CatalogModel is the SDK-independent model fact passed from discovery into a
+// provider. Source is "foundation", "profile", or "mantle".
+type CatalogModel struct {
+	ID           string
+	Status       string
+	Availability string
+	Provider     string
+	Source       string
+}
+
+// IsAvailable reports whether AWS positively marked a model as available or
+// the older cache entry predates availability metadata. Only an explicit
+// NOT_AVAILABLE classification rejects a model.
+func (m CatalogModel) IsAvailable() bool { return m.Availability != "NOT_AVAILABLE" }
+
+// ModelSupport explains whether a provider may safely expose a catalog entry.
+type ModelSupport struct {
+	Supported bool
+	Reason    string
+}
+
+// catalogSelectionState reports whether a cache contains the provider's
+// relevant source and whether the selected model is usable according to that
+// provider. A cache containing only another provider's sources is equivalent
+// to no cache, so a partial native-only refresh never produces a false Mantle
+// warning (and vice versa).
+func catalogSelectionState(models []CatalogModel, selectedID string, p CatalogProvider) (hasRelevantSource, selectedAvailable bool) {
+	sources := make(map[string]bool)
+	for _, source := range p.CatalogSources() {
+		sources[source] = true
+	}
+	for _, model := range models {
+		if !sources[model.Source] {
+			continue
+		}
+		hasRelevantSource = true
+		if model.ID == selectedID && p.SupportsModel(model).Supported {
+			selectedAvailable = true
+		}
+	}
+	return hasRelevantSource, selectedAvailable
 }
 
 // Capability identifies an optional feature a Provider may support, so cmd/ can

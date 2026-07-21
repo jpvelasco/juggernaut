@@ -1,0 +1,133 @@
+package discovery
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/config"
+)
+
+const maxMantleCatalogBytes = 8 << 20
+
+type httpDoer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+type requestSigner func(context.Context, *http.Request) error
+
+// ListMantleModels queries the account- and region-specific Mantle Models API.
+// A bearer token is used when supplied; otherwise the request is SigV4-signed
+// with the default AWS credential chain and service name "bedrock".
+func ListMantleModels(ctx context.Context, region, bearerToken string) ([]DiscoveredModel, error) {
+	endpoint := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/v1/models", region)
+
+	var sign requestSigner
+	if bearerToken == "" {
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+		if err != nil {
+			return nil, fmt.Errorf("loading AWS config: %w", err)
+		}
+		creds, err := cfg.Credentials.Retrieve(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("retrieving AWS credentials: %w", err)
+		}
+		sign = func(ctx context.Context, req *http.Request) error {
+			emptyHash := sha256.Sum256(nil)
+			payloadHash := hex.EncodeToString(emptyHash[:])
+			return v4.NewSigner().SignHTTP(ctx, creds, req, payloadHash, "bedrock", region, time.Now())
+		}
+	}
+
+	return listMantleModelsWith(ctx, endpoint, bearerToken, http.DefaultClient, sign)
+}
+
+func listMantleModelsWith(
+	ctx context.Context,
+	endpoint, bearerToken string,
+	client httpDoer,
+	sign requestSigner,
+) ([]DiscoveredModel, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating Mantle models request: %w", err)
+	}
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	} else {
+		if sign == nil {
+			return nil, fmt.Errorf("signing Mantle models request: no bearer token or AWS signer available")
+		}
+		if err := sign(ctx, req); err != nil {
+			return nil, fmt.Errorf("signing Mantle models request: %w", err)
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("requesting Mantle models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxMantleCatalogBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("reading Mantle models response: %w", err)
+	}
+	if len(body) > maxMantleCatalogBytes {
+		return nil, fmt.Errorf("mantle models response exceeds %d bytes", maxMantleCatalogBytes)
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		detail := strings.TrimSpace(string(body))
+		if len(detail) > 512 {
+			detail = detail[:512] + "..."
+		}
+		if detail == "" {
+			detail = "no response body"
+		}
+		return nil, fmt.Errorf("mantle models returned %s: %s", resp.Status, detail)
+	}
+
+	var payload struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Status  string `json:"status"`
+			OwnedBy string `json:"owned_by"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decoding Mantle models response: %w", err)
+	}
+
+	models := make([]DiscoveredModel, 0, len(payload.Data))
+	for _, model := range payload.Data {
+		if model.ID == "" {
+			continue
+		}
+		status := strings.ToUpper(model.Status)
+		if status == "AVAILABLE" {
+			status = "ACTIVE"
+		}
+		if status == "" {
+			status = "UNKNOWN"
+		}
+		provider := model.OwnedBy
+		if provider == "" {
+			provider, _, _ = strings.Cut(model.ID, ".")
+		}
+		models = append(models, DiscoveredModel{
+			ID:           model.ID,
+			Status:       status,
+			Availability: "AVAILABLE",
+			Provider:     provider,
+			Source:       SourceMantle,
+		})
+	}
+	return models, nil
+}

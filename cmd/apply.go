@@ -54,7 +54,7 @@ func init() {
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")
-	f.StringVar(&applyFlags.model, "model", "", "override all model IDs")
+	f.StringVar(&applyFlags.model, "model", "", "model ID or provider-specific convenience alias")
 	f.StringVar(&applyFlags.opusModel, "opus-model", "", "override Opus model ID")
 	f.StringVar(&applyFlags.sonnetModel, "sonnet-model", "", "override Sonnet model ID")
 	f.StringVar(&applyFlags.haikuModel, "haiku-model", "", "override Haiku model ID")
@@ -225,6 +225,10 @@ func runApply(_ *cobra.Command, _ []string) error {
 	// default). Mantle providers auto-switch a model to a region that serves it
 	// only when the region was defaulted; an explicit --region is honored.
 	provOpts.RegionExplicit = applyFlags.region != ""
+	provOpts.ModelCatalog, err = cachedProviderModels(home, region)
+	if err != nil {
+		return fmt.Errorf("loading cached model catalog: %w", err)
+	}
 
 	if applyFlags.dryRun {
 		return printApplyDryRun(home, block, prov, bCfg, provOpts)

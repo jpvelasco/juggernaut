@@ -110,9 +110,9 @@ func TestOpenCode_OwnsConfig(t *testing.T) {
 	}
 }
 
-// TestOpenCode_BuildConfig_Curated: default (gpt-oss) writes a custom
+// TestOpenCode_BuildConfig_DefaultAlias: default (gpt-oss) writes a custom
 // openai-compatible provider block pointing at Mantle /v1, plus top-level model.
-func TestOpenCode_BuildConfig_Curated(t *testing.T) {
+func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	p, _ := Get("opencode")
 	opts := baseOpts()
 	opts.Region = "us-west-2"
@@ -151,11 +151,12 @@ func TestOpenCode_BuildConfig_Curated(t *testing.T) {
 	}
 }
 
-// TestOpenCode_BuildConfig_CuratedModels: GLM/Kimi/DeepSeek/Qwen are curated and
-// resolve to their Mantle model IDs (all Chat/v1).
-func TestOpenCode_BuildConfig_CuratedModels(t *testing.T) {
+// TestOpenCode_BuildConfig_Aliases: common convenience names resolve to their
+// Mantle model IDs without acting as the authoritative availability roster.
+func TestOpenCode_BuildConfig_Aliases(t *testing.T) {
 	cases := map[string]string{
 		"glm-4.7":       "zai.glm-4.7",
+		"glm-5":         "zai.glm-5",
 		"kimi-k2.5":     "moonshotai.kimi-k2.5",
 		"deepseek-v3.2": "deepseek.v3.2",
 		"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-instruct",

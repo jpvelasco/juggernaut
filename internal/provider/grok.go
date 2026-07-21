@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -100,23 +101,37 @@ func (g grok) LaunchSpec() LaunchSpec {
 // still falls through to interactive login. The [auth] block is the documented
 // way to replace login entirely.
 func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+	modelID := opts.Model
+	if modelID == "" {
+		modelID = "xai.grok-4.3"
+	} else if strings.HasPrefix(modelID, "grok-") {
+		modelID = "xai." + modelID
+	}
+	if !strings.HasPrefix(modelID, "xai.grok-") {
+		return ConfigPlan{}, fmt.Errorf("unknown Grok model %q (expected a discovered xai.grok-* model)", opts.Model)
+	}
+
 	// Iron Fist: route to a region that actually serves grok-4.3 rather than
 	// writing a config that can't reach it (see resolveMantleRegion).
-	region, regionMsg, _ := resolveMantleRegion(opts.Region, opts.RegionExplicit, grokRegions)
+	region := opts.Region
+	regionMsg := ""
+	if modelID == "xai.grok-4.3" {
+		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, grokRegions)
+	}
 
 	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
+	modelBlock := map[string]any{
+		"model":       modelID,
+		"base_url":    baseURL,
+		"name":        modelID + " (Amazon Bedrock Mantle)",
+		"api_backend": "responses",
+	}
+	if modelID == "xai.grok-4.3" {
+		modelBlock["context_window"] = 1000000
+	}
 	keys := map[string]any{
 		"model": map[string]any{
-			grokModelName: map[string]any{
-				"model":       "xai.grok-4.3",
-				"base_url":    baseURL,
-				"name":        "Grok 4.3 (Amazon Bedrock Mantle)",
-				"api_backend": "responses",
-				// grok-4.3 on Mantle serves both Chat + Responses on /openai/v1
-				// (verified 2026-07-03); Responses is the richer surface (web
-				// search etc.), so we route through it.
-				"context_window": 1000000,
-			},
+			grokModelName: modelBlock,
 		},
 		"models": map[string]any{
 			"default": grokModelName,
@@ -129,12 +144,34 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 
 	var warnings []string
 	if regionMsg != "" {
-		warnings = append(warnings, "xai.grok-4.3 "+regionMsg)
+		warnings = append(warnings, modelID+" "+regionMsg)
 	}
-
+	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, g); hasMantleCatalog && !selectedAvailable {
+		warnings = append(warnings, fmt.Sprintf(
+			"model %q was not returned as ACTIVE and available by Mantle in %s; refresh the catalog or select a listed model",
+			modelID, region))
+	}
 	return ConfigPlan{
 		Keys:        keys,
 		ManagedKeys: g.NativeManagedKeys(),
 		Warnings:    warnings,
 	}, nil
 }
+
+func (g grok) SupportsModel(model CatalogModel) ModelSupport {
+	if model.Source != "mantle" {
+		return ModelSupport{Reason: "Grok routes through Mantle"}
+	}
+	if model.Status != "ACTIVE" {
+		return ModelSupport{Reason: "model is not ACTIVE"}
+	}
+	if !model.IsAvailable() {
+		return ModelSupport{Reason: "model is not available to this AWS account"}
+	}
+	if !strings.HasPrefix(model.ID, "xai.grok-") {
+		return ModelSupport{Reason: "the Grok client supports xAI Grok models"}
+	}
+	return ModelSupport{Supported: true, Reason: "xAI Responses model"}
+}
+
+func (g grok) CatalogSources() []string { return []string{"mantle"} }

@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/bedrock"
@@ -12,17 +13,37 @@ import (
 // fakeBedrockClient is a hand-written stand-in for the real SDK client, used
 // by every test in this package. No test ever calls real AWS.
 type fakeBedrockClient struct {
-	foundationModelsOut  *bedrock.ListFoundationModelsOutput
-	foundationModelsErr  error
-	inferenceProfilesOut *bedrock.ListInferenceProfilesOutput
-	inferenceProfilesErr error
+	foundationModelsOut       *bedrock.ListFoundationModelsOutput
+	foundationModelsErr       error
+	foundationAvailabilityOut map[string]*bedrock.GetFoundationModelAvailabilityOutput
+	foundationAvailabilityErr error
+	inferenceProfilesOut      *bedrock.ListInferenceProfilesOutput
+	inferenceProfilePages     map[string]*bedrock.ListInferenceProfilesOutput
+	inferenceProfilesErr      error
 }
 
 func (f *fakeBedrockClient) ListFoundationModels(_ context.Context, _ *bedrock.ListFoundationModelsInput, _ ...func(*bedrock.Options)) (*bedrock.ListFoundationModelsOutput, error) {
 	return f.foundationModelsOut, f.foundationModelsErr
 }
 
-func (f *fakeBedrockClient) ListInferenceProfiles(_ context.Context, _ *bedrock.ListInferenceProfilesInput, _ ...func(*bedrock.Options)) (*bedrock.ListInferenceProfilesOutput, error) {
+func (f *fakeBedrockClient) GetFoundationModelAvailability(_ context.Context, in *bedrock.GetFoundationModelAvailabilityInput, _ ...func(*bedrock.Options)) (*bedrock.GetFoundationModelAvailabilityOutput, error) {
+	if f.foundationAvailabilityErr != nil {
+		return nil, f.foundationAvailabilityErr
+	}
+	if in == nil || in.ModelId == nil {
+		return nil, nil
+	}
+	return f.foundationAvailabilityOut[*in.ModelId], nil
+}
+
+func (f *fakeBedrockClient) ListInferenceProfiles(_ context.Context, in *bedrock.ListInferenceProfilesInput, _ ...func(*bedrock.Options)) (*bedrock.ListInferenceProfilesOutput, error) {
+	if f.inferenceProfilePages != nil {
+		token := ""
+		if in != nil && in.NextToken != nil {
+			token = *in.NextToken
+		}
+		return f.inferenceProfilePages[token], f.inferenceProfilesErr
+	}
 	return f.inferenceProfilesOut, f.inferenceProfilesErr
 }
 
@@ -57,11 +78,58 @@ func TestListAnthropicModelsWith_MapsActiveAndLegacy(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 models, got %d: %+v", len(got), got)
 	}
-	if got[0].ID != "anthropic.claude-opus-4-8" || got[0].Status != "ACTIVE" || got[0].Provider != "Anthropic" {
+	if got[0].ID != "anthropic.claude-opus-4-8" || got[0].Status != "ACTIVE" || got[0].Provider != "Anthropic" || got[0].Source != SourceFoundation {
 		t.Errorf("unexpected first model: %+v", got[0])
 	}
 	if got[1].ID != "anthropic.claude-sonnet-4-20250514-v1:0" || got[1].Status != "LEGACY" {
 		t.Errorf("unexpected second model: %+v", got[1])
+	}
+}
+
+func TestListAvailableFoundationModelsWith_MapsAccountAvailability(t *testing.T) {
+	client := &fakeBedrockClient{
+		foundationModelsOut: &bedrock.ListFoundationModelsOutput{
+			ModelSummaries: []types.FoundationModelSummary{
+				{ModelId: strPtr("available"), ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive}},
+				{ModelId: strPtr("blocked"), ModelLifecycle: &types.FoundationModelLifecycle{Status: types.FoundationModelLifecycleStatusActive}},
+			},
+		},
+		foundationAvailabilityOut: map[string]*bedrock.GetFoundationModelAvailabilityOutput{
+			"available": {
+				AgreementAvailability:   &types.AgreementAvailability{Status: types.AgreementStatusAvailable},
+				AuthorizationStatus:     types.AuthorizationStatusAuthorized,
+				EntitlementAvailability: types.EntitlementAvailabilityAvailable,
+				RegionAvailability:      types.RegionAvailabilityAvailable,
+			},
+			"blocked": {
+				AgreementAvailability:   &types.AgreementAvailability{Status: types.AgreementStatusAvailable},
+				AuthorizationStatus:     types.AuthorizationStatusNotAuthorized,
+				EntitlementAvailability: types.EntitlementAvailabilityAvailable,
+				RegionAvailability:      types.RegionAvailabilityAvailable,
+			},
+		},
+	}
+
+	got, err := listAvailableFoundationModelsWith(context.Background(), client)
+	if err != nil {
+		t.Fatalf("listAvailableFoundationModelsWith: %v", err)
+	}
+	if len(got) != 2 || got[0].Availability != "AVAILABLE" || got[1].Availability != "NOT_AVAILABLE" {
+		t.Fatalf("unexpected availability mapping: %+v", got)
+	}
+}
+
+func TestListAvailableFoundationModelsWith_PropagatesAvailabilityError(t *testing.T) {
+	client := &fakeBedrockClient{
+		foundationModelsOut: &bedrock.ListFoundationModelsOutput{ModelSummaries: []types.FoundationModelSummary{
+			{ModelId: strPtr("model-id")},
+		}},
+		foundationAvailabilityErr: errors.New("access denied"),
+	}
+
+	_, err := listAvailableFoundationModelsWith(context.Background(), client)
+	if err == nil || !strings.Contains(err.Error(), "model-id") {
+		t.Fatalf("expected model-specific availability error, got %v", err)
 	}
 }
 
@@ -158,6 +226,32 @@ func TestListInferenceProfilesWith_MapsActiveProfiles(t *testing.T) {
 	}
 	if got[0].ID != "global.anthropic.claude-fable-5" || got[0].Status != "ACTIVE" {
 		t.Errorf("unexpected profile: %+v", got[0])
+	}
+}
+
+func TestListInferenceProfilesWith_Paginates(t *testing.T) {
+	client := &fakeBedrockClient{
+		inferenceProfilePages: map[string]*bedrock.ListInferenceProfilesOutput{
+			"": {
+				InferenceProfileSummaries: []types.InferenceProfileSummary{{
+					InferenceProfileId: strPtr("first"), Status: types.InferenceProfileStatusActive,
+				}},
+				NextToken: strPtr("second-page"),
+			},
+			"second-page": {
+				InferenceProfileSummaries: []types.InferenceProfileSummary{{
+					InferenceProfileId: strPtr("second"), Status: types.InferenceProfileStatusActive,
+				}},
+			},
+		},
+	}
+
+	got, err := listInferenceProfilesWith(context.Background(), client)
+	if err != nil {
+		t.Fatalf("listInferenceProfilesWith: %v", err)
+	}
+	if len(got) != 2 || got[0].ID != "first" || got[1].ID != "second" {
+		t.Fatalf("unexpected paginated profiles: %+v", got)
 	}
 }
 

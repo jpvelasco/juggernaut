@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
@@ -79,7 +80,7 @@ var codexModels = map[string]codexMantleModel{
 	},
 	"gpt-5.4": {
 		ModelID: "openai.gpt-5.4",
-		Regions: []string{"us-east-1", "us-west-2"},
+		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
 	},
 	// NOTE: gpt-oss is intentionally absent. Current Codex is Responses-API-only
 	// (it rejects `wire_api = "chat"` at config load — openai/codex
@@ -90,6 +91,15 @@ var codexModels = map[string]codexMantleModel{
 
 func codexModel(key string) (codexMantleModel, bool) {
 	m, ok := codexModels[key]
+	if ok {
+		return m, true
+	}
+	if strings.HasPrefix(key, "gpt-5.") {
+		return codexMantleModel{ModelID: "openai." + key}, true
+	}
+	if strings.HasPrefix(key, "openai.gpt-5.") {
+		return codexMantleModel{ModelID: key}, true
+	}
 	return m, ok
 }
 
@@ -118,13 +128,17 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	}
 	m, ok := codexModel(key)
 	if !ok {
-		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (supported: gpt-5.5, gpt-5.4)", key)
+		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-5.* model)", key)
 	}
 
 	// A model is only reachable in the regions where it's verified available; a
 	// user's default region may not serve it. Auto-switch when the region was
 	// defaulted, honor-and-warn when it was explicit.
-	region, regionMsg, _ := resolveMantleRegion(opts.Region, opts.RegionExplicit, m.Regions)
+	region := opts.Region
+	regionMsg := ""
+	if len(m.Regions) > 0 {
+		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, m.Regions)
+	}
 
 	keys := map[string]any{
 		"model":          m.ModelID,
@@ -163,13 +177,35 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	if regionMsg != "" {
 		warnings = append(warnings, fmt.Sprintf("%s: %s", m.ModelID, regionMsg))
 	}
-
+	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, m.ModelID, c); hasMantleCatalog && !selectedAvailable {
+		warnings = append(warnings, fmt.Sprintf(
+			"model %q was not returned as ACTIVE and available by Mantle in %s; refresh the catalog or select a listed model",
+			m.ModelID, region))
+	}
 	return ConfigPlan{
 		Keys:        keys,
 		ManagedKeys: c.NativeManagedKeys(),
 		Warnings:    warnings,
 	}, nil
 }
+
+func (c codex) SupportsModel(model CatalogModel) ModelSupport {
+	if model.Source != "mantle" {
+		return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
+	}
+	if model.Status != "ACTIVE" {
+		return ModelSupport{Reason: "model is not ACTIVE"}
+	}
+	if !model.IsAvailable() {
+		return ModelSupport{Reason: "model is not available to this AWS account"}
+	}
+	if !strings.HasPrefix(model.ID, "openai.gpt-5.") {
+		return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}
+	}
+	return ModelSupport{Supported: true, Reason: "Codex Responses model"}
+}
+
+func (c codex) CatalogSources() []string { return []string{"mantle"} }
 
 func (c codex) LaunchSpec() LaunchSpec {
 	// Codex has no "use bedrock" flag — routing lives in config.toml.

@@ -168,8 +168,31 @@ claude          # after apply --cli=claude (default)
 | `show` | Print the current Juggernaut-managed config from user and project scopes. |
 | `doctor` | Read-only diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts. Supports `--cli=claude\|codex\|opencode\|grok`. |
 | `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
+| `models refresh` | Discover the models available to the current AWS account and region from native Bedrock and Mantle, then cache the result locally. |
+| `models list` | List the cached inventory, optionally filtered to models compatible with a specific CLI. |
 | `models check` | Maintainer tool: check `bedrock-config.json`'s pinned models against AWS Bedrock's live catalog; `--write --set-<tier>=<id>` to update a stale pin. |
 | `version` | Print the installed version. |
+
+### Account model discovery
+
+Juggernaut can configure the model inventory the account actually exposes instead of relying on a release-time roster:
+
+```bash
+# Query native Bedrock plus the Mantle /v1/models endpoint with the default AWS profile
+juggernaut models refresh --region=us-west-2
+
+# See the OpenCode-compatible subset (for example Kimi, GLM, Qwen,
+# GPT OSS, DeepSeek, MiniMax, and future compatible models)
+juggernaut models list --region=us-west-2 --cli=opencode
+
+# Refresh or inspect one endpoint family only
+juggernaut models refresh --region=us-east-1 --source=mantle
+juggernaut models list --region=us-east-1 --source=native
+```
+
+The account/region inventory is stored at `~/.juggernaut/model-catalog.json` with owner-only permissions. `apply` reads the matching cached region and never makes an implicit network call, so configuration remains deterministic and works offline. Run `models refresh` again when AWS adds models or the account's access changes; `models list --refresh` combines both steps.
+
+Each provider filters the live inventory by what its client protocol can use: Claude Code accepts native Anthropic models and inference profiles, Codex accepts Mantle GPT-5 models, OpenCode accepts general OpenAI-compatible Mantle models, and Grok accepts Mantle xAI Grok models. This small compatibility policy prevents Juggernaut from advertising a model to a client that cannot speak its API while avoiding a maintained model roster. Explicit `--model` selections remain supported and receive an actionable warning when a relevant cached catalog says they are unavailable.
 
 ## Default Models
 
@@ -285,13 +308,16 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
   "Action": [
     "bedrock:InvokeModel",
     "bedrock:InvokeModelWithResponseStream",
-    "bedrock:ListInferenceProfiles"
+    "bedrock:ListFoundationModels",
+    "bedrock:GetFoundationModelAvailability",
+    "bedrock:ListInferenceProfiles",
+    "bedrock-mantle:ListModels"
   ],
   "Resource": "*"
 }
 ```
 
-See [`iam-policy.json`](iam-policy.json) for the complete policy. For tighter security, restrict the resource to specific regions.
+See [`iam-policy.json`](iam-policy.json) for the complete policy. Model catalog list and availability actions do not support resource-level permissions; restrict model invocation resources to specific regions and model ARNs where practical.
 
 ## Uninstall
 

@@ -76,7 +76,7 @@ func TestCodexModel_GPT55(t *testing.T) {
 // see openai/codex CHAT_WIRE_API_REMOVED_ERROR), but gpt-oss on Mantle speaks
 // only Chat Completions on /v1 — it has no Responses endpoint. So Codex cannot
 // reach gpt-oss at all; offering it would write a config that fails to load.
-// (OpenCode, which does speak Chat, still curates gpt-oss — that's unaffected.)
+// (OpenCode, which does speak Chat, still supports gpt-oss — that's unaffected.)
 func TestCodexModel_GPTOSSExcluded(t *testing.T) {
 	for _, key := range []string{"gpt-oss-120b", "gpt-oss-20b"} {
 		if _, ok := codexModel(key); ok {

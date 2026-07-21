@@ -16,7 +16,7 @@ import (
 
 var modelsCmd = &cobra.Command{
 	Use:   "models",
-	Short: "Maintainer tools for the embedded bedrock-config.json model catalog",
+	Short: "Discover available Bedrock models and maintain model configuration",
 }
 
 var modelsCheckCmd = &cobra.Command{

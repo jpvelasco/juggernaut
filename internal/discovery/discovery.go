@@ -12,18 +12,30 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrock"
 )
 
+// Source identifies the Bedrock catalog endpoint that returned a model.
+type Source string
+
+const (
+	SourceFoundation Source = "foundation"
+	SourceProfile    Source = "profile"
+	SourceMantle     Source = "mantle"
+)
+
 // DiscoveredModel is Juggernaut's own view of a Bedrock model or inference
 // profile, decoupled from the AWS SDK's response shape.
 type DiscoveredModel struct {
-	ID       string // e.g. "anthropic.claude-opus-4-8" or "global.anthropic.claude-fable-5"
-	Status   string // "ACTIVE", "LEGACY", or "UNKNOWN" if AWS omits lifecycle info
-	Provider string // e.g. "Anthropic"; empty for inference profiles (not returned there)
+	ID           string `json:"id"`           // e.g. "anthropic.claude-opus-4-8" or "openai.gpt-oss-120b"
+	Status       string `json:"status"`       // "ACTIVE", "LEGACY", or "UNKNOWN" if AWS omits lifecycle info
+	Availability string `json:"availability"` // "AVAILABLE", "NOT_AVAILABLE", or "UNKNOWN"
+	Provider     string `json:"provider"`     // e.g. "Anthropic"; empty when the endpoint omits it
+	Source       Source `json:"source"`       // foundation, profile, or mantle
 }
 
 // bedrockClient is the subset of the real AWS SDK client this package needs.
 // Satisfied by *bedrock.Client in production and a hand-written fake in tests.
 type bedrockClient interface {
 	ListFoundationModels(ctx context.Context, params *bedrock.ListFoundationModelsInput, optFns ...func(*bedrock.Options)) (*bedrock.ListFoundationModelsOutput, error)
+	GetFoundationModelAvailability(ctx context.Context, params *bedrock.GetFoundationModelAvailabilityInput, optFns ...func(*bedrock.Options)) (*bedrock.GetFoundationModelAvailabilityOutput, error)
 	ListInferenceProfiles(ctx context.Context, params *bedrock.ListInferenceProfilesInput, optFns ...func(*bedrock.Options)) (*bedrock.ListInferenceProfilesOutput, error)
 }
 
@@ -47,6 +59,37 @@ func ListAnthropicModels(ctx context.Context, region string) ([]DiscoveredModel,
 	return listAnthropicModelsWith(ctx, client)
 }
 
+// ListFoundationModels queries Bedrock's complete legacy/native foundation
+// model catalog. Unlike ListAnthropicModels it intentionally does not filter by
+// provider, so callers can inventory everything visible in the account/region.
+func ListFoundationModels(ctx context.Context, region string) ([]DiscoveredModel, error) {
+	client, err := newClient(ctx, region)
+	if err != nil {
+		return nil, err
+	}
+	return listAvailableFoundationModelsWith(ctx, client)
+}
+
+func listAvailableFoundationModelsWith(ctx context.Context, client bedrockClient) ([]DiscoveredModel, error) {
+	models, err := listFoundationModelsWith(ctx, client, nil)
+	if err != nil {
+		return nil, err
+	}
+	for i := range models {
+		if models[i].ID == "" {
+			continue
+		}
+		out, availabilityErr := client.GetFoundationModelAvailability(ctx, &bedrock.GetFoundationModelAvailabilityInput{
+			ModelId: &models[i].ID,
+		})
+		if availabilityErr != nil {
+			return nil, fmt.Errorf("checking availability of foundation model %s: %w", models[i].ID, availabilityErr)
+		}
+		models[i].Availability = foundationModelAvailability(out)
+	}
+	return models, nil
+}
+
 // ListInferenceProfiles queries Bedrock's live cross-region inference profile
 // catalog (the global./us. prefixed IDs bedrock-config.json pins).
 func ListInferenceProfiles(ctx context.Context, region string) ([]DiscoveredModel, error) {
@@ -59,8 +102,12 @@ func ListInferenceProfiles(ctx context.Context, region string) ([]DiscoveredMode
 
 func listAnthropicModelsWith(ctx context.Context, client bedrockClient) ([]DiscoveredModel, error) {
 	provider := "Anthropic"
+	return listFoundationModelsWith(ctx, client, &provider)
+}
+
+func listFoundationModelsWith(ctx context.Context, client bedrockClient, provider *string) ([]DiscoveredModel, error) {
 	out, err := client.ListFoundationModels(ctx, &bedrock.ListFoundationModelsInput{
-		ByProvider: &provider,
+		ByProvider: provider,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing foundation models: %w", err)
@@ -80,24 +127,51 @@ func listAnthropicModelsWith(ctx context.Context, client bedrockClient) ([]Disco
 		if m.ProviderName != nil {
 			providerName = *m.ProviderName
 		}
-		models = append(models, DiscoveredModel{ID: id, Status: status, Provider: providerName})
+		models = append(models, DiscoveredModel{
+			ID:           id,
+			Status:       status,
+			Availability: "UNKNOWN",
+			Provider:     providerName,
+			Source:       SourceFoundation,
+		})
 	}
 	return models, nil
 }
 
-func listInferenceProfilesWith(ctx context.Context, client bedrockClient) ([]DiscoveredModel, error) {
-	out, err := client.ListInferenceProfiles(ctx, &bedrock.ListInferenceProfilesInput{})
-	if err != nil {
-		return nil, fmt.Errorf("listing inference profiles: %w", err)
+func foundationModelAvailability(out *bedrock.GetFoundationModelAvailabilityOutput) string {
+	if out == nil {
+		return "UNKNOWN"
 	}
+	agreementAvailable := out.AgreementAvailability != nil && out.AgreementAvailability.Status == "AVAILABLE"
+	if agreementAvailable && out.AuthorizationStatus == "AUTHORIZED" &&
+		out.EntitlementAvailability == "AVAILABLE" && out.RegionAvailability == "AVAILABLE" {
+		return "AVAILABLE"
+	}
+	return "NOT_AVAILABLE"
+}
 
-	profiles := make([]DiscoveredModel, 0, len(out.InferenceProfileSummaries))
-	for _, p := range out.InferenceProfileSummaries {
-		id := ""
-		if p.InferenceProfileId != nil {
-			id = *p.InferenceProfileId
+func listInferenceProfilesWith(ctx context.Context, client bedrockClient) ([]DiscoveredModel, error) {
+	var profiles []DiscoveredModel
+	var nextToken *string
+	for {
+		out, err := client.ListInferenceProfiles(ctx, &bedrock.ListInferenceProfilesInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("listing inference profiles: %w", err)
 		}
-		profiles = append(profiles, DiscoveredModel{ID: id, Status: string(p.Status)})
+
+		for _, p := range out.InferenceProfileSummaries {
+			id := ""
+			if p.InferenceProfileId != nil {
+				id = *p.InferenceProfileId
+			}
+			profiles = append(profiles, DiscoveredModel{
+				ID: id, Status: string(p.Status), Availability: "AVAILABLE", Source: SourceProfile,
+			})
+		}
+		if out.NextToken == nil || *out.NextToken == "" {
+			break
+		}
+		nextToken = out.NextToken
 	}
 	return profiles, nil
 }
