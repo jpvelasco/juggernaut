@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // CallerAccount returns the AWS account selected by the default credential
@@ -56,7 +57,7 @@ func CredentialScope(home string) (string, error) {
 		}
 		for _, path := range paths {
 			writeHashField(hash, "path", filepath.Clean(path))
-			data, err := os.ReadFile(path)
+			data, err := safepath.ReadFile(filepath.Dir(path), path)
 			if err != nil && !os.IsNotExist(err) {
 				// Applying configuration must remain usable without AWS filesystem
 				// access. Include the read failure in the fingerprint rather than

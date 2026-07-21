@@ -4,12 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 func TestCredentialScope_TracksProfileAndCredentialsWithoutSecrets(t *testing.T) {
 	home := t.TempDir()
 	awsDir := filepath.Join(home, ".aws")
-	if err := os.MkdirAll(awsDir, 0o700); err != nil {
+	if err := safepath.MkdirAll(awsDir); err != nil {
 		t.Fatal(err)
 	}
 	credentials := filepath.Join(awsDir, "credentials")
@@ -67,5 +69,24 @@ func TestCredentialScope_TracksEnvironmentAccessKey(t *testing.T) {
 	}
 	if first == second {
 		t.Fatal("credential scope did not change with AWS_ACCESS_KEY_ID")
+	}
+}
+
+func TestCredentialScope_FingerprintsUnreadableCredentialSelectors(t *testing.T) {
+	home := t.TempDir()
+	for _, name := range []string{"AWS_ACCESS_KEY_ID", "AWS_PROFILE", "AWS_DEFAULT_PROFILE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("AWS_CONFIG_FILE", home) // Reading a directory exercises the non-fatal read-error path.
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(home, "missing"))
+	scope, err := CredentialScope(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scope) != 64 {
+		t.Fatalf("scope length = %d, want SHA-256 hex", len(scope))
+	}
+	if got := firstNonEmpty(" ", ""); got != "" {
+		t.Fatalf("firstNonEmpty returned %q", got)
 	}
 }

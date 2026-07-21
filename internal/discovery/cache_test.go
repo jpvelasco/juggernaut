@@ -137,3 +137,20 @@ func TestCatalogCache_RejectsInvalidInputsAndVersion(t *testing.T) {
 		t.Fatalf("version error = %v", err)
 	}
 }
+
+func TestCatalogCache_ReportsMalformedCache(t *testing.T) {
+	home := t.TempDir()
+	path, err := CachePath(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceMantle}, nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadCachedModels(home, testScope, "us-west-2"); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
+		t.Fatalf("malformed cache error = %v", err)
+	}
+}

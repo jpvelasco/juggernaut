@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -116,5 +117,52 @@ func TestListMantleModelsWith_PropagatesTransportAndSignerErrors(t *testing.T) {
 	signer := func(context.Context, *http.Request) error { return signerErr }
 	if _, err := listMantleModelsWith(context.Background(), "https://example.test", "", client, signer); !errors.Is(err, signerErr) {
 		t.Fatalf("signer error = %v, want wrapped %v", err, signerErr)
+	}
+}
+
+type failingReader struct{ err error }
+
+func (r failingReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestListMantleModelsWith_RejectsInvalidAndOversizedResponses(t *testing.T) {
+	if _, err := listMantleModelsWith(context.Background(), "://bad", "token", httpDoerFunc(nil), nil); err == nil || !strings.Contains(err.Error(), "creating Mantle") {
+		t.Fatalf("invalid endpoint error = %v", err)
+	}
+
+	readErr := errors.New("read failed")
+	readFailure := httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(failingReader{err: readErr})}, nil
+	})
+	if _, err := listMantleModelsWith(context.Background(), "https://example.test", "token", readFailure, nil); !errors.Is(err, readErr) {
+		t.Fatalf("read error = %v, want wrapped %v", err, readErr)
+	}
+
+	oversized := httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		body := bytes.NewReader(make([]byte, maxMantleCatalogBytes+1))
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(body)}, nil
+	})
+	if _, err := listMantleModelsWith(context.Background(), "https://example.test", "token", oversized, nil); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized response error = %v", err)
+	}
+}
+
+func TestListMantleModelsWith_FormatsEmptyAndLongHTTPErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty", body: "", want: "no response body"},
+		{name: "long", body: strings.Repeat("x", 600), want: "..."},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client := httpDoerFunc(func(*http.Request) (*http.Response, error) {
+				return mantleResponse(http.StatusBadGateway, tt.body), nil
+			})
+			_, err := listMantleModelsWith(context.Background(), "https://example.test", "token", client, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
 	}
 }
