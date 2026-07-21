@@ -237,8 +237,8 @@ func runApply(_ *cobra.Command, _ []string) error {
 	return commitApply(home, authMode, token, block, prov, bCfg, provOpts)
 }
 
-// parseCommaSeparatedModels splits a comma-separated model ID string, rejecting
-// empty entries. Returns nil for an empty/whitespace-only input.
+// parseCommaSeparatedModels splits a comma-separated model ID string, then
+// delegates validation to schema.ValidateModelList. Returns nil for empty input.
 func parseCommaSeparatedModels(raw string, flagName string) ([]string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -248,11 +248,7 @@ func parseCommaSeparatedModels(raw string, flagName string) ([]string, error) {
 	parts := strings.Split(trimmed, ",")
 	models := make([]string, 0, len(parts))
 	for _, part := range parts {
-		model := strings.TrimSpace(part)
-		if model == "" {
-			return nil, fmt.Errorf("%s contains an empty model ID", flagName)
-		}
-		models = append(models, model)
+		models = append(models, strings.TrimSpace(part))
 	}
-	return models, nil
+	return schema.ValidateModelList(models, flagName)
 }

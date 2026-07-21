@@ -141,11 +141,11 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if fable == "" {
 		fable = cfg.Models.Fable
 	}
-	fallbackModels, err := normalizeModelList(opts.FallbackModels, "fallback model chain")
+	fallbackModels, err := ValidateModelList(opts.FallbackModels, "fallback model chain")
 	if err != nil {
 		return nil, err
 	}
-	availableModels, err := normalizeModelList(opts.AvailableModels, "available models list")
+	availableModels, err := ValidateModelList(opts.AvailableModels, "available models list")
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +423,10 @@ func persistedEffortLevel(effort string) string {
 	return effort
 }
 
-func normalizeModelList(models []string, context string) ([]string, error) {
+// ValidateModelList trims and validates a list of model IDs, rejecting empty
+// entries. Returns nil for empty input. Used by Build and cmd/apply — there
+// should be only one implementation across the project.
+func ValidateModelList(models []string, context string) ([]string, error) {
 	if len(models) == 0 {
 		return nil, nil
 	}
