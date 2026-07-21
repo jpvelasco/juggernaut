@@ -56,6 +56,12 @@ type Options struct {
 	// ModelCatalog is the cached or freshly discovered account/region inventory.
 	// Providers decide which entries their client protocol can actually use.
 	ModelCatalog []CatalogModel
+	// RefreshedSources lists the source names (e.g. "native", "mantle") that
+	// were successfully refreshed for this cache entry. A source present here
+	// but absent from ModelCatalog means the refresh returned zero entries —
+	// which is distinct from "never refreshed" and still counts as proof that
+	// the model is unavailable.
+	RefreshedSources []string
 }
 
 // CatalogModel is the SDK-independent model fact passed from discovery into a
@@ -83,11 +89,20 @@ type ModelSupport struct {
 // relevant source and whether the selected model is usable according to that
 // provider. A cache containing only another provider's sources is equivalent
 // to no cache, so a partial native-only refresh never produces a false Mantle
-// warning (and vice versa).
-func catalogSelectionState(models []CatalogModel, selectedID string, p CatalogProvider) (hasRelevantSource, selectedAvailable bool) {
+// warning (and vice versa). When refreshedSources is non-nil, a source present
+// there but absent from the model list still counts as "refreshed but empty" —
+// meaning the model is provably unavailable rather than merely unrefreshed.
+func catalogSelectionState(models []CatalogModel, selectedID string, p CatalogProvider, refreshedSources []string) (hasRelevantSource, selectedAvailable bool) {
 	sources := make(map[string]bool)
 	for _, source := range p.CatalogSources() {
 		sources[source] = true
+	}
+	// A refreshed-but-empty source still counts as "relevant" — it proves the
+	// model is unavailable rather than merely unrefreshed.
+	for _, src := range refreshedSources {
+		if sources[src] {
+			hasRelevantSource = true
+		}
 	}
 	for _, model := range models {
 		if !sources[model.Source] {

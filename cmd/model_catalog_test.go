@@ -467,7 +467,7 @@ func TestCachedProviderModels_MapsCachedInventory(t *testing.T) {
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{discovery.SourceMantle}, []discovery.DiscoveredModel{model}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	models, err := cachedProviderModels(home, "us-west-2")
+	models, _, err := cachedProviderCatalog(home, "us-west-2")
 	if err != nil || len(models) != 1 || models[0].ID != model.ID || models[0].Source != string(model.Source) {
 		t.Fatalf("models = %+v, err %v", models, err)
 	}
@@ -504,7 +504,7 @@ func TestModelCatalogCommands_PropagateIdentityAndProviderErrors(t *testing.T) {
 	}
 
 	catalogCredentialScope = func(string) (string, error) { return "", errors.New("scope unavailable") }
-	if _, err := cachedProviderModels(home, "us-west-2"); err == nil || !strings.Contains(err.Error(), "scope unavailable") {
+	if _, _, err := cachedProviderCatalog(home, "us-west-2"); err == nil || !strings.Contains(err.Error(), "scope unavailable") {
 		t.Fatalf("cached provider scope error = %v", err)
 	}
 }

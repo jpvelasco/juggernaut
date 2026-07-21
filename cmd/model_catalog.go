@@ -250,7 +250,27 @@ func catalogIdentity(ctx context.Context, home, region string) (accountID, crede
 	return accountID, credentialScope, nil
 }
 
-func cachedProviderModels(home, region string) ([]provider.CatalogModel, error) {
+// cachedProviderCatalog returns both the provider model list and the refreshed
+// source names from the cached snapshot. Sources survive empty catalogs — a
+// refresh that returned zero models still records which sources were touched.
+// Returns nil/nil when no cache exists (not an error).
+func cachedProviderCatalog(home, region string) (models []provider.CatalogModel, sources []string, err error) {
+	snapshot, err := loadCachedSnapshot(home, region)
+	if err != nil || snapshot == nil {
+		return nil, nil, err
+	}
+	models = make([]provider.CatalogModel, 0, len(snapshot.Models))
+	for _, model := range snapshot.Models {
+		models = append(models, toProviderCatalogModel(model))
+	}
+	sources = make([]string, 0, len(snapshot.Sources))
+	for _, s := range snapshot.Sources {
+		sources = append(sources, string(s))
+	}
+	return models, sources, nil
+}
+
+func loadCachedSnapshot(home, region string) (*discovery.RegionCatalog, error) {
 	credentialScope, err := catalogCredentialScope(home)
 	if err != nil {
 		return nil, err
@@ -259,9 +279,5 @@ func cachedProviderModels(home, region string) ([]provider.CatalogModel, error) 
 	if err != nil || !found {
 		return nil, err
 	}
-	models := make([]provider.CatalogModel, 0, len(snapshot.Models))
-	for _, model := range snapshot.Models {
-		models = append(models, toProviderCatalogModel(model))
-	}
-	return models, nil
+	return &snapshot, nil
 }

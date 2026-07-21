@@ -118,7 +118,7 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 			models[discovered.ID] = map[string]any{"name": discovered.ID}
 		}
 	}
-	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, o); hasMantleCatalog && !selectedAvailable {
+	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, o, opts.RefreshedSources); hasMantleCatalog && !selectedAvailable {
 		warnings = append(warnings, fmt.Sprintf(
 			"model %q was not returned as ACTIVE and available by Mantle in %s; it remains configured for explicit use",
 			modelID, opts.Region))
