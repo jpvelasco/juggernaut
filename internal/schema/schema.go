@@ -141,11 +141,11 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if fable == "" {
 		fable = cfg.Models.Fable
 	}
-	fallbackModels, err := normalizeFallbackModels(opts.FallbackModels)
+	fallbackModels, err := normalizeModelList(opts.FallbackModels, "fallback model chain")
 	if err != nil {
 		return nil, err
 	}
-	availableModels, err := normalizeAvailableModels(opts.AvailableModels)
+	availableModels, err := normalizeModelList(opts.AvailableModels, "available models list")
 	if err != nil {
 		return nil, err
 	}
@@ -423,32 +423,15 @@ func persistedEffortLevel(effort string) string {
 	return effort
 }
 
-func normalizeFallbackModels(models []string) ([]string, error) {
+func normalizeModelList(models []string, context string) ([]string, error) {
 	if len(models) == 0 {
 		return nil, nil
 	}
-
 	out := make([]string, 0, len(models))
 	for _, model := range models {
 		trimmed := strings.TrimSpace(model)
 		if trimmed == "" {
-			return nil, fmt.Errorf("fallback model chain contains an empty model ID")
-		}
-		out = append(out, trimmed)
-	}
-	return out, nil
-}
-
-func normalizeAvailableModels(models []string) ([]string, error) {
-	if len(models) == 0 {
-		return nil, nil
-	}
-
-	out := make([]string, 0, len(models))
-	for _, model := range models {
-		trimmed := strings.TrimSpace(model)
-		if trimmed == "" {
-			return nil, fmt.Errorf("available models list contains an empty model ID")
+			return nil, fmt.Errorf("%s contains an empty model ID", context)
 		}
 		out = append(out, trimmed)
 	}

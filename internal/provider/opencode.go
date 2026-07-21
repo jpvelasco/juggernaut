@@ -118,10 +118,8 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 			models[discovered.ID] = map[string]any{"name": discovered.ID}
 		}
 	}
-	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, o, opts.RefreshedSources); hasMantleCatalog && !selectedAvailable {
-		warnings = append(warnings, fmt.Sprintf(
-			"model %q was not returned as ACTIVE and available by Mantle in %s; it remains configured for explicit use",
-			modelID, opts.Region))
+	if w := catalogUnavailableWarning(opts.ModelCatalog, modelID, opts.Region, "it remains configured for explicit use", o, opts.RefreshedSources); w != "" {
+		warnings = append(warnings, w)
 	}
 
 	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/v1", opts.Region)
