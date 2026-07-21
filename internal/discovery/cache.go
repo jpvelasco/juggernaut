@@ -19,6 +19,7 @@ const catalogCacheVersion = 2
 type RegionCatalog struct {
 	AccountID   string            `json:"account_id"`
 	RefreshedAt time.Time         `json:"refreshed_at"`
+	Sources     []Source          `json:"sources,omitempty"` // sources that were refreshed for this region
 	Models      []DiscoveredModel `json:"models"`
 }
 
@@ -119,9 +120,20 @@ func SaveCachedModels(
 		}
 		return merged[i].ID < merged[j].ID
 	})
+	// Build the union of sources present in the merged result so that an
+	// empty refresh still records which sources were touched.
+	resolvedSources := make([]Source, 0, len(touched))
+	for s := range touched {
+		resolvedSources = append(resolvedSources, s)
+	}
+	sort.Slice(resolvedSources, func(i, j int) bool {
+		return resolvedSources[i] < resolvedSources[j]
+	})
+
 	account.Regions[region] = RegionCatalog{
 		AccountID:   accountID,
 		RefreshedAt: refreshedAt.UTC(),
+		Sources:     resolvedSources,
 		Models:      merged,
 	}
 	cache.Accounts[accountID] = account

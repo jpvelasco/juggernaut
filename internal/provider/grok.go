@@ -146,7 +146,7 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 	if regionMsg != "" {
 		warnings = append(warnings, modelID+" "+regionMsg)
 	}
-	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, g); hasMantleCatalog && !selectedAvailable {
+	if hasMantleCatalog, selectedAvailable := catalogSelectionState(opts.ModelCatalog, modelID, g, opts.RefreshedSources); hasMantleCatalog && !selectedAvailable {
 		warnings = append(warnings, fmt.Sprintf(
 			"model %q was not returned as ACTIVE and available by Mantle in %s; refresh the catalog or select a listed model",
 			modelID, region))

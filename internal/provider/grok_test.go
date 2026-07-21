@@ -215,6 +215,41 @@ func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 // TestGrok_BuildConfig_RegionIronFist: xai.grok-4.3 is verified in us-east-1/2
 // and us-west-2. An unlisted region is OVERRIDDEN to a known-good one (base_url
 // reflects it) rather than written as-is; a known region is kept silently.
+// TestGrok_BuildConfig_UnknownModel: BuildConfig errors on a model ID that
+// doesn't start with xai.grok- after normalization.
+func TestGrok_BuildConfig_UnknownModel(t *testing.T) {
+	p, _ := Get("grok")
+	opts := baseOpts()
+	opts.Model = "anthropic.claude-sonnet-4-6"
+	if _, err := p.BuildConfig(testConfig(), opts); err == nil {
+		t.Fatal("expected error for non-Grok model")
+	}
+}
+
+// TestGrok_BuildConfig_GrokPrefixNormalizes: a model key starting with "grok-"
+// is normalized to "xai.grok-" and accepted.
+func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
+	p, _ := Get("grok")
+	opts := baseOpts()
+	opts.Model = "grok-4.4"
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	bg, ok := nestedMapChain(plan.Keys, "model", grokModelName)
+	if !ok {
+		t.Fatalf("[model.%s] missing", grokModelName)
+	}
+	bgMap := bg.(map[string]any)
+	if bgMap["model"] != "xai.grok-4.4" {
+		t.Errorf("model = %v, want xai.grok-4.4", bgMap["model"])
+	}
+	// Non-4.3 models don't get context_window
+	if _, hasContext := bgMap["context_window"]; hasContext {
+		t.Error("non-4.3 model must not have context_window")
+	}
+}
+
 func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("grok")
 	opts := baseOpts()

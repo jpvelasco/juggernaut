@@ -229,6 +229,10 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("loading cached model catalog: %w", err)
 	}
+	provOpts.RefreshedSources, err = cachedProviderSources(home, region)
+	if err != nil {
+		return fmt.Errorf("loading cached model sources: %w", err)
+	}
 
 	if applyFlags.dryRun {
 		return printApplyDryRun(home, block, prov, bCfg, provOpts)

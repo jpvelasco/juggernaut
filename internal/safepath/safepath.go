@@ -8,8 +8,11 @@ import (
 	"strings"
 )
 
-// dirPerm is owner-only directory permission (rwx------).
-var dirPerm = os.FileMode(0o700)
+// DirPerm is owner-only directory permission (rwx------).
+var DirPerm = os.FileMode(0o700)
+
+// dirPerm is the internal alias used by MkdirAll.
+var dirPerm = DirPerm
 
 // filePerm is owner-only file permission (rw-------).
 const filePerm = 0o600
