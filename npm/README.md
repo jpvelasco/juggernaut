@@ -133,7 +133,7 @@ The inventory is cached per account/region at `~/.juggernaut/model-catalog.json`
 | Tier | Model | Global inference profile |
 |------|-------|--------------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
-| **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
+| **Opus** | Claude Opus 5 | `global.anthropic.claude-opus-5` |
 | **Fable** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
@@ -141,7 +141,7 @@ Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by ap
 
 Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
 Override one tier: `juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>`
-Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6`
+Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5,global.anthropic.claude-sonnet-4-6`
 
 ## Effort levels
 
@@ -151,7 +151,7 @@ Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | m
 juggernaut apply --auth=iam --effort=max
 ```
 
-Default: `high`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported.
+Default: `high`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported. Opus 5 supports adaptive thinking on by default; disabling it caps effort at `high`.
 
 ## Permission modes
 
@@ -187,7 +187,7 @@ Auto mode on Bedrock requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — Juggernaut se
 --fallback-model=a,b        # write native fallbackModel chain
 --available-models=a,b      # curate the /model picker
 --enforce-available-models  # restrict picker to listed models
---opusplan                  # route /plan to Opus 4.8, execution to Sonnet 4.6
+--opusplan                  # route /plan to Opus, execution to Sonnet
 --effort=high               # low | medium | high | xhigh | max | auto
 --mode=auto                 # auto-approve safe tool calls
 --mantle                    # enable Mantle routing (Claude only)

@@ -4,6 +4,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Default Opus model bumped to Claude Opus 5.** `models.opus` and `ANTHROPIC_DEFAULT_OPUS_MODEL` move from `global.anthropic.claude-opus-4-8` to `global.anthropic.claude-opus-5`, verified live against AWS Bedrock (`ACTIVE` foundation model and `global.`/`us.` inference profiles) and against AWS's Opus 5 model card (1M context, 128K output — the same profile as Opus 4.8). `IsAutoModeCapableModel` and `supportsClaudeCode1M` now recognize Opus 5, matching Claude Code's documented auto-mode requirement of "Sonnet 5, Opus 4.7 or later" on Bedrock. Opus 4.7/4.8 remain fully supported via `--opus-model`.
+
 ## [5.5.0] - 2026-07-21
 
 **Minor release — account model discovery, npm docs, and codebase simplification.**

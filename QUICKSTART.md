@@ -86,7 +86,7 @@ juggernaut apply --auth=iam --opusplan
 juggernaut apply --auth=iam --mode=auto
 
 # Curate the /model picker (user/project settings — not OS-managed enforcement)
-juggernaut apply --auth=iam --available-models=sonnet,claude-opus-4-8 --enforce-available-models
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
 
 # Override the subagent/background model
 juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6

@@ -1,10 +1,10 @@
 {
   "description": "Claude Code Bedrock configuration - single source of truth",
-  "version": "5.5.0",
+  "version": "5.6.0",
   "models": {
     "default": "global.anthropic.claude-sonnet-5",
     "fast": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "opus": "global.anthropic.claude-opus-4-8",
+    "opus": "global.anthropic.claude-opus-5",
     "sonnet": "global.anthropic.claude-sonnet-5",
     "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "fable": "global.anthropic.claude-fable-5"
@@ -15,14 +15,14 @@
   "environment": {
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-5",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-5",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_SUBAGENT_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 4.8 (Most capable - 1M context, max-effort capable)",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME": "Opus 5 (Most capable - 1M context, max-effort capable)",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME": "Sonnet 5 (Recommended - 1M context, auto-mode capable)",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME": "Haiku 4.5 (Fast)",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable Claude model - 1M context, 128K output, high-res vision, adaptive thinking via effort level (max/xhigh/high/medium/low). Only adaptive thinking supported; effort level controls thinking depth.",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION": "Most capable Claude model - 1M context, 128K output, high-res vision, adaptive thinking via effort level (max/xhigh/high/medium/low). Adaptive thinking is on by default; disabling it caps effort at high.",
     "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION": "Best balance of speed and intelligence",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION": "Fastest model for everyday tasks and subagents",
     "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking",
@@ -61,15 +61,15 @@
   },
   "notes": {
     "fast_model": "Fast/background model defaults to Haiku 4.5 using ANTHROPIC_DEFAULT_HAIKU_MODEL (Anthropic recommendation for cost & speed on subagents, exploration, etc.). ANTHROPIC_SMALL_FAST_MODEL was removed because it is officially deprecated. See: https://code.claude.com/docs/en/model-config",
-    "1m_context": "Opus 4.8, Opus 4.7, and Sonnet 5 have native 1M context windows in Amazon Bedrock (Sonnet 5 verified against its model card: 1M context, 128K output). Juggernaut appends Claude Code's [1m] suffix to Opus and Sonnet alias environment variables by default, and to the configured Fable alias when it matches Claude Code's Fable ID, so Claude Code can account against 1M context for supported aliases locally, then strips the suffix before calling Bedrock. Use --no-1m-context to set CLAUDE_CODE_DISABLE_1M_CONTEXT=1 and keep pinned model IDs suffix-free.",
+    "1m_context": "Opus 5, Opus 4.8, Opus 4.7, and Sonnet 5 have native 1M context windows in Amazon Bedrock (verified against each model's AWS Bedrock model card: 1M context, 128K output). Juggernaut appends Claude Code's [1m] suffix to Opus and Sonnet alias environment variables by default, and to the configured Fable alias when it matches Claude Code's Fable ID, so Claude Code can account against 1M context for supported aliases locally, then strips the suffix before calling Bedrock. Use --no-1m-context to set CLAUDE_CODE_DISABLE_1M_CONTEXT=1 and keep pinned model IDs suffix-free.",
     "global_inference": "All pinned model IDs use the global. cross-region inference profile prefix (global.anthropic.*) by preference — it routes to whichever region has capacity worldwide for maximum throughput, and every current Anthropic model on Bedrock publishes a global. profile. Juggernaut prefers global inference profiles whenever a model offers one; the region flag only affects the Mantle base URL for non-Claude CLIs (Codex/Grok), not Claude, which the global profile routes automatically.",
-    "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max|auto. Defaults to high (a safe floor across models); the default Sonnet 5 and Opus 4.8 both support xhigh, and Claude Code falls back to the highest supported level at or below the requested effort for any model that doesn't. Juggernaut persists fixed levels (low|medium|high|xhigh) as native effortLevel; max and auto are env-only because Claude Code settings do not accept them as persisted effortLevel values. Use --effort=xhigh for Opus 4.8/4.7 or other capable model configurations, --effort=max when you explicitly want the deepest session behavior, or --effort=auto to let Claude Code choose. Ultracode is a separate Claude Code session setting, not a CLAUDE_CODE_EFFORT_LEVEL value or persisted settings.json effortLevel.",
+    "effort": "CLAUDE_CODE_EFFORT_LEVEL sets the default effort for all models. Valid values: low|medium|high|xhigh|max|auto. Defaults to high (a safe floor across models); the default Sonnet 5 and Opus 5 both support xhigh, and Claude Code falls back to the highest supported level at or below the requested effort for any model that doesn't. Juggernaut persists fixed levels (low|medium|high|xhigh) as native effortLevel; max and auto are env-only because Claude Code settings do not accept them as persisted effortLevel values. Use --effort=xhigh for Opus 5/4.8/4.7 or other capable model configurations, --effort=max when you explicitly want the deepest session behavior, or --effort=auto to let Claude Code choose. Ultracode is a separate Claude Code session setting, not a CLAUDE_CODE_EFFORT_LEVEL value or persisted settings.json effortLevel.",
     "subagent_model": "CLAUDE_CODE_SUBAGENT_MODEL controls the model for background subagents independently of ANTHROPIC_DEFAULT_HAIKU_MODEL. Defaults to Haiku for cost efficiency.",
     "fable_fallback": "models.fable defaults to global.anthropic.claude-fable-5, verified live against AWS Bedrock's ListFoundationModels/ListInferenceProfiles APIs (ACTIVE status). Pass --fable-model to override with a different Bedrock-accessible Fable model ID. Use --fallback-model to set Claude Code's native fallbackModel chain.",
     "capabilities": "SUPPORTED_CAPABILITIES declares features Bedrock model IDs don't auto-detect (effort levels, thinking, etc.). See: https://code.claude.com/docs/en/model-config",
-    "auto_mode": "Auto mode (permissions.defaultMode: auto) enables the agentic safety classifier. On Bedrock it requires BOTH CLAUDE_CODE_ENABLE_AUTO_MODE=1 (Juggernaut sets this when --mode=auto AND any configured model is auto-capable) AND an active session model of Sonnet 5, Opus 4.7, or Opus 4.8 (Claude Code v2.1.158+). As of the Sonnet 5 default, the default model IS auto-capable, so auto appears in the Shift+Tab cycle out of the box. Haiku and Sonnet 4.6/older do not support auto mode on Bedrock. opusplan still runs execution on Sonnet, which now qualifies. Verified against https://code.claude.com/docs/en/permission-modes ('only Claude Sonnet 5, Opus 4.7, and Opus 4.8').",
+    "auto_mode": "Auto mode (permissions.defaultMode: auto) enables the agentic safety classifier. On Bedrock it requires BOTH CLAUDE_CODE_ENABLE_AUTO_MODE=1 (Juggernaut sets this when --mode=auto AND any configured model is auto-capable) AND an active session model of Sonnet 5, Opus 4.7 or later (Claude Code v2.1.158+). As of the Sonnet 5 default, the default model IS auto-capable, so auto appears in the Shift+Tab cycle out of the box; the default Opus override (Opus 5) also qualifies. Haiku and Sonnet 4.6/older do not support auto mode on Bedrock. opusplan still runs execution on Sonnet, which now qualifies. Verified against https://code.claude.com/docs/en/permission-modes ('only Claude Sonnet 5, Opus 4.7 or later, and Fable 5').",
     "nonessential_traffic": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 is the documented aggregate that disables the autoupdater, feedback command, error reporting, and telemetry in one setting. It replaces the individual DISABLE_AUTOUPDATER/DISABLE_FEEDBACK_COMMAND/DISABLE_ERROR_REPORTING/DISABLE_TELEMETRY vars. See: https://code.claude.com/docs/en/env-vars",
-    "opus_4_8": "Opus 4.8 supports only adaptive thinking mode. Manual thinking.type:enabled is rejected with a 400 error. Use effort level to control thinking depth instead.",
-    "source": "Bedrock IDs and context windows verified against AWS Bedrock model cards: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-8.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-4-5.html. Claude Code model env vars verified against: https://docs.anthropic.com/en/docs/claude-code/model-config"
+    "opus_reasoning": "Opus 4.8 and 4.7 support only adaptive thinking mode — manual thinking.type:enabled is rejected with a 400 error, so effort level is the only way to control thinking depth. Opus 5's AWS model card documents reasoning as supported with adaptive thinking on by default; thinking can be disabled, but doing so caps effort at high.",
+    "source": "Bedrock IDs and context windows verified against AWS Bedrock model cards: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-8.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html, https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-4-5.html. Claude Code model env vars verified against: https://docs.anthropic.com/en/docs/claude-code/model-config"
   }
 }

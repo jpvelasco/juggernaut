@@ -259,14 +259,16 @@ func normalizeModelID(modelID string) string {
 }
 
 // IsAutoModeCapableModel reports whether modelID is a model that can use auto
-// permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7, or Opus
-// 4.8. Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified against
-// https://code.claude.com/docs/en/permission-modes ("only Claude Sonnet 5, Opus
-// 4.7, and Opus 4.8"). Note claude-sonnet-5 is capable while claude-sonnet-4-6 is
-// not — the version digits matter, so match the full token, not just "sonnet".
+// permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7 or later
+// (4.7, 4.8, 5). Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified
+// against https://code.claude.com/docs/en/permission-modes ("only Claude Sonnet
+// 5, Opus 4.7 or later, and Fable 5"). Note claude-sonnet-5 is capable while
+// claude-sonnet-4-6 is not — the version digits matter, so match the full token,
+// not just "sonnet".
 func IsAutoModeCapableModel(modelID string) bool {
 	normalized := normalizeModelID(modelID)
-	return strings.Contains(normalized, "claude-opus-4-8") ||
+	return strings.Contains(normalized, "claude-opus-5") ||
+		strings.Contains(normalized, "claude-opus-4-8") ||
 		strings.Contains(normalized, "claude-opus-4-7") ||
 		strings.Contains(normalized, "claude-sonnet-5")
 }
@@ -344,6 +346,7 @@ func supportsClaudeCode1M(model string) bool {
 	normalized := normalizeModelID(model)
 	return normalized == "opusplan" ||
 		strings.Contains(normalized, "claude-fable-5") ||
+		strings.Contains(normalized, "claude-opus-5") || // 1M context, verified via model card
 		strings.Contains(normalized, "claude-opus-4-8") ||
 		strings.Contains(normalized, "claude-opus-4-7") ||
 		strings.Contains(normalized, "claude-opus-4-6") ||
@@ -385,8 +388,8 @@ func (b *Block) NativeKeys() NativeKeys {
 func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 	overrides := map[string]string{
 		"opus":                      models.Opus,
-		"claude-opus-4-8":           models.Opus,
-		"anthropic.claude-opus-4-8": models.Opus,
+		"claude-opus-5":             models.Opus,
+		"anthropic.claude-opus-5":   models.Opus,
 		"sonnet":                    models.Sonnet,
 		"claude-sonnet-5":           models.Sonnet,
 		"anthropic.claude-sonnet-5": models.Sonnet,
@@ -402,8 +405,8 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 	}
 	if use1M {
 		overrides["opus[1m]"] = models.Opus
-		overrides["claude-opus-4-8[1m]"] = models.Opus
-		overrides["anthropic.claude-opus-4-8[1m]"] = models.Opus
+		overrides["claude-opus-5[1m]"] = models.Opus
+		overrides["anthropic.claude-opus-5[1m]"] = models.Opus
 		overrides["sonnet[1m]"] = models.Sonnet
 		overrides["claude-sonnet-5[1m]"] = models.Sonnet
 		overrides["anthropic.claude-sonnet-5[1m]"] = models.Sonnet
