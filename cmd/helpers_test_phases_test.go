@@ -1301,87 +1301,79 @@ func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
 	}
 }
 
-func TestResolveApplyInputs_OwnedConfigPreservesPermissionMode(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.scope = "user"
-
-	home := setupApplyTest(t)
-
-	// Pre-write a settings.json that Juggernaut owns with permission mode in meta.
-	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
-		t.Fatalf("mkdir: %v", err)
-	}
-	ownedConfig := `{
-		"juggernaut": {
-			"auth": {"mode": "iam", "region": "us-west-2"},
-			"meta": {"managedBy": "juggernaut", "permissionMode": "acceptEdits"}
-		}
-	}`
-	if err := os.WriteFile(settingsPath, []byte(ownedConfig), 0o600); err != nil {
-		t.Fatalf("write owned config: %v", err)
-	}
-
-	bCfg, err := loadBedrockConfig()
-	if err != nil {
-		t.Skipf("no bedrock config: %v", err)
-	}
-	prov, err := provider.Get("claude")
-	if err != nil {
-		t.Fatalf("get claude provider: %v", err)
-	}
-
-	// No --mode flag set — should preserve "acceptEdits" from meta.
-	_, _, _, err = resolveApplyInputs(home, bCfg, prov)
-	if err != nil {
-		t.Fatalf("resolveApplyInputs: %v", err)
-	}
-	if applyFlags.mode != "acceptEdits" {
-		t.Errorf("applyFlags.mode = %q, want 'acceptEdits' (preserved from existing meta)", applyFlags.mode)
-	}
-}
-
-func TestResolveApplyInputs_OwnedConfigPreservesNativePermissionMode(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.scope = "user"
-
-	home := setupApplyTest(t)
-
-	// Pre-write an owned config where permissionMode is set only in the native
-	// permissions.defaultMode (not in meta) — simulating Claude Code's Shift+Tab.
-	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
-		t.Fatalf("mkdir: %v", err)
-	}
-	ownedConfig := `{
-		"juggernaut": {
-			"auth": {"mode": "iam", "region": "us-west-2"},
-			"meta": {"managedBy": "juggernaut"}
+// TestResolveApplyInputs_OwnedConfigPreservesPermissionModeSources covers the
+// two places an owned config can carry a permission mode when --mode is
+// omitted: Juggernaut's own meta.permissionMode, and the native
+// permissions.defaultMode Claude Code's Shift+Tab writes directly. Both must
+// be preserved/adopted onto applyFlags.mode.
+func TestResolveApplyInputs_OwnedConfigPreservesPermissionModeSources(t *testing.T) {
+	tests := []struct {
+		name       string
+		ownedJSON  string
+		wantMode   string
+		wantReason string
+	}{
+		{
+			name: "meta",
+			ownedJSON: `{
+				"juggernaut": {
+					"auth": {"mode": "iam", "region": "us-west-2"},
+					"meta": {"managedBy": "juggernaut", "permissionMode": "acceptEdits"}
+				}
+			}`,
+			wantMode:   "acceptEdits",
+			wantReason: "preserved from existing meta",
 		},
-		"permissions": {"defaultMode": "plan"}
-	}`
-	if err := os.WriteFile(settingsPath, []byte(ownedConfig), 0o600); err != nil {
-		t.Fatalf("write owned config: %v", err)
+		{
+			// permissionMode is set only in the native permissions.defaultMode
+			// (not in meta) — simulating Claude Code's Shift+Tab.
+			name: "native",
+			ownedJSON: `{
+				"juggernaut": {
+					"auth": {"mode": "iam", "region": "us-west-2"},
+					"meta": {"managedBy": "juggernaut"}
+				},
+				"permissions": {"defaultMode": "plan"}
+			}`,
+			wantMode:   "plan",
+			wantReason: "adopted from native permissions.defaultMode",
+		},
 	}
 
-	bCfg, err := loadBedrockConfig()
-	if err != nil {
-		t.Skipf("no bedrock config: %v", err)
-	}
-	prov, err := provider.Get("claude")
-	if err != nil {
-		t.Fatalf("get claude provider: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer resetFlags()
+			resetFlags()
+			applyFlags.scope = "user"
 
-	_, _, _, err = resolveApplyInputs(home, bCfg, prov)
-	if err != nil {
-		t.Fatalf("resolveApplyInputs: %v", err)
-	}
-	// resolveApplyInputs should adopt the native permissions.defaultMode.
-	if applyFlags.mode != "plan" {
-		t.Errorf("applyFlags.mode = %q, want 'plan' (adopted from native permissions.defaultMode)", applyFlags.mode)
+			home := setupApplyTest(t)
+
+			settingsPath := filepath.Join(home, ".claude", "settings.json")
+			if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { //nolint:gosec // test-only temp dir
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.WriteFile(settingsPath, []byte(tt.ownedJSON), 0o600); err != nil {
+				t.Fatalf("write owned config: %v", err)
+			}
+
+			bCfg, err := loadBedrockConfig()
+			if err != nil {
+				t.Skipf("no bedrock config: %v", err)
+			}
+			prov, err := provider.Get("claude")
+			if err != nil {
+				t.Fatalf("get claude provider: %v", err)
+			}
+
+			// No --mode flag set.
+			_, _, _, err = resolveApplyInputs(home, bCfg, prov)
+			if err != nil {
+				t.Fatalf("resolveApplyInputs: %v", err)
+			}
+			if applyFlags.mode != tt.wantMode {
+				t.Errorf("applyFlags.mode = %q, want %q (%s)", applyFlags.mode, tt.wantMode, tt.wantReason)
+			}
+		})
 	}
 }
 
