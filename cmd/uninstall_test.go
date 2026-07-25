@@ -183,6 +183,52 @@ func TestUninstall_EOFAborts(t *testing.T) {
 	}
 }
 
+// TestUninstall_WarnsWhenAutoModeWillBeLost reproduces the real-world
+// incident: apply --mode=auto leaves the config in auto mode, and uninstall
+// wipes that mode with nothing left for a future apply to restore it from.
+// Uninstall must warn about this before removing anything.
+func TestUninstall_WarnsWhenAutoModeWillBeLost(t *testing.T) {
+	_ = setupApplyTest(t)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Auto mode is currently enabled") {
+		t.Errorf("expected auto-mode-loss warning before uninstall, got:\n%s", out)
+	}
+}
+
+// TestUninstall_NoAutoModeWarningWhenNotAuto verifies the warning is silent
+// when permission mode was never auto — no false positives on every uninstall.
+func TestUninstall_NoAutoModeWarningWhenNotAuto(t *testing.T) {
+	_ = setupApplyTest(t)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--force"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	if strings.Contains(out, "Auto mode is currently enabled") {
+		t.Errorf("did not expect auto-mode-loss warning when mode was never auto, got:\n%s", out)
+	}
+}
+
 // TestUninstall_NothingInstalled is a clean no-op: uninstall on a fresh home
 // should succeed and still print completion without errors.
 func TestUninstall_NothingInstalled(t *testing.T) {

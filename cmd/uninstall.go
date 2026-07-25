@@ -47,6 +47,8 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	warnIfAutoModeWillBeLost(home, prov)
+
 	if aborted, err := confirmUninstallAborted(); aborted || err != nil {
 		return err
 	}
@@ -66,6 +68,35 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 		fmt.Println("Uninstall complete.")
 	}
 	return nil
+}
+
+// warnIfAutoModeWillBeLost prints a heads-up when the config about to be
+// uninstalled has auto permission mode active. Uninstall removes the
+// juggernaut block along with permissions.defaultMode/env — nothing is left
+// for a future `apply` (without --mode=auto) to restore auto mode from, so a
+// re-apply after reinstalling silently comes back in default mode. This only
+// reads, never mutates, so it's safe to run unconditionally (including
+// --dry-run and --force). Claude-only: auto mode is a CapAutoMode feature.
+func warnIfAutoModeWillBeLost(home string, prov provider.Provider) {
+	if !prov.Supports(provider.CapAutoMode) {
+		return
+	}
+	for _, scope := range uninstallScopes() {
+		mgr, err := newProviderManager(prov, home, scope)
+		if err != nil {
+			continue
+		}
+		data, err := mgr.Read()
+		if err != nil {
+			continue
+		}
+		if effectivePermissionMode(data, "") == "auto" {
+			fmt.Println("⚠ Auto mode is currently enabled — uninstalling will disable it.")
+			fmt.Println("  After reinstalling, run `juggernaut apply --mode=auto` to re-enable it;")
+			fmt.Println("  a plain `juggernaut apply` will come back in default mode.")
+			return
+		}
+	}
 }
 
 func confirmUninstallAborted() (aborted bool, err error) {
