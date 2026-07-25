@@ -278,130 +278,100 @@ func TestCatalogProviderModels_MapsAllFields(t *testing.T) {
 	}
 }
 
-func TestModelsList_WithGroKProvider(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	models := []discovery.DiscoveredModel{
-		{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-	}
-	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceMantle}, models, when); err != nil {
-		t.Fatal(err)
-	}
-
-	origFlags := modelsListFlags
-	origScope := catalogCredentialScope
-	t.Cleanup(func() {
-		modelsListFlags = origFlags
-		catalogCredentialScope = origScope
-	})
-	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
-	modelsListFlags.cli = "grok"
-	modelsListFlags.refresh = false
-	modelsListFlags.showUnsupported = false
-	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
-
-	var output bytes.Buffer
-	command := &cobra.Command{}
-	command.SetOut(&output)
-	if err := runModelsList(command, nil); err != nil {
-		t.Fatal(err)
-	}
-	got := output.String()
-	if !strings.Contains(got, "xai.grok-4.3") {
-		t.Fatalf("grok list missing supported model:\n%s", got)
-	}
-	if strings.Contains(got, "moonshotai.kimi-k2.5") {
-		t.Fatalf("grok list should not include kimi without show-unsupported:\n%s", got)
-	}
-}
-
-func TestModelsList_WithCodexProvider(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	models := []discovery.DiscoveredModel{
-		{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-	}
-	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceMantle}, models, when); err != nil {
-		t.Fatal(err)
-	}
-
-	origFlags := modelsListFlags
-	origScope := catalogCredentialScope
-	t.Cleanup(func() {
-		modelsListFlags = origFlags
-		catalogCredentialScope = origScope
-	})
-	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
-	modelsListFlags.cli = "codex"
-	modelsListFlags.refresh = false
-	modelsListFlags.showUnsupported = false
-	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
-
-	var output bytes.Buffer
-	command := &cobra.Command{}
-	command.SetOut(&output)
-	if err := runModelsList(command, nil); err != nil {
-		t.Fatal(err)
-	}
-	got := output.String()
-	if !strings.Contains(got, "openai.gpt-5.5") {
-		t.Fatalf("codex list missing supported model:\n%s", got)
-	}
-	if strings.Contains(got, "xai.grok-4.3") {
-		t.Fatalf("codex list should not include grok without show-unsupported:\n%s", got)
-	}
-}
-
-func TestModelsList_WithClaudeProvider(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	models := []discovery.DiscoveredModel{
-		{ID: "anthropic.claude-opus-4-8", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "global.anthropic.claude-sonnet-4-6", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-	}
-	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle},
-		models, when); err != nil {
-		t.Fatal(err)
+// TestModelsList_FiltersByProvider covers models list for grok, codex, and
+// claude: each provider's compatible models must appear in its list output,
+// while models exclusive to other protocols stay hidden without
+// --show-unsupported.
+func TestModelsList_FiltersByProvider(t *testing.T) {
+	tests := []struct {
+		name          string
+		source        string
+		cli           string
+		cachedSources []discovery.Source
+		models        []discovery.DiscoveredModel
+		wantPresent   []string
+		wantAbsent    []string
+	}{
+		{
+			name:          "grok",
+			source:        "mantle",
+			cli:           "grok",
+			cachedSources: []discovery.Source{discovery.SourceMantle},
+			models: []discovery.DiscoveredModel{
+				{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+			},
+			wantPresent: []string{"xai.grok-4.3"},
+			wantAbsent:  []string{"moonshotai.kimi-k2.5"},
+		},
+		{
+			name:          "codex",
+			source:        "mantle",
+			cli:           "codex",
+			cachedSources: []discovery.Source{discovery.SourceMantle},
+			models: []discovery.DiscoveredModel{
+				{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+			},
+			wantPresent: []string{"openai.gpt-5.5"},
+			wantAbsent:  []string{"xai.grok-4.3"},
+		},
+		{
+			name:          "claude",
+			source:        "native",
+			cli:           "claude",
+			cachedSources: []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle},
+			models: []discovery.DiscoveredModel{
+				{ID: "anthropic.claude-opus-4-8", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "global.anthropic.claude-sonnet-4-6", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+			},
+			wantPresent: []string{"anthropic.claude-opus-4-8", "global.anthropic.claude-sonnet-4-6"},
+			wantAbsent:  []string{"openai.gpt-5.5"},
+		},
 	}
 
-	origFlags := modelsListFlags
-	origScope := catalogCredentialScope
-	t.Cleanup(func() {
-		modelsListFlags = origFlags
-		catalogCredentialScope = origScope
-	})
-	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "native"
-	modelsListFlags.cli = "claude"
-	modelsListFlags.refresh = false
-	modelsListFlags.showUnsupported = false
-	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+			if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
+				tt.cachedSources, tt.models, when); err != nil {
+				t.Fatal(err)
+			}
 
-	var output bytes.Buffer
-	command := &cobra.Command{}
-	command.SetOut(&output)
-	if err := runModelsList(command, nil); err != nil {
-		t.Fatal(err)
-	}
-	got := output.String()
-	for _, id := range []string{"anthropic.claude-opus-4-8", "global.anthropic.claude-sonnet-4-6"} {
-		if !strings.Contains(got, id) {
-			t.Errorf("claude list missing model %q:\n%s", id, got)
-		}
-	}
-	if strings.Contains(got, "openai.gpt-5.5") {
-		t.Fatalf("claude native list should not include Mantle model:\n%s", got)
+			origFlags := modelsListFlags
+			origScope := catalogCredentialScope
+			t.Cleanup(func() {
+				modelsListFlags = origFlags
+				catalogCredentialScope = origScope
+			})
+			modelsListFlags.region = "us-west-2"
+			modelsListFlags.source = tt.source
+			modelsListFlags.cli = tt.cli
+			modelsListFlags.refresh = false
+			modelsListFlags.showUnsupported = false
+			catalogCredentialScope = func(string) (string, error) { return "scope", nil }
+
+			var output bytes.Buffer
+			command := &cobra.Command{}
+			command.SetOut(&output)
+			if err := runModelsList(command, nil); err != nil {
+				t.Fatal(err)
+			}
+			got := output.String()
+			for _, id := range tt.wantPresent {
+				if !strings.Contains(got, id) {
+					t.Errorf("%s list missing model %q:\n%s", tt.cli, id, got)
+				}
+			}
+			for _, id := range tt.wantAbsent {
+				if strings.Contains(got, id) {
+					t.Errorf("%s list should not include %q without show-unsupported:\n%s", tt.cli, id, got)
+				}
+			}
+		})
 	}
 }
 

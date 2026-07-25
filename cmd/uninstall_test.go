@@ -120,78 +120,56 @@ func TestUninstall_ConfirmYes(t *testing.T) {
 	}
 }
 
-// TestUninstall_ConfirmAbort exercises the prompt being declined (anything but y).
-func TestUninstall_ConfirmAbort(t *testing.T) {
-	home := setupApplyTest(t)
-
-	if err := ExecuteArgs([]string{
-		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
-	}); err != nil {
-		t.Fatalf("apply error: %v", err)
+// TestUninstall_AbortPaths covers the two ways the confirmation prompt can
+// decline: an explicit "n" and a closed stdin (EOF on the first Scan, e.g.
+// Ctrl+D or a closed pipe). Both must abort without completing and preserve
+// the juggernaut block.
+func TestUninstall_AbortPaths(t *testing.T) {
+	tests := []struct {
+		name       string
+		stdin      string
+		wantErrMsg string
+	}{
+		{name: "declined", stdin: "n\n", wantErrMsg: "declining the prompt should abort"},
+		{name: "eof", stdin: "", wantErrMsg: "EOF on the prompt should abort"},
 	}
 
-	var out string
-	withStdin(t, "n\n", func() {
-		out = captureStdout(t, func() {
-			if err := ExecuteArgs([]string{"uninstall"}); err != nil {
-				t.Fatalf("uninstall error: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := setupApplyTest(t)
+
+			if err := ExecuteArgs([]string{
+				"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+			}); err != nil {
+				t.Fatalf("apply error: %v", err)
+			}
+
+			var out string
+			withStdin(t, tt.stdin, func() {
+				out = captureStdout(t, func() {
+					if err := ExecuteArgs([]string{"uninstall"}); err != nil {
+						t.Fatalf("uninstall error: %v", err)
+					}
+				})
+			})
+
+			if !strings.Contains(out, "Aborted") {
+				t.Errorf("%s, got:\n%s", tt.wantErrMsg, out)
+			}
+			if strings.Contains(out, "Uninstall complete") {
+				t.Errorf("aborted uninstall must not complete, got:\n%s", out)
+			}
+
+			// Block must survive an aborted uninstall.
+			data := readSettingsJSON(t, home)
+			var settings map[string]any
+			if err := json.Unmarshal(data, &settings); err != nil {
+				t.Fatalf("parsing settings.json: %v", err)
+			}
+			if _, ok := settings["juggernaut"]; !ok {
+				t.Error("aborted uninstall should preserve the juggernaut block")
 			}
 		})
-	})
-
-	if !strings.Contains(out, "Aborted") {
-		t.Errorf("declining the prompt should abort, got:\n%s", out)
-	}
-	if strings.Contains(out, "Uninstall complete") {
-		t.Errorf("aborted uninstall must not complete, got:\n%s", out)
-	}
-
-	// Block must survive an aborted uninstall.
-	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	if _, ok := settings["juggernaut"]; !ok {
-		t.Error("aborted uninstall should preserve the juggernaut block")
-	}
-}
-
-// TestUninstall_EOFAborts verifies that closing stdin without input (e.g. Ctrl+D
-// or a closed pipe) is treated as a decline: the uninstall aborts and the block
-// survives. Covers the scanner.Scan()==false EOF branch of confirmUninstallAborted.
-func TestUninstall_EOFAborts(t *testing.T) {
-	home := setupApplyTest(t)
-
-	if err := ExecuteArgs([]string{
-		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
-	}); err != nil {
-		t.Fatalf("apply error: %v", err)
-	}
-
-	var out string
-	withStdin(t, "", func() { // empty input -> EOF on first Scan
-		out = captureStdout(t, func() {
-			if err := ExecuteArgs([]string{"uninstall"}); err != nil {
-				t.Fatalf("uninstall error: %v", err)
-			}
-		})
-	})
-
-	if !strings.Contains(out, "Aborted") {
-		t.Errorf("EOF on the prompt should abort, got:\n%s", out)
-	}
-	if strings.Contains(out, "Uninstall complete") {
-		t.Errorf("EOF-aborted uninstall must not complete, got:\n%s", out)
-	}
-
-	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		t.Fatalf("parsing settings.json: %v", err)
-	}
-	if _, ok := settings["juggernaut"]; !ok {
-		t.Error("EOF-aborted uninstall should preserve the juggernaut block")
 	}
 }
 
