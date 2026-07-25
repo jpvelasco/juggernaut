@@ -46,7 +46,7 @@ func profilesForConfig(cfg *bedrock.Config, statusBySuffix map[string]string) []
 // by end-to-end models check tests (which call loadBedrockConfig).
 func activeProfilesForEmbeddedConfig() []discovery.DiscoveredModel {
 	return []discovery.DiscoveredModel{
-		{ID: "global.anthropic.claude-opus-4-8", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-opus-5", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-sonnet-5", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-sonnet-4-6", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE", Provider: "Anthropic"},
@@ -323,7 +323,7 @@ func TestRunModelsCheck_EndToEnd_AllActiveExitsClean(t *testing.T) {
 	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
 	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{
-			{ID: "anthropic.claude-opus-4-8", Status: "ACTIVE"},
+			{ID: "anthropic.claude-opus-5", Status: "ACTIVE"},
 			{ID: "anthropic.claude-sonnet-5", Status: "ACTIVE"},
 			{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE"},
 			{ID: "anthropic.claude-fable-5", Status: "ACTIVE"},
@@ -358,7 +358,7 @@ func TestRunModelsCheck_EndToEnd_LegacyTierErrors(t *testing.T) {
 	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
 	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{
-			{ID: "anthropic.claude-opus-4-8", Status: "LEGACY"},
+			{ID: "anthropic.claude-opus-5", Status: "LEGACY"},
 			{ID: "anthropic.claude-sonnet-5", Status: "ACTIVE"},
 			{ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE"},
 			{ID: "anthropic.claude-fable-5", Status: "ACTIVE"},
@@ -394,7 +394,7 @@ func TestRunModelsCheck_SetWithoutWrite_PrintsValidationFeedback(t *testing.T) {
 	origAnthropic, origProfiles := listAnthropicModels, listInferenceProfiles
 	listAnthropicModels = func(_ context.Context, _ string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{
-			{ID: "anthropic.claude-opus-4-8", Status: "ACTIVE"},
+			{ID: "anthropic.claude-opus-5", Status: "ACTIVE"},
 			{ID: "anthropic.claude-opus-4-9", Status: "ACTIVE"},
 			{ID: "anthropic.claude-sonnet-4-6", Status: "ACTIVE"},
 			{ID: "anthropic.claude-sonnet-5", Status: "ACTIVE"},

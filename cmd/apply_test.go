@@ -144,7 +144,7 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["CLAUDE_CODE_USE_BEDROCK"] != "1" {
 		t.Error("expected CLAUDE_CODE_USE_BEDROCK=1 in top-level env")
 	}
-	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8[1m]" {
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5[1m]" {
 		t.Errorf("expected Opus default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
 	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
@@ -183,7 +183,7 @@ func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
 		t.Fatalf("settings.json is not valid JSON: %v", err)
 	}
 	env := settings["env"].(map[string]any)
-	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8" {
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5" {
 		t.Errorf("expected Opus default model without [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
 	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5" {
@@ -864,7 +864,7 @@ func TestCredentialEchoMode_IsEchoNone(t *testing.T) {
 }
 
 // TestApply_AutoMode_EnabledWithDefaultConfig: the default config configures Opus
-// 4.8 (auto-capable) as the opus override even though the default model is Sonnet,
+// (auto-capable) as the opus override even though the default model is Sonnet,
 // so --mode=auto ENABLES auto mode and prints the "enabled / how to reach it" info
 // — NOT the incapable-model warning. This is the fix for JP's case.
 func TestApply_AutoMode_EnabledWithDefaultConfig(t *testing.T) {
@@ -882,7 +882,7 @@ func TestApply_AutoMode_EnabledWithDefaultConfig(t *testing.T) {
 		t.Errorf("expected the auto-mode-enabled info with the default config, got:\n%s", out)
 	}
 	if strings.Contains(out, "cannot be enabled") {
-		t.Errorf("must not warn 'cannot be enabled' when Opus 4.8 is configured, got:\n%s", out)
+		t.Errorf("must not warn 'cannot be enabled' when the default Opus model is configured, got:\n%s", out)
 	}
 }
 

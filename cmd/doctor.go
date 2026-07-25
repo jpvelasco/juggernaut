@@ -363,7 +363,7 @@ func checkAutoModeReadiness(r *doctor.Report, scope string, data map[string]any)
 		return
 	}
 	r.Check(label, doctor.Warn, "WARN — no configured model supports auto mode; "+
-		"configure Opus 4.7/4.8 or Sonnet 5 and re-run `juggernaut apply --mode=auto`")
+		"configure Opus 4.7 or later, or Sonnet 5, and re-run `juggernaut apply --mode=auto`")
 }
 
 // effectivePermissionMode returns the native top-level permissions.defaultMode

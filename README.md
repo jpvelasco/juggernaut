@@ -199,7 +199,7 @@ Each provider filters the live inventory by what its client protocol can use: Cl
 | Tier | Model | Global CRIS Profile |
 |------|-------|---------------------|
 | **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
-| **Opus** | Claude Opus 4.8 | `global.anthropic.claude-opus-4-8` |
+| **Opus** | Claude Opus 5 | `global.anthropic.claude-opus-5` |
 | **Fable alias** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
 | **Fast / subagent** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
@@ -212,11 +212,11 @@ Fable defaults to `global.anthropic.claude-fable-5`, verified live against AWS B
 Override any tier:
 
 ```bash
-juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-4-8
+juggernaut apply --auth=iam --opus-model=us.anthropic.claude-opus-5
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
 juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6  # override all model aliases
-juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-4-8,global.anthropic.claude-sonnet-4-6
-juggernaut apply --auth=iam --available-models=sonnet,claude-opus-4-8 --enforce-available-models
+juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5,global.anthropic.claude-sonnet-4-6
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
 ```
 
 `--available-models`/`--enforce-available-models` write to your user/project `settings.json`, which Claude Code merges with any other non-managed settings the user controls — this curates the `/model` picker, it is not a tamper-resistant restriction. For organization-wide enforcement a user can't bypass, deploy `availableModels`/`enforceAvailableModels` in Claude Code's OS-level managed settings (e.g. `/etc/claude-code/managed-settings.json`) instead; Juggernaut does not write there.
@@ -238,7 +238,7 @@ Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhi
 juggernaut apply --auth=iam --effort=max
 ```
 
-> On Opus 4.8 and 4.7, only adaptive thinking is supported. Manual thinking mode is rejected by the API.
+> On Opus 4.8 and 4.7, only adaptive thinking is supported — manual thinking mode is rejected by the API. Opus 5's Bedrock model card documents adaptive thinking on by default; it can be disabled, but doing so caps effort at `high`.
 
 ## Permission Modes
 
@@ -290,7 +290,7 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "AWS_REGION": "us-west-2",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-4-8[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-5[1m]",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-4-6[1m]",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "CLAUDE_CODE_EFFORT_LEVEL": "high",

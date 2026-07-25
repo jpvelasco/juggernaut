@@ -268,7 +268,7 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 				).
 				Value(&permMode),
 			huh.NewConfirm().
-				Title("Enable opusplan? (routes planning to Opus 4.8, execution to Sonnet 4.6)").
+				Title("Enable opusplan? (routes planning to Opus, execution to Sonnet)").
 				Value(&opusplan),
 		),
 	)
@@ -442,9 +442,10 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 // warnAutoModeModel handles the two --mode=auto outcomes. If at least one
 // configured model can use auto mode (AutoModeAvailable), Juggernaut has enabled
 // it — print how to actually reach it, since auto only appears in the Shift+Tab
-// cycle when the ACTIVE session model is capable (Sonnet 5 / Opus 4.7 / 4.8), not
-// when the Sonnet-tier default is active. If NO configured model is capable, warn
-// that auto can't be enabled at all. Only relevant when --mode=auto was requested.
+// cycle when the ACTIVE session model is capable (Sonnet 5 / Opus 4.7 or later),
+// not when the Sonnet-tier default is active. If NO configured model is capable,
+// warn that auto can't be enabled at all. Only relevant when --mode=auto was
+// requested.
 func warnAutoModeModel(block *schema.Block) {
 	if block.Meta.PermissionMode != "auto" {
 		return
@@ -453,14 +454,14 @@ func warnAutoModeModel(block *schema.Block) {
 	if block.AutoModeAvailable() {
 		fmt.Println("ℹ Auto mode is enabled (CLAUDE_CODE_ENABLE_AUTO_MODE=1).")
 		fmt.Println("  On Bedrock it appears in the Shift+Tab cycle only while your active session")
-		fmt.Println("  model is Sonnet 5, Opus 4.7, or Opus 4.8 — not the Sonnet-tier default. Run")
+		fmt.Println("  model is Sonnet 5, or Opus 4.7 or later — not the Sonnet-tier default. Run")
 		fmt.Println("  `claude --model opus` (or `/model opus` in a session) to use it. Requires")
 		fmt.Println("  Claude Code v2.1.158+.")
 		return
 	}
 	fmt.Println("⚠ Auto mode cannot be enabled: none of the configured models support it.")
-	fmt.Println("  On Bedrock auto mode requires Sonnet 5, Opus 4.7, or Opus 4.8 (Claude Code")
-	fmt.Println("  v2.1.158+). Configure one of those (e.g. keep the default Opus 4.8 alias) and")
+	fmt.Println("  On Bedrock auto mode requires Sonnet 5, or Opus 4.7 or later (Claude Code")
+	fmt.Println("  v2.1.158+). Configure one of those (e.g. keep the default Opus alias) and")
 	fmt.Println("  re-run with --mode=auto.")
 }
 

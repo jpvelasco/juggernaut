@@ -13,7 +13,7 @@ func testConfig() *bedrock.Config {
 	return &bedrock.Config{
 		Version: "4.1.0",
 		Models: bedrock.ModelSet{
-			Opus:   "global.anthropic.claude-opus-4-8",
+			Opus:   "global.anthropic.claude-opus-5",
 			Sonnet: "global.anthropic.claude-sonnet-5",
 			Haiku:  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
 			Fable:  "global.anthropic.claude-fable-5",
@@ -124,7 +124,7 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8[1m]" {
+	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5[1m]" {
 		t.Errorf("expected Opus env model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
 	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
@@ -150,8 +150,8 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	if native.ModelOverrides["claude-sonnet-5[1m]"] != "global.anthropic.claude-sonnet-5" {
 		t.Errorf("expected [1m] Sonnet override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-sonnet-5[1m]"])
 	}
-	if native.ModelOverrides["claude-opus-4-8[1m]"] != "global.anthropic.claude-opus-4-8" {
-		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-4-8[1m]"])
+	if native.ModelOverrides["claude-opus-5[1m]"] != "global.anthropic.claude-opus-5" {
+		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-5[1m]"])
 	}
 	if native.ModelOverrides["claude-fable-5[1m]"] != "global.anthropic.claude-fable-5" {
 		t.Errorf("expected [1m] Fable override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-fable-5[1m]"])
@@ -172,7 +172,7 @@ func TestBuild_No1MDisablesClaudeCodeExtendedContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-4-8" {
+	if block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5" {
 		t.Errorf("expected Opus env model without [1m], got %q", block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
 	if block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5" {
@@ -578,8 +578,8 @@ func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
 			t.Errorf("expected %s to map to global Sonnet profile, got %q", key, overrides[key])
 		}
 	}
-	for _, key := range []string{"opus", "claude-opus-4-8", "anthropic.claude-opus-4-8"} {
-		if overrides[key] != "global.anthropic.claude-opus-4-8" {
+	for _, key := range []string{"opus", "claude-opus-5", "anthropic.claude-opus-5"} {
+		if overrides[key] != "global.anthropic.claude-opus-5" {
 			t.Errorf("expected %s to map to global Opus profile, got %q", key, overrides[key])
 		}
 	}
@@ -652,7 +652,7 @@ func TestBuild_Mantle_StripsGlobalPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if block.Models.Opus != "anthropic.claude-opus-4-8" {
+	if block.Models.Opus != "anthropic.claude-opus-5" {
 		t.Errorf("expected opus without global. prefix, got %s", block.Models.Opus)
 	}
 	if block.Models.Sonnet != "anthropic.claude-sonnet-5" {
@@ -746,7 +746,7 @@ func TestBuild_NoMantle_KeepsGlobalPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error: %v", err)
 	}
-	if block.Models.Opus != "global.anthropic.claude-opus-4-8" {
+	if block.Models.Opus != "global.anthropic.claude-opus-5" {
 		t.Errorf("expected opus with global. prefix preserved, got %s", block.Models.Opus)
 	}
 }
@@ -775,12 +775,15 @@ func TestIsAutoModeCapableModel(t *testing.T) {
 		want  bool
 	}{
 		// Supported on Bedrock (verified against code.claude.com/docs/en/permission-modes):
-		// Sonnet 5, Opus 4.7, and Opus 4.8 — with any region prefix / [1m] suffix.
+		// Sonnet 5, and Opus 4.7 or later (4.7, 4.8, 5) — with any region prefix / [1m] suffix.
+		{"global.anthropic.claude-opus-5", true},
+		{"global.anthropic.claude-opus-5[1m]", true},
 		{"global.anthropic.claude-opus-4-8", true},
 		{"global.anthropic.claude-opus-4-8[1m]", true},
 		{"us.anthropic.claude-opus-4-7", true},
 		{"anthropic.claude-opus-4-7", true},
 		{"claude-opus-4-8", true},
+		{"claude-opus-5", true},
 		{"global.anthropic.claude-sonnet-5", true},
 		{"global.anthropic.claude-sonnet-5[1m]", true},
 		{"us.anthropic.claude-sonnet-5", true},
@@ -850,7 +853,7 @@ func TestBlock_AutoModeUsable_FalseWhenModeNotAuto(t *testing.T) {
 }
 
 // autoOpts is the default-config auto-mode option set: Sonnet-tier default model
-// (not capable) but the Opus 4.8 override IS capable — the exact shape of JP's setup.
+// (not capable) but the Opus override IS capable — the exact shape of JP's setup.
 func autoOpts() schema.Options {
 	return schema.Options{
 		AuthMode: "iam", Region: "us-west-2", Effort: "high",
@@ -859,7 +862,7 @@ func autoOpts() schema.Options {
 }
 
 // TestBlock_AutoModeAvailable_TrueWithDefaultConfig: the default config pins Sonnet
-// as the default model but always configures Opus 4.8 as the opus override, which IS
+// as the default model but always configures Opus 5 as the opus override, which IS
 // auto-capable — so auto mode is AVAILABLE (the enable var should be written) even
 // though the default model isn't capable. This is JP's real scenario.
 func TestBlock_AutoModeAvailable_TrueWithDefaultConfig(t *testing.T) {
@@ -868,7 +871,7 @@ func TestBlock_AutoModeAvailable_TrueWithDefaultConfig(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 	if !block.AutoModeAvailable() {
-		t.Error("expected AutoModeAvailable()=true: the Opus 4.8 override is auto-capable")
+		t.Error("expected AutoModeAvailable()=true: the Opus override is auto-capable")
 	}
 }
 
