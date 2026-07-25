@@ -2,9 +2,21 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
+
+// autoModeCapableStub wraps stubProvider (from apply_test.go) to report
+// CapAutoMode support, so warnIfAutoModeWillBeLost's error branches — which
+// are only reached past the CapAutoMode guard — are actually exercised.
+type autoModeCapableStub struct{ stubProvider }
+
+func (autoModeCapableStub) Supports(c provider.Capability) bool { return c == provider.CapAutoMode }
 
 // TestUninstall_DryRun_PreservesBlock verifies that a dry-run reports intended
 // removals but leaves settings.json untouched and never prints completion.
@@ -228,6 +240,47 @@ func TestUninstall_NoAutoModeWarningWhenNotAuto(t *testing.T) {
 		t.Errorf("did not expect auto-mode-loss warning when mode was never auto, got:\n%s", out)
 	}
 }
+
+// TestWarnIfAutoModeWillBeLost_ManagerErrorSkipped covers the newProviderManager
+// error branch: a provider whose ConfigPath fails must be skipped (continue),
+// not treated as a crash or a false "auto mode found" positive.
+func TestWarnIfAutoModeWillBeLost_ManagerErrorSkipped(t *testing.T) {
+	home := t.TempDir()
+	prov := autoModeCapableStub{stubProvider{formatName: "json", pathErr: fmt.Errorf("bad path")}}
+
+	out := captureStdout(t, func() {
+		warnIfAutoModeWillBeLost(home, prov)
+	})
+
+	if strings.Contains(out, "Auto mode is currently enabled") {
+		t.Errorf("a ConfigPath error must not be reported as auto mode found, got:\n%s", out)
+	}
+}
+
+// TestWarnIfAutoModeWillBeLost_ReadErrorSkipped covers the mgr.Read() error
+// branch: a config path pointing at a directory (unreadable as a file) must
+// be skipped (continue), not crash or falsely report auto mode.
+func TestWarnIfAutoModeWillBeLost_ReadErrorSkipped(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "isadir")
+	if err := safepath.MkdirAll(dir); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	dp := dirPathProvider{stubProvider: stubProvider{formatName: "json"}, dir: dir}
+
+	out := captureStdout(t, func() {
+		warnIfAutoModeWillBeLost(home, autoModeReadErrorStub{dp})
+	})
+
+	if strings.Contains(out, "Auto mode is currently enabled") {
+		t.Errorf("a Read() error must not be reported as auto mode found, got:\n%s", out)
+	}
+}
+
+// autoModeReadErrorStub wraps dirPathProvider to report CapAutoMode support.
+type autoModeReadErrorStub struct{ dirPathProvider }
+
+func (autoModeReadErrorStub) Supports(c provider.Capability) bool { return c == provider.CapAutoMode }
 
 // TestUninstall_NothingInstalled is a clean no-op: uninstall on a fresh home
 // should succeed and still print completion without errors.
