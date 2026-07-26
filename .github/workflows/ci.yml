@@ -103,23 +103,16 @@ jobs:
           use_pypi: true
           files: ./coverage.out
           fail_ci_if_error: ${{ matrix.os != 'windows-latest' }}
-      # Codacy coverage complements Codecov — feeds the Codacy dashboard's
-      # coverage tab. Uses a repository API token (not OIDC — Codacy doesn't
-      # support it). Codacy has exactly two token types, Account and
-      # Repository — the action's `project-token` input just expects a
-      # Repository API token under a legacy name, not a distinct third type.
-      # force-coverage-parser: go is required — the default LCOV parser
-      # cannot parse Go's native coverprofile format. Linux-only: the
-      # Windows-only PowerShell/keychain code makes the merged-OS report
-      # meaningful, but Codacy's uploader only needs one representative report.
-      - name: Upload coverage to Codacy
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699  # v1.3.0
+      # Codacy coverage is uploaded by the trusted workflow_run workflow.
+      # Keeping the report in an artifact lets Dependabot PRs provide coverage
+      # without making the repository API token available to PR code.
+      - name: Save coverage for Codacy
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          project-token: ${{ secrets.CODACY_REPOSITORY_API_TOKEN }}
-          coverage-reports: coverage.out
-          force-coverage-parser: go
-          language: Go
+          name: codacy-coverage-${{ github.run_id }}
+          path: coverage.out
+          if-no-files-found: error
 
   test-race:
     runs-on: ubuntu-latest
