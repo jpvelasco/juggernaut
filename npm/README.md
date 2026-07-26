@@ -1,15 +1,17 @@
 # juggernaut-bedrock
 
-**Safe Bedrock routing for coding agents — Claude Code, Codex, OpenCode, and Grok.**
+**Route Claude Code, Codex, OpenCode, and Grok through Amazon Bedrock with IAM, SSO, or Bedrock API keys.**
 
 Juggernaut is a cross-platform CLI that wires your coding CLI to [Amazon Bedrock](https://aws.amazon.com/bedrock/) instead of vendor APIs. One `apply`, then keep typing `claude`, `codex`, `opencode`, or `grok`.
 
-Built for developers shipping with GenAI today: IAM and SSO for teams, API keys for solo runs, collision detection that refuses to clobber foreign config, and a `doctor` command when something's off.
+Built for developers and teams shipping with GenAI today: one command configures routing, protects existing settings, stores API keys in the OS keychain, discovers the models your AWS account can use, and provides a `doctor` command when something's off.
 
 <p align="center">
   <a href="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml"><img src="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/jpvelasco/juggernaut/releases/latest"><img src="https://img.shields.io/github/v/release/jpvelasco/juggernaut" alt="Release"></a>
-  <a href="https://www.npmjs.com/package/juggernaut-bedrock"><img src="https://img.shields.io/npm/v/juggernaut-bedrock" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/juggernaut-bedrock"><img src="https://img.shields.io/npm/v/juggernaut-bedrock" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/juggernaut-bedrock"><img src="https://img.shields.io/npm/dw/juggernaut-bedrock" alt="npm weekly downloads"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/node/v/juggernaut-bedrock" alt="Node.js version"></a>
   <a href="https://app.codacy.com/gh/jpvelasco/juggernaut/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade"><img src="https://app.codacy.com/project/badge/Grade/2bf1e68b80964537b5c65350663c3073" alt="Codacy Grade"></a>
 </p>
 
@@ -25,7 +27,62 @@ Or try it without installing globally:
 npx juggernaut-bedrock version
 ```
 
-Works on **macOS**, **Linux**, **Windows**, and **WSL** — `x64` and `arm64`.
+Works on **macOS** and **Linux** (`x64` and `arm64`), plus **Windows x64** and **WSL**.
+
+Requires **Node.js 20+**, a supported coding CLI, and access to the desired Amazon Bedrock models. AWS IAM/SSO mode uses your existing AWS credentials; Bedrock API-key mode stores the key in your OS keychain.
+
+## Choose your setup
+
+Already use AWS IAM or SSO?
+
+```bash
+juggernaut apply --auth=iam
+```
+
+Have a Bedrock API key?
+
+```bash
+juggernaut apply --auth=bedrock-api-key
+```
+
+Not sure which mode to use?
+
+```bash
+juggernaut apply
+```
+
+The interactive setup guides you through the first run. After applying, restart or source your shell and continue using your normal CLI command.
+
+## Why developers use it
+
+| Feature | Benefit |
+|---------|---------|
+| **IAM and SSO** | Use existing AWS identity, roles, federation, and enterprise access controls |
+| **Four coding CLIs** | Configure Claude Code, Codex, OpenCode, and Grok side by side |
+| **Keychain-only secrets** | Keep Bedrock API keys out of shell profiles and plaintext config |
+| **Collision detection** | Refuse to overwrite foreign configuration instead of silently clobbering it |
+| **Account-aware model discovery** | See models your AWS account and region can actually use |
+| **Safe activation** | Never overwrite an unknown CLI binary; fall through to the real CLI if Juggernaut is unavailable |
+| **Cross-platform launcher** | Use the same workflow on macOS, Linux, Windows, and WSL |
+| **`doctor` diagnostics** | Check credentials, configuration, activation, PATH, binaries, and legacy artifacts |
+
+## Use the models your account can actually access
+
+Bedrock model access varies by AWS account and region. Juggernaut can query native Bedrock and Mantle, cache the result per account and region, and filter the inventory for each coding CLI.
+
+```bash
+# Discover models available to the current AWS account
+juggernaut models refresh --region=us-west-2
+juggernaut models list --region=us-west-2 --cli=opencode
+```
+
+The catalog is stored locally and `apply` reads it without making an implicit network call, so configuration stays deterministic and offline-friendly.
+
+## Built for teams and individual developers
+
+- **Teams:** use IAM, SSO, roles, CloudTrail, AWS billing, region controls, and VPC endpoints.
+- **Individual developers:** use a Bedrock API key stored in the OS keychain while keeping your normal CLI workflow.
+- **Multi-agent workflows:** configure multiple coding CLIs side by side while sharing the Bedrock bearer token safely.
 
 ## Upgrading
 

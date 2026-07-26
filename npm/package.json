@@ -1,7 +1,7 @@
 {
   "name": "juggernaut-bedrock",
   "version": "0.0.0",
-  "description": "Safe Amazon Bedrock routing for Claude Code, Codex, OpenCode, and Grok — IAM, SSO, or API key. Cross-platform CLI for GenAI developers.",
+  "description": "Route Claude Code, Codex, OpenCode, and Grok through Amazon Bedrock with IAM, SSO, or API keys. Safe cross-platform CLI.",
   "bin": {
     "juggernaut": "./index.js"
   },
@@ -36,6 +36,11 @@
     "iam",
     "sso",
     "mantle",
+    "claude-code-bedrock",
+    "amazon-bedrock-cli",
+    "aws-claude",
+    "bedrock-coding-agent",
+    "claude-code-aws",
     "developer-tools"
   ],
   "engines": {
