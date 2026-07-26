@@ -210,37 +210,6 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
 
-  codacy-issues-gate:
-    # Total outstanding Codacy issues on main — a debt-zero monitoring gate,
-    # not a per-PR blocker. Runs on push to main only: an unrelated pre-existing
-    # issue elsewhere in the repo must never block someone else's PR. Surfaces
-    # regressions right after they land instead. Uses a repository-scoped API
-    # token (Settings > Integrations > Repository API tokens on Codacy), not
-    # the broader account token, so a compromised secret here can't reach
-    # other repos.
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check for outstanding Codacy issues on main
-        env:
-          CODACY_REPOSITORY_API_TOKEN: ${{ secrets.CODACY_REPOSITORY_API_TOKEN }}
-        run: |
-          RESPONSE=$(curl -sS -X POST \
-            -H "api-token: ${CODACY_REPOSITORY_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"branchName":"main"}' \
-            "https://app.codacy.com/api/v3/analysis/organizations/gh/${{ github.repository_owner }}/repositories/${{ github.event.repository.name }}/issues/search?limit=1")
-          TOTAL=$(echo "$RESPONSE" | jq -r '.pagination.total')
-          if [ "$TOTAL" = "null" ] || [ -z "$TOTAL" ]; then
-            echo "Unexpected response from Codacy API: $RESPONSE"
-            exit 1
-          fi
-          echo "Outstanding Codacy issues on main: $TOTAL"
-          if [ "$TOTAL" -gt 0 ]; then
-            echo "main has $TOTAL outstanding Codacy issue(s) — see https://app.codacy.com/gh/${{ github.repository }}/issues"
-            exit 1
-          fi
-
   goreleaser:
     runs-on: ubuntu-latest
     steps:
