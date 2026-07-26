@@ -4,9 +4,25 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-07-26
+
+**Minor release — default Opus model bumped to Claude Opus 5.**
+
 ### Changed
 
 - **Default Opus model bumped to Claude Opus 5.** `models.opus` and `ANTHROPIC_DEFAULT_OPUS_MODEL` move from `global.anthropic.claude-opus-4-8` to `global.anthropic.claude-opus-5`, verified live against AWS Bedrock (`ACTIVE` foundation model and `global.`/`us.` inference profiles) and against AWS's Opus 5 model card (1M context, 128K output — the same profile as Opus 4.8). `IsAutoModeCapableModel` and `supportsClaudeCode1M` now recognize Opus 5, matching Claude Code's documented auto-mode requirement of "Sonnet 5, Opus 4.7 or later" on Bedrock. Opus 4.7/4.8 remain fully supported via `--opus-model`.
+
+### Fixed
+
+- **Warn before uninstall silently disables auto mode.** `uninstall` removes managed `permissions.defaultMode` / env, so a prior `--mode=auto` config would re-apply without auto; warn before removal.
+- **Codecov uploads use the PyPI CLI path.** Avoids GPG key-import flakes from the native Codecov binary on CI runners.
+- **Codacy CI uses a single repository API token for coverage.** No account API token in Actions; Codacy analysis is informational (not a merge/main gate).
+
+### Other
+
+- **CI quality stack brought up to the Fabrica standard.** Windows lint, govulncheck, Trivy, GoReleaser snapshot, tracked git hooks, and trusted Codacy coverage handoff.
+- **Docs:** Opus 5 defaults documented; npm package landing page improved.
+- **Deps:** CodeQL action and `actions/checkout` bumps.
 
 ## [5.5.0] - 2026-07-21
 
@@ -1146,7 +1162,9 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.4.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.6.0...HEAD
+[5.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.0
+[5.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.5.0
 [5.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.4.0
 [5.3.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.4
 [5.3.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.3.3
