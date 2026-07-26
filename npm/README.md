@@ -4,7 +4,7 @@
 
 Juggernaut is a cross-platform CLI that wires your coding CLI to [Amazon Bedrock](https://aws.amazon.com/bedrock/) instead of vendor APIs. One `apply`, then keep typing `claude`, `codex`, `opencode`, or `grok`.
 
-Built for developers and teams shipping with GenAI today: one command configures routing, protects existing settings, stores API keys in the OS keychain, discovers the models your AWS account can use, and provides a `doctor` command when something's off.
+Built for developers and teams shipping with GenAI today: one command configures routing, protects existing settings, stores API keys in the OS keychain, provides an explicit account-model discovery command, and includes a `doctor` command when something's off.
 
 <p align="center">
   <a href="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml"><img src="https://github.com/jpvelasco/juggernaut/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -66,7 +66,7 @@ The interactive setup guides you through the first run. After applying, restart 
 | **Cross-platform launcher** | Use the same workflow on macOS, Linux, Windows, and WSL |
 | **`doctor` diagnostics** | Check credentials, configuration, activation, PATH, binaries, and legacy artifacts |
 
-## Use the models your account can actually access
+## Discover models your account can actually access
 
 Bedrock model access varies by AWS account and region. Juggernaut can query native Bedrock and Mantle, cache the result per account and region, and filter the inventory for each coding CLI.
 
@@ -76,7 +76,7 @@ juggernaut models refresh --region=us-west-2
 juggernaut models list --region=us-west-2 --cli=opencode
 ```
 
-The catalog is stored locally and `apply` reads it without making an implicit network call, so configuration stays deterministic and offline-friendly.
+`models refresh` is an explicit discovery step and currently requires working AWS IAM or SSO credentials. It is not part of the one-command `apply` setup and is not available through Bedrock API-key authentication. The catalog is stored locally, and `apply` reads it without making an implicit network call, so configuration stays deterministic and offline-friendly.
 
 ## Built for teams and individual developers
 
@@ -173,7 +173,7 @@ No overwriting the real CLI binary. No copying API keys into env vars. A backup 
 
 ### Account model discovery
 
-Discover what models your AWS account actually exposes in a given region:
+With working AWS IAM or SSO credentials, discover what models your AWS account actually exposes in a given region:
 
 ```bash
 # Query native Bedrock plus Mantle /v1/models endpoint
@@ -183,7 +183,7 @@ juggernaut models refresh --region=us-west-2
 juggernaut models list --region=us-west-2 --cli=opencode
 ```
 
-The inventory is cached per account/region at `~/.juggernaut/model-catalog.json`. `apply` reads this cache without network calls — deterministic and offline-friendly.
+The inventory is cached per account/region at `~/.juggernaut/model-catalog.json`. `apply` reads this cache without network calls — deterministic and offline-friendly. Bedrock API-key users can still use `apply`, but should not run `models refresh` unless they also have AWS credentials available.
 
 ## Default models
 
