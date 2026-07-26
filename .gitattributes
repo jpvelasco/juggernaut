@@ -8,6 +8,9 @@
 # Entry point script without .sh extension
 juggernaut text eol=lf
 
+# Git hooks (extensionless shell scripts) — LF required
+.githooks/* text eol=lf
+
 # Shellcheck config
 .shellcheckrc text eol=lf
 .gitattributes text eol=lf

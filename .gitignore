@@ -96,5 +96,3 @@ terminals/
 # Research working docs
 .research/
 
-# Git hooks directory (installed via setup-hooks.sh / setup-hooks.ps1)
-.githooks/

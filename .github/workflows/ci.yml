@@ -40,6 +40,31 @@ jobs:
           version: v2.9
           args: --timeout=5m
 
+  lint-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9
+        with:
+          version: v2.9
+          args: --timeout=5m
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
+
   test:
     strategy:
       fail-fast: false  # one leg failing must not cancel the others' coverage uploads
@@ -78,6 +103,20 @@ jobs:
           use_pypi: true
           files: ./coverage.out
           fail_ci_if_error: ${{ matrix.os != 'windows-latest' }}
+      # Codacy coverage complements Codecov — feeds the Codacy dashboard's
+      # coverage tab. Uses the project token (not OIDC — Codacy doesn't
+      # support it). force-coverage-parser: go is required — the default
+      # LCOV parser cannot parse Go's native coverprofile format. Linux-only:
+      # the Windows-only PowerShell/keychain code makes the merged-OS report
+      # meaningful, but Codacy's uploader only needs one representative report.
+      - name: Upload coverage to Codacy
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699  # v1.3.0
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: coverage.out
+          force-coverage-parser: go
+          language: Go
 
   test-race:
     runs-on: ubuntu-latest
@@ -161,3 +200,67 @@ jobs:
           go-version-file: go.mod
       - name: Run gosec
         run: go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -exclude=G204,G304,G702,G703 ./...
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+  codacy-issues-gate:
+    # Total outstanding Codacy issues on main — a debt-zero monitoring gate,
+    # not a per-PR blocker. Runs on push to main only: an unrelated pre-existing
+    # issue elsewhere in the repo must never block someone else's PR. Surfaces
+    # regressions right after they land instead. Uses a repository-scoped API
+    # token (Settings > Integrations > Repository API tokens on Codacy), not
+    # the broader account token, so a compromised secret here can't reach
+    # other repos.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for outstanding Codacy issues on main
+        env:
+          CODACY_REPOSITORY_API_TOKEN: ${{ secrets.CODACY_REPOSITORY_API_TOKEN }}
+        run: |
+          RESPONSE=$(curl -sS -X POST \
+            -H "api-token: ${CODACY_REPOSITORY_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"branchName":"main"}' \
+            "https://app.codacy.com/api/v3/analysis/organizations/gh/${{ github.repository_owner }}/repositories/${{ github.event.repository.name }}/issues/search?limit=1")
+          TOTAL=$(echo "$RESPONSE" | jq -r '.pagination.total')
+          if [ "$TOTAL" = "null" ] || [ -z "$TOTAL" ]; then
+            echo "Unexpected response from Codacy API: $RESPONSE"
+            exit 1
+          fi
+          echo "Outstanding Codacy issues on main: $TOTAL"
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "main has $TOTAL outstanding Codacy issue(s) — see https://app.codacy.com/gh/${{ github.repository }}/issues"
+            exit 1
+          fi
+
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      # Build-only: verifies .goreleaser.yml compiles all platforms. NEVER
+      # publishes (no `release`, no tag). Catches config breakage on PRs.
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94  # v7
+        with:
+          args: build --snapshot --clean
+      - name: Smoke-test the built linux binary
+        run: |
+          BIN=$(find dist -type f -name juggernaut -path '*linux_amd64*' | head -1)
+          test -n "$BIN" || { echo "no linux/amd64 juggernaut binary in dist/"; exit 1; }
+          chmod +x "$BIN"
+          OUT=$("$BIN" version)
+          echo "$OUT"
