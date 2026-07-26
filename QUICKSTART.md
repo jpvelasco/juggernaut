@@ -68,7 +68,7 @@ juggernaut doctor
 
 - Bedrock routing enabled (auth-gated)
 - Claude Sonnet 5 as the primary model (Global CRIS inference profile)
-- Claude Opus 5 as the default Opus override, with adaptive thinking, 1M context, and 128K output
+- Claude Opus 5 as the default Opus override, with adaptive thinking and 1M context accounting (the default output cap is 32768 tokens; the model supports up to 128K)
 - Claude Haiku 4.5 as fast/background model
 - Claude Code 1M context accounting for Opus and Sonnet by default
 - All three model tiers visible in `/model` selector
