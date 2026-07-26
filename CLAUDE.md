@@ -39,13 +39,25 @@ make fmt vet
 # Dry-run apply (preview config write without committing)
 ./bin/juggernaut apply --auth=iam --dry-run
 
-# Install git hooks (pre-commit, conventional commits)
+# Install git hooks (pre-commit, commit-msg, pre-push) — REQUIRED once per clone,
+# otherwise unformatted/untested code and non-Conventional-Commit messages can
+# slip through locally (CI is the real gate either way)
 scripts/setup-hooks.ps1    # Windows
 bash scripts/setup-hooks.sh  # Linux/macOS
 
 # Check Codacy dashboard issues (requires @codacy/codacy-cloud-cli + CODACY_API_TOKEN)
 make codacy
 ```
+
+## Git Hooks
+
+Hooks live in `.githooks/` (tracked) and are installed into `.git/hooks/` via `scripts/setup-hooks.sh`/`.ps1` (see Commands above) — install once per clone.
+
+- **pre-commit**: runs `gofmt -l` and `go vet` on staged Go files, then `go mod tidy` (fails if `go.mod`/`go.sum` change)
+- **commit-msg**: enforces Conventional Commits (`feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert`)
+- **pre-push**: fails if any changed non-test Go file has a function at 0.0% coverage (early catch; bypass with `git push --no-verify` in emergencies)
+
+The hooks are a convenience — **CI is the real gate**: Codecov's `patch` status (target 80%, in `codecov.yml`) runs on every PR and cannot be bypassed locally.
 
 ## Architecture
 

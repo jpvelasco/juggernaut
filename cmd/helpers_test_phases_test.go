@@ -1943,14 +1943,11 @@ func TestReportLegacyRecovery_BackupRestore(t *testing.T) {
 		reportLegacyRecovery(home)
 	})
 
-	// After recovery, the backup should have been restored as claude.
+	// After recovery, the backup should have been restored as claude. If no
+	// restore happened, the backup was not a known artifact — output might be
+	// empty, and the important thing is the function ran without error.
 	claudePath := filepath.Join(binDir, "claude")
-	if _, err := os.Stat(claudePath); os.IsNotExist(err) {
-		// No restore happened — output might be empty. This is valid
-		// if the backup was not a known artifact. The important thing is
-		// the function ran without error.
-	} else {
-		// Restore happened — output should contain the action.
+	if _, err := os.Stat(claudePath); err == nil {
 		if !strings.Contains(out, "restored") {
 			t.Errorf("expected 'restored' in output, got: %s", out)
 		}
