@@ -78,7 +78,7 @@ with `auth_provider_command` pointing at `juggernaut auth-token`.
   route through Mantle because native Bedrock is Claude-only.
 - `apply --mode=auto` must keep the Bedrock auto-mode guardrails: it writes
   `CLAUDE_CODE_ENABLE_AUTO_MODE=1`, but should warn unless the resolved active
-  model is Opus 4.7/4.8-capable.
+  model is Opus 4.7-or-later capable, including Opus 5.
 - `--fallback-model`, `--service-tier`, `--always-thinking`, `--effort`, and
   `skipWebFetchPreflight` are managed settings; `max` and `auto` effort levels
   are env-only, while fixed levels also persist as native `effortLevel`.
