@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Pre-commit hook: go fmt + go mod tidy check
+set -e
+
+# Check that go fmt hasn't changed files
+if ! git diff --cached --name-only --diff-filter=ACM -- '*.go' | grep -q .; then
+  exit 0
+fi
+
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+git diff --cached --name-only --diff-filter=ACM -- '*.go' | while read -r f; do
+  mkdir -p "$TMPDIR/$(dirname "$f")"
+  cp "$f" "$TMPDIR/$f"
+done
+
+# Run go fmt on staged files
+git diff --cached --name-only --diff-filter=ACM -- '*.go' | while read -r f; do
+  gofmt -w "$f"
+done
+
+# Re-add and check if anything changed
+git diff --cached --name-only --diff-filter=ACM -- '*.go' | while read -r f; do
+  if ! diff -q "$f" "$TMPDIR/$f" > /dev/null 2>&1; then
+    echo "FAIL: $f is not properly formatted. Run 'go fmt ./...' and amend."
+    cp "$TMPDIR/$f" "$f"
+    exit 1
+  fi
+done
+
+# Check go mod tidy — only fail if go.mod/go.sum have unstaged changes
+if ! go mod tidy; then
+  echo "FAIL: go mod tidy failed."
+  exit 1
+fi
+
+if [ -n "$(git diff -- go.mod go.sum)" ]; then
+  echo "FAIL: go.mod or go.sum changed after 'go mod tidy'. Run 'go mod tidy' and amend."
+  exit 1
+fi

@@ -7,10 +7,17 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+    - gocritic
+    - misspell
+    - unconvert
+    - dupl
   settings:
     govet:
       disable:
         - shadow
+    misspell:
+      ignore-rules:
+        - hardlinked
   exclusions:
     generated: lax
     presets:
