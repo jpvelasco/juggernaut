@@ -132,16 +132,16 @@ The inventory is cached per account/region at `~/.juggernaut/model-catalog.json`
 
 | Tier | Model | Global inference profile |
 |------|-------|--------------------------|
-| **Primary** | Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` |
+| **Primary** | Claude Sonnet 5 | `global.anthropic.claude-sonnet-5` |
 | **Opus** | Claude Opus 5 | `global.anthropic.claude-opus-5` |
 | **Fable** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
 | **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
 
-Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Use `--no-1m-context` to opt out.
+Claude Opus 5 is the default Opus tier on Bedrock, with adaptive thinking, 1M context, and 128K output. Opus 4.7 and 4.8 remain available through `--opus-model`. Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Use `--no-1m-context` to opt out.
 
-Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-4-6`
+Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-5`
 Override one tier: `juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>`
-Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5,global.anthropic.claude-sonnet-4-6`
+Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5,global.anthropic.claude-sonnet-5`
 
 ## Effort levels
 
