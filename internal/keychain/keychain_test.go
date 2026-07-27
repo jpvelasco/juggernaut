@@ -50,8 +50,13 @@ func TestDefault_NoOverrideReturnsStore(t *testing.T) {
 
 // skipIfUnavailable skips the test if the keychain backend is not available.
 // On headless Linux CI (no Secret Service daemon), all keychain ops fail.
+// On macOS CI the 'security' command blocks indefinitely waiting for keychain
+// unlock, so Set() never returns — skip on darwin as well.
 func skipIfUnavailable(t *testing.T, s *keychain.Store) {
 	t.Helper()
+	if runtime.GOOS == "darwin" {
+		t.Skip("keychain security command hangs on macOS CI")
+	}
 	if err := s.Set("probe"); err != nil {
 		t.Skipf("keychain backend unavailable: %v", err)
 	}
