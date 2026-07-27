@@ -146,7 +146,7 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 }
 
 func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
-	return o.BaseProvider.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+	return o.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
 		if m.Source != "mantle" {
 			return ModelSupport{Reason: "OpenCode's Bedrock provider routes through Mantle"}
 		}
@@ -156,5 +156,3 @@ func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
 		return ModelSupport{Supported: true, Reason: "Mantle Chat-compatible candidate"}
 	})
 }
-
-func (o opencode) CatalogSources() []string { return []string{"mantle"} }

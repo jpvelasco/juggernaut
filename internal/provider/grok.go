@@ -150,7 +150,7 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 }
 
 func (g grok) SupportsModel(model CatalogModel) ModelSupport {
-	return g.BaseProvider.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+	return g.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
 		if m.Source != "mantle" {
 			return ModelSupport{Reason: "Grok routes through Mantle"}
 		}
@@ -160,5 +160,3 @@ func (g grok) SupportsModel(model CatalogModel) ModelSupport {
 		return ModelSupport{Supported: true, Reason: "xAI Responses model"}
 	})
 }
-
-func (g grok) CatalogSources() []string { return []string{"mantle"} }

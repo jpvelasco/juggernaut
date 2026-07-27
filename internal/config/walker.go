@@ -147,3 +147,66 @@ func walkManagedKeys(plan map[string]any, deepKeys []string, visit walkManagedKe
 	}
 	return nil
 }
+
+// walkManagedKeyRemovalVisitor is called for each key during removal, carrying
+// the key name and its classified action. Unlike walkManagedKeyVisitor, this
+// does not carry a value — removal only needs the key name and classification.
+type walkManagedKeyRemovalVisitor func(key string, action managedKeyAction) error
+
+// walkManagedKeysForRemoval is the removal counterpart of walkManagedKeys.
+// It classifies a list of key names (without values) and dispatches each to
+// the visitor. The permissions key is always emitted so RemoveManagedKeysDeep
+// can ensure the Juggernaut-managed permissions sub-key is stripped even when
+// "permissions" was not in the key list (matches legacy behavior).
+func walkManagedKeysForRemoval(keys []string, ownedSubKeys map[string][]string, visit walkManagedKeyRemovalVisitor) error {
+	deep := make(map[string]bool, len(ownedSubKeys))
+	for k := range ownedSubKeys {
+		deep[k] = true
+	}
+	seen := make(map[string]bool, len(keys)+1)
+	for _, k := range keys {
+		seen[k] = true
+		var action managedKeyAction
+		switch {
+		case k == "juggernaut":
+			action = actionJuggernaut
+		case k == "permissions":
+			action = actionPermissions
+		case deep[k]:
+			action = actionDeep
+		default:
+			action = actionScalar
+		}
+		if err := visit(k, action); err != nil {
+			return err
+		}
+	}
+	// Always emit permissions so the managed sub-key is stripped even if
+	// "permissions" was not in the key list (matches legacy behavior).
+	if !seen["permissions"] {
+		if err := visit("permissions", actionPermissions); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// classifyManagedKey returns the action for a key name during removal.
+// Unlike walkManagedKeys, this does not need the value — removal only cares
+// about the key's classification (juggernaut, permissions, deep, or scalar).
+func classifyManagedKey(k string, deepKeys []string) managedKeyAction {
+	deep := make(map[string]bool, len(deepKeys))
+	for _, dk := range deepKeys {
+		deep[dk] = true
+	}
+	switch {
+	case k == "juggernaut":
+		return actionJuggernaut
+	case k == "permissions":
+		return actionPermissions
+	case deep[k]:
+		return actionDeep
+	default:
+		return actionScalar
+	}
+}

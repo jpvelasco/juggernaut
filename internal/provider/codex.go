@@ -181,7 +181,7 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 }
 
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
-	return c.BaseProvider.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+	return c.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
 		if m.Source != "mantle" {
 			return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
 		}
@@ -191,8 +191,6 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 		return ModelSupport{Supported: true, Reason: "Codex Responses model"}
 	})
 }
-
-func (c codex) CatalogSources() []string { return []string{"mantle"} }
 
 func (c codex) LaunchSpec() LaunchSpec {
 	// Codex has no "use bedrock" flag — routing lives in config.toml.

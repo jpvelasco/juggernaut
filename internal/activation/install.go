@@ -326,6 +326,9 @@ func resolveOrUse(home string, psResult *ProfileResolverResult) *ProfileResolver
 	if psResult != nil {
 		return psResult
 	}
+	if runtime.GOOS != "windows" {
+		return nil
+	}
 	r := ResolvePowerShellProfilesScoped(home)
 	return &r
 }

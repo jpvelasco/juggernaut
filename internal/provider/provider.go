@@ -124,25 +124,29 @@ func init() {
 			CapAutoMode, Cap1MContext, CapOpusplan, CapThinking,
 			CapServiceTiers, CapEffortLevels, CapNativeAuth,
 		},
+		catalogSources: []string{"foundation", "profile"},
 	}})
 	register(codex{BaseProvider: BaseProvider{
-		name:         "codex",
-		displayName:  "Codex",
-		configFormat: "toml",
-		binaryName:   "codex",
-		capabilities: []Capability{CapEffortLevels, CapNativeAuth},
+		name:           "codex",
+		displayName:    "Codex",
+		configFormat:   "toml",
+		binaryName:     "codex",
+		capabilities:   []Capability{CapEffortLevels, CapNativeAuth},
+		catalogSources: []string{"mantle"},
 	}})
 	register(opencode{BaseProvider: BaseProvider{
-		name:         "opencode",
-		displayName:  "OpenCode",
-		configFormat: "json",
-		binaryName:   "opencode",
+		name:           "opencode",
+		displayName:    "OpenCode",
+		configFormat:   "json",
+		binaryName:     "opencode",
+		catalogSources: []string{"mantle"},
 	}})
 	register(grok{BaseProvider: BaseProvider{
-		name:         "grok",
-		displayName:  "Grok",
-		configFormat: "toml",
-		binaryName:   "grok",
+		name:           "grok",
+		displayName:    "Grok",
+		configFormat:   "toml",
+		binaryName:     "grok",
+		catalogSources: []string{"mantle"},
 	}})
 }
 

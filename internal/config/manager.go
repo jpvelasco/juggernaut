@@ -289,24 +289,22 @@ func (m *Manager) RemoveManagedKeys(keys []string) error {
 // dropped. All other keys are removed whole-value.
 func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][]string) error {
 	return m.withConfig(func(existing map[string]any) error {
+		// Always remove the juggernaut block — this is the uninstall entry point
+		// and the block must go regardless of whether the caller listed it.
 		delete(existing, "juggernaut")
-		for _, k := range keys {
-			if k == "permissions" {
+		return walkManagedKeysForRemoval(keys, ownedSubKeys, func(k string, action managedKeyAction) error {
+			switch action {
+			case actionJuggernaut:
+				// already removed above
+			case actionPermissions:
 				mergePermissions(existing, nil)
-				continue
+			case actionDeep:
+				return removeOwnedSubKeys(existing, k, ownedSubKeys[k], m.path)
+			default:
+				delete(existing, k)
 			}
-			if subs, deep := ownedSubKeys[k]; deep {
-				if err := removeOwnedSubKeys(existing, k, subs, m.path); err != nil {
-					return err
-				}
-				continue
-			}
-			delete(existing, k)
-		}
-		// Ensure the Juggernaut-managed permissions sub-key is stripped even if
-		// "permissions" was not in the key list (matches legacy behavior).
-		mergePermissions(existing, nil)
-		return nil
+			return nil
+		})
 	})
 }
 

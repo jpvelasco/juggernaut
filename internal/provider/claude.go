@@ -12,7 +12,7 @@ import (
 )
 
 func (c claude) SupportsModel(model CatalogModel) ModelSupport {
-	return c.BaseProvider.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+	return c.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
 		if m.Source != "foundation" && m.Source != "profile" {
 			return ModelSupport{Reason: "Claude uses native Bedrock models and inference profiles"}
 		}
@@ -22,8 +22,6 @@ func (c claude) SupportsModel(model CatalogModel) ModelSupport {
 		return ModelSupport{Supported: true, Reason: "native Claude model"}
 	})
 }
-
-func (c claude) CatalogSources() []string { return []string{"foundation", "profile"} }
 
 // claude is the Claude Code provider. Every value here is transcribed from the
 // pre-abstraction sources so behavior is byte-identical: the markers and binary

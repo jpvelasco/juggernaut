@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -340,5 +341,240 @@ func TestLookupNestedKey_Integration(t *testing.T) {
 	_, found = lookupNestedKey(tbl, strings.Split("amazon-bedrock.missing.region", "."))
 	if found {
 		t.Error("expected not found for missing intermediate")
+	}
+}
+
+// TestWalkManagedKeys_JuggernautAction verifies that the "juggernaut" key
+// is classified as actionJuggernaut.
+func TestWalkManagedKeys_JuggernautAction(t *testing.T) {
+	plan := map[string]any{"juggernaut": map[string]any{"auth": "iam"}}
+	var capturedAction managedKeyAction
+	_ = walkManagedKeys(plan, nil, func(k string, v any, action managedKeyAction) error {
+		if k != "juggernaut" {
+			t.Fatalf("expected key juggernaut, got %s", k)
+		}
+		capturedAction = action
+		return nil
+	})
+	if capturedAction != actionJuggernaut {
+		t.Errorf("expected actionJuggernaut, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeys_PermissionsAction verifies that the "permissions" key
+// is classified as actionPermissions.
+func TestWalkManagedKeys_PermissionsAction(t *testing.T) {
+	plan := map[string]any{"permissions": map[string]any{"defaultMode": "auto"}}
+	var capturedAction managedKeyAction
+	_ = walkManagedKeys(plan, nil, func(k string, v any, action managedKeyAction) error {
+		if k != "permissions" {
+			t.Fatalf("expected key permissions, got %s", k)
+		}
+		capturedAction = action
+		return nil
+	})
+	if capturedAction != actionPermissions {
+		t.Errorf("expected actionPermissions, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeys_DeepKeyAction verifies that keys listed in deepKeys
+// are classified as actionDeep.
+func TestWalkManagedKeys_DeepKeyAction(t *testing.T) {
+	plan := map[string]any{
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{"aws": map[string]any{"region": "us-east-1"}},
+		},
+	}
+	var capturedAction managedKeyAction
+	_ = walkManagedKeys(plan, []string{"model_providers"}, func(k string, v any, action managedKeyAction) error {
+		if k != "model_providers" {
+			t.Fatalf("expected key model_providers, got %s", k)
+		}
+		capturedAction = action
+		return nil
+	})
+	if capturedAction != actionDeep {
+		t.Errorf("expected actionDeep, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeys_MapAction verifies that map values (not in deepKeys)
+// are classified as actionMap.
+func TestWalkManagedKeys_MapAction(t *testing.T) {
+	plan := map[string]any{
+		"env": map[string]string{"AWS_REGION": "us-east-1"},
+	}
+	var capturedAction managedKeyAction
+	_ = walkManagedKeys(plan, nil, func(k string, v any, action managedKeyAction) error {
+		if k != "env" {
+			t.Fatalf("expected key env, got %s", k)
+		}
+		capturedAction = action
+		return nil
+	})
+	if capturedAction != actionMap {
+		t.Errorf("expected actionMap, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeys_ScalarAction verifies that non-map values are
+// classified as actionScalar.
+func TestWalkManagedKeys_ScalarAction(t *testing.T) {
+	plan := map[string]any{
+		"model":       "anthropic.claude-sonnet-4-20250514",
+		"effortLevel": "high",
+	}
+	actions := make(map[string]managedKeyAction)
+	_ = walkManagedKeys(plan, nil, func(k string, v any, action managedKeyAction) error {
+		actions[k] = action
+		return nil
+	})
+	if actions["model"] != actionScalar {
+		t.Errorf("expected actionScalar for model, got %d", actions["model"])
+	}
+	if actions["effortLevel"] != actionScalar {
+		t.Errorf("expected actionScalar for effortLevel, got %d", actions["effortLevel"])
+	}
+}
+
+// TestWalkManagedKeys_MultipleKeys verifies that all keys in a plan are
+// visited with their correct actions.
+func TestWalkManagedKeys_MultipleKeys(t *testing.T) {
+	plan := map[string]any{
+		"juggernaut":  map[string]any{"auth": "iam"},
+		"permissions": map[string]any{"defaultMode": "auto"},
+		"model":       "anthropic.claude-sonnet-4-20250514",
+		"env":         map[string]string{"AWS_REGION": "us-east-1"},
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{"aws": map[string]any{"region": "us-east-1"}},
+		},
+	}
+	actions := make(map[string]managedKeyAction)
+	_ = walkManagedKeys(plan, []string{"model_providers"}, func(k string, v any, action managedKeyAction) error {
+		actions[k] = action
+		return nil
+	})
+
+	expected := map[string]managedKeyAction{
+		"juggernaut":      actionJuggernaut,
+		"permissions":     actionPermissions,
+		"model":           actionScalar,
+		"env":             actionMap,
+		"model_providers": actionDeep,
+	}
+
+	for k, want := range expected {
+		got, ok := actions[k]
+		if !ok {
+			t.Errorf("key %q not visited", k)
+			continue
+		}
+		if got != want {
+			t.Errorf("key %q: expected action %d, got %d", k, want, got)
+		}
+	}
+}
+
+// TestWalkManagedKeys_ErrorPropagation verifies that visitor errors are
+// propagated correctly.
+func TestWalkManagedKeys_ErrorPropagation(t *testing.T) {
+	plan := map[string]any{
+		"model": "anthropic.claude-sonnet-4-20250514",
+	}
+	expectedErr := fmt.Errorf("test error")
+	err := walkManagedKeys(plan, nil, func(k string, v any, action managedKeyAction) error {
+		return expectedErr
+	})
+	if err != expectedErr {
+		t.Errorf("expected error %v, got %v", expectedErr, err)
+	}
+}
+
+// TestWalkManagedKeys_EmptyPlan verifies that an empty plan produces no visits.
+func TestWalkManagedKeys_EmptyPlan(t *testing.T) {
+	plan := map[string]any{}
+	visited := false
+	_ = walkManagedKeys(plan, nil, func(k string, v any, action managedKeyAction) error {
+		visited = true
+		return nil
+	})
+	if visited {
+		t.Error("expected no visits for empty plan")
+	}
+}
+
+// TestWalkManagedKeys_DeepKeyOverridesMap verifies that a key listed in
+// deepKeys is classified as actionDeep even if its value is a map (which
+// would normally be actionMap).
+func TestWalkManagedKeys_DeepKeyOverridesMap(t *testing.T) {
+	plan := map[string]any{
+		"model": map[string]any{
+			"bedrock-grok": map[string]any{"model": "xai.grok-4.3"},
+		},
+	}
+	var capturedAction managedKeyAction
+	_ = walkManagedKeys(plan, []string{"model"}, func(k string, v any, action managedKeyAction) error {
+		capturedAction = action
+		return nil
+	})
+	if capturedAction != actionDeep {
+		t.Errorf("expected actionDeep (not actionMap) when key is in deepKeys, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeysForRemoval_Juggernaut verifies that the juggernaut key
+// is classified as actionJuggernaut during removal.
+func TestWalkManagedKeysForRemoval_Juggernaut(t *testing.T) {
+	var capturedAction managedKeyAction
+	_ = walkManagedKeysForRemoval([]string{"juggernaut", "model"}, nil, func(k string, action managedKeyAction) error {
+		if k == "juggernaut" {
+			capturedAction = action
+		}
+		return nil
+	})
+	if capturedAction != actionJuggernaut {
+		t.Errorf("expected actionJuggernaut, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeysForRemoval_DeepKey verifies that keys in ownedSubKeys
+// are classified as actionDeep during removal.
+func TestWalkManagedKeysForRemoval_DeepKey(t *testing.T) {
+	owned := map[string][]string{"model_providers": {"amazon-bedrock.aws.region"}}
+	var capturedAction managedKeyAction
+	_ = walkManagedKeysForRemoval([]string{"model_providers"}, owned, func(k string, action managedKeyAction) error {
+		if k == "model_providers" {
+			capturedAction = action
+		}
+		return nil
+	})
+	if capturedAction != actionDeep {
+		t.Errorf("expected actionDeep, got %d", capturedAction)
+	}
+}
+
+// TestWalkManagedKeysForRemoval_PermissionsAlwaysEmitted verifies that
+// permissions is always emitted even when not in the key list.
+func TestWalkManagedKeysForRemoval_PermissionsAlwaysEmitted(t *testing.T) {
+	actions := make(map[string]managedKeyAction)
+	_ = walkManagedKeysForRemoval([]string{"model", "env"}, nil, func(k string, action managedKeyAction) error {
+		actions[k] = action
+		return nil
+	})
+	if actions["permissions"] != actionPermissions {
+		t.Error("expected permissions to be emitted even when not in key list")
+	}
+}
+
+// TestWalkManagedKeysForRemoval_ErrorPropagation verifies that visitor errors
+// are propagated during removal.
+func TestWalkManagedKeysForRemoval_ErrorPropagation(t *testing.T) {
+	expectedErr := fmt.Errorf("removal error")
+	err := walkManagedKeysForRemoval([]string{"model"}, nil, func(k string, action managedKeyAction) error {
+		return expectedErr
+	})
+	if err != expectedErr {
+		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 }

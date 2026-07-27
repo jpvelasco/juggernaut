@@ -23,6 +23,9 @@ type BaseProvider struct {
 	binaryName string
 	// capabilities lists all capabilities this provider supports.
 	capabilities []Capability
+	// catalogSources lists the discovery sources this provider accepts
+	// (e.g. "foundation", "profile", "mantle"). Empty means no catalog support.
+	catalogSources []string
 }
 
 // Name returns the canonical provider name.
@@ -100,8 +103,10 @@ func (b BaseProvider) SupportsModel(model CatalogModel) ModelSupport {
 	return ModelSupport{Reason: "provider has no compatibility rule for " + model.Source}
 }
 
-// CatalogSources returns no endpoints by default.
-func (b BaseProvider) CatalogSources() []string { return nil }
+// CatalogSources returns the discovery sources this provider accepts.
+// Defaults to the catalogSources field set at registration time; nil means
+// no catalog support.
+func (b BaseProvider) CatalogSources() []string { return b.catalogSources }
 
 // DisplayName returns the human-facing CLI name for messages.
 func (b BaseProvider) DisplayName() string {
