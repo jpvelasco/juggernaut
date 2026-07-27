@@ -12,10 +12,11 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestInstallIsIdempotent(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	var psResult *ProfileResolverResult
 	// On Windows, inject a mock runner + resolver so Install doesn't touch real profiles.
@@ -65,7 +66,7 @@ func TestInstallIsIdempotent(t *testing.T) {
 }
 
 func TestUninstallPreservesUnrelatedContent(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	target := filepath.Join(home, ".bashrc")
 	original := "export FOO=bar\n"
 	if err := safepath.WriteFile(home, target, []byte(original)); err != nil {
@@ -176,7 +177,7 @@ func TestBlocksFallThroughWhenJuggernautMissing(t *testing.T) {
 // TestInstallTargetFor_UpgradesLegacyHardFailWrapper ensures re-apply replaces
 // pre-fallthrough wrappers that always called juggernaut (the breakage mode).
 func TestInstallTargetFor_UpgradesLegacyHardFailWrapper(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, ".bashrc")
 	old := BeginMarker + "\nclaude() {\n  juggernaut launch -- \"$@\"\n}\n" + EndMarker + "\n"
 	if err := safepath.WriteFile(home, path, []byte(old)); err != nil {
@@ -207,7 +208,7 @@ func TestInstallTargetFor_UpgradesLegacyHardFailWrapper(t *testing.T) {
 }
 
 func TestShouldWritePOSIXTarget_NeverCreatesBareProfile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := Target{Path: filepath.Join(home, ".profile"), Shell: ShellPOSIX}
 	if shouldWritePOSIXTarget(profile) {
 		t.Fatal("must not create a brand-new ~/.profile")
@@ -222,7 +223,7 @@ func TestShouldWritePOSIXTarget_NeverCreatesBareProfile(t *testing.T) {
 }
 
 func TestShouldWritePOSIXTarget_SkipsMissingZshWhenNoShell(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Point PATH at an empty dir so LookPath cannot find zsh/fish/bash.
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)
@@ -237,7 +238,7 @@ func TestShouldWritePOSIXTarget_SkipsMissingZshWhenNoShell(t *testing.T) {
 }
 
 func TestInstallWith_DoesNotCreateUnusedShellProfiles(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	empty := t.TempDir()
 	t.Setenv("PATH", empty) // no bash/zsh/fish
 
@@ -271,7 +272,7 @@ func TestInstallWith_DoesNotCreateUnusedShellProfiles(t *testing.T) {
 }
 
 func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	dir := t.TempDir()
 	self := filepath.Join(dir, "juggernaut")
 	if runtime.GOOS == "windows" {
@@ -319,7 +320,7 @@ func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
 }
 
 func TestLaunchInjectsAPIKeyToken(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
 	name := "claude"
@@ -351,7 +352,7 @@ func TestLaunchInjectsAPIKeyToken(t *testing.T) {
 }
 
 func TestLaunch_WarnsOnExpiredShortTermKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
 	name := "claude"
@@ -395,7 +396,7 @@ func TestLaunch_WarnsOnExpiredShortTermKey(t *testing.T) {
 }
 
 func TestLaunch_NoExpiryWarningForLongTermKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
 	name := "claude"
@@ -422,7 +423,7 @@ func TestLaunch_NoExpiryWarningForLongTermKey(t *testing.T) {
 }
 
 func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "iam")
 	realDir := t.TempDir()
 	name := "claude"
@@ -454,7 +455,7 @@ func TestLaunchIAMDoesNotReadKeychain(t *testing.T) {
 }
 
 func TestLaunch_BedrockAPIKey_UsesDefaultKeychain(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "bedrock-api-key")
 	realDir := t.TempDir()
 	name := "claude"
@@ -488,7 +489,7 @@ func TestLaunch_BedrockAPIKey_UsesDefaultKeychain(t *testing.T) {
 }
 
 func TestLaunch_IAM_UnsetsBearerTokenIfPreSet(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "iam")
 	realDir := t.TempDir()
 	name := "claude"
@@ -523,7 +524,7 @@ func TestLaunch_IAM_UnsetsBearerTokenIfPreSet(t *testing.T) {
 }
 
 func TestLaunchWithoutSettingsDoesNotForceBedrockEnv(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
 	realDir := t.TempDir()
 	name := "claude"
@@ -745,7 +746,7 @@ func TestIsLegacyClaudeShim_NotAShim(t *testing.T) {
 }
 
 func TestDefaultBinDir(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	dir := DefaultBinDir(home)
 	expected := filepath.Join(home, ".local", "bin")
 	if dir != expected {
@@ -757,7 +758,7 @@ func TestRecoverLegacyArtifacts_RemovesShim(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for dirs, test under t.TempDir()
 		t.Fatal(err)
@@ -789,7 +790,7 @@ func TestDetectLegacyArtifacts(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission — 0o700 is correct for dirs, test under t.TempDir()
 		t.Fatal(err)

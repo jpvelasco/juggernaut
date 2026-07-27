@@ -16,6 +16,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -271,7 +272,7 @@ func TestResolveOpusplanConflict_BothSet(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDetectForeignCollisions_NoFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, err := provider.Get("claude")
 	if err != nil {
 		t.Fatalf("get provider: %v", err)
@@ -287,7 +288,7 @@ func TestDetectForeignCollisions_NoFile(t *testing.T) {
 }
 
 func TestDetectForeignCollisions_EmptyFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
@@ -309,7 +310,7 @@ func TestDetectForeignCollisions_EmptyFile(t *testing.T) {
 }
 
 func TestDetectForeignCollisions_ForeignEnvKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
@@ -342,7 +343,7 @@ func TestDetectForeignCollisions_ForeignEnvKey(t *testing.T) {
 }
 
 func TestDetectForeignCollisions_OwnedConfig_NoCollisions(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
@@ -369,7 +370,7 @@ func TestDetectForeignCollisions_OwnedConfig_NoCollisions(t *testing.T) {
 }
 
 func TestDetectForeignCollisions_ForeignPermissionKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
@@ -616,7 +617,7 @@ func TestResolveCredential_BedrockKey_PreserveKey_NoKeychain(t *testing.T) {
 
 	// Use an isolated keychain service so we don't read tokens from other tests.
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-preserve-key-test")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	// With --preserve-key and no --bedrock-key, resolveCredential will try the
 	// keychain. On CI/Linux without a keychain backend, the GetWithFallback call
@@ -645,7 +646,7 @@ func TestResolveCredential_PreserveKey_KeychainError(t *testing.T) {
 
 	// Use an isolated keychain service to avoid reading tokens from other tests.
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-preserve-key-err-test")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	// With --preserve-key and no --bedrock-key, resolveCredential calls
 	// keychain.Default().GetWithFallback(). On headless Linux CI the keychain
@@ -674,7 +675,7 @@ func TestResolveCredential_BedrockKey_KeychainReturnsToken(t *testing.T) {
 
 	// Seed a versioned credential file so GetWithFallback returns a token
 	// without touching the OS keychain backend.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	// #nosec G101 — test-only token, not a real credential
 	const testToken = "seeded-token-from-file"
@@ -698,7 +699,7 @@ func TestResolveCredential_BedrockKey_KeychainReturnsToken(t *testing.T) {
 func TestReportLegacyRecovery_NoArtifacts(t *testing.T) {
 	// A clean temp dir has no legacy artifacts to recover — reportLegacyRecovery
 	// should succeed silently (no stdout output).
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	out := captureStdout(t, func() {
 		reportLegacyRecovery(home)
 	})
@@ -711,7 +712,7 @@ func TestReportLegacyRecovery_WithActions(t *testing.T) {
 	// Create a temp bin dir with a file matching a known v4.2.6 artifact name
 	// so RecoverLegacyArtifacts returns actions. Then verify reportLegacyRecovery
 	// prints them.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1493,7 +1494,7 @@ func TestInstallActivation_UpdatedProfiles(t *testing.T) {
 
 func TestReportLegacyRecovery_ErrorPath(t *testing.T) {
 	// Create a bin dir that exists but has no read permissions.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1731,7 +1732,7 @@ func TestWithStdin_Empty(t *testing.T) {
 }
 
 func TestReadJuggernautPermissionMode(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1752,7 +1753,7 @@ func TestReadJuggernautPermissionMode(t *testing.T) {
 }
 
 func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1773,7 +1774,7 @@ func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
 }
 
 func TestReadNativeEnvValue(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1794,7 +1795,7 @@ func TestReadNativeEnvValue(t *testing.T) {
 }
 
 func TestReadNativeEnvValue_Missing(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1810,7 +1811,7 @@ func TestReadNativeEnvValue_Missing(t *testing.T) {
 }
 
 func TestSetNativeDefaultMode(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1840,7 +1841,7 @@ func TestSetNativeDefaultMode(t *testing.T) {
 }
 
 func TestSetNativeDefaultMode_NoExistingPermissions(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -1874,7 +1875,7 @@ func TestResolveCredential_KeychainWarning_NoPreserveKey(t *testing.T) {
 
 	// Use an isolated keychain service so nothing is in the keychain.
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-warning-test")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	// With no --bedrock-key, no keychain token, and no --preserve-key,
 	// resolveCredential prints a warning to stderr and falls through to the
@@ -1899,7 +1900,7 @@ func TestResolveCredential_KeychainReturnsToken_ViaFileFallback(t *testing.T) {
 
 	// Seed a versioned credential file so GetWithFallback returns a token
 	// without touching the OS keychain backend.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	// #nosec G101 — test-only token, not a real credential
 	const testToken = "api-key-from-fallback"
@@ -1926,7 +1927,7 @@ func TestResolveCredential_PreserveKey_ExistingKeyFound(t *testing.T) {
 	applyFlags.preserveKey = true
 
 	// Seed a versioned credential file so the keychain returns a token.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	// #nosec G101 — test-only token
 	const testToken = "preserved-existing-key"
@@ -1954,7 +1955,7 @@ func TestReportLegacyRecovery_BackupRestore(t *testing.T) {
 		t.Skip("backup restore test is POSIX-only (symlink-based detection)")
 	}
 
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2000,7 +2001,7 @@ func TestReportLegacyRecovery_LegacyLauncherRemoved(t *testing.T) {
 	// (matched by SHA256 hash). A random symlink won't match, so this test
 	// verifies that reportLegacyRecovery succeeds silently when no matching
 	// artifacts are found — covering the empty-for-loop path.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2229,7 +2230,7 @@ func TestInstallActivation_ErrorPath(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDetectForeignCollisions_TOMLProvider(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	// Grok is always user-scoped and uses TOML.
 	prov, _ := provider.Get("grok")
@@ -2256,7 +2257,7 @@ func TestDetectForeignCollisions_TOMLProvider(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDetectForeignCollisions_ReadError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
 
@@ -2343,7 +2344,7 @@ func TestHomeDir_BothEnvVarsEmpty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadSettingsJSON_FileNotFound(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// No .claude/settings.json exists — readSettingsJSON calls t.Fatalf.
 	// We can't directly test t.Fatalf, but we can verify the condition
 	// that triggers it by checking the file doesn't exist.
@@ -2360,7 +2361,7 @@ func TestReadSettingsJSON_FileNotFound(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2390,7 +2391,7 @@ func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadJuggernautPermissionMode_NoMetaBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2508,7 +2509,7 @@ func TestWithStdin_MultiLine(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadNativeDefaultMode_EmptyStringValue(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2529,7 +2530,7 @@ func TestReadNativeDefaultMode_EmptyStringValue(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadNativeEnvValue_NonStringValue(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2554,7 +2555,7 @@ func TestReportLegacyRecovery_MultipleActions(t *testing.T) {
 		t.Skip("multiple actions test is POSIX-only (symlink-based detection)")
 	}
 
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
@@ -2593,7 +2594,7 @@ func TestReportLegacyRecovery_MultipleActions(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDetectForeignCollisions_TOMLForeignConfig(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, _ := provider.Get("grok")
 	path, _ := prov.ConfigPath(home, "user")
 

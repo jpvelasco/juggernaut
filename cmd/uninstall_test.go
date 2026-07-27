@@ -223,7 +223,7 @@ func TestUninstall_NoAutoModeWarningWhenNotAuto(t *testing.T) {
 // error branch: a provider whose ConfigPath fails must be skipped (continue),
 // not treated as a crash or a false "auto mode found" positive.
 func TestWarnIfAutoModeWillBeLost_ManagerErrorSkipped(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov := autoModeCapableStub{stubProvider{formatName: "json", pathErr: fmt.Errorf("bad path")}}
 
 	out := captureStdout(t, func() {
@@ -239,7 +239,7 @@ func TestWarnIfAutoModeWillBeLost_ManagerErrorSkipped(t *testing.T) {
 // branch: a config path pointing at a directory (unreadable as a file) must
 // be skipped (continue), not crash or falsely report auto mode.
 func TestWarnIfAutoModeWillBeLost_ReadErrorSkipped(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	dir := filepath.Join(home, "isadir")
 	if err := safepath.MkdirAll(dir); err != nil {
 		t.Fatalf("mkdir: %v", err)

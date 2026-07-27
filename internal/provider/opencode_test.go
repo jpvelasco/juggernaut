@@ -27,7 +27,7 @@ func TestOpenCode_ConfigFormatIsJSON(t *testing.T) {
 
 func TestOpenCode_ConfigPath(t *testing.T) {
 	p, _ := Get("opencode")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	user, err := p.ConfigPath(home, "user")
 	if err != nil {
 		t.Fatalf("user: %v", err)

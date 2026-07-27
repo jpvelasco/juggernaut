@@ -1157,7 +1157,7 @@ func (s stubProvider) OwnedSubKeys() map[string][]string { return nil }
 // branch: a provider reporting an unknown config format surfaces an error rather
 // than silently proceeding.
 func TestResolveApplyInputs_BadConfigFormat_Errors(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
 	_, _, _, err := resolveApplyInputs(home, bCfg, stubProvider{formatName: "yaml"})
 	if err == nil {
@@ -1170,7 +1170,7 @@ func TestResolveApplyInputs_BadConfigFormat_Errors(t *testing.T) {
 
 // TestResolveApplyInputs_ConfigPathError_Propagates covers the ConfigPath error branch.
 func TestResolveApplyInputs_ConfigPathError_Propagates(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
 	sentinel := fmt.Errorf("bad path")
 	_, _, _, err := resolveApplyInputs(home, bCfg, stubProvider{formatName: "json", pathErr: sentinel})
@@ -1190,7 +1190,7 @@ type dirPathProvider struct {
 func (d dirPathProvider) ConfigPath(string, string) (string, error) { return d.dir, nil }
 
 func TestResolveApplyInputs_ReadError_Propagates(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	dir := filepath.Join(home, "isadir")
 	if err := safepath.MkdirAll(dir); err != nil {
 		t.Fatalf("mkdir: %v", err)

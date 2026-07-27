@@ -450,7 +450,7 @@ func TestApply_ReportsMalformedModelCatalog(t *testing.T) {
 }
 
 func TestCachedProviderModels_MapsCachedInventory(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	origScope := catalogCredentialScope
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }

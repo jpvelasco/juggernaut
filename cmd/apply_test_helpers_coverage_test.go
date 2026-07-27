@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // writeSettingsJSON creates a settings.json under home/.claude/ with the given
@@ -36,7 +37,7 @@ func writeSettingsJSON(t *testing.T, home string, settings map[string]any) {
 // ---------------------------------------------------------------------------
 
 func TestReadJuggernautAuthMode_Present(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{
@@ -53,7 +54,7 @@ func TestReadJuggernautAuthMode_Present(t *testing.T) {
 }
 
 func TestReadJuggernautAuthMode_BedrockAPIKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{
@@ -70,7 +71,7 @@ func TestReadJuggernautAuthMode_BedrockAPIKey(t *testing.T) {
 }
 
 func TestReadJuggernautAuthMode_MissingAuth(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"meta": map[string]any{"schemaVersion": float64(2)},
@@ -96,7 +97,7 @@ func TestReadJuggernautAuthMode_MissingAuth(t *testing.T) {
 }
 
 func TestReadJuggernautAuthMode_MissingJuggernautBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"env": map[string]any{
 			"SOME_VAR": "hello",
@@ -120,7 +121,7 @@ func TestReadJuggernautAuthMode_MissingJuggernautBlock(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadJuggernautPermissionMode_Present(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"meta": map[string]any{
@@ -137,7 +138,7 @@ func TestReadJuggernautPermissionMode_Present(t *testing.T) {
 }
 
 func TestReadJuggernautPermissionMode_ReadOnly(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"meta": map[string]any{
@@ -154,7 +155,7 @@ func TestReadJuggernautPermissionMode_ReadOnly(t *testing.T) {
 }
 
 func TestReadJuggernautPermissionMode_MissingMeta(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{
@@ -184,7 +185,7 @@ func TestReadJuggernautPermissionMode_MissingMeta(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadNativeDefaultMode_Present(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"permissions": map[string]any{
 			"defaultMode": "auto",
@@ -199,7 +200,7 @@ func TestReadNativeDefaultMode_Present(t *testing.T) {
 }
 
 func TestReadNativeDefaultMode_ReadOnly(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"permissions": map[string]any{
 			"defaultMode": "readOnly",
@@ -214,7 +215,7 @@ func TestReadNativeDefaultMode_ReadOnly(t *testing.T) {
 }
 
 func TestReadNativeDefaultMode_MissingPermissions(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{"mode": "iam"},
@@ -229,7 +230,7 @@ func TestReadNativeDefaultMode_MissingPermissions(t *testing.T) {
 }
 
 func TestReadNativeDefaultMode_EmptyPermissions(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"permissions": map[string]any{},
 	}
@@ -246,7 +247,7 @@ func TestReadNativeDefaultMode_EmptyPermissions(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadNativeEnvValue_Present(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"env": map[string]any{
 			"CLAUDE_CODE_USE_BEDROCK": "1",
@@ -261,7 +262,7 @@ func TestReadNativeEnvValue_Present(t *testing.T) {
 }
 
 func TestReadNativeEnvValue_MultipleKeys(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"env": map[string]any{
 			"CLAUDE_CODE_USE_BEDROCK":        "1",
@@ -278,7 +279,7 @@ func TestReadNativeEnvValue_MultipleKeys(t *testing.T) {
 }
 
 func TestReadNativeEnvValue_MissingKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"env": map[string]any{
 			"CLAUDE_CODE_USE_BEDROCK": "1",
@@ -293,7 +294,7 @@ func TestReadNativeEnvValue_MissingKey(t *testing.T) {
 }
 
 func TestReadNativeEnvValue_MissingEnvBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{"mode": "iam"},
@@ -312,7 +313,7 @@ func TestReadNativeEnvValue_MissingEnvBlock(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSetNativeDefaultMode_SetsValue(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{"mode": "iam"},
@@ -330,7 +331,7 @@ func TestSetNativeDefaultMode_SetsValue(t *testing.T) {
 }
 
 func TestSetNativeDefaultMode_CreatesPermissionsBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"juggernaut": map[string]any{
 			"auth": map[string]any{"mode": "iam"},
@@ -347,7 +348,7 @@ func TestSetNativeDefaultMode_CreatesPermissionsBlock(t *testing.T) {
 }
 
 func TestSetNativeDefaultMode_OverwritesExisting(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	settings := map[string]any{
 		"permissions": map[string]any{
 			"defaultMode": "readOnly",

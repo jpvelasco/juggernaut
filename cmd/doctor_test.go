@@ -12,6 +12,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestOpusplanProblem(t *testing.T) {
@@ -294,7 +295,7 @@ func TestClaudeCommandStatus_WarnWhenMissing(t *testing.T) {
 }
 
 func TestCheckSettingsScope_DefaultProjectMissingIsOK(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	status, detail := checkSettingsScope(home, "project", false)
 	if status != doctor.OK {
@@ -306,7 +307,7 @@ func TestCheckSettingsScope_DefaultProjectMissingIsOK(t *testing.T) {
 }
 
 func TestCheckSettingsScope_RequiredScopeMissingFails(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	status, detail := checkSettingsScope(home, "user", true)
 	if status != doctor.Fail {
@@ -315,7 +316,7 @@ func TestCheckSettingsScope_RequiredScopeMissingFails(t *testing.T) {
 }
 
 func TestCheckProviderConfigScope_CodexMissingRequiredFails(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, err := provider.Get("codex")
 	if err != nil {
 		t.Fatal(err)
@@ -330,7 +331,7 @@ func TestCheckProviderConfigScope_CodexMissingRequiredFails(t *testing.T) {
 }
 
 func TestCheckProviderConfigScope_CodexOwnedOK(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, err := provider.Get("codex")
 	if err != nil {
 		t.Fatal(err)

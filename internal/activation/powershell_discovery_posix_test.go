@@ -4,6 +4,8 @@ package activation
 
 import (
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestDiscoverPowerShellProfiles_POSIX(t *testing.T) {
@@ -18,7 +20,7 @@ func TestDiscoverPowerShellProfiles_POSIX(t *testing.T) {
 }
 
 func TestDiscoverPowerShellProfilesScoped_POSIX(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	scoped := discoverPowerShellProfilesScoped(home)
 	unscoped := discoverPowerShellProfiles()
 	// On POSIX the scoped variant delegates to the unscoped one.

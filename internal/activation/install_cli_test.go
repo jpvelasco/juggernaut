@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 const (
@@ -48,7 +49,7 @@ func TestUpsertBlockWithMarkers_ReplacesOwn(t *testing.T) {
 // TestUninstallWith_CodexSpec_PreservesClaude: uninstalling the Codex block via
 // UninstallWith{Spec} removes only Codex, leaving Claude's block in the profile.
 func TestUninstallWith_CodexSpec_PreservesClaude(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, ".bashrc")
 	claudeBlk := blockFor(ShellPOSIX, "claude", BeginMarker, EndMarker)
 	codexBlk := blockFor(ShellPOSIX, "codex", codexBegin, codexEnd)

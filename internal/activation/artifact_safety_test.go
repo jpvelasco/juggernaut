@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestRecoverLegacyArtifacts_PreservesRealClaude is the safety invariant: a real
@@ -14,7 +16,7 @@ func TestRecoverLegacyArtifacts_PreservesRealClaude(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows uses content matching; POSIX safety is covered by the symlink tests")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		t.Fatal(err)
@@ -44,7 +46,7 @@ func TestRecoverLegacyArtifacts_PreservesRealClaude(t *testing.T) {
 // v4.2.6 backup exists and no claude is present, the backup is renamed back
 // into place.
 func TestRecoverLegacyArtifacts_RestoresBackup(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		t.Fatal(err)
@@ -76,7 +78,7 @@ func TestRecoverLegacyArtifacts_RestoresBackup(t *testing.T) {
 // TestRecoverLegacyArtifacts_KeepsExistingClaudeOverBackup verifies restore does
 // NOT clobber an existing claude when a backup is also present.
 func TestRecoverLegacyArtifacts_KeepsExistingClaudeOverBackup(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	binDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		t.Fatal(err)

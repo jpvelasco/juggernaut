@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestLaunchWithOptions_CodexSpec: with a Codex LaunchTarget that has a config
@@ -16,7 +18,7 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 	// sets CLAUDE_CODE_USE_BEDROCK in the real environment. We assert the Codex
 	// launch does not itself set it.
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	realDir := t.TempDir()
 	codexName := "codex"
@@ -77,7 +79,7 @@ func TestLaunchWithOptions_CodexSpec(t *testing.T) {
 // bedrock-api-key auth (the bearer token is shared).
 func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-	home := t.TempDir() // no .claude settings written
+	home := testutil.NewTestHome(t) // no .claude settings written
 
 	realDir := t.TempDir()
 	codexName := "codex"
@@ -129,7 +131,7 @@ func TestLaunchWithOptions_CodexOnly_InjectsToken(t *testing.T) {
 // uses the AWS SDK credential chain, not a keychain token).
 func TestLaunchWithOptions_Codex_IAM_NoToken(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	realDir := t.TempDir()
 	codexName := "codex"
@@ -274,7 +276,7 @@ func TestReadAuthModeFromConfig(t *testing.T) {
 // token injected, no static env).
 func TestLaunchWithOptions_Codex_NoConfigFile(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	realDir := t.TempDir()
 	codexName := "codex"
@@ -317,7 +319,7 @@ func TestLaunchWithOptions_Codex_NoConfigFile(t *testing.T) {
 // unmanaged behavior (no token injected).
 func TestLaunchWithOptions_Codex_BadConfigFile(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	realDir := t.TempDir()
 	codexName := "codex"
@@ -363,7 +365,7 @@ func TestLaunchWithOptions_Codex_BadConfigFile(t *testing.T) {
 // TestLaunchWithOptions_ClaudeDefault: an empty Target defaults to Claude
 // behavior (claude binary + CLAUDE_CODE_USE_BEDROCK=1) — back-compat.
 func TestLaunchWithOptions_ClaudeDefault(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	writeSettings(t, home, "iam")
 
 	realDir := t.TempDir()

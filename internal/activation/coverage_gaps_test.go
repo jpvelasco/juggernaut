@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestShouldWritePOSIXTarget_DefaultAndStatError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	// Unknown basename with missing file → default false.
 	unknown := Target{Path: filepath.Join(home, "custom.rc"), Shell: ShellPOSIX}
@@ -65,7 +66,7 @@ func TestBlockFor_PanicsOnInvalidMarkers(t *testing.T) {
 }
 
 func TestInstallTargetFor_ReadError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Target path is a directory — ReadFile fails with a non-NotExist error.
 	_, err := InstallTargetFor(Target{Path: home, Shell: ShellPOSIX}, claudeCLISpec())
 	if err == nil {
@@ -77,7 +78,7 @@ func TestInstallTargetFor_ReadError(t *testing.T) {
 }
 
 func TestInstallTargetFor_WriteError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Intermediate path component is a file. On Unix, ReadFile fails first
 	// ("not a directory"); on some platforms WriteFile fails later. Either is
 	// a hard error — the important contract is we do not silently succeed.
@@ -97,7 +98,7 @@ func TestInstallTargetFor_WriteError(t *testing.T) {
 }
 
 func TestUninstallCLIBlocks_DuplicatePathKeySkipped(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, "prof.ps1")
 	block := blockFor(ShellPowerShell, "codex", codexBegin, codexEnd)
 	if err := safepath.WriteFile(home, profile, []byte(block+"\n")); err != nil {
@@ -120,7 +121,7 @@ func TestUninstallCLIBlocks_DuplicatePathKeySkipped(t *testing.T) {
 }
 
 func TestUninstallCLIBlocks_RemoveError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Directory path makes RemoveTargetForMarkers fail on read.
 	_, err := UninstallWith(home, UninstallOptions{
 		Spec: CLISpec{Name: "codex", Begin: codexBegin, End: codexEnd},
@@ -134,7 +135,7 @@ func TestUninstallCLIBlocks_RemoveError(t *testing.T) {
 }
 
 func TestUninstallWith_RemoveTargetWithLegacyError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Claude uninstall walks DefaultTargets; seed .bashrc as a directory so
 	// RemoveTargetWithLegacy returns a read error.
 	bashrc := filepath.Join(home, ".bashrc")

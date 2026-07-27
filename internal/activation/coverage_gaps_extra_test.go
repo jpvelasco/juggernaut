@@ -101,7 +101,7 @@ func TestRemoveTargetForMarkers_WriteError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows write-permission semantics differ")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, "profile")
 	block := blockFor(ShellPOSIX, "claude", BeginMarker, EndMarker)
 	if err := os.WriteFile(profile, []byte(block), 0o600); err != nil {
@@ -136,7 +136,7 @@ func TestRemoveTargetWithLegacy_WriteError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows write-permission semantics differ")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, "profile")
 	block := blockFor(ShellPOSIX, "claude", BeginMarker, EndMarker)
 	if err := os.WriteFile(profile, []byte(block), 0o600); err != nil {
@@ -194,7 +194,7 @@ func TestInstalledTargetsForMarkers_NonWindowsWithPSResult(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, "profile.ps1")
 	block := blockFor(ShellPowerShell, "claude", BeginMarker, EndMarker)
 	if err := os.WriteFile(profile, []byte(block), 0o600); err != nil {
@@ -267,7 +267,7 @@ func TestInstallWith_NonWindowsWithPSResult(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, "profile.ps1")
 	if err := os.WriteFile(profile, []byte(""), 0o600); err != nil {
 		t.Fatal(err)
@@ -304,7 +304,7 @@ func TestUninstallWith_Claude_NonWindowsWithPSResult(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, "profile.ps1")
 	block := blockFor(ShellPowerShell, "claude", BeginMarker, EndMarker)
 	if err := os.WriteFile(profile, []byte(block), 0o600); err != nil {
@@ -345,7 +345,7 @@ func TestCommandOnPATH(t *testing.T) {
 
 // TestShouldWritePOSIXTarget_ExistingFile covers the existing-file path.
 func TestShouldWritePOSIXTarget_ExistingFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bashrc := filepath.Join(home, ".bashrc")
 	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
 		t.Fatal(err)
@@ -358,7 +358,7 @@ func TestShouldWritePOSIXTarget_ExistingFile(t *testing.T) {
 
 // TestShouldWritePOSIXTarget_ProfileNeverCreated covers .profile never being created.
 func TestShouldWritePOSIXTarget_ProfileNeverCreated(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := Target{Path: filepath.Join(home, ".profile"), Shell: ShellPOSIX}
 	if shouldWritePOSIXTarget(profile) {
 		t.Error(".profile should never be created from scratch")
@@ -522,7 +522,7 @@ func TestIsExecutable_NotExecutable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows always returns true for existing files")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, "test")
 	if err := os.WriteFile(path, []byte("x"), 0o000); err != nil {
 		t.Fatal(err)
@@ -555,7 +555,7 @@ func TestSameExecutable_EmptySelf(t *testing.T) {
 
 // TestSameExecutable_DifferentFiles covers different files.
 func TestSameExecutable_DifferentFiles(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	a := filepath.Join(home, "a")
 	b := filepath.Join(home, "b")
 	if err := os.WriteFile(a, []byte("a"), 0o600); err != nil {
@@ -592,7 +592,7 @@ func TestSamePath_Different(t *testing.T) {
 
 // TestFileExists_Exists covers existing file.
 func TestFileExists_Exists(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, "test")
 	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -725,7 +725,7 @@ func TestSpecOrClaude_Populated(t *testing.T) {
 
 // TestInstallTarget_Default covers the default InstallTarget function.
 func TestInstallTarget_Default(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bashrc := filepath.Join(home, ".bashrc")
 	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
 		t.Fatal(err)
@@ -741,7 +741,7 @@ func TestInstallTarget_Default(t *testing.T) {
 
 // TestRemoveTarget_Default covers the default RemoveTarget function.
 func TestRemoveTarget_Default(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bashrc := filepath.Join(home, ".bashrc")
 	block := Block(ShellPOSIX)
 	if err := os.WriteFile(bashrc, []byte(block), 0o600); err != nil {
@@ -776,7 +776,7 @@ func TestInstall_Default(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows — requires PowerShell")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bashrc := filepath.Join(home, ".bashrc")
 	if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
 		t.Fatal(err)
@@ -790,7 +790,7 @@ func TestUninstall_Default(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows — requires PowerShell")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	_, _ = Uninstall(home)
 }
 
@@ -799,7 +799,7 @@ func TestInstalledTargets_Default(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on Windows — requires PowerShell")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bashrc := filepath.Join(home, ".bashrc")
 	block := Block(ShellPOSIX)
 	if err := os.WriteFile(bashrc, []byte(block), 0o600); err != nil {

@@ -74,7 +74,7 @@ func assertEmptyActions(t *testing.T, name string, actions []LegacyAction) {
 func TestWrapperDelegation(t *testing.T) {
 	t.Run("Install", func(t *testing.T) {
 		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-		home := t.TempDir()
+		home := testutil.NewTestHome(t)
 		bashrc := filepath.Join(home, ".bashrc")
 		if err := os.WriteFile(bashrc, []byte("# existing"), 0o600); err != nil {
 			t.Fatal(err)
@@ -97,7 +97,7 @@ func TestWrapperDelegation(t *testing.T) {
 
 	t.Run("Uninstall", func(t *testing.T) {
 		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-		home := t.TempDir()
+		home := testutil.NewTestHome(t)
 		bashrc := writeShellBlock(t, home, ".bashrc")
 		removed, err := Uninstall(home)
 		if err != nil {
@@ -117,7 +117,7 @@ func TestWrapperDelegation(t *testing.T) {
 
 	t.Run("InstalledTargets", func(t *testing.T) {
 		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-		home := t.TempDir()
+		home := testutil.NewTestHome(t)
 		bashrc := writeShellBlock(t, home, ".bashrc")
 		paths := InstalledTargets(home)
 		if len(paths) == 0 {
@@ -130,7 +130,7 @@ func TestWrapperDelegation(t *testing.T) {
 
 	t.Run("InstalledTargetsWith", func(t *testing.T) {
 		skipIf(t, runtime.GOOS == "windows", "requires POSIX targets")
-		home := t.TempDir()
+		home := testutil.NewTestHome(t)
 		writeShellBlock(t, home, ".zshrc")
 		paths := InstalledTargetsWith(home, nil)
 		if len(paths) == 0 {
@@ -321,7 +321,7 @@ func TestIsKnownJuggernautArtifact_NonWindows(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLegacyArtifactDetection_CleanDir(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	assertEmptyActions(t, "DetectLegacyArtifacts", DetectLegacyArtifacts(home))
 
 	skipIf(t, runtime.GOOS == "windows", "non-Windows only")
@@ -345,7 +345,7 @@ func TestLegacyArtifactDetection_CleanDir(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAuthModes_EmptyConfig(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	claudeDir := createClaudeDir(t, home)
 	settingsPath := filepath.Join(claudeDir, "settings.json")
 	if err := os.WriteFile(settingsPath, []byte("{}"), 0o600); err != nil {
@@ -368,7 +368,7 @@ func TestAuthModes_EmptyConfig(t *testing.T) {
 func TestLaunchWithOptions(t *testing.T) {
 	t.Run("ManagedIAM_NoToken", func(t *testing.T) {
 		t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
-		home := t.TempDir()
+		home := testutil.NewTestHome(t)
 		claudeDir := createClaudeDir(t, home)
 		settings := map[string]any{
 			"juggernaut": map[string]any{

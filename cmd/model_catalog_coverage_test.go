@@ -138,7 +138,7 @@ func TestRunModelsList_NoModelsMatchSourceFilter(t *testing.T) {
 }
 
 func TestCachedProviderModels_LoadError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	origScope := catalogCredentialScope
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
@@ -245,7 +245,7 @@ func TestModelsList_RefreshAccountError(t *testing.T) {
 }
 
 func TestCatalogProviderModels_MapsAllFields(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	origScope := catalogCredentialScope
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
@@ -545,7 +545,7 @@ func TestModelsRefresh_HomeDirError(t *testing.T) {
 }
 
 func TestCachedProviderSources_ReturnsSources(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	origScope := catalogCredentialScope
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
@@ -563,7 +563,7 @@ func TestCachedProviderSources_ReturnsSources(t *testing.T) {
 }
 
 func TestCachedProviderSources_NoCache(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	origScope := catalogCredentialScope
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
@@ -579,7 +579,7 @@ func TestCachedProviderSources_NoCache(t *testing.T) {
 }
 
 func TestCachedProviderSources_ScopeError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	origScope := catalogCredentialScope
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "", errors.New("scope unavailable") }

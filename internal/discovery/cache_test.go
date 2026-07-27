@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 const (
@@ -17,7 +18,7 @@ const (
 )
 
 func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	if _, found, err := LoadCachedModels(home, testScope, "us-west-2"); err != nil || found {
 		t.Fatalf("missing cache = found %v, err %v; want false, nil", found, err)
 	}
@@ -83,7 +84,7 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 }
 
 func TestCatalogCache_IsolatesAccountsAndRebindsCredentialScope(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	when := time.Now()
 	modelA := []DiscoveredModel{{ID: "account-a-model", Source: SourceMantle}}
 	modelB := []DiscoveredModel{{ID: "account-b-model", Source: SourceMantle}}
@@ -114,7 +115,7 @@ func TestCatalogCache_IsolatesAccountsAndRebindsCredentialScope(t *testing.T) {
 }
 
 func TestCatalogCache_RejectsInvalidInputsAndVersion(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	validSources := []Source{SourceMantle}
 	if err := SaveCachedModels(home, "", testScope, "us-west-2", validSources, nil, time.Now()); err == nil {
 		t.Fatal("expected empty-account error")
@@ -142,7 +143,7 @@ func TestCatalogCache_RejectsInvalidInputsAndVersion(t *testing.T) {
 }
 
 func TestCatalogCache_ReportsMalformedCache(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path, err := CachePath(home)
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +163,7 @@ func TestCatalogCache_ReportsMalformedCache(t *testing.T) {
 }
 
 func TestCatalogCache_MissingAccountAndReadFailure(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path, err := CachePath(home)
 	if err != nil {
 		t.Fatal(err)

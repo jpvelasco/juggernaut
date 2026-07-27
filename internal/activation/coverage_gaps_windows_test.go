@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestInstallPowerShell_LegacyMigrationAndStripErrors(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
 	legacyPath := filepath.Join(home, "Documents", "PowerShell", "legacy.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
@@ -52,7 +53,7 @@ func TestInstallPowerShell_LegacyMigrationAndStripErrors(t *testing.T) {
 }
 
 func TestInstallPowerShell_MigrationReadError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "ok", "profile.ps1")
 	bad := filepath.Join(home, "bad-dir")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
@@ -72,7 +73,7 @@ func TestInstallPowerShell_MigrationReadError(t *testing.T) {
 }
 
 func TestInstallPowerShell_InstallTargetError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Install target is a directory → InstallTargetFor fails.
 	dir := filepath.Join(home, "ps")
 	if err := safepath.MkdirAll(dir); err != nil {
@@ -87,7 +88,7 @@ func TestInstallPowerShell_InstallTargetError(t *testing.T) {
 }
 
 func TestInstallPowerShell_ThirdPassStripError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
 	staleDir := filepath.Join(home, "Documents", "PowerShell", "stale-dir")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
@@ -112,7 +113,7 @@ func TestInstallPowerShell_ThirdPassStripError(t *testing.T) {
 }
 
 func TestInstallPowerShell_LegacyWriteError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	legacyPath := filepath.Join(home, "Documents", "PowerShell", "legacy.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(legacyPath)); err != nil {
 		t.Fatal(err)
@@ -161,7 +162,7 @@ func TestHistoricalPowerShellTargetsScoped_EmptyAndDocsError(t *testing.T) {
 	})
 	t.Cleanup(ResetResolveDocumentsFolderForTesting)
 
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	got := historicalPowerShellTargetsScoped(home)
 	// Falls back to $HOME/Documents and still adds OneDrive alternate.
 	want := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
@@ -178,7 +179,7 @@ func TestHistoricalPowerShellTargetsScoped_EmptyAndDocsError(t *testing.T) {
 }
 
 func TestHistoricalPowerShellTargets_Unscoped(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	docs := filepath.Join(home, "Documents")
 	SetResolveDocumentsFolderForTesting(func() (string, error) {
 		return docs, nil
@@ -212,7 +213,7 @@ func TestHistoricalPowerShellTargets_Unscoped(t *testing.T) {
 }
 
 func TestUninstallCLIBlocks_WindowsNilResolver(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Seed a POSIX profile only; nil PowerShellResult forces live discovery
 	// (covers uninstallCLIBlocks windows branch) without requiring real PS blocks.
 	bashrc := filepath.Join(home, ".bashrc")
@@ -255,7 +256,7 @@ func TestUninstallCLIBlocks_WindowsNilResolver(t *testing.T) {
 // TestInstallPowerShell_StaleStripNotCountedAsInstall: third-pass cleanup
 // must not inflate the "installed" path list used by apply messaging.
 func TestInstallPowerShell_StaleStripNotCountedAsInstall(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
 	currentHost := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {

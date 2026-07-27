@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 type fakeSTSClient struct {
@@ -80,7 +81,7 @@ func TestCallerAccount(t *testing.T) {
 }
 
 func TestCredentialScope_TracksProfileAndCredentialsWithoutSecrets(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	awsDir := filepath.Join(home, ".aws")
 	if err := safepath.MkdirAll(awsDir); err != nil {
 		t.Fatal(err)
@@ -124,7 +125,7 @@ func TestCredentialScope_TracksProfileAndCredentialsWithoutSecrets(t *testing.T)
 }
 
 func TestCredentialScope_TracksEnvironmentAccessKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	for _, name := range []string{"AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"} {
 		t.Setenv(name, "")
 	}
@@ -144,7 +145,7 @@ func TestCredentialScope_TracksEnvironmentAccessKey(t *testing.T) {
 }
 
 func TestCredentialScope_FingerprintsUnreadableCredentialSelectors(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	for _, name := range []string{"AWS_ACCESS_KEY_ID", "AWS_PROFILE", "AWS_DEFAULT_PROFILE"} {
 		t.Setenv(name, "")
 	}

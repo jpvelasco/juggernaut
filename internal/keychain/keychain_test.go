@@ -10,6 +10,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func testStore() *keychain.Store {
@@ -107,7 +108,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestSetWithFallback_FallsBackToFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
@@ -131,7 +132,7 @@ func TestSetWithFallback_FallsBackToFile(t *testing.T) {
 }
 
 func TestGetWithFallback_ReadsVersionedFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
@@ -161,7 +162,7 @@ func TestGetWithFallback_VersionedFileWinsOverKeychain(t *testing.T) {
 	}
 
 	// Write a different token to the file with the versioned envelope.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\nfile-token")); err != nil {
@@ -178,7 +179,7 @@ func TestGetWithFallback_VersionedFileWinsOverKeychain(t *testing.T) {
 }
 
 func TestGetWithFallback_ReturnsEmptyWhenNothingStored(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 	// With no fallback file and nothing stored, GetWithFallback consults the
 	// keychain. As of v5.2.4 a broken keychain backend (e.g. headless Linux with
@@ -203,7 +204,7 @@ func TestSetWithFallback_ClearsStaleKeychainOnFallback(t *testing.T) {
 
 	s := testStore()
 	skipIfUnavailable(t, s)
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
 	// Store a short token in the keychain.
@@ -237,7 +238,7 @@ func TestSetWithFallback_ClearsStaleKeychainOnFallback(t *testing.T) {
 }
 
 func TestDeleteWithFallback_RemovesFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 	skipIfUnavailable(t, s)
 
@@ -289,7 +290,7 @@ func TestIsTooBigForKeychain(t *testing.T) {
 // while retaining permissive file permissions — this regression test ensures
 // that scenario is rejected.
 func TestSetWithFallback_FailsWhenCredentialPathCannotBeRemoved(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
@@ -330,7 +331,7 @@ func TestGetWithFallback_LegacyFilePlusKeychain_ReturnsKeychainToken(t *testing.
 	}
 
 	// Write legacy unversioned token A to the file.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	if err := safepath.WriteFile(home, filePath, []byte("legacy-token-A")); err != nil {
@@ -366,7 +367,7 @@ func TestGetWithFallback_VersionedFilePlusKeychain_ReturnsFileVersion(t *testing
 	}
 
 	// Write versioned token A to the file.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	if err := safepath.WriteFile(home, filePath, []byte("juggernaut-credential-v1\nversioned-token-A")); err != nil {
@@ -396,7 +397,7 @@ func TestGetWithFallback_LegacyFilePlusEmptyKeychain_ReturnsLegacyFile(t *testin
 	}
 
 	// Write legacy unversioned token to the file.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 	if err := safepath.WriteFile(home, filePath, []byte("legacy-token-A")); err != nil {
@@ -420,7 +421,7 @@ func TestSetWithFallback_KeychainSuccessRemovesFallback(t *testing.T) {
 	skipIfUnavailable(t, s)
 	defer func() { _ = s.Delete() }()
 
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
 
@@ -459,7 +460,7 @@ func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
 		t.Skip("Windows-only: requires 2560-byte keychain limit to force file fallback")
 	}
 
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 
@@ -501,7 +502,7 @@ func TestSetWithFallback_WritesVersionedCredential(t *testing.T) {
 // unavailable and other keychain tests skip.
 
 func TestDeleteWithFallback_RemovesFileNoBackend(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 
 	// Seed an authoritative versioned fallback file directly (no backend needed).
@@ -527,7 +528,7 @@ func TestDeleteWithFallback_RemovesFileNoBackend(t *testing.T) {
 }
 
 func TestGetWithFallback_VersionedFileNoBackend(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
@@ -547,7 +548,7 @@ func TestGetWithFallback_VersionedFileNoBackend(t *testing.T) {
 }
 
 func TestGetWithFallback_EmptyVersionedFile(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := testStore()
 
 	// Versioned envelope with an empty token body.

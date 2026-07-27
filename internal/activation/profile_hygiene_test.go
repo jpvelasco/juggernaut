@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestUninstallCLIBlocks_ScansMigrationTargets: multi-CLI uninstall must
 // remove blocks from historical paths that are not in ActiveTargets.
 func TestUninstallCLIBlocks_ScansMigrationTargets(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	active := filepath.Join(home, "active.ps1")
 	historical := filepath.Join(home, "historical.ps1")
 	block := blockFor(ShellPowerShell, "codex", codexBegin, codexEnd)
