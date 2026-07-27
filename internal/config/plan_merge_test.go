@@ -6,7 +6,7 @@ import (
 )
 
 // TestMergeConfigPlan_SetAndDelete verifies the generic plan merge preserves the
-// set-or-delete-by-zero-value semantics of the legacy MergeJuggernautBlock.
+// set-or-delete-by-zero-value semantics of the generic plan merge.
 func TestMergeConfigPlan_SetAndDelete(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := NewManager(path)

@@ -83,7 +83,7 @@ func TestReadWithUTF8BOM(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_RewritesUTF8BOM(t *testing.T) {
+func TestMergeConfigPlan_RewritesUTF8BOM(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	data := append([]byte{0xEF, 0xBB, 0xBF}, []byte(`{"userPref":"keep-me"}`)...)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -91,8 +91,8 @@ func TestMergeJuggernautBlock_RewritesUTF8BOM(t *testing.T) {
 	}
 
 	m := config.NewManager(path)
-	if err := m.MergeJuggernautBlock(map[string]any{"managedBy": "juggernaut"}, nil, nil); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(map[string]any{"juggernaut": map[string]any{"managedBy": "juggernaut"}}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	written, err := safepath.ReadFile(filepath.Dir(path), path)
@@ -115,23 +115,26 @@ func TestMergeJuggernautBlock_RewritesUTF8BOM(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock(t *testing.T) {
+func TestMergeConfigPlan_FullApply(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
 	existing := map[string]any{"userPref": "keep-me"}
 	_ = m.Write(existing)
 
-	block := map[string]any{"managedBy": "juggernaut"}
-	nativeEnv := map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"}
-	nativeKeys := map[string]any{
-		"effortLevel":           "xhigh",
-		"fallbackModel":         []string{"global.anthropic.claude-opus-4-8", "global.anthropic.claude-sonnet-4-6"},
+	plan := map[string]any{
+		"juggernaut":  map[string]any{"managedBy": "juggernaut"},
+		"env":         map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
+		"effortLevel": "xhigh",
+		"fallbackModel": []string{
+			"global.anthropic.claude-opus-4-8",
+			"global.anthropic.claude-sonnet-4-6",
+		},
 		"skipWebFetchPreflight": true,
 	}
 
-	if err := m.MergeJuggernautBlock(block, nativeEnv, nativeKeys); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(plan); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -156,18 +159,17 @@ func TestMergeJuggernautBlock(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_NativeKeys_BoolFalseDeletes(t *testing.T) {
+func TestMergeConfigPlan_BoolFalseDeletes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
 	_ = m.Write(map[string]any{"alwaysThinkingEnabled": true})
 
-	if err := m.MergeJuggernautBlock(
-		map[string]any{},
-		nil,
-		map[string]any{"alwaysThinkingEnabled": false},
-	); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":            map[string]any{},
+		"alwaysThinkingEnabled": false,
+	}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -176,18 +178,17 @@ func TestMergeJuggernautBlock_NativeKeys_BoolFalseDeletes(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_NativeKeys_EmptySliceDeletes(t *testing.T) {
+func TestMergeConfigPlan_EmptySliceDeletes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
 	_ = m.Write(map[string]any{"fallbackModel": []any{"global.anthropic.claude-opus-4-8"}})
 
-	if err := m.MergeJuggernautBlock(
-		map[string]any{},
-		nil,
-		map[string]any{"fallbackModel": []string{}},
-	); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":    map[string]any{},
+		"fallbackModel": []string{},
+	}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -196,15 +197,15 @@ func TestMergeJuggernautBlock_NativeKeys_EmptySliceDeletes(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_Permissions(t *testing.T) {
+func TestMergeConfigPlan_Permissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
-	nativeKeys := map[string]any{
+	if err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":  map[string]any{},
 		"permissions": map[string]any{"defaultMode": "auto"},
-	}
-	if err := m.MergeJuggernautBlock(map[string]any{}, nil, nativeKeys); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -217,15 +218,18 @@ func TestMergeJuggernautBlock_Permissions(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_NativeKeys_NilPermissionsRemovesDefaultMode(t *testing.T) {
+func TestMergeConfigPlan_NilPermissionsRemovesDefaultMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
 	// Only defaultMode — whole permissions key should be gone after nil.
 	_ = m.Write(map[string]any{"permissions": map[string]any{"defaultMode": "auto"}})
 
-	if err := m.MergeJuggernautBlock(map[string]any{}, nil, map[string]any{"permissions": nil}); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":  map[string]any{},
+		"permissions": nil,
+	}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -234,17 +238,20 @@ func TestMergeJuggernautBlock_NativeKeys_NilPermissionsRemovesDefaultMode(t *tes
 	}
 }
 
-func TestMergeJuggernautBlock_NativeKeys_UnknownTypeErrors(t *testing.T) {
+func TestMergeConfigPlan_UnknownTypeErrors(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
-	err := m.MergeJuggernautBlock(map[string]any{}, nil, map[string]any{"effortLevel": 42})
+	err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":  map[string]any{},
+		"effortLevel": 42,
+	})
 	if err == nil {
 		t.Error("expected error for unsupported native key type int")
 	}
 }
 
-func TestRemoveJuggernautBlock(t *testing.T) {
+func TestRemoveManagedKeys_FullRemoval(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
@@ -262,8 +269,11 @@ func TestRemoveJuggernautBlock(t *testing.T) {
 	}
 	_ = m.Write(data)
 
-	if err := m.RemoveJuggernautBlock(); err != nil {
-		t.Fatalf("RemoveJuggernautBlock() error: %v", err)
+	if err := m.RemoveManagedKeys([]string{
+		"env", "model", "modelOverrides", "fallbackModel",
+		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight",
+	}); err != nil {
+		t.Fatalf("RemoveManagedKeys() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -291,11 +301,11 @@ func TestMergePermissions_PreservesUserRules(t *testing.T) {
 	})
 
 	// Apply sets defaultMode=auto — should NOT wipe allow/deny.
-	nativeKeys := map[string]any{
+	if err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":  map[string]any{},
 		"permissions": map[string]any{"defaultMode": "auto"},
-	}
-	if err := m.MergeJuggernautBlock(map[string]any{}, nil, nativeKeys); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -314,7 +324,7 @@ func TestMergePermissions_PreservesUserRules(t *testing.T) {
 	}
 }
 
-func TestRemoveJuggernautBlock_PreservesUserPermissionRules(t *testing.T) {
+func TestRemoveManagedKeys_PreservesUserPermissionRules(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
@@ -326,8 +336,8 @@ func TestRemoveJuggernautBlock_PreservesUserPermissionRules(t *testing.T) {
 		},
 	})
 
-	if err := m.RemoveJuggernautBlock(); err != nil {
-		t.Fatalf("RemoveJuggernautBlock() error: %v", err)
+	if err := m.RemoveManagedKeys([]string{"permissions"}); err != nil {
+		t.Fatalf("RemoveManagedKeys() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -343,11 +353,11 @@ func TestRemoveJuggernautBlock_PreservesUserPermissionRules(t *testing.T) {
 	}
 }
 
-func TestHasJuggernautBlock(t *testing.T) {
+func TestHasManagedKeys_DetectsBlock(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
-	has, _ := m.HasJuggernautBlock()
+	has, _ := m.HasManagedKeys([]string{"model"})
 	if has {
 		t.Error("should not have block on empty file")
 	}
@@ -358,9 +368,9 @@ func TestHasJuggernautBlock(t *testing.T) {
 		},
 	})
 
-	has, err := m.HasJuggernautBlock()
+	has, err := m.HasManagedKeys([]string{"model"})
 	if err != nil {
-		t.Fatalf("HasJuggernautBlock() error: %v", err)
+		t.Fatalf("HasManagedKeys() error: %v", err)
 	}
 	if !has {
 		t.Error("should have block after writing")
@@ -385,20 +395,18 @@ func TestBackupRotation(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_PopulatedMapAndAnySlice(t *testing.T) {
+func TestMergeConfigPlan_PopulatedMapAndAnySlice(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 
-	// map[string]any (permissions populated) and []any native values exercise
-	// the populated-map and []any branches of the merge switch.
-	block := map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}}
-	nativeKeys := map[string]any{
+	plan := map[string]any{
+		"juggernaut":     map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}},
 		"permissions":    map[string]any{"defaultMode": "auto"},
 		"modelOverrides": map[string]any{"sonnet": "model-x"},
 		"fallbackModel":  []any{"a", "b"},
 	}
-	if err := m.MergeJuggernautBlock(block, nil, nativeKeys); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(plan); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 
 	got, _ := m.Read()
@@ -416,18 +424,16 @@ func TestMergeJuggernautBlock_PopulatedMapAndAnySlice(t *testing.T) {
 	}
 }
 
-func TestMergeJuggernautBlock_EmptyMapDeletes(t *testing.T) {
+func TestMergeConfigPlan_EmptyMapDeletes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	m := config.NewManager(path)
 	_ = m.Write(map[string]any{"modelOverrides": map[string]any{"sonnet": "old"}})
 
-	// An empty map[string]any value deletes the key.
-	if err := m.MergeJuggernautBlock(
-		map[string]any{},
-		nil,
-		map[string]any{"modelOverrides": map[string]any{}},
-	); err != nil {
-		t.Fatalf("MergeJuggernautBlock() error: %v", err)
+	if err := m.MergeConfigPlan(map[string]any{
+		"juggernaut":     map[string]any{},
+		"modelOverrides": map[string]any{},
+	}); err != nil {
+		t.Fatalf("MergeConfigPlan() error: %v", err)
 	}
 	got, _ := m.Read()
 	if _, ok := got["modelOverrides"]; ok {
@@ -436,7 +442,6 @@ func TestMergeJuggernautBlock_EmptyMapDeletes(t *testing.T) {
 }
 
 func TestWrite_CreatesNestedDir(t *testing.T) {
-	// Write must create the settings directory if it does not exist.
 	path := filepath.Join(t.TempDir(), "nested", "deeper", "settings.json")
 	m := config.NewManager(path)
 	if err := m.Write(map[string]any{"k": "v"}); err != nil {

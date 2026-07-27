@@ -112,47 +112,10 @@ func (m *Manager) Write(data map[string]any) error {
 	return nil
 }
 
-// nativeManagedKeys lists every top-level settings.json key Juggernaut fully owns
-// (replaced on apply, removed on uninstall). The "permissions" key is handled
-// specially — only the "defaultMode" sub-key is managed so user-defined
-// allow/deny rules are preserved.
-var nativeManagedKeys = []string{
-	"env",
-	"model",
-	"modelOverrides",
-	"fallbackModel",
-	"effortLevel",
-	"alwaysThinkingEnabled",
-	"skipWebFetchPreflight",
-}
-
-// MergeJuggernautBlock merges the juggernaut block and native top-level keys into
-// existing settings. nativeKeys carries all non-env top-level values Juggernaut
-// manages. Keys with zero/nil values are deleted from the file.
-//
-// The "permissions" key is deep-merged: only permissions.defaultMode is set or
-// removed; other user-defined permission rules (allow, deny, ask) are preserved.
-func (m *Manager) MergeJuggernautBlock(block map[string]any, nativeEnv map[string]string, nativeKeys map[string]any) error {
-	existing, err := m.Read()
-	if err != nil {
-		return err
-	}
-	existing["juggernaut"] = block
-	if len(nativeEnv) > 0 {
-		existing["env"] = nativeEnv
-	}
-	for k, v := range nativeKeys {
-		if err := applyManagedKey(existing, k, v); err != nil {
-			return err
-		}
-	}
-	return m.Write(existing)
-}
-
 // applyManagedKey sets or deletes one managed top-level key using the shared
 // set-or-delete-by-zero-value semantics. "permissions" is deep-merged (only
 // defaultMode is managed). This is the single source of truth for how a managed
-// key is applied, shared by MergeJuggernautBlock and MergeConfigPlan.
+// key is applied, shared by MergeConfigPlanDeep.
 func applyManagedKey(existing map[string]any, k string, v any) error {
 	if k == "permissions" {
 		mergePermissions(existing, v)
@@ -203,9 +166,9 @@ func isSupportedType(v any) bool {
 }
 
 // MergeConfigPlan merges a provider's ConfigPlan.Keys into the existing config
-// using the same set-or-delete semantics as MergeJuggernautBlock. The
+// using set-or-delete-by-zero-value semantics. The
 // "juggernaut" key (if present) is always set. This is the generic,
-// provider-driven entry point that supersedes MergeJuggernautBlock's fixed shape.
+// provider-driven entry point for merging config.
 func (m *Manager) MergeConfigPlan(keys map[string]any) error {
 	return m.MergeConfigPlanDeep(keys, nil)
 }
@@ -323,17 +286,10 @@ func mergePermissions(existing map[string]any, v any) {
 	existing["permissions"] = perms
 }
 
-// RemoveJuggernautBlock strips Claude's Juggernaut-managed keys from
-// settings.json. For "permissions", only the defaultMode sub-key is removed so
-// user-defined allow/deny rules are preserved.
-func (m *Manager) RemoveJuggernautBlock() error {
-	return m.RemoveManagedKeys(nativeManagedKeys)
-}
-
 // RemoveManagedKeys removes the juggernaut block plus the given top-level
 // managed keys, preserving user content. "permissions" is handled specially
 // (only defaultMode is stripped). This is the generic, provider-driven form of
-// RemoveJuggernautBlock.
+// RemoveManagedKeysDeep.
 func (m *Manager) RemoveManagedKeys(keys []string) error {
 	return m.RemoveManagedKeysDeep(keys, nil)
 }
@@ -431,8 +387,8 @@ func removeNestedKey(tbl map[string]any, parts []string, prefix string, path str
 }
 
 // HasManagedKeys reports whether the config contains the juggernaut block or any
-// of the given managed top-level keys. Unlike HasJuggernautBlock it does not
-// require the Claude-specific juggernaut.meta.managedBy marker, so it correctly
+// of the given managed top-level keys. It does not require the
+// Claude-specific juggernaut.meta.managedBy marker, so it correctly
 // detects CLIs (e.g. Codex TOML) whose config carries only native keys.
 func (m *Manager) HasManagedKeys(keys []string) (bool, error) {
 	data, err := m.Read()
@@ -448,16 +404,6 @@ func (m *Manager) HasManagedKeys(keys []string) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-// HasJuggernautBlock returns true if settings.json contains a managed Juggernaut block.
-func (m *Manager) HasJuggernautBlock() (bool, error) {
-	data, err := m.Read()
-	if err != nil {
-		return false, err
-	}
-	_, ok := ParseJuggernautBlock(data)
-	return ok, nil
 }
 
 func (m *Manager) rotateBackup() error {

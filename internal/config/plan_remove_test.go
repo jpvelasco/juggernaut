@@ -39,9 +39,10 @@ func TestRemoveManagedKeys(t *testing.T) {
 	}
 }
 
-// TestRemoveManagedKeys_MatchesLegacyForClaude: removing Claude's managed key set
-// yields the same result as the legacy RemoveJuggernautBlock.
-func TestRemoveManagedKeys_MatchesLegacyForClaude(t *testing.T) {
+// TestRemoveManagedKeys_ClaudeManagedKeySet verifies that removing Claude's
+// managed key set (the same keys that the legacy RemoveJuggernautBlock would
+// have removed) produces the expected result.
+func TestRemoveManagedKeys_ClaudeManagedKeySet(t *testing.T) {
 	seed := map[string]any{
 		"juggernaut":            map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}},
 		"env":                   map[string]any{"AWS_REGION": "us-west-2"},
@@ -52,25 +53,39 @@ func TestRemoveManagedKeys_MatchesLegacyForClaude(t *testing.T) {
 		"userKept":              "yes",
 	}
 
-	legacyPath := filepath.Join(t.TempDir(), "a.json")
-	lm := NewManager(legacyPath)
-	_ = lm.Write(cloneMap(seed))
-	_ = lm.RemoveJuggernautBlock()
-	legacyGot, _ := lm.Read()
+	path := filepath.Join(t.TempDir(), "settings.json")
+	m := NewManager(path)
+	_ = m.Write(cloneMap(seed))
+	_ = m.RemoveManagedKeys([]string{
+		"env", "model", "modelOverrides", "fallbackModel",
+		"effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight",
+	})
+	got, _ := m.Read()
 
-	newPath := filepath.Join(t.TempDir(), "b.json")
-	nm := NewManager(newPath)
-	_ = nm.Write(cloneMap(seed))
-	_ = nm.RemoveManagedKeys(nativeManagedKeys)
-	newGot, _ := nm.Read()
-
-	if len(legacyGot) != len(newGot) {
-		t.Fatalf("key count differs: legacy=%v new=%v", legacyGot, newGot)
+	// Managed keys removed.
+	if _, ok := got["juggernaut"]; ok {
+		t.Error("juggernaut block should be removed")
 	}
-	for k := range legacyGot {
-		if _, ok := newGot[k]; !ok {
-			t.Errorf("legacy kept %q, new dropped it", k)
-		}
+	if _, ok := got["model"]; ok {
+		t.Error("model should be removed")
+	}
+	if _, ok := got["effortLevel"]; ok {
+		t.Error("effortLevel should be removed")
+	}
+	if _, ok := got["skipWebFetchPreflight"]; ok {
+		t.Error("skipWebFetchPreflight should be removed")
+	}
+	// User keys preserved.
+	if got["userKept"] != "yes" {
+		t.Error("user key must be preserved")
+	}
+	// Permissions: defaultMode stripped, user rules preserved.
+	perms, _ := got["permissions"].(map[string]any)
+	if perms == nil {
+		t.Fatal("permissions dropped entirely; user allow rule lost")
+	}
+	if _, ok := perms["defaultMode"]; ok {
+		t.Error("defaultMode should be stripped")
 	}
 }
 

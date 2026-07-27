@@ -27,8 +27,7 @@ func (c claude) SupportsModel(model CatalogModel) ModelSupport {
 func (c claude) CatalogSources() []string { return []string{"foundation", "profile"} }
 
 // claude is the Claude Code provider. Every value here is transcribed from the
-// pre-abstraction sources so behavior is byte-identical: NativeManagedKeys from
-// internal/config/manager.go's nativeManagedKeys slice, the markers and binary
+// pre-abstraction sources so behavior is byte-identical: the markers and binary
 // names from internal/activation/activation.go, and the Bedrock env var
 // (CLAUDE_CODE_USE_BEDROCK=1) from the literal set inside activation.Launch.
 // The provider_test.go pins guard against drift.
