@@ -12,13 +12,13 @@ import (
 )
 
 // =============================================================================
-// RemoveJuggernautBlock
+// RemoveManagedKeys
 // =============================================================================
 
-// TestRemoveJuggernautBlock_ConfigWithBlock verifies the primary path: a config
-// with a juggernaut block plus all managed keys has them stripped, while user
+// TestRemoveManagedKeys_ConfigWithBlock verifies the primary path: a config
+// with a juggernaut block plus managed keys has them stripped, while user
 // keys and user-defined permission rules survive.
-func TestRemoveJuggernautBlock_ConfigWithBlock(t *testing.T) {
+func TestRemoveManagedKeys_ConfigWithBlock(t *testing.T) {
 	dir := t.TempDir()
 	path, err := safepath.JoinUnder(dir, "settings.json")
 	if err != nil {
@@ -43,8 +43,10 @@ func TestRemoveJuggernautBlock_ConfigWithBlock(t *testing.T) {
 		t.Fatalf("Write seed: %v", err)
 	}
 
-	if err := m.RemoveJuggernautBlock(); err != nil {
-		t.Fatalf("RemoveJuggernautBlock: %v", err)
+	if err := m.RemoveManagedKeys([]string{
+		"env", "model", "effortLevel", "alwaysThinkingEnabled", "skipWebFetchPreflight",
+	}); err != nil {
+		t.Fatalf("RemoveManagedKeys: %v", err)
 	}
 
 	got, err := m.Read()
@@ -76,11 +78,11 @@ func TestRemoveJuggernautBlock_ConfigWithBlock(t *testing.T) {
 	}
 }
 
-// TestRemoveJuggernautBlock_NoConfigFile verifies the no-op path: removing from
-// a config that doesn't exist yet. RemoveJuggernautBlock calls withConfig which
+// TestRemoveManagedKeys_NoConfigFile verifies the no-op path: removing from
+// a config that doesn't exist yet. RemoveManagedKeys calls withConfig which
 // calls Read; Read returns an empty map for missing files, so the delete calls
 // are no-ops and Write creates an empty file.
-func TestRemoveJuggernautBlock_NoConfigFile(t *testing.T) {
+func TestRemoveManagedKeys_NoConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	path, err := safepath.JoinUnder(dir, "settings.json")
 	if err != nil {
@@ -94,8 +96,8 @@ func TestRemoveJuggernautBlock_NoConfigFile(t *testing.T) {
 	}
 
 	// Removing from a non-existent config should not error.
-	if err := m.RemoveJuggernautBlock(); err != nil {
-		t.Fatalf("RemoveJuggernautBlock on missing file: %v", err)
+	if err := m.RemoveManagedKeys([]string{"model", "env"}); err != nil {
+		t.Fatalf("RemoveManagedKeys on missing file: %v", err)
 	}
 
 	// The file may have been created (Write creates the file). Read should
@@ -109,9 +111,9 @@ func TestRemoveJuggernautBlock_NoConfigFile(t *testing.T) {
 	}
 }
 
-// TestRemoveJuggernautBlock_NoManagedKeys verifies the no-op path: a config
+// TestRemoveManagedKeys_NoManagedKeys verifies the no-op path: a config
 // that exists but has no managed keys. All the delete calls are no-ops.
-func TestRemoveJuggernautBlock_NoManagedKeys(t *testing.T) {
+func TestRemoveManagedKeys_NoManagedKeys(t *testing.T) {
 	dir := t.TempDir()
 	path, err := safepath.JoinUnder(dir, "settings.json")
 	if err != nil {
@@ -123,8 +125,8 @@ func TestRemoveJuggernautBlock_NoManagedKeys(t *testing.T) {
 		t.Fatalf("Write seed: %v", err)
 	}
 
-	if err := m.RemoveJuggernautBlock(); err != nil {
-		t.Fatalf("RemoveJuggernautBlock: %v", err)
+	if err := m.RemoveManagedKeys([]string{"model", "env"}); err != nil {
+		t.Fatalf("RemoveManagedKeys: %v", err)
 	}
 
 	got, err := m.Read()
