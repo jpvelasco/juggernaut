@@ -290,7 +290,7 @@ func TestDetectForeignCollisions_EmptyFile(t *testing.T) {
 	home := t.TempDir()
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Empty file — no collisions.
@@ -312,7 +312,7 @@ func TestDetectForeignCollisions_ForeignEnvKey(t *testing.T) {
 	home := t.TempDir()
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A config that Juggernaut does NOT own (no juggernaut block) but has an env key.
@@ -345,7 +345,7 @@ func TestDetectForeignCollisions_OwnedConfig_NoCollisions(t *testing.T) {
 	home := t.TempDir()
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A config that Juggernaut owns — re-apply, so no collision check.
@@ -372,7 +372,7 @@ func TestDetectForeignCollisions_ForeignPermissionKey(t *testing.T) {
 	home := t.TempDir()
 	prov, _ := provider.Get("claude")
 	path, _ := prov.ConfigPath(home, "user")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A config without juggernaut block but with permissions.defaultMode set by someone else.
@@ -713,7 +713,7 @@ func TestReportLegacyRecovery_WithActions(t *testing.T) {
 	// prints them.
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Write a shim file matching the v4.2.6 launcher artifact pattern.
@@ -783,7 +783,7 @@ func TestCommitApply_CollisionRefusal(t *testing.T) {
 	// Write a settings.json that Juggernaut does NOT own but has env keys
 	// that collide with what commitApply is about to write.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	foreignConfig := `{"env":{"AWS_REGION":"eu-west-1","CUSTOM_VAR":"keep-me"}}`
@@ -975,7 +975,7 @@ func TestPrintApplyDryRun_CollisionsNoForce(t *testing.T) {
 
 	// Write a foreign config with colliding env keys.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	foreignConfig := `{"env":{"AWS_REGION":"eu-west-1"}}`
@@ -1294,7 +1294,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
 
 	// Pre-write a settings.json that Juggernaut owns (has juggernaut block).
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	ownedConfig := `{
@@ -1374,7 +1374,7 @@ func TestResolveApplyInputs_OwnedConfigPreservesPermissionModeSources(t *testing
 			home := setupApplyTest(t)
 
 			settingsPath := filepath.Join(home, ".claude", "settings.json")
-			if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+			if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 				t.Fatalf("mkdir: %v", err)
 			}
 			if err := os.WriteFile(settingsPath, []byte(tt.ownedJSON), 0o600); err != nil {
@@ -1495,7 +1495,7 @@ func TestReportLegacyRecovery_ErrorPath(t *testing.T) {
 	// Create a bin dir that exists but has no read permissions.
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Make the directory unreadable so RecoverLegacyArtifacts errors.
@@ -1733,7 +1733,7 @@ func TestWithStdin_Empty(t *testing.T) {
 func TestReadJuggernautPermissionMode(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1754,7 +1754,7 @@ func TestReadJuggernautPermissionMode(t *testing.T) {
 func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1775,7 +1775,7 @@ func TestReadJuggernautPermissionMode_Empty(t *testing.T) {
 func TestReadNativeEnvValue(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1796,7 +1796,7 @@ func TestReadNativeEnvValue(t *testing.T) {
 func TestReadNativeEnvValue_Missing(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{"env": {"AWS_REGION": "us-east-1"}}`
@@ -1812,7 +1812,7 @@ func TestReadNativeEnvValue_Missing(t *testing.T) {
 func TestSetNativeDefaultMode(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	configData := `{
@@ -1842,7 +1842,7 @@ func TestSetNativeDefaultMode(t *testing.T) {
 func TestSetNativeDefaultMode_NoExistingPermissions(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Config with no permissions block at all.
@@ -1956,7 +1956,7 @@ func TestReportLegacyRecovery_BackupRestore(t *testing.T) {
 
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -2002,7 +2002,7 @@ func TestReportLegacyRecovery_LegacyLauncherRemoved(t *testing.T) {
 	// artifacts are found — covering the empty-for-loop path.
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -2100,7 +2100,7 @@ func TestCommitApply_ForceBypassesCollision(t *testing.T) {
 
 	// Write a foreign config with colliding env keys.
 	settingsPath, _ := safepath.JoinUnder(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	foreignConfig := `{"env":{"AWS_REGION":"eu-west-1"}}`
@@ -2205,7 +2205,7 @@ func TestInstallActivation_ErrorPath(t *testing.T) {
 	// Create a .bashrc as a directory instead of a file — this causes
 	// InstallTargetFor to fail when it tries to read/write it.
 	bashrcPath := filepath.Join(home, ".bashrc")
-	if err := os.MkdirAll(bashrcPath, 0o700); err != nil {
+	if err := os.MkdirAll(bashrcPath, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -2261,7 +2261,7 @@ func TestDetectForeignCollisions_ReadError(t *testing.T) {
 	path, _ := prov.ConfigPath(home, "user")
 
 	// Create a file that can't be read (directory instead of file).
-	if err := os.MkdirAll(path, 0o700); err != nil {
+	if err := os.MkdirAll(path, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -2362,7 +2362,7 @@ func TestReadSettingsJSON_FileNotFound(t *testing.T) {
 func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Config with no juggernaut block — readJuggernautAuthMode calls t.Fatal.
@@ -2392,7 +2392,7 @@ func TestReadJuggernautAuthMode_NoJuggernautBlock(t *testing.T) {
 func TestReadJuggernautPermissionMode_NoMetaBlock(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// Config with juggernaut block but no meta — readJuggernautPermissionMode
@@ -2510,7 +2510,7 @@ func TestWithStdin_MultiLine(t *testing.T) {
 func TestReadNativeDefaultMode_EmptyStringValue(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// permissions.defaultMode is an empty string — the helper returns "".
@@ -2531,7 +2531,7 @@ func TestReadNativeDefaultMode_EmptyStringValue(t *testing.T) {
 func TestReadNativeEnvValue_NonStringValue(t *testing.T) {
 	home := t.TempDir()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	// env key has a numeric value — type assertion to string fails, returns "".
@@ -2556,7 +2556,7 @@ func TestReportLegacyRecovery_MultipleActions(t *testing.T) {
 
 	home := t.TempDir()
 	binDir := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -2602,7 +2602,7 @@ func TestDetectForeignCollisions_TOMLForeignConfig(t *testing.T) {
 [model]
 default = "openai"
 `
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(configData), 0o600); err != nil {
