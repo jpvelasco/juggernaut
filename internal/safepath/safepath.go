@@ -25,12 +25,20 @@ func JoinUnder(base string, elems ...string) (string, error) {
 	return withinBase(base, target)
 }
 
-func withinBase(base, target string) (string, error) {
+// IsUnderBase reports whether target is contained under base after cleaning.
+// Both paths are cleaned before comparison.
+func IsUnderBase(base, target string) bool {
+	base = filepath.Clean(base)
+	target = filepath.Clean(target)
 	rel, err := filepath.Rel(base, target)
 	if err != nil {
-		return "", fmt.Errorf("resolving path under %q: %w", base, err)
+		return false
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func withinBase(base, target string) (string, error) {
+	if !IsUnderBase(base, target) {
 		return "", fmt.Errorf("path %q escapes base %q", target, base)
 	}
 	return target, nil
