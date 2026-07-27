@@ -111,6 +111,7 @@ func TestSetWithFallback_FallsBackToFile(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
+	skipIfUnavailable(t, s)
 
 	// Use a token longer than the Windows keychain limit (2560 bytes) to
 	// force the file fallback path on Windows. On non-Windows the keychain
