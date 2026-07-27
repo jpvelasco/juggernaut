@@ -78,7 +78,7 @@ func (c claude) NativeManagedKeys() []string {
 // Claude logic is relocated here, not rewritten — the golden-output test guards
 // against drift.
 func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
-	block, err := schema.Build(cfg, toSchemaOptions(opts))
+	block, err := schema.Build(cfg, opts.SchemaOpts)
 	if err != nil {
 		return ConfigPlan{}, err
 	}
@@ -124,33 +124,5 @@ func (c claude) LaunchSpec() LaunchSpec {
 		// The launcher decides via needsBearerToken(authModes). Forcing true here
 		// would break every Claude+IAM launch with "API key not found".
 		NeedsToken: false,
-	}
-}
-
-// toSchemaOptions maps the CLI-neutral provider.Options onto Claude's
-// schema.Options. This mapping is the ONLY place the provider package couples to
-// schema, keeping the coupling isolated to claude.go.
-func toSchemaOptions(o Options) schema.Options {
-	return schema.Options{
-		AuthMode:               o.AuthMode,
-		Region:                 o.Region,
-		Effort:                 o.Effort,
-		Scope:                  o.Scope,
-		Version:                o.Version,
-		OpusModel:              o.OpusModel,
-		SonnetModel:            o.SonnetModel,
-		HaikuModel:             o.HaikuModel,
-		FableModel:             o.FableModel,
-		Opusplan:               o.Opusplan,
-		FallbackModels:         o.FallbackModels,
-		AvailableModels:        o.AvailableModels,
-		EnforceAvailableModels: o.EnforceAvailableModels,
-		Use1M:                  o.Use1M,
-		UseMantle:              o.UseMantle,
-		MantleURL:              o.MantleURL,
-		AuthValidated:          o.AuthValidated,
-		PermissionMode:         o.PermissionMode,
-		AlwaysThinking:         o.AlwaysThinking,
-		ServiceTier:            o.ServiceTier,
 	}
 }

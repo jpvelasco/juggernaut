@@ -86,7 +86,9 @@ func TestPrintApplyDryRun_NonClaudeProvider(t *testing.T) {
 		Region:   "us-west-2",
 		Scope:    "user",
 		Version:  "5.4.0",
-		Effort:   "high",
+		SchemaOpts: schema.Options{
+			Effort: "high",
+		},
 	}
 	block := &schema.Block{}
 

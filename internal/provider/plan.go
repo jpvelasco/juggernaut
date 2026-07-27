@@ -3,6 +3,8 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 // ToMap serializes any value to a generic map via JSON round-trip.
@@ -23,38 +25,29 @@ func ToMap(v any) (map[string]any, error) {
 
 // Options are the apply-time inputs a Provider turns into a ConfigPlan. It is a
 // neutral, CLI-agnostic struct: cmd/ populates it, and each provider maps it to
-// its own config shape internally (claude.go maps it to schema.Options; codex.go
-// selects a per-model Mantle block). Kept separate from schema.Options so the
-// provider package stays decoupled from Claude's schema — the mapping lives only
-// in claude.go.
+// its own config shape internally (claude.go passes SchemaOpts through to
+// schema.Build; codex/grok/opencode use the flat fields below).
 type Options struct {
-	AuthMode string
-	Region   string
+	// SchemaOpts carries the original schema.Options for the Claude provider.
+	// The Claude provider passes this directly to schema.Build, avoiding a
+	// field-by-field round-trip. Non-Claude providers ignore this field.
+	SchemaOpts schema.Options
+	// Region is the resolved AWS region. Shared by all providers.
+	Region string
 	// RegionExplicit is true when the user passed --region, false when Region was
 	// filled from the global default. Mantle providers use this to decide whether
 	// they may auto-switch a model to a region that actually serves it (default)
 	// or must honor the user's explicit choice (and only warn).
-	RegionExplicit         bool
-	Effort                 string
-	Scope                  string
-	Version                string
-	Model                  string // friendly model key or override (provider-interpreted)
-	OpusModel              string
-	SonnetModel            string
-	HaikuModel             string
-	FableModel             string
-	Opusplan               bool
-	FallbackModels         []string
-	AvailableModels        []string
-	EnforceAvailableModels bool
-	Use1M                  bool
-	UseMantle              bool
-	MantleURL              string
-	AuthValidated          bool
-	PermissionMode         string
-	AlwaysThinking         bool
-	ServiceTier            string
-	Route                  string // "mantle" (default) or "native"
+	RegionExplicit bool
+	// AuthMode is the auth mode (iam or bedrock-api-key). Used by non-Claude
+	// providers. Claude reads it from SchemaOpts.
+	AuthMode string
+	// Scope is user or project scope. Used by non-Claude providers.
+	Scope string
+	// Version is the Juggernaut version string. Used by non-Claude providers.
+	Version string
+	Model   string // friendly model key or override (provider-interpreted)
+	Route   string // "mantle" (default) or "native"
 	// ModelCatalog is the cached or freshly discovered account/region inventory.
 	// Providers decide which entries their client protocol can actually use.
 	ModelCatalog []CatalogModel
@@ -64,6 +57,19 @@ type Options struct {
 	// which is distinct from "never refreshed" and still counts as proof that
 	// the model is unavailable.
 	RefreshedSources []string
+}
+
+// FromSchemaOptions stores schema.Options directly so the Claude provider can
+// pass it to schema.Build without a field-by-field round-trip. It also populates
+// the flat fields (Region, AuthMode, Scope, Version) that non-Claude providers
+// read. The remaining fields (RegionExplicit, Model, Route, ModelCatalog,
+// RefreshedSources) are the caller's responsibility.
+func (o *Options) FromSchemaOptions(s schema.Options) {
+	o.SchemaOpts = s
+	o.Region = s.Region
+	o.AuthMode = s.AuthMode
+	o.Scope = s.Scope
+	o.Version = s.Version
 }
 
 // CatalogModel is the SDK-independent model fact passed from discovery into a
