@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
 // pathKey normalizes a path for set membership. On Windows, comparison is
@@ -66,11 +68,8 @@ func validateAndCanonicalizePath(p, baseDir string) string {
 	if p == "." {
 		return ""
 	}
-	if baseDir != "" {
-		rel, err := filepath.Rel(baseDir, p)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return ""
-		}
+	if baseDir != "" && !safepath.IsUnderBase(baseDir, p) {
+		return ""
 	}
 	return p
 }

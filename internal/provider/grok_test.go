@@ -30,7 +30,7 @@ func TestGrok_ConfigFormatIsTOML(t *testing.T) {
 // scopes resolve to the user config.
 func TestGrok_ConfigPath(t *testing.T) {
 	p, _ := Get("grok")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	for _, scope := range []string{"user", "project"} {
 		got, err := p.ConfigPath(home, scope)
 		if err != nil {

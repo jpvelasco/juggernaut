@@ -423,7 +423,7 @@ func TestDiscoverPowerShellProfiles_NoExecutable_DiscoveryFailure(t *testing.T) 
 }
 
 func TestParseDiscoveryOutput_Valid(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "redirected", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	output := makePSOutput(allHosts, allHosts)
 
@@ -451,7 +451,7 @@ func TestParseDiscoveryOutput_EmptyPaths(t *testing.T) {
 }
 
 func TestParseDiscoveryOutput_BOM(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "profile.ps1")
 	output := makePSOutput(allHosts, allHosts)
 	output = append([]byte("\xef\xbb\xbf"), output...) // prepend UTF-8 BOM
@@ -584,7 +584,7 @@ func TestCheckPowerShellActivation_NoFalseWarning_DiscoveredPathMatchesHistorica
 }
 
 func TestValidateAndCanonicalizePath(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	docsDir := filepath.Join(home, "Documents")
 	validPath := filepath.Join(docsDir, "PowerShell", "profile.ps1")
 	validSpaces := filepath.Join(docsDir, "My PowerShell", "profile.ps1")
@@ -611,7 +611,7 @@ func TestValidateAndCanonicalizePath(t *testing.T) {
 }
 
 func TestDeduplicatePathsCI(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path1 := filepath.Join(home, "profile.ps1")
 	path2 := filepath.Join(home, "other.ps1")
 
@@ -940,7 +940,7 @@ func TestOneExecutableMissing(t *testing.T) {
 }
 
 func TestValidateAndCanonicalizePath_Unicode(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Paths with Unicode characters should work
 	p := validateAndCanonicalizePath(filepath.Join(home, "über", "profile.ps1"), "")
 	if p == "" {
@@ -949,7 +949,7 @@ func TestValidateAndCanonicalizePath_Unicode(t *testing.T) {
 }
 
 func TestValidateAndCanonicalizePath_Spaces(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	p := validateAndCanonicalizePath("  "+filepath.Join(home, "My Documents", "profile.ps1")+"  ", "")
 	if p == "" {
 		t.Error("path with spaces should be valid")
@@ -957,7 +957,7 @@ func TestValidateAndCanonicalizePath_Spaces(t *testing.T) {
 }
 
 func TestValidateAndCanonicalizePath_PathContainment(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	docsDir := filepath.Join(home, "Documents")
 
 	// Valid path under baseDir
@@ -1079,7 +1079,7 @@ func TestOneDriveRedirect_FullFlow(t *testing.T) {
 
 // Test that the mockCommandRunner respects the context timeout.
 func TestMockCommandRunner_WithTimeout(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, "profile.ps1")
 	runner := &mockCommandRunner{
 		output: map[string][]byte{

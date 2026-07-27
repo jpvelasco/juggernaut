@@ -155,12 +155,15 @@ func (r *ConnectivityResult) IsAuthFailure() bool {
 	return r.StatusCode == 401 || r.StatusCode == 403
 }
 
-// stripRegionPrefix removes the Bedrock inference profile region prefix
-// (us., eu., apac.) so the model ID is valid for direct API calls.
-// The global. prefix is preserved because global inference profiles
-// are valid for cross-region invocation.
+// stripRegionPrefix removes the Bedrock cross-region inference profile prefix so the
+// model ID is valid for direct API calls (InvokeModel). This mirrors
+// schema.StripRegionPrefix but must live here to avoid a circular import:
+// internal/schema imports internal/bedrock (for bedrock.Config in schema.Build),
+// so internal/bedrock cannot import internal/schema back. The prefix list below
+// is kept identical to schema.RegionalInferencePrefixes; if that list changes,
+// update this one too.
 func stripRegionPrefix(modelID string) string {
-	for _, prefix := range []string{"us.", "eu.", "apac."} {
+	for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
 		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
 			return rest
 		}

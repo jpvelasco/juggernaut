@@ -15,7 +15,7 @@ import (
 // it also wires a mock discovery runner.
 func setupActivationFixture(t *testing.T) (string, *ProfileResolverResult) {
 	t.Helper()
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	var psResult *ProfileResolverResult
 	if runtime.GOOS == "windows" {
@@ -122,7 +122,7 @@ func TestNoArgWrappers_RoundTrip(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no-arg wrappers resolve real PowerShell profiles on Windows")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	installed, err := Install(home)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestUninstallWith_NoBlocksIsNoop(t *testing.T) {
 }
 
 func TestRemoveTarget_MissingFileIsNoop(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	missing := filepath.Join(home, ".bashrc")
 
 	ok, err := RemoveTarget(missing)
@@ -174,7 +174,7 @@ func TestRemoveTarget_MissingFileIsNoop(t *testing.T) {
 }
 
 func TestRemoveTarget_RemovesBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, ".bashrc")
 	content := "export FOO=bar\n" + Block(ShellPOSIX) + "\nalias ll='ls -la'\n"
 	writeFile(t, home, path, content)

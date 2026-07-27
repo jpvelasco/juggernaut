@@ -76,6 +76,9 @@ type Provider interface {
 	// Supports reports whether the Provider handles a given optional capability,
 	// so cmd/ can gate CLI-specific flags without per-CLI branches.
 	Supports(Capability) bool
+
+	// DisplayName returns the human-facing CLI name for messages.
+	DisplayName() string
 }
 
 // CatalogProvider is an optional extension implemented by providers that can
@@ -121,25 +124,29 @@ func init() {
 			CapAutoMode, Cap1MContext, CapOpusplan, CapThinking,
 			CapServiceTiers, CapEffortLevels, CapNativeAuth,
 		},
+		catalogSources: []string{"foundation", "profile"},
 	}})
 	register(codex{BaseProvider: BaseProvider{
-		name:         "codex",
-		displayName:  "Codex",
-		configFormat: "toml",
-		binaryName:   "codex",
-		capabilities: []Capability{CapEffortLevels, CapNativeAuth},
+		name:           "codex",
+		displayName:    "Codex",
+		configFormat:   "toml",
+		binaryName:     "codex",
+		capabilities:   []Capability{CapEffortLevels, CapNativeAuth},
+		catalogSources: []string{"mantle"},
 	}})
 	register(opencode{BaseProvider: BaseProvider{
-		name:         "opencode",
-		displayName:  "OpenCode",
-		configFormat: "json",
-		binaryName:   "opencode",
+		name:           "opencode",
+		displayName:    "OpenCode",
+		configFormat:   "json",
+		binaryName:     "opencode",
+		catalogSources: []string{"mantle"},
 	}})
 	register(grok{BaseProvider: BaseProvider{
-		name:         "grok",
-		displayName:  "Grok",
-		configFormat: "toml",
-		binaryName:   "grok",
+		name:           "grok",
+		displayName:    "Grok",
+		configFormat:   "toml",
+		binaryName:     "grok",
+		catalogSources: []string{"mantle"},
 	}})
 }
 

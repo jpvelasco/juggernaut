@@ -164,7 +164,7 @@ func removeKeychainToken(home string) {
 
 func uninstallActivationFull(home string, prov provider.Provider) {
 	begin, end := prov.ActivationMarkers()
-	title := providerDisplayName(prov.Name())
+	title := prov.DisplayName()
 	if uninstallFlags.dryRun {
 		fmt.Printf("Would remove Juggernaut %s activation blocks from shell profiles\n", title)
 		if prov.Name() == "claude" {

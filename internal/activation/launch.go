@@ -96,7 +96,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	if wantToken {
 		token, err := opts.TokenGetter()
 		if err != nil {
-			return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
+			return fmt.Errorf("%s: %w", keychain.ErrReadingKeychainMsg, err)
 		}
 		if token == "" {
 			return fmt.Errorf("bedrock API key not found in keychain; run `juggernaut apply --auth=%s`", authmode.BedrockAPIKey)

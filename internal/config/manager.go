@@ -180,31 +180,19 @@ func (m *Manager) MergeConfigPlan(keys map[string]any) error {
 // a user's sibling entries survive. All other keys keep whole-value
 // set-or-delete semantics.
 func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) error {
-	deep := make(map[string]bool, len(deepKeys))
-	for _, k := range deepKeys {
-		deep[k] = true
-	}
 	return m.withConfig(func(existing map[string]any) error {
-		for k, v := range keys {
-			if err := m.mergeKey(existing, k, v, deep); err != nil {
-				return err
+		return walkManagedKeys(keys, deepKeys, func(key string, value any, action managedKeyAction) error {
+			switch action {
+			case actionJuggernaut:
+				existing[key] = value
+			case actionDeep:
+				return mergeNested(existing, key, value, m.path)
+			default:
+				return applyManagedKey(existing, key, value)
 			}
-		}
-		return nil
+			return nil
+		})
 	})
-}
-
-// mergeKey handles one key in a merge operation. "juggernaut" is always set
-// verbatim; keys in deepSet are deep-merged; all others use applyManagedKey.
-func (m *Manager) mergeKey(existing map[string]any, k string, v any, deepSet map[string]bool) error {
-	if k == "juggernaut" {
-		existing[k] = v // the managed block is always set verbatim
-		return nil
-	}
-	if deepSet[k] {
-		return mergeNested(existing, k, v, m.path)
-	}
-	return applyManagedKey(existing, k, v)
 }
 
 // mergeNested merges the sub-keys of a nested-table value into existing[k],
@@ -301,24 +289,22 @@ func (m *Manager) RemoveManagedKeys(keys []string) error {
 // dropped. All other keys are removed whole-value.
 func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][]string) error {
 	return m.withConfig(func(existing map[string]any) error {
+		// Always remove the juggernaut block — this is the uninstall entry point
+		// and the block must go regardless of whether the caller listed it.
 		delete(existing, "juggernaut")
-		for _, k := range keys {
-			if k == "permissions" {
+		return walkManagedKeysForRemoval(keys, ownedSubKeys, func(k string, action managedKeyAction) error {
+			switch action {
+			case actionJuggernaut:
+				// already removed above
+			case actionPermissions:
 				mergePermissions(existing, nil)
-				continue
+			case actionDeep:
+				return removeOwnedSubKeys(existing, k, ownedSubKeys[k], m.path)
+			default:
+				delete(existing, k)
 			}
-			if subs, deep := ownedSubKeys[k]; deep {
-				if err := removeOwnedSubKeys(existing, k, subs, m.path); err != nil {
-					return err
-				}
-				continue
-			}
-			delete(existing, k)
-		}
-		// Ensure the Juggernaut-managed permissions sub-key is stripped even if
-		// "permissions" was not in the key list (matches legacy behavior).
-		mergePermissions(existing, nil)
-		return nil
+			return nil
+		})
 	})
 }
 
@@ -357,34 +343,8 @@ func removeOwnedSubKeys(existing map[string]any, k string, subs []string, path s
 	return nil
 }
 
-// removeNestedKey walks a slice of path parts through nested maps and deletes
-// the leaf key. Empty parent maps are cleaned up on the way back so orphan
-// tables don't remain.
-func removeNestedKey(tbl map[string]any, parts []string, prefix string, path string) error {
-	if len(parts) == 1 {
-		delete(tbl, parts[0])
-		return nil
-	}
-	raw, present := tbl[parts[0]]
-	if !present {
-		return nil // sub-key doesn't exist — nothing to remove
-	}
-	child, ok := raw.(map[string]any)
-	if !ok {
-		return fmt.Errorf("cannot remove nested key %q in %s: expected a table at %s but found %T",
-			prefix, path, parts[0], raw)
-	}
-	if err := removeNestedKey(child, parts[1:], prefix, path); err != nil {
-		return err
-	}
-	// Clean up empty parent maps.
-	if len(child) == 0 {
-		delete(tbl, parts[0])
-	} else {
-		tbl[parts[0]] = child
-	}
-	return nil
-}
+// removeNestedKey is implemented in walker.go using the shared walkNestedMap helper.
+// The declaration there uses the same signature and behavior as the original.
 
 // HasManagedKeys reports whether the config contains the juggernaut block or any
 // of the given managed top-level keys. It does not require the

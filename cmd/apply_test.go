@@ -15,6 +15,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -647,7 +648,7 @@ func TestApply_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected --enforce-available-models without --available-models to error")
 	}
-	if !strings.Contains(err.Error(), "--enforce-available-models requires --available-models to be set to a non-empty list") {
+	if !strings.Contains(err.Error(), schema.ErrEnforceRequiresAvailable) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
@@ -1152,12 +1153,13 @@ func (s stubProvider) LaunchSpec() provider.LaunchSpec   { return provider.Launc
 func (s stubProvider) Supports(provider.Capability) bool { return false }
 func (s stubProvider) DeepMergeKeys() []string           { return nil }
 func (s stubProvider) OwnedSubKeys() map[string][]string { return nil }
+func (s stubProvider) DisplayName() string               { return "Stub" }
 
 // TestResolveApplyInputs_BadConfigFormat_Errors covers the FormatByName error
 // branch: a provider reporting an unknown config format surfaces an error rather
 // than silently proceeding.
 func TestResolveApplyInputs_BadConfigFormat_Errors(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
 	_, _, _, err := resolveApplyInputs(home, bCfg, stubProvider{formatName: "yaml"})
 	if err == nil {
@@ -1170,7 +1172,7 @@ func TestResolveApplyInputs_BadConfigFormat_Errors(t *testing.T) {
 
 // TestResolveApplyInputs_ConfigPathError_Propagates covers the ConfigPath error branch.
 func TestResolveApplyInputs_ConfigPathError_Propagates(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"}}
 	sentinel := fmt.Errorf("bad path")
 	_, _, _, err := resolveApplyInputs(home, bCfg, stubProvider{formatName: "json", pathErr: sentinel})
@@ -1190,7 +1192,7 @@ type dirPathProvider struct {
 func (d dirPathProvider) ConfigPath(string, string) (string, error) { return d.dir, nil }
 
 func TestResolveApplyInputs_ReadError_Propagates(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	dir := filepath.Join(home, "isadir")
 	if err := safepath.MkdirAll(dir); err != nil {
 		t.Fatalf("mkdir: %v", err)

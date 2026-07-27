@@ -110,6 +110,11 @@ var validServiceTiers = map[string]bool{
 	"default": true, "flex": true, "priority": true,
 }
 
+// ErrEnforceRequiresAvailable is returned when --enforce-available-models is
+// set without a non-empty --available-models list. Used by both schema.Build
+// and cmd/apply flag validation.
+const ErrEnforceRequiresAvailable = "--enforce-available-models requires --available-models to be set to a non-empty list"
+
 // Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
@@ -125,22 +130,14 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		return nil, fmt.Errorf("invalid service-tier %q — must be one of: default, flex, priority", opts.ServiceTier)
 	}
 
-	opus := opts.OpusModel
-	if opus == "" {
-		opus = cfg.Models.Opus
+	opus, sonnet, haiku, fable := resolveTierModels(cfg, opts)
+	if opts.UseMantle {
+		opus = mantleModelID(opus)
+		sonnet = mantleModelID(sonnet)
+		haiku = mantleModelID(haiku)
+		fable = mantleModelID(fable)
 	}
-	sonnet := opts.SonnetModel
-	if sonnet == "" {
-		sonnet = cfg.Models.Sonnet
-	}
-	haiku := opts.HaikuModel
-	if haiku == "" {
-		haiku = cfg.Models.Haiku
-	}
-	fable := opts.FableModel
-	if fable == "" {
-		fable = cfg.Models.Fable
-	}
+
 	fallbackModels, err := ValidateModelList(opts.FallbackModels, "fallback model chain")
 	if err != nil {
 		return nil, err
@@ -150,18 +147,76 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		return nil, err
 	}
 	if opts.EnforceAvailableModels && len(availableModels) == 0 {
-		return nil, fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
+		return nil, fmt.Errorf("%s", ErrEnforceRequiresAvailable)
 	}
 
-	// Mantle uses anthropic.* model IDs; Bedrock inference profile IDs are not
-	// valid Mantle targets. Strip profile prefixes only when Mantle is explicit.
-	if opts.UseMantle {
-		opus = mantleModelID(opus)
-		sonnet = mantleModelID(sonnet)
-		haiku = mantleModelID(haiku)
-		fable = mantleModelID(fable)
+	env := buildEnv(cfg, opts, opus, sonnet, haiku, fable)
+
+	var warnings []string
+	if IsFable5Model(fable) {
+		warnings = append(warnings, FableDataRetentionWarning)
 	}
 
+	return &Block{
+		Auth: Auth{
+			Mode:   opts.AuthMode,
+			Region: opts.Region,
+		},
+		Models: ModelOverrides{
+			Opus:     opus,
+			Sonnet:   sonnet,
+			Haiku:    haiku,
+			Fable:    fable,
+			Subagent: haiku,
+		},
+		Env: env,
+		Meta: Meta{
+			SchemaVersion:          SchemaVersion,
+			Version:                opts.Version,
+			ManagedBy:              "juggernaut",
+			Scope:                  opts.Scope,
+			AppliedAt:              time.Now().UTC().Format(time.RFC3339),
+			Opusplan:               opts.Opusplan,
+			Use1M:                  opts.Use1M,
+			UseMantle:              opts.UseMantle,
+			MantleURL:              opts.MantleURL,
+			Effort:                 opts.Effort,
+			FallbackModels:         fallbackModels,
+			AvailableModels:        availableModels,
+			EnforceAvailableModels: opts.EnforceAvailableModels,
+			PermissionMode:         opts.PermissionMode,
+			AlwaysThinking:         opts.AlwaysThinking,
+			ServiceTier:            opts.ServiceTier,
+		},
+		Warnings: warnings,
+	}, nil
+}
+
+// resolveTierModels fills in per-tier model IDs from the config defaults.
+func resolveTierModels(cfg *bedrock.Config, opts Options) (opus, sonnet, haiku, fable string) {
+	opus = opts.OpusModel
+	if opus == "" {
+		opus = cfg.Models.Opus
+	}
+	sonnet = opts.SonnetModel
+	if sonnet == "" {
+		sonnet = cfg.Models.Sonnet
+	}
+	haiku = opts.HaikuModel
+	if haiku == "" {
+		haiku = cfg.Models.Haiku
+	}
+	fable = opts.FableModel
+	if fable == "" {
+		fable = cfg.Models.Fable
+	}
+	return
+}
+
+// buildEnv constructs the environment map for the Juggernaut block.
+// The resolved tier models are passed in so Mantle normalization is applied
+// before env values are set.
+func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable string) map[string]string {
 	env := make(map[string]string, len(cfg.Environment))
 	maps.Copy(env, cfg.Environment)
 
@@ -208,54 +263,26 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		env["ANTHROPIC_BEDROCK_SERVICE_TIER"] = opts.ServiceTier
 	}
 
-	var warnings []string
-	if IsFable5Model(fable) {
-		warnings = append(warnings, FableDataRetentionWarning)
-	}
+	return env
+}
 
-	return &Block{
-		Auth: Auth{
-			Mode:   opts.AuthMode,
-			Region: opts.Region,
-		},
-		Models: ModelOverrides{
-			Opus:     opus,
-			Sonnet:   sonnet,
-			Haiku:    haiku,
-			Fable:    fable,
-			Subagent: haiku,
-		},
-		Env: env,
-		Meta: Meta{
-			SchemaVersion:          SchemaVersion,
-			Version:                opts.Version,
-			ManagedBy:              "juggernaut",
-			Scope:                  opts.Scope,
-			AppliedAt:              time.Now().UTC().Format(time.RFC3339),
-			Opusplan:               opts.Opusplan,
-			Use1M:                  opts.Use1M,
-			UseMantle:              opts.UseMantle,
-			MantleURL:              opts.MantleURL,
-			Effort:                 opts.Effort,
-			FallbackModels:         fallbackModels,
-			AvailableModels:        availableModels,
-			EnforceAvailableModels: opts.EnforceAvailableModels,
-			PermissionMode:         opts.PermissionMode,
-			AlwaysThinking:         opts.AlwaysThinking,
-			ServiceTier:            opts.ServiceTier,
-		},
-		Warnings: warnings,
-	}, nil
+// StripRegionPrefix removes a cross-region inference profile prefix from a
+// model ID, recovering the bare provider model identifier. This is the single
+// exported function for region-prefix stripping — callers in cmd, bedrock, and
+// schema all use it. Uses RegionalInferencePrefixes as the authoritative list.
+func StripRegionPrefix(modelID string) string {
+	for _, prefix := range RegionalInferencePrefixes {
+		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
+			return rest
+		}
+	}
+	return modelID
 }
 
 // normalizeModelID strips the [1m] context suffix and regional inference
 // prefixes from a model ID, recovering the bare provider model identifier.
 func normalizeModelID(modelID string) string {
-	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range RegionalInferencePrefixes {
-		normalized = strings.TrimPrefix(normalized, prefix)
-	}
-	return normalized
+	return StripRegionPrefix(strings.TrimSuffix(modelID, "[1m]"))
 }
 
 // autoModeCapablePrefixes lists model ID fragments that support auto
@@ -333,17 +360,12 @@ func (b *Block) AutoModeAvailable() bool {
 
 // RegionalInferencePrefixes are the Bedrock cross-region inference profile
 // prefixes stripped to recover the bare provider model ID. Keep this the single
-// source of truth so mantleModelID, supportsClaudeCode1M, and
-// IsAutoModeCapableModel all normalize identically. Exported for use by cmd/models.go's bareModelID.
+// source of truth so StripRegionPrefix, supportsClaudeCode1M, and
+// IsAutoModeCapableModel all normalize identically.
 var RegionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
 
 func mantleModelID(model string) string {
-	for _, prefix := range RegionalInferencePrefixes {
-		if rest, ok := strings.CutPrefix(model, prefix); ok {
-			return rest
-		}
-	}
-	return model
+	return StripRegionPrefix(model)
 }
 
 func claudeCodeContextModelID(model string, use1M bool) string {

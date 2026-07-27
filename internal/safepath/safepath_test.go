@@ -134,3 +134,46 @@ func TestHomeDirOrEmpty_NoErrorOnMissing(t *testing.T) {
 	// If UserHomeDir works, it returns the real home; if not, empty string — both acceptable
 	_ = got
 }
+
+func TestIsUnderBase_TableDriven(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		target string
+		want   bool
+	}{
+		{"same path", "/a/b", "/a/b", true},
+		{"child", "/a/b", "/a/b/c", true},
+		{"deep child", "/a/b", "/a/b/c/d/e", true},
+		{"escape one level", "/a/b", "/a/c", false},
+		{"escape parent", "/a/b", "/a", false},
+		{"escape root", "/a/b", "/", false},
+		{"dot cleans to base", "/a/b", "/a/b/.", true},
+		{"dotdot escape", "/a/b", "/a/b/../c", false},
+		{"unclean child", "/a/b", "/a/b/./c", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := safepath.IsUnderBase(tt.base, tt.target)
+			if got != tt.want {
+				t.Errorf("IsUnderBase(%q, %q) = %v, want %v", tt.base, tt.target, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsUnderBase_WithTempDir(t *testing.T) {
+	base := t.TempDir()
+	child := filepath.Join(base, "child")
+	outside := t.TempDir()
+
+	if !safepath.IsUnderBase(base, base) {
+		t.Error("base should be under itself")
+	}
+	if !safepath.IsUnderBase(base, child) {
+		t.Error("child should be under base")
+	}
+	if safepath.IsUnderBase(base, outside) {
+		t.Error("outside should not be under base")
+	}
+}

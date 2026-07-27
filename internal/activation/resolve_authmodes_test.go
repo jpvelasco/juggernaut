@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestResolveClaudeBinary_NotFound covers the fallthrough: no claude on PATH
@@ -152,7 +153,7 @@ func TestResolveBinaryFrom_SelfPaths(t *testing.T) {
 // block missing the managedBy marker, or with wrong-typed auth, contributes no
 // mode instead of erroring.
 func TestAuthModes_SkipsMalformedSettings(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Change into a scratch dir so the "./.claude/settings.json" probe is empty.
 	t.Chdir(t.TempDir())
 
@@ -175,7 +176,7 @@ func TestAuthModes_SkipsMalformedSettings(t *testing.T) {
 // TestAuthModes_ReadsManagedMode covers the happy path: a properly-managed
 // block contributes its auth mode.
 func TestAuthModes_ReadsManagedMode(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	t.Chdir(t.TempDir())
 
 	writeAuthSettings(t, home, `{

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestHasLegacyLauncherBlock(t *testing.T) {
@@ -75,7 +76,7 @@ func TestRemoveBlockWithMarkers_OrphanBeginUntouched(t *testing.T) {
 // TestRemoveTargetWithLegacy_RemovesLegacyBedrockBlock exercises the legacy
 // Bedrock-config removal path through the public RemoveTargetWithLegacy entry.
 func TestRemoveTargetWithLegacy_RemovesLegacyBedrockBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, ".bashrc")
 	content := "export KEEP=1\n" +
 		LegacyBedrockBegin + "\nexport CLAUDE_CODE_USE_BEDROCK=1\n" + LegacyBedrockEnd + "\n" +

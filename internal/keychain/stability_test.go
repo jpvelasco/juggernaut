@@ -9,6 +9,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestSetWithFallback_PreservesKeychainWhenFileWriteFails is the core guarantee
@@ -24,7 +25,7 @@ func TestSetWithFallback_PreservesKeychainWhenFileWriteFails(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("file-fallback path is Windows-only (no keychain size limit elsewhere)")
 	}
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-stability-preserve")
 	skipIfUnavailableStab(t, s)
 	t.Cleanup(func() { _ = s.DeleteWithFallback(home) })
@@ -90,7 +91,7 @@ func TestGet_FallsBackToLegacyV3Account(t *testing.T) {
 // file is removed. Either way the new token must round-trip via GetWithFallback
 // and no plaintext copy of it may remain on disk.
 func TestSetWithFallback_V1FileMigratesOnWrite(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-stability-migrate")
 	if runtime.GOOS != "windows" {
 		// macOS/Linux store the big token in the keychain — needs a backend.
@@ -149,6 +150,9 @@ func first25(b []byte) string {
 // in keychain_test.go in the same package; redeclared name avoided).
 func skipIfUnavailableStab(t *testing.T, s *keychain.Store) {
 	t.Helper()
+	if runtime.GOOS == "darwin" {
+		t.Skip("keychain security command hangs on macOS CI")
+	}
 	if err := s.Set("probe"); err != nil {
 		t.Skipf("keychain backend unavailable: %v", err)
 	}

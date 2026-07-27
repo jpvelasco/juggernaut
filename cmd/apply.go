@@ -145,7 +145,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
 		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
 			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
-			providerDisplayName(prov.Name()), authmode.BedrockAPIKey)
+			prov.DisplayName(), authmode.BedrockAPIKey)
 	}
 
 	// Skip credential resolution in dry-run mode: it can prompt interactively
@@ -158,76 +158,26 @@ func runApply(_ *cobra.Command, _ []string) error {
 			return err
 		}
 	}
+
 	useMantle, err := resolveMantle()
 	if err != nil {
 		return err
 	}
 
-	opusModel := applyFlags.opusModel
-	sonnetModel := applyFlags.sonnetModel
-	haikuModel := applyFlags.haikuModel
-	fableModel := applyFlags.fableModel
-	if applyFlags.model != "" {
-		opusModel = applyFlags.model
-		sonnetModel = applyFlags.model
-		haikuModel = applyFlags.model
-		fableModel = applyFlags.model
-	}
-
-	fallbackModels, err := parseCommaSeparatedModels(applyFlags.fallbackModel, "--fallback-model")
-	if err != nil {
-		return err
-	}
-	availableModels, err := parseCommaSeparatedModels(applyFlags.availableModels, "--available-models")
+	models, err := resolveApplyModels()
 	if err != nil {
 		return err
 	}
 
-	// Validate that --enforce-available-models requires --available-models to be set.
-	if applyFlags.enforceAvailableModels && len(availableModels) == 0 {
-		return fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
-	}
-
-	opts := schema.Options{
-		AuthMode:               authMode,
-		Region:                 region,
-		Effort:                 applyFlags.effort,
-		Scope:                  applyFlags.scope,
-		Version:                Version,
-		OpusModel:              opusModel,
-		SonnetModel:            sonnetModel,
-		HaikuModel:             haikuModel,
-		FableModel:             fableModel,
-		FallbackModels:         fallbackModels,
-		AvailableModels:        availableModels,
-		EnforceAvailableModels: applyFlags.enforceAvailableModels,
-		Opusplan:               opusplan,
-		Use1M:                  !applyFlags.no1m,
-		UseMantle:              useMantle,
-		MantleURL:              applyFlags.mantleURL,
-		AuthValidated:          true,
-		PermissionMode:         applyFlags.mode,
-		AlwaysThinking:         applyFlags.alwaysThinking,
-		ServiceTier:            applyFlags.serviceTier,
-	}
-
+	opts := buildApplyOptions(authMode, region, opusplan, useMantle, models)
 	block, err := schema.Build(bCfg, opts)
 	if err != nil {
 		return err
 	}
 
-	provOpts := toProviderOptions(opts)
-	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
-	// not one of Claude's per-tier IDs. Thread the raw flag through so the
-	// provider selects the right model instead of silently defaulting.
-	provOpts.Model = applyFlags.model
-	// Whether the region was explicitly chosen (vs filled from the global
-	// default). Mantle providers auto-switch a model to a region that serves it
-	// only when the region was defaulted; an explicit --region is honored.
-	provOpts.RegionExplicit = applyFlags.region != ""
-	provOpts.ModelCatalog, provOpts.RefreshedSources, err = cachedProviderCatalog(home, region)
+	provOpts, err := buildProviderOptions(home, region, opts)
 	if err != nil {
-		return fmt.Errorf("loading cached model catalog: %w", err)
+		return err
 	}
 
 	if applyFlags.dryRun {
@@ -251,4 +201,100 @@ func parseCommaSeparatedModels(raw string, flagName string) ([]string, error) {
 		models = append(models, strings.TrimSpace(part))
 	}
 	return schema.ValidateModelList(models, flagName)
+}
+
+// resolvedModels holds the model-related values extracted from apply flags.
+type resolvedModels struct {
+	opusModel              string
+	sonnetModel            string
+	haikuModel             string
+	fableModel             string
+	fallbackModels         []string
+	availableModels        []string
+	enforceAvailableModels bool
+}
+
+// resolveApplyModels extracts and validates all model-related flags.
+func resolveApplyModels() (*resolvedModels, error) {
+	opusModel := applyFlags.opusModel
+	sonnetModel := applyFlags.sonnetModel
+	haikuModel := applyFlags.haikuModel
+	fableModel := applyFlags.fableModel
+	if applyFlags.model != "" {
+		opusModel = applyFlags.model
+		sonnetModel = applyFlags.model
+		haikuModel = applyFlags.model
+		fableModel = applyFlags.model
+	}
+
+	fallbackModels, err := parseCommaSeparatedModels(applyFlags.fallbackModel, "--fallback-model")
+	if err != nil {
+		return nil, err
+	}
+	availableModels, err := parseCommaSeparatedModels(applyFlags.availableModels, "--available-models")
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate that --enforce-available-models requires --available-models to be set.
+	if applyFlags.enforceAvailableModels && len(availableModels) == 0 {
+		return nil, fmt.Errorf("%s", schema.ErrEnforceRequiresAvailable)
+	}
+
+	return &resolvedModels{
+		opusModel:              opusModel,
+		sonnetModel:            sonnetModel,
+		haikuModel:             haikuModel,
+		fableModel:             fableModel,
+		fallbackModels:         fallbackModels,
+		availableModels:        availableModels,
+		enforceAvailableModels: applyFlags.enforceAvailableModels,
+	}, nil
+}
+
+// buildApplyOptions constructs the schema.Options from resolved inputs.
+func buildApplyOptions(authMode, region string, opusplan, useMantle bool, models *resolvedModels) schema.Options {
+	return schema.Options{
+		AuthMode:               authMode,
+		Region:                 region,
+		Effort:                 applyFlags.effort,
+		Scope:                  applyFlags.scope,
+		Version:                Version,
+		OpusModel:              models.opusModel,
+		SonnetModel:            models.sonnetModel,
+		HaikuModel:             models.haikuModel,
+		FableModel:             models.fableModel,
+		FallbackModels:         models.fallbackModels,
+		AvailableModels:        models.availableModels,
+		EnforceAvailableModels: models.enforceAvailableModels,
+		Opusplan:               opusplan,
+		Use1M:                  !applyFlags.no1m,
+		UseMantle:              useMantle,
+		MantleURL:              applyFlags.mantleURL,
+		AuthValidated:          true,
+		PermissionMode:         applyFlags.mode,
+		AlwaysThinking:         applyFlags.alwaysThinking,
+		ServiceTier:            applyFlags.serviceTier,
+	}
+}
+
+// buildProviderOptions constructs the provider.Options from the schema options
+// that were already built for apply, plus the cached model catalog.
+func buildProviderOptions(home, region string, scopts schema.Options) (provider.Options, error) {
+	provOpts := toProviderOptions(scopts)
+	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
+	// not one of Claude's per-tier IDs. Thread the raw flag through so the
+	// provider selects the right model instead of silently defaulting.
+	provOpts.Model = applyFlags.model
+	// Whether the region was explicitly chosen (vs filled from the global
+	// default). Mantle providers auto-switch a model to a region that serves it
+	// only when the region was defaulted; an explicit --region is honored.
+	provOpts.RegionExplicit = applyFlags.region != ""
+	catalog, sources, err := cachedProviderCatalog(home, region)
+	if err != nil {
+		return provOpts, fmt.Errorf("loading cached model catalog: %w", err)
+	}
+	provOpts.ModelCatalog = catalog
+	provOpts.RefreshedSources = sources
+	return provOpts, nil
 }

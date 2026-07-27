@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestSaveCachedModels_RenameError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	when := time.Now()
 
 	// Save a valid cache first so the parent directory exists.
@@ -48,7 +49,7 @@ func TestSaveCachedModels_RenameError(t *testing.T) {
 }
 
 func TestLoadCache_ReadFileError(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path, err := CachePath(home)
 	if err != nil {
 		t.Fatal(err)

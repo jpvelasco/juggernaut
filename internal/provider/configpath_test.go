@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestClaude_ConfigPath pins Claude's config location (unchanged from the
@@ -11,7 +13,7 @@ import (
 // relative).
 func TestClaude_ConfigPath(t *testing.T) {
 	p, _ := Get("claude")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	user, err := p.ConfigPath(home, "user")
 	if err != nil {
@@ -33,7 +35,7 @@ func TestClaude_ConfigPath(t *testing.T) {
 // TestCodex_ConfigPath: ~/.codex/config.toml (user), ./.codex/config.toml (project).
 func TestCodex_ConfigPath(t *testing.T) {
 	p, _ := Get("codex")
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 
 	user, err := p.ConfigPath(home, "user")
 	if err != nil {

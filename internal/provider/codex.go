@@ -131,76 +131,58 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-5.* model)", key)
 	}
 
-	// A model is only reachable in the regions where it's verified available; a
-	// user's default region may not serve it. Auto-switch when the region was
-	// defaulted, honor-and-warn when it was explicit.
-	region := opts.Region
-	regionMsg := ""
-	if len(m.Regions) > 0 {
-		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, m.Regions)
-	}
-
-	keys := map[string]any{
-		"model":          m.ModelID,
-		"model_provider": "amazon-bedrock",
-		"model_providers": map[string]any{
-			"amazon-bedrock": map[string]any{
-				"aws": map[string]any{
-					"region": region,
+	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", c, func(region string) (ConfigPlan, error) {
+		keys := map[string]any{
+			"model":          m.ModelID,
+			"model_provider": "amazon-bedrock",
+			"model_providers": map[string]any{
+				"amazon-bedrock": map[string]any{
+					"aws": map[string]any{
+						"region": region,
+					},
 				},
 			},
-		},
-	}
+		}
 
-	// Persist the juggernaut block so the launch wrapper can read the auth mode
-	// at runtime (IAM → no token needed; API key → inject bearer token).
-	juggernautBlock := &schema.Block{
-		Auth: schema.Auth{
-			Mode:   opts.AuthMode,
-			Region: region,
-		},
-		Meta: schema.Meta{
-			SchemaVersion: 2,
-			Version:       opts.Version,
-			ManagedBy:     "juggernaut",
-			Scope:         opts.Scope,
-			AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
-		},
-	}
-	blockMap, err := ToMap(juggernautBlock)
-	if err != nil {
-		return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
-	}
-	keys["juggernaut"] = blockMap
+		// Persist the juggernaut block so the launch wrapper can read the auth mode
+		// at runtime (IAM → no token needed; API key → inject bearer token).
+		juggernautBlock := &schema.Block{
+			Auth: schema.Auth{
+				Mode:   opts.AuthMode,
+				Region: region,
+			},
+			Meta: schema.Meta{
+				SchemaVersion: 2,
+				Version:       opts.Version,
+				ManagedBy:     "juggernaut",
+				Scope:         opts.Scope,
+				AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
+			},
+		}
+		blockMap, err := ToMap(juggernautBlock)
+		if err != nil {
+			return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
+		}
+		keys["juggernaut"] = blockMap
 
-	var warnings []string
-	if regionMsg != "" {
-		warnings = append(warnings, fmt.Sprintf("%s: %s", m.ModelID, regionMsg))
-	}
-	if w := catalogUnavailableWarning(opts.ModelCatalog, m.ModelID, region, "refresh the catalog or select a listed model", c, opts.RefreshedSources); w != "" {
-		warnings = append(warnings, w)
-	}
-	return ConfigPlan{
-		Keys:        keys,
-		ManagedKeys: c.NativeManagedKeys(),
-		Warnings:    warnings,
-	}, nil
+		return ConfigPlan{
+			Keys:        keys,
+			ManagedKeys: c.NativeManagedKeys(),
+		}, nil
+	})
 }
 
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
-	if s := checkModelPreconditions(model); s.Reason != "" {
-		return s
-	}
-	if model.Source != "mantle" {
-		return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
-	}
-	if !strings.HasPrefix(model.ID, "openai.gpt-5.") {
-		return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}
-	}
-	return ModelSupport{Supported: true, Reason: "Codex Responses model"}
+	return c.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		if m.Source != "mantle" {
+			return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
+		}
+		if !strings.HasPrefix(m.ID, "openai.gpt-5.") {
+			return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}
+		}
+		return ModelSupport{Supported: true, Reason: "Codex Responses model"}
+	})
 }
-
-func (c codex) CatalogSources() []string { return []string{"mantle"} }
 
 func (c codex) LaunchSpec() LaunchSpec {
 	// Codex has no "use bedrock" flag — routing lives in config.toml.

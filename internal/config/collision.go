@@ -27,33 +27,27 @@ type Collision struct {
 // owned by Juggernaut (Provider.OwnsConfig returns false) — a re-apply of a
 // file Juggernaut already owns must proceed with zero new friction.
 func DetectCollisions(existing, plan map[string]any, deepKeys []string, ownedSubKeys map[string][]string) []Collision {
-	deep := make(map[string]bool, len(deepKeys))
-	for _, k := range deepKeys {
-		deep[k] = true
-	}
-
 	var collisions []Collision
-	for k, v := range plan {
-		if k == "juggernaut" {
-			continue // always fully owned by Juggernaut, never checked
+	_ = walkManagedKeys(plan, deepKeys, func(k string, v any, action managedKeyAction) error {
+		switch action {
+		case actionJuggernaut:
+			return nil // always fully owned by Juggernaut, never checked
+		case actionPermissions:
+			collisions = append(collisions, detectPermissionsCollision(existing[k])...)
+		case actionDeep:
+			collisions = append(collisions, detectDeepKeyCollisions(existing[k], k, ownedSubKeys[k])...)
+		case actionMap:
+			incomingMap := asStringKeyedMapUnwrap(v)
+			ev, present := existing[k]
+			collisions = append(collisions, detectMapKeyCollisions(ev, present, k, incomingMap)...)
+		default:
+			ev, present := existing[k]
+			if present {
+				collisions = append(collisions, Collision{Path: k, Existing: ev})
+			}
 		}
-		existingVal, present := existing[k]
-		if k == "permissions" {
-			collisions = append(collisions, detectPermissionsCollision(existingVal)...)
-			continue
-		}
-		if deep[k] {
-			collisions = append(collisions, detectDeepKeyCollisions(existingVal, k, ownedSubKeys[k])...)
-			continue
-		}
-		if incomingMap, ok := asStringKeyedMap(v); ok {
-			collisions = append(collisions, detectMapKeyCollisions(existingVal, present, k, incomingMap)...)
-			continue
-		}
-		if present {
-			collisions = append(collisions, Collision{Path: k, Existing: existingVal})
-		}
-	}
+		return nil
+	})
 
 	sort.Slice(collisions, func(i, j int) bool { return collisions[i].Path < collisions[j].Path })
 	return collisions
@@ -79,6 +73,13 @@ func detectPermissionsCollision(existingVal any) []Collision {
 	return nil
 }
 
+// isStringKeyedMap reports whether v is a string-keyed map (map[string]any or
+// map[string]string). Used by walkManagedKeys to classify keys.
+func isStringKeyedMap(v any) bool {
+	_, ok := asStringKeyedMap(v)
+	return ok
+}
+
 // asStringKeyedMap normalizes any string-keyed map shape a provider's plan
 // might use (map[string]any, or map[string]string like Claude's native
 // env — see schema.NativeKeys.Env) into map[string]any for uniform handling.
@@ -95,6 +96,17 @@ func asStringKeyedMap(v any) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// asStringKeyedMapUnwrap is like asStringKeyedMap but panics if the value is
+// not a string-keyed map. It is only called from walkManagedKeys when the
+// actionMap branch has already confirmed the value is a map.
+func asStringKeyedMapUnwrap(v any) map[string]any {
+	m, ok := asStringKeyedMap(v)
+	if !ok {
+		panic("config: asStringKeyedMapUnwrap called with non-map value")
+	}
+	return m
 }
 
 // detectMapKeyCollisions handles a whole-value key whose incoming plan value
@@ -143,27 +155,5 @@ func detectDeepKeyCollisions(existingVal any, key string, subs []string) []Colli
 	return collisions
 }
 
-// lookupNestedKey walks a slice of dotted path parts through nested maps,
-// returning the leaf value if the path resolves to a present value. A
-// genuinely MISSING intermediate is "nothing to collide with" (consistent
-// with removeNestedKey's missing-intermediate no-op) — but an intermediate
-// that is PRESENT with the wrong type (not a map) is not "missing", it's a
-// foreign value incompatible with the table Juggernaut expects to write
-// through; mergeNestedPrefix's recursion guard would silently let Juggernaut's
-// map replace that scalar with no error, so it must be surfaced as a
-// collision at that intermediate's own path rather than treated as absent.
-func lookupNestedKey(tbl map[string]any, parts []string) (any, bool) {
-	if len(parts) == 1 {
-		v, ok := tbl[parts[0]]
-		return v, ok
-	}
-	raw, present := tbl[parts[0]]
-	if !present {
-		return nil, false
-	}
-	child, ok := raw.(map[string]any)
-	if !ok {
-		return raw, true // present but wrong type — a collision, not "missing"
-	}
-	return lookupNestedKey(child, parts[1:])
-}
+// lookupNestedKey is implemented in walker.go using the shared walkNestedMap helper.
+// The declaration there uses the same signature and behavior as the original.

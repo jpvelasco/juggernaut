@@ -113,60 +113,50 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 
 	// Iron Fist: route to a region that actually serves grok-4.3 rather than
 	// writing a config that can't reach it (see resolveMantleRegion).
-	region := opts.Region
-	regionMsg := ""
-	if modelID == "xai.grok-4.3" {
-		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, grokRegions)
+	modelRegions := grokRegions
+	if modelID != "xai.grok-4.3" {
+		modelRegions = nil
 	}
 
-	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
-	modelBlock := map[string]any{
-		"model":       modelID,
-		"base_url":    baseURL,
-		"name":        modelID + " (Amazon Bedrock Mantle)",
-		"api_backend": "responses",
-	}
-	if modelID == "xai.grok-4.3" {
-		modelBlock["context_window"] = 1000000
-	}
-	keys := map[string]any{
-		"model": map[string]any{
-			grokModelName: modelBlock,
-		},
-		"models": map[string]any{
-			"default": grokModelName,
-		},
-		"auth": map[string]any{
-			"auth_provider_command": grokAuthCommand,
-			"auth_provider_label":   "Bedrock",
-		},
-	}
+	return buildWithRegionWarnings(opts, modelID, modelRegions, " ", g, func(region string) (ConfigPlan, error) {
+		baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
+		modelBlock := map[string]any{
+			"model":       modelID,
+			"base_url":    baseURL,
+			"name":        modelID + " (Amazon Bedrock Mantle)",
+			"api_backend": "responses",
+		}
+		if modelID == "xai.grok-4.3" {
+			modelBlock["context_window"] = 1000000
+		}
+		keys := map[string]any{
+			"model": map[string]any{
+				grokModelName: modelBlock,
+			},
+			"models": map[string]any{
+				"default": grokModelName,
+			},
+			"auth": map[string]any{
+				"auth_provider_command": grokAuthCommand,
+				"auth_provider_label":   "Bedrock",
+			},
+		}
 
-	var warnings []string
-	if regionMsg != "" {
-		warnings = append(warnings, modelID+" "+regionMsg)
-	}
-	if w := catalogUnavailableWarning(opts.ModelCatalog, modelID, region, "refresh the catalog or select a listed model", g, opts.RefreshedSources); w != "" {
-		warnings = append(warnings, w)
-	}
-	return ConfigPlan{
-		Keys:        keys,
-		ManagedKeys: g.NativeManagedKeys(),
-		Warnings:    warnings,
-	}, nil
+		return ConfigPlan{
+			Keys:        keys,
+			ManagedKeys: g.NativeManagedKeys(),
+		}, nil
+	})
 }
 
 func (g grok) SupportsModel(model CatalogModel) ModelSupport {
-	if s := checkModelPreconditions(model); s.Reason != "" {
-		return s
-	}
-	if model.Source != "mantle" {
-		return ModelSupport{Reason: "Grok routes through Mantle"}
-	}
-	if !strings.HasPrefix(model.ID, "xai.grok-") {
-		return ModelSupport{Reason: "the Grok client supports xAI Grok models"}
-	}
-	return ModelSupport{Supported: true, Reason: "xAI Responses model"}
+	return g.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		if m.Source != "mantle" {
+			return ModelSupport{Reason: "Grok routes through Mantle"}
+		}
+		if !strings.HasPrefix(m.ID, "xai.grok-") {
+			return ModelSupport{Reason: "the Grok client supports xAI Grok models"}
+		}
+		return ModelSupport{Supported: true, Reason: "xAI Responses model"}
+	})
 }
-
-func (g grok) CatalogSources() []string { return []string{"mantle"} }

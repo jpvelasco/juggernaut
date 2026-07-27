@@ -9,6 +9,8 @@ import (
 
 func TestWriteCredentialFileFailsWhenExistingPathCannotBeRemoved(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	filePath := credentialFilePath(home)
 
 	// Make the credential path a non-empty directory so removal fails on all

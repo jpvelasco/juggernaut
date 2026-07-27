@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestRemoveBlock_OrphanBeginPreservesTrailingContent guards against the
@@ -102,7 +103,7 @@ func TestUpsertBlock_OrphanBeginPreservesTrailingContent(t *testing.T) {
 // TestRemoveTarget_OrphanBeginPreservesTrailingContent exercises the public
 // uninstall path end-to-end against a real (temp) profile file.
 func TestRemoveTarget_OrphanBeginPreservesTrailingContent(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, ".bashrc")
 	content := "export KEEP=1\n" + BeginMarker + "\nexport AFTER=2\nalias x='y'\n"
 	if err := safepath.WriteFile(home, path, []byte(content)); err != nil {

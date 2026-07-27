@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestInstallPowerShell_StripsStaleCurrentHostBlock: apply must remove this
@@ -16,7 +17,7 @@ import (
 // the real CLI — the failure mode that left dead juggernaut wrappers in
 // Microsoft.PowerShell_profile.ps1.
 func TestInstallPowerShell_StripsStaleCurrentHostBlock(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
 	currentHost := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
@@ -86,7 +87,7 @@ func TestInstallPowerShell_StripsStaleCurrentHostBlock(t *testing.T) {
 // live discovery only sees AllHosts, while a stale wrapper lives solely under
 // MigrationTargets (historical CurrentHost not in ActiveTargets).
 func TestInstallPowerShell_StripsMigrationOnlyStaleHost(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "profile.ps1")
 	historicalHost := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
 	if err := safepath.MkdirAll(filepath.Dir(allHosts)); err != nil {
@@ -166,7 +167,7 @@ func TestResolveHistoricalTargets_IncludesAllHostsAndCurrentHost(t *testing.T) {
 }
 
 func TestHistoricalPowerShellTargetsScoped_ScansOneDriveAndLocalDocs(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Known Documents points at OneDrive; local Documents must still be scanned.
 	onedriveDocs := filepath.Join(home, "OneDrive", "Documents")
 	SetResolveDocumentsFolderForTesting(func() (string, error) {

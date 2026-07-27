@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestInstallTargetFor_Coexist installs a Claude block then a Codex block into
 // the same profile and asserts both survive.
 func TestInstallTargetFor_Coexist(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	profile := filepath.Join(home, ".bashrc")
 	if err := safepath.WriteFile(home, profile, []byte("export X=1\n")); err != nil {
 		t.Fatal(err)
@@ -51,7 +52,7 @@ func TestInstallTargetFor_Coexist(t *testing.T) {
 // TestInstallTargetFor_ClaudeMatchesLegacy: installing via the claude CLISpec
 // produces the same profile content as the legacy InstallTarget.
 func TestInstallTargetFor_ClaudeMatchesLegacy(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	legacyProfile := filepath.Join(home, "legacy.sh")
 	specProfile := filepath.Join(home, "spec.sh")
 	seed := "export X=1\n"

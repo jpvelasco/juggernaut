@@ -195,9 +195,9 @@ func pinStatus(pinned string, anthropic, profiles []discovery.DiscoveredModel) (
 		}
 		return "", false
 	}
-	bare := bareModelID(pinned)
+	bare := schema.StripRegionPrefix(pinned)
 	for _, m := range anthropic {
-		if m.ID == bare || bareModelID(m.ID) == bare {
+		if m.ID == bare || schema.StripRegionPrefix(m.ID) == bare {
 			return m.Status, true
 		}
 	}
@@ -205,25 +205,7 @@ func pinStatus(pinned string, anthropic, profiles []discovery.DiscoveredModel) (
 }
 
 func hasRegionalPrefix(modelID string) bool {
-	for _, prefix := range schema.RegionalInferencePrefixes {
-		if strings.HasPrefix(modelID, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// bareModelID strips a cross-region inference profile prefix so a pinned
-// "global.anthropic.claude-opus-4-8" matches the bare "anthropic.claude-opus-4-8"
-// ListFoundationModels returns. Uses schema.RegionalInferencePrefixes to maintain
-// a single source of truth across the codebase.
-func bareModelID(modelID string) string {
-	for _, prefix := range schema.RegionalInferencePrefixes {
-		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
-			return rest
-		}
-	}
-	return modelID
+	return schema.StripRegionPrefix(modelID) != modelID
 }
 
 // activeCandidatesForTier returns every ACTIVE model matching tier, sorted

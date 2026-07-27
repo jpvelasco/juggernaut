@@ -74,41 +74,33 @@ func Install(home string) ([]string, error) {
 
 // InstallWith is like Install but accepts injectable dependencies.
 func InstallWith(home string, opts InstallOptions) ([]string, error) {
-	var installed []string
 	spec := specOrClaude(opts.Spec)
 
+	var installed []string
 	if runtime.GOOS == "windows" {
 		psInstalled, err := installPowerShellActivationForSpec(home, opts.PowerShellResult, spec)
 		if err != nil {
 			return installed, err
 		}
 		installed = append(installed, psInstalled...)
-	} else if opts.PowerShellResult != nil {
-		// On non-Windows, use the injected PowerShell result for profile paths.
-		for _, target := range opts.PowerShellResult.ActiveTargets {
-			changed, err := InstallTargetFor(target, spec)
-			if err != nil {
-				return installed, err
-			}
-			if changed {
-				installed = append(installed, target.Path)
-			}
-		}
 	}
 
-	for _, target := range DefaultTargets(home) {
-		if !shouldWritePOSIXTarget(target) {
-			continue
-		}
-		changed, err := InstallTargetFor(target, spec)
-		if err != nil {
-			return installed, err
-		}
-		if changed {
-			installed = append(installed, target.Path)
-		}
+	psResult := opts.PowerShellResult
+	if runtime.GOOS == "windows" {
+		psResult = nil // PowerShell handled by installPowerShellActivationForSpec above
+	} else {
+		psResult = resolveOrUse(home, psResult)
 	}
-	return installed, nil
+	result, err := iterateAllTargets(home, psResult, func(target Target) (bool, error) {
+		if !shouldWritePOSIXTarget(target) {
+			return false, nil
+		}
+		return InstallTargetFor(target, spec)
+	})
+	if err != nil {
+		return installed, err
+	}
+	return append(installed, result...), nil
 }
 
 // InstallTarget writes or updates the Claude activation block for one profile.
@@ -158,36 +150,27 @@ func UninstallWith(home string, opts UninstallOptions) ([]string, error) {
 	}
 
 	var removed []string
-
 	if runtime.GOOS == "windows" {
 		psRemoved, err := UninstallPowerShellActivationWith(home, opts.PowerShellResult)
 		if err != nil {
 			return removed, err
 		}
 		removed = append(removed, psRemoved...)
-	} else if opts.PowerShellResult != nil {
-		// On non-Windows, use the injected PowerShell result for profile paths.
-		for _, target := range opts.PowerShellResult.ActiveTargets {
-			ok, err := RemoveTarget(target.Path)
-			if err != nil {
-				return removed, err
-			}
-			if ok {
-				removed = append(removed, target.Path)
-			}
-		}
 	}
 
-	for _, target := range DefaultTargets(home) {
-		ok, err := RemoveTargetWithLegacy(target.Path)
-		if err != nil {
-			return removed, err
-		}
-		if ok {
-			removed = append(removed, target.Path)
-		}
+	psResult := opts.PowerShellResult
+	if runtime.GOOS == "windows" {
+		psResult = nil // PowerShell handled by UninstallPowerShellActivationWith above
+	} else {
+		psResult = resolveOrUse(home, psResult)
 	}
-	return removed, nil
+	result, err := iterateAllTargets(home, psResult, func(target Target) (bool, error) {
+		return RemoveTargetWithLegacy(target.Path)
+	})
+	if err != nil {
+		return removed, err
+	}
+	return append(removed, result...), nil
 }
 
 // uninstallCLIBlocks removes one non-Claude CLI's activation block (by its
@@ -311,35 +294,14 @@ func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string
 // InstalledTargetsForMarkers returns profile paths containing the given
 // begin/end activation markers (any managed CLI).
 func InstalledTargetsForMarkers(home string, psResult *ProfileResolverResult, begin, end string) []string {
-	var paths []string
-
-	if runtime.GOOS == "windows" {
-		result := psResult
-		if result == nil {
-			r := ResolvePowerShellProfilesScoped(home)
-			result = &r
-		}
-		for _, target := range result.ActiveTargets {
-			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err == nil && HasBlockWithMarkers(string(data), begin, end) {
-				paths = append(paths, target.Path)
-			}
-		}
-	} else if psResult != nil {
-		for _, target := range psResult.ActiveTargets {
-			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err == nil && HasBlockWithMarkers(string(data), begin, end) {
-				paths = append(paths, target.Path)
-			}
-		}
-	}
-
-	for _, target := range DefaultTargets(home) {
+	psResolved := resolveOrUse(home, psResult)
+	paths, _ := iterateAllTargets(home, psResolved, func(target Target) (bool, error) {
 		data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-		if err == nil && HasBlockWithMarkers(string(data), begin, end) {
-			paths = append(paths, target.Path)
+		if err != nil {
+			return false, nil
 		}
-	}
+		return HasBlockWithMarkers(string(data), begin, end), nil
+	})
 	return paths
 }
 
@@ -358,15 +320,55 @@ func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResul
 	return installPowerShellActivationForSpec(home, psResult, claudeCLISpec())
 }
 
+// resolveOrUse returns a concrete ProfileResolverResult, resolving PowerShell
+// profiles when psResult is nil and we're on Windows. Returns nil on non-Windows.
+func resolveOrUse(home string, psResult *ProfileResolverResult) *ProfileResolverResult {
+	if psResult != nil {
+		return psResult
+	}
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	r := ResolvePowerShellProfilesScoped(home)
+	return &r
+}
+
+// iterateAllTargets visits all managed target profiles in order: PowerShell
+// active targets first (if psResult is non-nil), then POSIX defaults.
+// The callback is invoked for each target; if it returns an error, iteration
+// stops and the error is returned. When the callback returns true, the target
+// path is collected into the result slice.
+// Pass nil for psResult to skip PowerShell targets entirely; callers that
+// need lazy resolution should use resolveOrUse before calling this.
+func iterateAllTargets(home string, psResult *ProfileResolverResult, fn func(Target) (bool, error)) ([]string, error) {
+	var paths []string
+
+	if psResult != nil {
+		for _, target := range psResult.ActiveTargets {
+			if ok, err := fn(target); err != nil {
+				return paths, err
+			} else if ok {
+				paths = append(paths, target.Path)
+			}
+		}
+	}
+
+	for _, target := range DefaultTargets(home) {
+		if ok, err := fn(target); err != nil {
+			return paths, err
+		} else if ok {
+			paths = append(paths, target.Path)
+		}
+	}
+	return paths, nil
+}
+
 func installPowerShellActivationForSpec(home string, psResult *ProfileResolverResult, spec CLISpec) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
 
-	if psResult == nil {
-		r := ResolvePowerShellProfilesScoped(home)
-		psResult = &r
-	}
+	psResult = resolveOrUse(home, psResult)
 	result := *psResult
 	var installed []string
 
@@ -455,10 +457,7 @@ func UninstallPowerShellActivationWith(home string, psResult *ProfileResolverRes
 		return nil, nil
 	}
 
-	if psResult == nil {
-		r := ResolvePowerShellProfilesScoped(home)
-		psResult = &r
-	}
+	psResult = resolveOrUse(home, psResult)
 	result := *psResult
 	var removed []string
 
@@ -509,10 +508,7 @@ func CheckPowerShellActivationWith(home string, psResult *ProfileResolverResult)
 		return true, "", nil
 	}
 
-	if psResult == nil {
-		r := ResolvePowerShellProfilesScoped(home)
-		psResult = &r
-	}
+	psResult = resolveOrUse(home, psResult)
 	result := *psResult
 
 	// Check effective profiles for the current block (first match wins).

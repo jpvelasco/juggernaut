@@ -43,7 +43,7 @@ func TestUninstallSettingsBlock_ManagerError(t *testing.T) {
 	defer func() { os.Stderr = old; r.Close(); w.Close() }()
 
 	// Use a non-existent path to force newProviderManager to error.
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	prov, err := provider.Get("claude")
 	if err != nil {
 		t.Fatalf("get provider: %v", err)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestBlockFor_ClaudeByteIdentical: the per-CLI block generator must produce
@@ -77,7 +78,7 @@ func TestBlockFor_CodexOtherShells(t *testing.T) {
 // TestInstallTargetFor_RejectsShellInjection rejects CLI names that would be
 // interpolated into generated shell profiles (function names / command tokens).
 func TestInstallTargetFor_RejectsShellInjection(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	path := filepath.Join(home, ".bashrc")
 	if err := safepath.WriteFile(home, path, []byte("# seed\n")); err != nil {
 		t.Fatal(err)

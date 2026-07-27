@@ -7,6 +7,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestGetWithFallback_BigKeyRoundTrip is the regression test for the 2026-06-27
@@ -15,7 +16,7 @@ import (
 // big key forces the file fallback on every platform when the keychain rejects
 // or is unavailable; we seed the file directly to assert the read path.
 func TestGetWithFallback_BigKeyRoundTrip(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-hardening-bigkey")
 
 	// Split the literal prefix so the gitleaks secret scanner doesn't flag this
@@ -40,7 +41,7 @@ func TestGetWithFallback_BigKeyRoundTrip(t *testing.T) {
 // envelope change does not break existing v1 plaintext fallback files written by
 // v5.2.2/5.2.3 — they must still be read transparently (migration safety).
 func TestGetWithFallback_V1PlaintextStillReadable(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-hardening-v1read")
 
 	token := "legacy-v1-plaintext-token"
@@ -64,7 +65,7 @@ func TestGetWithFallback_V1PlaintextStillReadable(t *testing.T) {
 // other platforms it round-trips via keychain or the file. Either way the value
 // must survive — this is the end-to-end guard for the outage scenario.
 func TestSetGetWithFallback_RoundTripBigKey(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-hardening-rt")
 	t.Cleanup(func() { _ = s.DeleteWithFallback(home) })
 
@@ -86,7 +87,7 @@ func TestSetGetWithFallback_RoundTripBigKey(t *testing.T) {
 // empty (treat as no usable credential) rather than leaking ciphertext. This is
 // cross-platform: a malformed v2 body fails base64 decode on every OS.
 func TestGetWithFallback_V2DecodeFailureYieldsEmpty(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-hardening-v2bad")
 
 	filePath := filepath.Join(home, ".claude", "juggernaut-credential")
@@ -108,7 +109,7 @@ func TestGetWithFallback_V2DecodeFailureYieldsEmpty(t *testing.T) {
 // envelope is v1 plaintext and round-trips. On Windows it is v2-encrypted
 // (covered by TestSetWithFallback_WritesVersionedCredential).
 func TestGetWithFallback_LegacyFileNoBackend(t *testing.T) {
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	s := keychain.NewStore("jug-hardening-legacy")
 
 	// A legacy (unversioned) fallback file with no keychain entry must return
