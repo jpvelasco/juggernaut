@@ -37,102 +37,34 @@ type ConnectivityResult struct {
 	Elapsed    time.Duration
 }
 
+// probeOpts carries the per-auth-mode parameters for a connectivity probe.
+type probeOpts struct {
+	authMode string
+	token    string // non-empty for API key mode
+	isIAM    bool   // if true, treat 403+auth-error as success
+}
+
 // CheckAPIKeyConnectivity makes a lightweight InvokeModel call to verify that
 // the Bedrock API key is valid and can reach the configured region.
-// It uses a minimal prompt ("hi") and a small max_tokens_to_sample to keep
-// the request cheap.
 func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult {
-	start := time.Now()
-
-	modelID = stripRegionPrefix(modelID)
-	url := bedrockEndpoint(region, modelID)
-
-	body, err := json.Marshal(map[string]any{
-		"messages":          []map[string]string{{"role": "user", "content": "hi"}},
-		"max_tokens":        1,
-		"anthropic_version": "bedrock-2023-05-31",
-	})
-	if err != nil {
-		return &ConnectivityResult{
-			OK:       false,
-			AuthMode: authmode.BedrockAPIKey,
-			Region:   region,
-			ModelID:  modelID,
-			Message:  fmt.Sprintf("failed to build request body: %v", err),
-			Elapsed:  time.Since(start),
-		}
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return &ConnectivityResult{
-			OK:       false,
-			AuthMode: authmode.BedrockAPIKey,
-			Region:   region,
-			ModelID:  modelID,
-			Message:  fmt.Sprintf("failed to create request: %v", err),
-			Elapsed:  time.Since(start),
-		}
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return &ConnectivityResult{
-			OK:       false,
-			AuthMode: authmode.BedrockAPIKey,
-			Region:   region,
-			ModelID:  modelID,
-			Message:  fmt.Sprintf("request failed: %v", err),
-			Elapsed:  time.Since(start),
-		}
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		respBody = []byte{}
-	}
-
-	elapsed := time.Since(start)
-
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return &ConnectivityResult{
-			OK:         true,
-			AuthMode:   authmode.BedrockAPIKey,
-			Region:     region,
-			ModelID:    modelID,
-			StatusCode: resp.StatusCode,
-			Message:    "connected",
-			Elapsed:    elapsed,
-		}
-	}
-
-	// Try to extract a useful error message from the response.
-	detail := formatResponseError(resp.StatusCode, respBody)
-	return &ConnectivityResult{
-		OK:         false,
-		AuthMode:   authmode.BedrockAPIKey,
-		Region:     region,
-		ModelID:    modelID,
-		StatusCode: resp.StatusCode,
-		Message:    detail,
-		Elapsed:    elapsed,
-	}
+	return probe(probeOpts{authMode: authmode.BedrockAPIKey, token: token}, region, modelID)
 }
 
 // CheckIAMConnectivity verifies that AWS credentials are configured and can
 // reach the Bedrock endpoint. This does NOT perform SigV4 signing (that
 // requires the AWS SDK); instead it makes an unauthenticated request to
 // confirm network reachability and that the region is valid.
-// Returns a result indicating whether the endpoint is reachable, regardless
-// of auth. IAM auth validation is left to Claude Code at runtime.
+// A 403 with an auth-related error body means the endpoint is reachable.
 func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
-	start := time.Now()
+	return probe(probeOpts{authMode: "iam", isIAM: true}, region, modelID)
+}
 
+// probe sends a minimal InvokeModel request and interprets the response
+// according to the auth mode. It is the shared implementation of
+// CheckAPIKeyConnectivity and CheckIAMConnectivity.
+func probe(opts probeOpts, region, modelID string) *ConnectivityResult {
+	start := time.Now()
 	modelID = stripRegionPrefix(modelID)
-	url := bedrockEndpoint(region, modelID)
 
 	body, err := json.Marshal(map[string]any{
 		"messages":          []map[string]string{{"role": "user", "content": "hi"}},
@@ -140,70 +72,48 @@ func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
 		"anthropic_version": "bedrock-2023-05-31",
 	})
 	if err != nil {
-		return &ConnectivityResult{
-			OK:       false,
-			AuthMode: "iam",
-			Region:   region,
-			ModelID:  modelID,
-			Message:  fmt.Sprintf("failed to build request body: %v", err),
-			Elapsed:  time.Since(start),
-		}
+		return failResult(opts.authMode, region, modelID,
+			fmt.Sprintf("failed to build request body: %v", err), time.Since(start))
 	}
 
+	url := bedrockEndpoint(region, modelID)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return &ConnectivityResult{
-			OK:       false,
-			AuthMode: "iam",
-			Region:   region,
-			ModelID:  modelID,
-			Message:  fmt.Sprintf("failed to create request: %v", err),
-			Elapsed:  time.Since(start),
-		}
+		return failResult(opts.authMode, region, modelID,
+			fmt.Sprintf("failed to create request: %v", err), time.Since(start))
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if opts.token != "" {
+		req.Header.Set("Authorization", "Bearer "+opts.token)
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return &ConnectivityResult{
-			OK:       false,
-			AuthMode: "iam",
-			Region:   region,
-			ModelID:  modelID,
-			Message:  fmt.Sprintf("request failed: %v", err),
-			Elapsed:  time.Since(start),
-		}
+		return failResult(opts.authMode, region, modelID,
+			fmt.Sprintf("request failed: %v", err), time.Since(start))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		respBody = []byte{}
-	}
-
+	respBody, _ := io.ReadAll(resp.Body)
 	elapsed := time.Since(start)
 
-	// For IAM, a 403 is expected because we don't sign the request.
-	// That means the endpoint is reachable and the region/model are valid.
-	if resp.StatusCode == 403 {
-		msg := string(respBody)
-		if containsAuthError(msg) {
-			return &ConnectivityResult{
-				OK:         true,
-				AuthMode:   "iam",
-				Region:     region,
-				ModelID:    modelID,
-				StatusCode: resp.StatusCode,
-				Message:    "endpoint reachable (IAM auth required — Claude Code will sign requests)",
-				Elapsed:    elapsed,
-			}
+	// For IAM, a 403 with an auth-related error means the endpoint is reachable.
+	if opts.isIAM && resp.StatusCode == 403 && containsAuthError(string(respBody)) {
+		return &ConnectivityResult{
+			OK:         true,
+			AuthMode:   opts.authMode,
+			Region:     region,
+			ModelID:    modelID,
+			StatusCode: resp.StatusCode,
+			Message:    "endpoint reachable (IAM auth required — Claude Code will sign requests)",
+			Elapsed:    elapsed,
 		}
 	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return &ConnectivityResult{
 			OK:         true,
-			AuthMode:   "iam",
+			AuthMode:   opts.authMode,
 			Region:     region,
 			ModelID:    modelID,
 			StatusCode: resp.StatusCode,
@@ -212,15 +122,25 @@ func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
 		}
 	}
 
-	detail := formatResponseError(resp.StatusCode, respBody)
 	return &ConnectivityResult{
 		OK:         false,
-		AuthMode:   "iam",
+		AuthMode:   opts.authMode,
 		Region:     region,
 		ModelID:    modelID,
 		StatusCode: resp.StatusCode,
-		Message:    detail,
+		Message:    formatResponseError(resp.StatusCode, respBody),
 		Elapsed:    elapsed,
+	}
+}
+
+func failResult(authMode, region, modelID, message string, elapsed time.Duration) *ConnectivityResult {
+	return &ConnectivityResult{
+		OK:       false,
+		AuthMode: authMode,
+		Region:   region,
+		ModelID:  modelID,
+		Message:  message,
+		Elapsed:  elapsed,
 	}
 }
 
