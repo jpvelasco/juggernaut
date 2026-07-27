@@ -59,7 +59,7 @@ func runAuthToken(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		// Diagnostics go to stderr; stdout stays clean so the caller never
 		// mis-parses an error message as a token.
-		return fmt.Errorf("reading Bedrock API key from keychain: %w", err)
+		return fmt.Errorf("%s: %w", keychain.ErrReadingKeychainMsg, err)
 	}
 	if token == "" {
 		return errors.New("no Bedrock bearer token stored in the keychain — " +

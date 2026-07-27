@@ -202,11 +202,7 @@ func resolveReApplyInputs(bCfg *bedrock.Config, authMode, region string, opuspla
 	// touching our meta block). Without this, a re-apply with no --mode
 	// would wipe the user's externally-chosen mode.
 	if applyFlags.mode == "" {
-		if perms, ok := existing["permissions"].(map[string]any); ok {
-			if dmode, ok := perms["defaultMode"].(string); ok && dmode != "" {
-				applyFlags.mode = dmode
-			}
-		}
+		applyFlags.mode = effectivePermissionMode(existing, "")
 	}
 	if authMode == "" {
 		authMode = bCfg.Defaults.AuthMode

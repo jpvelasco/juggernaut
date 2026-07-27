@@ -29,6 +29,11 @@ const MaxWindowsKeychainSize = 2560
 // inside ~/.claude/.
 const credentialFile = "juggernaut-credential"
 
+// ErrReadingKeychainMsg is the shared message prefix for errors reading the
+// Bedrock API key from the keychain. Used by both cmd/auth_token and
+// internal/activation/launch so the error text is identical.
+const ErrReadingKeychainMsg = "reading Bedrock API key from keychain"
+
 // credentialVersionPrefix is the line prefix that marks a v1 fallback credential
 // file as versioned and authoritative. The token body is stored verbatim
 // (plaintext, owner-only file perms). Files without any versioned prefix are

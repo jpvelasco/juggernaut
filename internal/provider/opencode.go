@@ -146,16 +146,15 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 }
 
 func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
-	if s := checkModelPreconditions(model); s.Reason != "" {
-		return s
-	}
-	if model.Source != "mantle" {
-		return ModelSupport{Reason: "OpenCode's Bedrock provider routes through Mantle"}
-	}
-	if strings.HasPrefix(model.ID, "openai.gpt-5.") {
-		return ModelSupport{Reason: "GPT-5 on Mantle requires the Responses API"}
-	}
-	return ModelSupport{Supported: true, Reason: "Mantle Chat-compatible candidate"}
+	return o.BaseProvider.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		if m.Source != "mantle" {
+			return ModelSupport{Reason: "OpenCode's Bedrock provider routes through Mantle"}
+		}
+		if strings.HasPrefix(m.ID, "openai.gpt-5.") {
+			return ModelSupport{Reason: "GPT-5 on Mantle requires the Responses API"}
+		}
+		return ModelSupport{Supported: true, Reason: "Mantle Chat-compatible candidate"}
+	})
 }
 
 func (o opencode) CatalogSources() []string { return []string{"mantle"} }

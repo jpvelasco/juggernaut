@@ -80,6 +80,17 @@ func checkModelPreconditions(model CatalogModel) ModelSupport {
 	return ModelSupport{}
 }
 
+// SupportsModelWith delegates preconditions, then evaluates the provided
+// predicate. The predicate receives the model and returns a ModelSupport.
+// If the predicate returns a non-empty Reason without Supported, that
+// rejection is returned. If it returns Supported=true, the model is accepted.
+func (b BaseProvider) SupportsModelWith(model CatalogModel, check func(CatalogModel) ModelSupport) ModelSupport {
+	if s := checkModelPreconditions(model); s.Reason != "" {
+		return s
+	}
+	return check(model)
+}
+
 // SupportsModel defaults to rejecting catalog entries. Each concrete provider
 // opts into exactly the endpoint and model families its client can speak.
 func (b BaseProvider) SupportsModel(model CatalogModel) ModelSupport {

@@ -181,16 +181,15 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 }
 
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
-	if s := checkModelPreconditions(model); s.Reason != "" {
-		return s
-	}
-	if model.Source != "mantle" {
-		return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
-	}
-	if !strings.HasPrefix(model.ID, "openai.gpt-5.") {
-		return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}
-	}
-	return ModelSupport{Supported: true, Reason: "Codex Responses model"}
+	return c.BaseProvider.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		if m.Source != "mantle" {
+			return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
+		}
+		if !strings.HasPrefix(m.ID, "openai.gpt-5.") {
+			return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}
+		}
+		return ModelSupport{Supported: true, Reason: "Codex Responses model"}
+	})
 }
 
 func (c codex) CatalogSources() []string { return []string{"mantle"} }
