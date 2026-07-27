@@ -190,23 +190,3 @@ func walkManagedKeysForRemoval(keys []string, ownedSubKeys map[string][]string, 
 	}
 	return nil
 }
-
-// classifyManagedKey returns the action for a key name during removal.
-// Unlike walkManagedKeys, this does not need the value — removal only cares
-// about the key's classification (juggernaut, permissions, deep, or scalar).
-func classifyManagedKey(k string, deepKeys []string) managedKeyAction {
-	deep := make(map[string]bool, len(deepKeys))
-	for _, dk := range deepKeys {
-		deep[dk] = true
-	}
-	switch {
-	case k == "juggernaut":
-		return actionJuggernaut
-	case k == "permissions":
-		return actionPermissions
-	case deep[k]:
-		return actionDeep
-	default:
-		return actionScalar
-	}
-}

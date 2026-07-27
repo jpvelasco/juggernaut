@@ -113,40 +113,40 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 
 	// Iron Fist: route to a region that actually serves grok-4.3 rather than
 	// writing a config that can't reach it (see resolveMantleRegion).
-	region := opts.Region
-	regionMsg := ""
-	if modelID == "xai.grok-4.3" {
-		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, grokRegions)
+	modelRegions := grokRegions
+	if modelID != "xai.grok-4.3" {
+		modelRegions = nil
 	}
 
-	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
-	modelBlock := map[string]any{
-		"model":       modelID,
-		"base_url":    baseURL,
-		"name":        modelID + " (Amazon Bedrock Mantle)",
-		"api_backend": "responses",
-	}
-	if modelID == "xai.grok-4.3" {
-		modelBlock["context_window"] = 1000000
-	}
-	keys := map[string]any{
-		"model": map[string]any{
-			grokModelName: modelBlock,
-		},
-		"models": map[string]any{
-			"default": grokModelName,
-		},
-		"auth": map[string]any{
-			"auth_provider_command": grokAuthCommand,
-			"auth_provider_label":   "Bedrock",
-		},
-	}
+	return buildWithRegionWarnings(opts, modelID, modelRegions, " ", g, func(region string) (ConfigPlan, error) {
+		baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
+		modelBlock := map[string]any{
+			"model":       modelID,
+			"base_url":    baseURL,
+			"name":        modelID + " (Amazon Bedrock Mantle)",
+			"api_backend": "responses",
+		}
+		if modelID == "xai.grok-4.3" {
+			modelBlock["context_window"] = 1000000
+		}
+		keys := map[string]any{
+			"model": map[string]any{
+				grokModelName: modelBlock,
+			},
+			"models": map[string]any{
+				"default": grokModelName,
+			},
+			"auth": map[string]any{
+				"auth_provider_command": grokAuthCommand,
+				"auth_provider_label":   "Bedrock",
+			},
+		}
 
-	return ConfigPlan{
-		Keys:        keys,
-		ManagedKeys: g.NativeManagedKeys(),
-		Warnings:    assembleMantleWarnings(regionMsg, modelID, region, "refresh the catalog or select a listed model", " ", g, opts.ModelCatalog, opts.RefreshedSources),
-	}, nil
+		return ConfigPlan{
+			Keys:        keys,
+			ManagedKeys: g.NativeManagedKeys(),
+		}, nil
+	})
 }
 
 func (g grok) SupportsModel(model CatalogModel) ModelSupport {

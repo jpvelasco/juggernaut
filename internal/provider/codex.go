@@ -131,53 +131,45 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-5.* model)", key)
 	}
 
-	// A model is only reachable in the regions where it's verified available; a
-	// user's default region may not serve it. Auto-switch when the region was
-	// defaulted, honor-and-warn when it was explicit.
-	region := opts.Region
-	regionMsg := ""
-	if len(m.Regions) > 0 {
-		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, m.Regions)
-	}
-
-	keys := map[string]any{
-		"model":          m.ModelID,
-		"model_provider": "amazon-bedrock",
-		"model_providers": map[string]any{
-			"amazon-bedrock": map[string]any{
-				"aws": map[string]any{
-					"region": region,
+	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", c, func(region string) (ConfigPlan, error) {
+		keys := map[string]any{
+			"model":          m.ModelID,
+			"model_provider": "amazon-bedrock",
+			"model_providers": map[string]any{
+				"amazon-bedrock": map[string]any{
+					"aws": map[string]any{
+						"region": region,
+					},
 				},
 			},
-		},
-	}
+		}
 
-	// Persist the juggernaut block so the launch wrapper can read the auth mode
-	// at runtime (IAM → no token needed; API key → inject bearer token).
-	juggernautBlock := &schema.Block{
-		Auth: schema.Auth{
-			Mode:   opts.AuthMode,
-			Region: region,
-		},
-		Meta: schema.Meta{
-			SchemaVersion: 2,
-			Version:       opts.Version,
-			ManagedBy:     "juggernaut",
-			Scope:         opts.Scope,
-			AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
-		},
-	}
-	blockMap, err := ToMap(juggernautBlock)
-	if err != nil {
-		return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
-	}
-	keys["juggernaut"] = blockMap
+		// Persist the juggernaut block so the launch wrapper can read the auth mode
+		// at runtime (IAM → no token needed; API key → inject bearer token).
+		juggernautBlock := &schema.Block{
+			Auth: schema.Auth{
+				Mode:   opts.AuthMode,
+				Region: region,
+			},
+			Meta: schema.Meta{
+				SchemaVersion: 2,
+				Version:       opts.Version,
+				ManagedBy:     "juggernaut",
+				Scope:         opts.Scope,
+				AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
+			},
+		}
+		blockMap, err := ToMap(juggernautBlock)
+		if err != nil {
+			return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
+		}
+		keys["juggernaut"] = blockMap
 
-	return ConfigPlan{
-		Keys:        keys,
-		ManagedKeys: c.NativeManagedKeys(),
-		Warnings:    assembleMantleWarnings(regionMsg, m.ModelID, region, "refresh the catalog or select a listed model", ": ", c, opts.ModelCatalog, opts.RefreshedSources),
-	}, nil
+		return ConfigPlan{
+			Keys:        keys,
+			ManagedKeys: c.NativeManagedKeys(),
+		}, nil
+	})
 }
 
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
