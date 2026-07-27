@@ -4,12 +4,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestApply_RejectsBareFlagShapedArgument(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := testutil.NewTestHome(t)
 
 	err := ExecuteArgs([]string{"apply", "cli=codex", "--dry-run"})
 	if err == nil {
@@ -69,9 +69,7 @@ func TestApply_SkipPreflightAccepted(t *testing.T) {
 // where the positional arg does not contain "=" (not flag-shaped). It falls
 // through to cobra.NoArgs and must be rejected.
 func TestApply_RejectsNonFlagArgument(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	testutil.NewTestHome(t)
 
 	err := ExecuteArgs([]string{"apply", "some-random-arg"})
 	if err == nil {
@@ -97,9 +95,7 @@ func TestApply_ValidateArgsEmptyArgs(t *testing.T) {
 // TestApply_RedactsBedrockKey verifies that a mistyped bedrock-key argument
 // does not leak the secret value in the error message.
 func TestApply_RedactsBedrockKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	testutil.NewTestHome(t)
 
 	err := ExecuteArgs([]string{"apply", "bedrock-key=test-fake-key-12345"})
 	if err == nil {

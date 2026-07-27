@@ -10,6 +10,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -50,7 +51,7 @@ func TestResolveCredential_TUIPromptError(t *testing.T) {
 	}
 	defer resetFlags()
 
-	home := t.TempDir()
+	home := testutil.NewTestHome(t)
 	// Ensure no credential file exists so the TUI prompt path is taken.
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "nonexistent-service-xyz-for-tui")
 

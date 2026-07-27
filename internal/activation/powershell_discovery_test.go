@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // mockCommandRunner returns pre-configured output for test scenarios.
@@ -37,12 +38,6 @@ func makePSOutput(allHosts, currentHost string) []byte {
 	return data
 }
 
-func makeHome(t *testing.T, home string) {
-	t.Helper()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-}
-
 // setupDocsMock mocks resolveDocumentsFolder to return the given home
 // directory as the Documents folder, so that path containment checks pass
 // when test paths are under t.TempDir(). This is intentionally broad — the
@@ -60,8 +55,7 @@ func TestDiscoverPowerShellProfiles_PS7Only(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -105,8 +99,7 @@ func TestDiscoverPowerShellProfiles_BothEditions(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	ps7All := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -135,8 +128,7 @@ func TestDiscoverPowerShellProfiles_OneDriveRedirected(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// Simulate OneDrive-redirected path
@@ -165,8 +157,7 @@ func TestDiscoverPowerShellProfiles_UNCPath(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	uncPath := `\\server\share\PowerShell\Microsoft.PowerShell_profile.ps1`
@@ -205,8 +196,7 @@ func TestDiscoverPowerShellProfiles_PathWithSpaces(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "My Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -233,8 +223,7 @@ func TestDiscoverPowerShellProfiles_PathWithUnicode(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "Dokumente_über", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -261,8 +250,7 @@ func TestDiscoverPowerShellProfiles_MalformedJSON(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	runner := &mockCommandRunner{
@@ -299,8 +287,7 @@ func TestDiscoverPowerShellProfiles_DiscoveryTimeout(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// Simulate a timeout by returning context.DeadlineExceeded
@@ -335,8 +322,7 @@ func TestDiscoverPowerShellProfiles_BothMissing(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	runner := &mockCommandRunner{
@@ -370,8 +356,7 @@ func TestDiscoverPowerShellProfiles_CaseInsensitiveDedup(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// Both editions return the same path with different casing
@@ -408,8 +393,7 @@ func TestDiscoverPowerShellProfiles_NoExecutable_DiscoveryFailure(t *testing.T) 
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	runner := &mockCommandRunner{
@@ -486,8 +470,7 @@ func TestCheckPowerShellActivation_Healthy(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -525,8 +508,7 @@ func TestCheckPowerShellActivation_NoActivation_DiscoveredProfileOnly(t *testing
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// The real discovered profile has NO activation
@@ -569,8 +551,7 @@ func TestCheckPowerShellActivation_NoFalseWarning_DiscoveredPathMatchesHistorica
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// Use the standard non-OneDrive path that used to be both "active" and "historical"
@@ -649,8 +630,7 @@ func TestInstallPowerShellActivation_Idempotent(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -695,8 +675,7 @@ func TestUninstallPowerShellActivation(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -753,8 +732,7 @@ func TestUninstallPowerShellActivation_HistoricalProfiles(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 
 	// Mock Documents folder to be home/OneDrive/Documents.
 	docsDir := filepath.Join(home, "OneDrive", "Documents")
@@ -814,8 +792,7 @@ func TestInstallPowerShellActivation_HostSpecificOverride(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// PS7 AllHosts (authoritative)
@@ -901,8 +878,7 @@ func TestDiscoveryTimeout_WithMock(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// Simulate a slow executable that times out
@@ -937,8 +913,7 @@ func TestOneExecutableMissing(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	allHosts := filepath.Join(home, "OneDrive", "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
@@ -1020,8 +995,7 @@ func TestOneDriveRedirect_FullFlow(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 	setupDocsMock(t, home)
 
 	// Actual discovered PowerShell profile (redirected Documents)
@@ -1145,8 +1119,7 @@ func TestKnownDocumentsFallback_InstallTargets(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 
 	// Mock resolveDocumentsFolder to return a known path
 	docsDir := filepath.Join(home, "Documents")
@@ -1192,8 +1165,7 @@ func TestFallbackInstallation_ActualProfileCreated(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows only")
 	}
-	home := t.TempDir()
-	makeHome(t, home)
+	home := testutil.NewTestHome(t)
 
 	// Mock the Known Folder API to return a path under the temp dir.
 	docsDir := filepath.Join(home, "Documents")
