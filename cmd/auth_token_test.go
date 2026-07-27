@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // makeShortTermKey builds a bedrock-api-key-<b64(presigned url)> whose embedded
@@ -78,9 +80,7 @@ func TestBuildAuthTokenJSON_StdoutIsCleanJSON(t *testing.T) {
 // token in an isolated keychain, run `auth-token`, and confirm stdout is the
 // JSON carrying that token.
 func TestAuthToken_Command_EmitsKeychainToken(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := testutil.NewTestHome(t)
 	store := setupIsolatedKeychain(t) // skips if backend unavailable/hangs
 	if err := store.SetWithFallback("kc-token-123", home); err != nil {
 		t.Fatalf("seed token: %v", err)
@@ -105,9 +105,7 @@ func TestAuthToken_Command_EmitsKeychainToken(t *testing.T) {
 // JSON), which is what Codex's auth.command reads (it trims stdout and uses the
 // whole thing as the bearer token — verified in openai/codex external_bearer.rs).
 func TestAuthToken_Command_FormatToken(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := testutil.NewTestHome(t)
 	store := setupIsolatedKeychain(t)
 	if err := store.SetWithFallback("kc-bare-456", home); err != nil {
 		t.Fatalf("seed token: %v", err)
@@ -144,10 +142,7 @@ func TestBuildAuthTokenOutput_Formats(t *testing.T) {
 // errors (non-zero) and prints nothing parseable as a token to stdout, so Grok
 // falls through to its normal login.
 func TestAuthToken_Command_ErrorsWhenNoToken(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	setupIsolatedKeychain(t) // isolated empty store
+	_ = testutil.NewTestHome(t)
 
 	var err error
 	out := captureStdout(t, func() {

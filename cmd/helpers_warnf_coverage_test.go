@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +17,7 @@ func TestShow_ScopePathError(t *testing.T) {
 	os.Stderr = w
 	defer func() { os.Stderr = old; r.Close(); w.Close() }()
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	// Reset flags to avoid inheriting state from other tests.
+	_ = testutil.NewTestHome(t)
 	origScope := showFlags.scope
 	defer func() { showFlags.scope = origScope }()
 

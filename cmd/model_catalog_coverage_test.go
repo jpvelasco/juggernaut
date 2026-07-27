@@ -11,12 +11,12 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 	"github.com/spf13/cobra"
 )
 
 func TestRunModelsRefresh_NativeSources(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 15, 0, 0, 0, time.UTC)
 
 	origFlags := modelsRefreshFlags
@@ -63,8 +63,7 @@ func TestRunModelsRefresh_NativeSources(t *testing.T) {
 }
 
 func TestRunModelsList_CliFilterWithProviderError(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
 		[]discovery.Source{discovery.SourceMantle},
@@ -101,8 +100,7 @@ func TestRunModelsList_CliFilterWithProviderError(t *testing.T) {
 }
 
 func TestRunModelsList_NoModelsMatchSourceFilter(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
 		[]discovery.Source{discovery.SourceFoundation},
@@ -225,8 +223,7 @@ func TestParseCatalogSources_CaseInsensitive(t *testing.T) {
 }
 
 func TestModelsList_RefreshAccountError(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	_ = testutil.NewTestHome(t)
 
 	origFlags := modelsListFlags
 	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
@@ -333,8 +330,7 @@ func TestModelsList_FiltersByProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
+			home := testutil.NewTestHome(t)
 			when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 			if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
 				tt.cachedSources, tt.models, when); err != nil {
@@ -376,8 +372,7 @@ func TestModelsList_FiltersByProvider(t *testing.T) {
 }
 
 func TestModelsList_SummaryLineFormat(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	if err := discovery.SaveCachedModels(home, "999988887777", "scope", "us-west-2",
 		[]discovery.Source{discovery.SourceMantle},
@@ -415,8 +410,7 @@ func TestModelsList_SummaryLineFormat(t *testing.T) {
 }
 
 func TestModelsRefresh_OutputFormat(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	_ = testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 15, 0, 0, 0, time.UTC)
 
 	origFlags := modelsRefreshFlags

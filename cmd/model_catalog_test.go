@@ -12,6 +12,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 	"github.com/spf13/cobra"
 )
 
@@ -131,8 +132,7 @@ func TestRefreshCatalog_IdentifiesFailingSource(t *testing.T) {
 }
 
 func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	models := []discovery.DiscoveredModel{
 		{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
@@ -187,8 +187,7 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 }
 
 func TestModelsList_MissingCacheIsActionable(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	_ = testutil.NewTestHome(t)
 	origFlags := modelsListFlags
 	modelsListFlags = struct {
 		region          string
@@ -205,8 +204,7 @@ func TestModelsList_MissingCacheIsActionable(t *testing.T) {
 }
 
 func TestModelsRefresh_ReportsInvalidSourceAndIdentityFailure(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	_ = testutil.NewTestHome(t)
 	origFlags := modelsRefreshFlags
 	origScope := catalogCredentialScope
 	t.Cleanup(func() {
@@ -227,8 +225,7 @@ func TestModelsRefresh_ReportsInvalidSourceAndIdentityFailure(t *testing.T) {
 }
 
 func TestModelsRefresh_CachesAllSources(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 15, 0, 0, 0, time.UTC)
 
 	origFlags := modelsRefreshFlags
@@ -270,8 +267,7 @@ func TestModelsRefresh_CachesAllSources(t *testing.T) {
 }
 
 func TestModelsRefresh_PropagatesDiscoveryAndCacheErrors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 
 	origFlags := modelsRefreshFlags
 	origMantle := listMantleCatalog
@@ -304,8 +300,7 @@ func TestModelsRefresh_PropagatesDiscoveryAndCacheErrors(t *testing.T) {
 }
 
 func TestModelsList_RefreshesAndListsWithoutCLIFilter(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	_ = testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 16, 0, 0, 0, time.UTC)
 
 	origFlags := modelsListFlags
@@ -344,8 +339,7 @@ func TestModelsList_RefreshesAndListsWithoutCLIFilter(t *testing.T) {
 }
 
 func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 
 	origFlags := modelsListFlags
 	origMantle := listMantleCatalog
@@ -394,8 +388,7 @@ func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
 }
 
 func TestModelsList_FiltersSourcesAndPropagatesWriterErrors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 17, 0, 0, 0, time.UTC)
 	models := []discovery.DiscoveredModel{
 		{ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
@@ -474,8 +467,7 @@ func TestCachedProviderModels_MapsCachedInventory(t *testing.T) {
 }
 
 func TestModelCatalogCommands_PropagateIdentityAndProviderErrors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	origRefreshFlags, origListFlags := modelsRefreshFlags, modelsListFlags
 	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
 	t.Cleanup(func() {
