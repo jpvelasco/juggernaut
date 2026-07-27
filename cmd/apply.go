@@ -238,7 +238,7 @@ func resolveApplyModels() (*resolvedModels, error) {
 
 	// Validate that --enforce-available-models requires --available-models to be set.
 	if applyFlags.enforceAvailableModels && len(availableModels) == 0 {
-		return nil, fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
+		return nil, fmt.Errorf("%s", schema.ErrEnforceRequiresAvailable)
 	}
 
 	return &resolvedModels{

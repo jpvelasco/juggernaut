@@ -423,7 +423,7 @@ func TestBuild_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected enforce-without-list to error")
 	}
-	if !strings.Contains(err.Error(), "--enforce-available-models requires --available-models to be set to a non-empty list") {
+	if !strings.Contains(err.Error(), schema.ErrEnforceRequiresAvailable) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

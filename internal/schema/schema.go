@@ -110,6 +110,11 @@ var validServiceTiers = map[string]bool{
 	"default": true, "flex": true, "priority": true,
 }
 
+// ErrEnforceRequiresAvailable is returned when --enforce-available-models is
+// set without a non-empty --available-models list. Used by both schema.Build
+// and cmd/apply flag validation.
+const ErrEnforceRequiresAvailable = "--enforce-available-models requires --available-models to be set to a non-empty list"
+
 // Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
@@ -142,7 +147,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		return nil, err
 	}
 	if opts.EnforceAvailableModels && len(availableModels) == 0 {
-		return nil, fmt.Errorf("--enforce-available-models requires --available-models to be set to a non-empty list")
+		return nil, fmt.Errorf("%s", ErrEnforceRequiresAvailable)
 	}
 
 	env := buildEnv(cfg, opts, opus, sonnet, haiku, fable)

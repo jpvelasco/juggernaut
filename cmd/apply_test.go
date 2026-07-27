@@ -15,6 +15,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -647,7 +648,7 @@ func TestApply_EnforceAvailableModelsWithoutListErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected --enforce-available-models without --available-models to error")
 	}
-	if !strings.Contains(err.Error(), "--enforce-available-models requires --available-models to be set to a non-empty list") {
+	if !strings.Contains(err.Error(), schema.ErrEnforceRequiresAvailable) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
