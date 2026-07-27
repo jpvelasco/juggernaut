@@ -142,6 +142,18 @@ func resolveMantle() (bool, error) {
 	return applyFlags.mantle || applyFlags.mantleURL != "", nil
 }
 
+// validateMantleAuth ensures that Mantle-only CLIs (Codex, OpenCode, Grok)
+// use a Bedrock API key — IAM/SSO (SigV4) does not reach Mantle. Rejects
+// non-bearer auth modes so we never write a config that can't authenticate.
+func validateMantleAuth(prov provider.Provider, authMode string) error {
+	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
+		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
+			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
+			prov.DisplayName(), authmode.BedrockAPIKey)
+	}
+	return nil
+}
+
 func resolveOpusplanConflict() error {
 	if applyFlags.noOpusplan && applyFlags.opusplan {
 		return fmt.Errorf("--no-opusplan cannot be combined with --opusplan")
@@ -150,45 +162,72 @@ func resolveOpusplanConflict() error {
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider) (authMode, region string, opusplan bool, err error) {
-	authMode = applyFlags.auth
-	if authMode == "" && !prov.Supports(provider.CapNativeAuth) {
-		authMode = authmode.BedrockAPIKey
-	}
 	region = applyFlags.region
 	if region == "" {
 		region = bCfg.Defaults.Region
 	}
 	opusplan = applyFlags.opusplan
 
-	existing, herr := readProviderConfig(prov, home, applyFlags.scope)
-	if herr != nil {
-		return "", "", false, fmt.Errorf("checking existing configuration: %w", herr)
+	existing, isReapply, err := detectReapplyConfig(prov, home, applyFlags.scope)
+	if err != nil {
+		return "", "", false, err
 	}
 
-	if prov.OwnsConfig(existing) {
-		return resolveReApplyInputs(bCfg, authMode, region, opusplan, existing)
+	if isReapply {
+		return resolveReApplyInputs(bCfg, prov, authMode, region, opusplan, existing)
 	}
 
+	authMode = resolveAuthMode(applyFlags.auth, prov, bCfg, nil)
 	if authMode != "" {
 		return authMode, region, opusplan, nil
 	}
-
 	return promptApplyInputs(bCfg, region, opusplan)
+}
+
+// detectReapplyConfig reads the provider's config file and checks whether
+// Juggernaut already owns it. Returns the existing config map, a re-apply flag,
+// and any error. An empty or missing config is not a re-apply.
+func detectReapplyConfig(prov provider.Provider, home, scope string) (existing map[string]any, isReapply bool, err error) {
+	existing, err = readProviderConfig(prov, home, scope)
+	if err != nil {
+		return nil, false, fmt.Errorf("checking existing configuration: %w", err)
+	}
+	if len(existing) == 0 {
+		return nil, false, nil
+	}
+	return existing, prov.OwnsConfig(existing), nil
+}
+
+// resolveAuthMode determines the authentication mode through the resolution
+// chain: flag value → provider default (BedrockAPIKey for Mantle-only CLIs) →
+// existing juggernaut block → bedrock config default.
+func resolveAuthMode(flagValue string, prov provider.Provider, bCfg *bedrock.Config, existing map[string]any) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if !prov.Supports(provider.CapNativeAuth) {
+		return authmode.BedrockAPIKey
+	}
+	if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
+		if auth, ok := jBlock["auth"].(map[string]any); ok {
+			if mode, ok := auth["mode"].(string); ok && mode != "" {
+				return mode
+			}
+		}
+	}
+	if bCfg != nil {
+		return bCfg.Defaults.AuthMode
+	}
+	return ""
 }
 
 // resolveReApplyInputs preserves settings from an existing Juggernaut-managed
 // config when re-applying. Reads auth mode and permission mode from the
 // juggernaut block and native permissions block, falling back to the global
 // default for auth mode when not supplied as a flag.
-func resolveReApplyInputs(bCfg *bedrock.Config, authMode, region string, opusplan bool, existing map[string]any) (string, string, bool, error) {
+func resolveReApplyInputs(bCfg *bedrock.Config, prov provider.Provider, authMode, region string, opusplan bool, existing map[string]any) (string, string, bool, error) {
+	authMode = resolveAuthMode(authMode, prov, bCfg, existing)
 	if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
-		if authMode == "" {
-			if auth, ok := jBlock["auth"].(map[string]any); ok {
-				if mode, ok := auth["mode"].(string); ok && mode != "" {
-					authMode = mode
-				}
-			}
-		}
 		if applyFlags.mode == "" {
 			if meta, ok := jBlock["meta"].(map[string]any); ok {
 				if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
@@ -203,9 +242,6 @@ func resolveReApplyInputs(bCfg *bedrock.Config, authMode, region string, opuspla
 	// would wipe the user's externally-chosen mode.
 	if applyFlags.mode == "" {
 		applyFlags.mode = effectivePermissionMode(existing, "")
-	}
-	if authMode == "" {
-		authMode = bCfg.Defaults.AuthMode
 	}
 	return authMode, region, opusplan, nil
 }

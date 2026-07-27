@@ -9,7 +9,7 @@ import (
 )
 
 func TestDiscoverPowerShellProfiles_POSIX(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.NewTestHome(t)
 	result := discoverPowerShellProfiles()
 	if len(result.ActiveTargets) == 0 {
 		t.Fatal("expected non-empty ActiveTargets on POSIX")

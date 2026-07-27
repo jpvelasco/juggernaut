@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testhome"
 )
 
 func TestWriteCredentialFileFailsWhenExistingPathCannotBeRemoved(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := testhome.NewTestHome(t)
 	filePath := credentialFilePath(home)
 
 	// Make the credential path a non-empty directory so removal fails on all

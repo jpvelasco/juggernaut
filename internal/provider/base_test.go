@@ -211,3 +211,83 @@ func TestRegister_AddsToRegistry(t *testing.T) {
 		t.Errorf("resolved provider Name() = %q, want %q", resolved.Name(), testName)
 	}
 }
+
+// --- BaseProvider.SupportsModelWith() ---
+
+func TestSupportsModelWith_PredicateAccepts(t *testing.T) {
+	p := newTestProvider("test", "", "json", "test", nil)
+	model := CatalogModel{ID: "anthropic.claude-5", Source: "foundation", Status: "ACTIVE", Availability: "AVAILABLE"}
+	s := p.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		return ModelSupport{Supported: true, Reason: "native Claude model"}
+	})
+	if !s.Supported {
+		t.Fatalf("expected supported, got reason: %s", s.Reason)
+	}
+	if s.Reason != "native Claude model" {
+		t.Errorf("reason = %q, want 'native Claude model'", s.Reason)
+	}
+}
+
+func TestSupportsModelWith_PredicateRejects(t *testing.T) {
+	p := newTestProvider("test", "", "json", "test", nil)
+	model := CatalogModel{ID: "xai.grok-4", Source: "mantle", Status: "ACTIVE", Availability: "AVAILABLE"}
+	s := p.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		return ModelSupport{Supported: false, Reason: "not a Claude model"}
+	})
+	if s.Supported {
+		t.Fatal("expected rejection")
+	}
+	if s.Reason != "not a Claude model" {
+		t.Errorf("reason = %q, want 'not a Claude model'", s.Reason)
+	}
+}
+
+func TestSupportsModelWith_InactiveModel(t *testing.T) {
+	base := newTestProvider("test", "", "json", "test", nil)
+	model := CatalogModel{ID: "old.model", Source: "foundation", Status: "LEGACY"}
+	s := base.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		// Predicate should not be called for inactive models
+		t.Fatal("predicate should not be called for inactive model")
+		return ModelSupport{Supported: true}
+	})
+	if s.Supported {
+		t.Fatal("expected rejection for inactive model")
+	}
+	if s.Reason != "model is not ACTIVE" {
+		t.Errorf("reason = %q, want 'model is not ACTIVE'", s.Reason)
+	}
+}
+
+func TestSupportsModelWith_UnavailableModel(t *testing.T) {
+	base := newTestProvider("test", "", "json", "test", nil)
+	model := CatalogModel{ID: "restricted.model", Source: "foundation", Status: "ACTIVE", Availability: "NOT_AVAILABLE"}
+	s := base.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
+		t.Fatal("predicate should not be called for unavailable model")
+		return ModelSupport{Supported: true}
+	})
+	if s.Supported {
+		t.Fatal("expected rejection for unavailable model")
+	}
+	if s.Reason != "model is not available to this AWS account" {
+		t.Errorf("reason = %q, want 'model is not available to this AWS account'", s.Reason)
+	}
+}
+
+// --- BaseProvider.CatalogSources() ---
+
+func TestCatalogSources_Empty(t *testing.T) {
+	p := newTestProvider("test", "", "json", "test", nil)
+	sources := p.CatalogSources()
+	if sources != nil {
+		t.Errorf("expected nil sources, got %v", sources)
+	}
+}
+
+func TestCatalogSources_Set(t *testing.T) {
+	p := newTestProvider("test", "", "json", "test", nil)
+	p.catalogSources = []string{"foundation", "profile"}
+	sources := p.CatalogSources()
+	if len(sources) != 2 || sources[0] != "foundation" || sources[1] != "profile" {
+		t.Errorf("sources = %v, want [foundation profile]", sources)
+	}
+}
