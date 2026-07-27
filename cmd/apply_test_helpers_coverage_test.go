@@ -19,8 +19,8 @@ func writeSettingsJSON(t *testing.T, home string, settings map[string]any) {
 		t.Fatalf("JoinUnder settings.json: %v", err)
 	}
 	settingsDir := settingsPath[:len(settingsPath)-len("/settings.json")]
-	if err := os.MkdirAll(settingsDir, 0o700); err != nil { //nolint:gosec // test-only temp dir
-		t.Fatalf("mkdir .claude: %v", err)
+	if err := os.MkdirAll(settingsDir, 0o700); err != nil {
+		t.Fatalf("mkdir %s: %v", settingsDir, err)
 	}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {

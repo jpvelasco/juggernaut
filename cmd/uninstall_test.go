@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // autoModeCapableStub wraps stubProvider (from apply_test.go) to report
@@ -47,8 +47,8 @@ func TestUninstall_DryRun_PreservesBlock(t *testing.T) {
 
 	// The juggernaut block must still be present after a dry-run.
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, ok := settings["juggernaut"]; !ok {
@@ -78,8 +78,8 @@ func TestUninstall_ScopeFilter(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, ok := settings["juggernaut"]; ok {
@@ -111,8 +111,8 @@ func TestUninstall_ConfirmYes(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, ok := settings["juggernaut"]; ok {
@@ -162,8 +162,8 @@ func TestUninstall_AbortPaths(t *testing.T) {
 
 			// Block must survive an aborted uninstall.
 			data := readSettingsJSON(t, home)
-			var settings map[string]any
-			if err := json.Unmarshal(data, &settings); err != nil {
+			settings, err := testutil.ParseJSON(data)
+			if err != nil {
 				t.Fatalf("parsing settings.json: %v", err)
 			}
 			if _, ok := settings["juggernaut"]; !ok {
