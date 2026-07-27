@@ -10,7 +10,7 @@ import (
 )
 
 // TestShow_ScopePathError covers the warnf branch in runShow when
-// settingsPath returns an error for an invalid scope.
+// provider.ConfigPath returns an error for an invalid scope.
 func TestShow_ScopePathError(t *testing.T) {
 	old := os.Stderr
 	r, w, _ := os.Pipe()
@@ -21,7 +21,7 @@ func TestShow_ScopePathError(t *testing.T) {
 	origScope := showFlags.scope
 	defer func() { showFlags.scope = origScope }()
 
-	// An invalid scope name will cause settingsPath to error for user scope,
+	// An invalid scope name will cause ConfigPath to error for user scope,
 	// exercising the warnf("could not determine %s scope path: %v") path.
 	// Project scope always works (returns .), so use user scope.
 	showFlags.scope = "user"
@@ -50,7 +50,7 @@ func TestUninstallSettingsBlock_ManagerError(t *testing.T) {
 	}
 
 	// The .claude directory does not exist in this temp dir, so
-	// settingsPath will resolve but the config will be empty/missing.
+	// ConfigPath will resolve but the config will be empty/missing.
 	// This exercises the "could not check" warnf path when HasManagedKeys
 	// encounters a missing config.
 	uninstallSettingsBlock(home, "user", prov)

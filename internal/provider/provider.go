@@ -156,6 +156,18 @@ func Get(name string) (Provider, error) {
 	return p, nil
 }
 
+// MustGet resolves a provider by name and panics if not found. Use for
+// hard-coded provider names that are always registered (e.g. "claude" in
+// doctor/show) where the error path is unreachable and only adds uncovered
+// lines.
+func MustGet(name string) Provider {
+	p, err := Get(name)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
 func supportedNames() string {
 	names := make([]string, 0, len(registry))
 	for n := range registry {

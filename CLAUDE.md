@@ -65,7 +65,7 @@ Single Go binary. Entry point: `main.go` → `cmd/` → `internal/`.
 
 **`main.go`** embeds `bedrock-config.json` via `//go:embed` and passes the bytes to `cmd.SetEmbeddedConfig()` before calling `cmd.Execute()`.
 
-**Shared helpers in `cmd/helpers.go`:** `homeDir()`, `settingsPath()`, `loadBedrockConfig()`, `toMap()`, `fileExists()`. All command files in `cmd/` use these — don't duplicate them.
+**Shared helpers in `cmd/helpers.go`:** `homeDir()`, `loadBedrockConfig()`, `toMap()`, `fileExists()`. All command files in `cmd/` use these — don't duplicate them. Config path resolution uses `provider.Get("<cli>").ConfigPath()` instead of a per-CLI helper.
 
 **Subcommands in `cmd/`:**
 - `apply.go` — builds and writes the Juggernaut block to the target CLI's config; installs shell activation; safely recovers known broken v4.2.6 launcher artifacts (Claude only)

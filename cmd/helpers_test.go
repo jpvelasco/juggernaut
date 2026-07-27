@@ -53,29 +53,6 @@ func TestHomeDir_FallsBackToUserHomeDir(t *testing.T) {
 	}
 }
 
-func TestSettingsPath_ProjectScope(t *testing.T) {
-	got, err := settingsPath("/ignored/home", "project")
-	if err != nil {
-		t.Fatalf("settingsPath() error: %v", err)
-	}
-	want := filepath.Join(".", ".claude", "settings.json")
-	if got != want {
-		t.Errorf("settingsPath(project) = %q, want %q", got, want)
-	}
-}
-
-func TestSettingsPath_UserScope(t *testing.T) {
-	home := t.TempDir()
-	got, err := settingsPath(home, "user")
-	if err != nil {
-		t.Fatalf("settingsPath() error: %v", err)
-	}
-	want := filepath.Join(home, ".claude", "settings.json")
-	if got != want {
-		t.Errorf("settingsPath(user) = %q, want %q", got, want)
-	}
-}
-
 func TestSetEmbeddedConfig_LoadsBytes(t *testing.T) {
 	// Save and restore the package-level embedded bytes so other tests that
 	// rely on the filesystem fallback are unaffected.
