@@ -248,14 +248,23 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}, nil
 }
 
+// StripRegionPrefix removes a cross-region inference profile prefix from a
+// model ID, recovering the bare provider model identifier. This is the single
+// exported function for region-prefix stripping — callers in cmd, bedrock, and
+// schema all use it. Uses RegionalInferencePrefixes as the authoritative list.
+func StripRegionPrefix(modelID string) string {
+	for _, prefix := range RegionalInferencePrefixes {
+		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
+			return rest
+		}
+	}
+	return modelID
+}
+
 // normalizeModelID strips the [1m] context suffix and regional inference
 // prefixes from a model ID, recovering the bare provider model identifier.
 func normalizeModelID(modelID string) string {
-	normalized := strings.TrimSuffix(modelID, "[1m]")
-	for _, prefix := range RegionalInferencePrefixes {
-		normalized = strings.TrimPrefix(normalized, prefix)
-	}
-	return normalized
+	return StripRegionPrefix(strings.TrimSuffix(modelID, "[1m]"))
 }
 
 // autoModeCapablePrefixes lists model ID fragments that support auto
@@ -333,17 +342,12 @@ func (b *Block) AutoModeAvailable() bool {
 
 // RegionalInferencePrefixes are the Bedrock cross-region inference profile
 // prefixes stripped to recover the bare provider model ID. Keep this the single
-// source of truth so mantleModelID, supportsClaudeCode1M, and
-// IsAutoModeCapableModel all normalize identically. Exported for use by cmd/models.go's bareModelID.
+// source of truth so StripRegionPrefix, supportsClaudeCode1M, and
+// IsAutoModeCapableModel all normalize identically.
 var RegionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
 
 func mantleModelID(model string) string {
-	for _, prefix := range RegionalInferencePrefixes {
-		if rest, ok := strings.CutPrefix(model, prefix); ok {
-			return rest
-		}
-	}
-	return model
+	return StripRegionPrefix(model)
 }
 
 func claudeCodeContextModelID(model string, use1M bool) string {

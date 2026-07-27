@@ -17,19 +17,19 @@ func TestStripRegionPrefix_PreservesGlobal(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "global inference profile preserved",
+			name:     "global. prefix stripped haiku",
 			input:    "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-			expected: "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			expected: "anthropic.claude-haiku-4-5-20251001-v1:0",
 		},
 		{
-			name:     "global opus preserved",
+			name:     "global. prefix stripped",
 			input:    "global.anthropic.claude-opus-4-8",
-			expected: "global.anthropic.claude-opus-4-8",
+			expected: "anthropic.claude-opus-4-8",
 		},
 		{
-			name:     "global sonnet preserved",
+			name:     "global. prefix stripped sonnet",
 			input:    "global.anthropic.claude-sonnet-4-6",
-			expected: "global.anthropic.claude-sonnet-4-6",
+			expected: "anthropic.claude-sonnet-4-6",
 		},
 		{
 			name:     "us. prefix stripped",
@@ -39,6 +39,11 @@ func TestStripRegionPrefix_PreservesGlobal(t *testing.T) {
 		{
 			name:     "eu. prefix stripped",
 			input:    "eu.anthropic.claude-sonnet-4-6",
+			expected: "anthropic.claude-sonnet-4-6",
+		},
+		{
+			name:     "us-gov. prefix stripped",
+			input:    "us-gov.anthropic.claude-sonnet-4-6",
 			expected: "anthropic.claude-sonnet-4-6",
 		},
 		{
@@ -72,9 +77,10 @@ func TestStripRegionPrefix_PreservesGlobal(t *testing.T) {
 	}
 }
 
-// TestStripRegionPrefix_BedrockConfigModelIDs verifies that every model ID
-// in bedrock-config.json survives stripRegionPrefix unchanged. This catches
-// regressions if the config switches to a different model ID format.
+// TestStripRegionPrefix_BedrockConfigModelIDs verifies that stripRegionPrefix
+// correctly strips regional inference prefixes from model IDs. Model IDs with
+// regional prefixes (global., us., us-gov., eu., apac.) are stripped to their
+// bare provider model ID. Plain model IDs without prefixes are unchanged.
 func TestStripRegionPrefix_BedrockConfigModelIDs(t *testing.T) {
 	repoRoot := filepath.Join("..", "..")
 	cfg, err := Load(filepath.Join(repoRoot, "bedrock-config.json"))
@@ -91,11 +97,19 @@ func TestStripRegionPrefix_BedrockConfigModelIDs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := stripRegionPrefix(id)
+			// Model IDs with regional prefixes should be stripped to bare form
+			for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
+				if strings.HasPrefix(id, prefix) {
+					want := strings.TrimPrefix(id, prefix)
+					if got != want {
+						t.Errorf("stripRegionPrefix(%q) = %q, want %q (strip %q)", id, got, want, prefix)
+					}
+					return
+				}
+			}
+			// Model IDs without regional prefixes should be unchanged
 			if got != id {
 				t.Errorf("stripRegionPrefix(%q) = %q, want %q", id, got, id)
-			}
-			if strings.HasPrefix(id, "global.") && !strings.HasPrefix(got, "global.") {
-				t.Errorf("global prefix stripped for %s model: got %q", name, got)
 			}
 		})
 	}
@@ -288,21 +302,31 @@ func TestFindBedrockConfigFile(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Regression: old behavior would have stripped global. prefix
+// Regression: ensure all regional prefixes are stripped correctly
 // -----------------------------------------------------------------------
 
-func TestStripRegionPrefix_OldBehaviorReggression(t *testing.T) {
-	// The old code stripped "global." from model IDs, producing raw model
-	// IDs that Bedrock rejects with HTTP 400. This test ensures that
-	// behavior cannot regress.
-	modelID := "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-	got := stripRegionPrefix(modelID)
-	if got != modelID {
-		t.Errorf("regression: global prefix was stripped, got %q", got)
+func TestStripRegionPrefix_OldBehaviorRegression(t *testing.T) {
+	// All regional inference prefixes (including global. and us-gov.) are
+	// stripped to recover the bare provider model ID. The old code had a
+	// stale prefix list that missed global. and us-gov. — this test ensures
+	// the fixed list is used.
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"global-prefix", "global.anthropic.claude-haiku-4-5-20251001-v1:0", "anthropic.claude-haiku-4-5-20251001-v1:0"},
+		{"us-prefix", "us.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
+		{"us-gov-prefix", "us-gov.anthropic.claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514"},
+		{"eu-prefix", "eu.anthropic.claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514"},
+		{"no-prefix", "anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
 	}
-	// Verify the stripped result would NOT be the raw model ID (old bug).
-	rawModelID := "anthropic.claude-haiku-4-5-20251001-v1:0"
-	if got == rawModelID {
-		t.Error("regression: global prefix was stripped to raw model ID (old bug)")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripRegionPrefix(tt.in)
+			if got != tt.want {
+				t.Errorf("stripRegionPrefix(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
