@@ -1,0 +1,60 @@
+package cmd
+
+import (
+	"os"
+	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
+	"github.com/spf13/cobra"
+)
+
+// TestProviderConfigPath_UserAndProject covers the provider.Get("claude") +
+// ConfigPath calls introduced in doctor.go and show.go when settingsPath was
+// removed. These replace the dead helper with the provider interface method.
+func TestProviderConfigPath_UserAndProject(t *testing.T) {
+	home := testutil.NewTestHome(t)
+
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("provider.Get(claude) error: %v", err)
+	}
+
+	path, err := prov.ConfigPath(home, "user")
+	if err != nil {
+		t.Fatalf("ConfigPath(user) error: %v", err)
+	}
+	if path == "" {
+		t.Error("ConfigPath(user) returned empty path")
+	}
+
+	// Project scope should resolve to ./.claude/settings.json.
+	path, err = prov.ConfigPath(home, "project")
+	if err != nil {
+		t.Fatalf("ConfigPath(project) error: %v", err)
+	}
+	if path == "" {
+		t.Error("ConfigPath(project) returned empty path")
+	}
+}
+
+// TestShow_ProviderGetPath covers the runShow path that calls
+// provider.Get("claude") and prov.ConfigPath — the replacement for
+// the removed settingsPath helper.
+func TestShow_ProviderGetPath(t *testing.T) {
+	_ = testutil.NewTestHome(t)
+
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	defer func() { os.Stderr = old; r.Close(); w.Close() }()
+
+	origScope := showFlags.scope
+	defer func() { showFlags.scope = origScope }()
+	showFlags.scope = "user"
+
+	// runShow exercises provider.Get("claude") + ConfigPath for each scope.
+	_ = runShow(&cobra.Command{}, []string{})
+	w.Close()
+	_ = r
+}
