@@ -143,27 +143,5 @@ func detectDeepKeyCollisions(existingVal any, key string, subs []string) []Colli
 	return collisions
 }
 
-// lookupNestedKey walks a slice of dotted path parts through nested maps,
-// returning the leaf value if the path resolves to a present value. A
-// genuinely MISSING intermediate is "nothing to collide with" (consistent
-// with removeNestedKey's missing-intermediate no-op) — but an intermediate
-// that is PRESENT with the wrong type (not a map) is not "missing", it's a
-// foreign value incompatible with the table Juggernaut expects to write
-// through; mergeNestedPrefix's recursion guard would silently let Juggernaut's
-// map replace that scalar with no error, so it must be surfaced as a
-// collision at that intermediate's own path rather than treated as absent.
-func lookupNestedKey(tbl map[string]any, parts []string) (any, bool) {
-	if len(parts) == 1 {
-		v, ok := tbl[parts[0]]
-		return v, ok
-	}
-	raw, present := tbl[parts[0]]
-	if !present {
-		return nil, false
-	}
-	child, ok := raw.(map[string]any)
-	if !ok {
-		return raw, true // present but wrong type — a collision, not "missing"
-	}
-	return lookupNestedKey(child, parts[1:])
-}
+// lookupNestedKey is implemented in walker.go using the shared walkNestedMap helper.
+// The declaration there uses the same signature and behavior as the original.

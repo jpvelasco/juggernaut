@@ -357,34 +357,8 @@ func removeOwnedSubKeys(existing map[string]any, k string, subs []string, path s
 	return nil
 }
 
-// removeNestedKey walks a slice of path parts through nested maps and deletes
-// the leaf key. Empty parent maps are cleaned up on the way back so orphan
-// tables don't remain.
-func removeNestedKey(tbl map[string]any, parts []string, prefix string, path string) error {
-	if len(parts) == 1 {
-		delete(tbl, parts[0])
-		return nil
-	}
-	raw, present := tbl[parts[0]]
-	if !present {
-		return nil // sub-key doesn't exist — nothing to remove
-	}
-	child, ok := raw.(map[string]any)
-	if !ok {
-		return fmt.Errorf("cannot remove nested key %q in %s: expected a table at %s but found %T",
-			prefix, path, parts[0], raw)
-	}
-	if err := removeNestedKey(child, parts[1:], prefix, path); err != nil {
-		return err
-	}
-	// Clean up empty parent maps.
-	if len(child) == 0 {
-		delete(tbl, parts[0])
-	} else {
-		tbl[parts[0]] = child
-	}
-	return nil
-}
+// removeNestedKey is implemented in walker.go using the shared walkNestedMap helper.
+// The declaration there uses the same signature and behavior as the original.
 
 // HasManagedKeys reports whether the config contains the juggernaut block or any
 // of the given managed top-level keys. It does not require the
