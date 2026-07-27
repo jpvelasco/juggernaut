@@ -143,6 +143,7 @@ func TestBuildAuthTokenOutput_Formats(t *testing.T) {
 // falls through to its normal login.
 func TestAuthToken_Command_ErrorsWhenNoToken(t *testing.T) {
 	_ = testutil.NewTestHome(t)
+	testutil.SkipIfNoKeychain(t) // isolated empty store
 
 	var err error
 	out := captureStdout(t, func() {
