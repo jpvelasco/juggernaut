@@ -150,6 +150,9 @@ func first25(b []byte) string {
 // in keychain_test.go in the same package; redeclared name avoided).
 func skipIfUnavailableStab(t *testing.T, s *keychain.Store) {
 	t.Helper()
+	if runtime.GOOS == "darwin" {
+		t.Skip("keychain security command hangs on macOS CI")
+	}
 	if err := s.Set("probe"); err != nil {
 		t.Skipf("keychain backend unavailable: %v", err)
 	}
