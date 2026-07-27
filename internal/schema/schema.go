@@ -157,6 +157,13 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 		warnings = append(warnings, FableDataRetentionWarning)
 	}
 
+	return assembleBlock(opts, opus, sonnet, haiku, fable, env, fallbackModels, availableModels, warnings), nil
+}
+
+// assembleBlock constructs the Block struct from resolved values.
+// All validation and resolution must have completed before calling this.
+func assembleBlock(opts Options, opus, sonnet, haiku, fable string, env map[string]string,
+	fallbackModels, availableModels []string, warnings []string) *Block {
 	return &Block{
 		Auth: Auth{
 			Mode:   opts.AuthMode,
@@ -189,7 +196,7 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 			ServiceTier:            opts.ServiceTier,
 		},
 		Warnings: warnings,
-	}, nil
+	}
 }
 
 // resolveTierModels fills in per-tier model IDs from the config defaults.

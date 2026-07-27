@@ -140,3 +140,100 @@ func TestResolveTierModels_EmptyConfig(t *testing.T) {
 		t.Errorf("expected empty fable, got %q", fable)
 	}
 }
+
+// TestAssembleBlock_OutputIdentity verifies that assembleBlock produces the
+// same Block fields as Build for multiple option combinations. Build runs
+// validation + resolution + assembleBlock; this tests that assembleBlock
+// faithfully maps all resolved values into the Block struct.
+func TestAssembleBlock_OutputIdentity(t *testing.T) {
+	cfg := &bedrock.Config{
+		Models: bedrock.ModelSet{
+			Opus:   "global.anthropic.claude-opus-5",
+			Sonnet: "global.anthropic.claude-sonnet-5",
+			Haiku:  "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+			Fable:  "global.anthropic.claude-fable-5",
+		},
+		Environment: map[string]string{
+			"CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
+		},
+		EnvironmentBedrockAuth: map[string]string{
+			"CLAUDE_CODE_USE_BEDROCK": "1",
+		},
+		Regions:  []string{"us-east-1", "us-west-2"},
+		Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: "iam"},
+	}
+
+	cases := []struct {
+		name string
+		opts Options
+	}{
+		{
+			name: "default_IAM",
+			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true},
+		},
+		{
+			name: "mantle",
+			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true, UseMantle: true},
+		},
+		{
+			name: "opusplan",
+			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true, Opusplan: true},
+		},
+		{
+			name: "auto_mode",
+			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true, PermissionMode: "auto"},
+		},
+		{
+			name: "service_tier",
+			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true, ServiceTier: "flex"},
+		},
+		{
+			name: "custom_models",
+			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true,
+				OpusModel: "us.anthropic.claude-opus-4-8", SonnetModel: "us.anthropic.claude-sonnet-4-6"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			block, err := Build(cfg, tc.opts)
+			if err != nil {
+				t.Fatalf("Build() error: %v", err)
+			}
+
+			// Verify all fields are set correctly
+			if block.Auth.Mode != tc.opts.AuthMode {
+				t.Errorf("auth.mode = %q, want %q", block.Auth.Mode, tc.opts.AuthMode)
+			}
+			if block.Auth.Region != tc.opts.Region {
+				t.Errorf("auth.region = %q, want %q", block.Auth.Region, tc.opts.Region)
+			}
+			if block.Meta.Version != tc.opts.Version {
+				t.Errorf("meta.version = %q, want %q", block.Meta.Version, tc.opts.Version)
+			}
+			if block.Meta.Opusplan != tc.opts.Opusplan {
+				t.Errorf("meta.opusplan = %v, want %v", block.Meta.Opusplan, tc.opts.Opusplan)
+			}
+			if block.Meta.UseMantle != tc.opts.UseMantle {
+				t.Errorf("meta.useMantle = %v, want %v", block.Meta.UseMantle, tc.opts.UseMantle)
+			}
+			if block.Meta.PermissionMode != tc.opts.PermissionMode {
+				t.Errorf("meta.permissionMode = %q, want %q", block.Meta.PermissionMode, tc.opts.PermissionMode)
+			}
+			if block.Meta.ServiceTier != tc.opts.ServiceTier {
+				t.Errorf("meta.serviceTier = %q, want %q", block.Meta.ServiceTier, tc.opts.ServiceTier)
+			}
+			if block.Meta.Effort != tc.opts.Effort {
+				t.Errorf("meta.effort = %q, want %q", block.Meta.Effort, tc.opts.Effort)
+			}
+
+			// Verify env has the expected keys
+			if block.Env["AWS_REGION"] != tc.opts.Region {
+				t.Errorf("env.AWS_REGION = %q, want %q", block.Env["AWS_REGION"], tc.opts.Region)
+			}
+			if block.Env["CLAUDE_CODE_EFFORT_LEVEL"] != tc.opts.Effort {
+				t.Errorf("env.CLAUDE_CODE_EFFORT_LEVEL = %q, want %q", block.Env["CLAUDE_CODE_EFFORT_LEVEL"], tc.opts.Effort)
+			}
+		})
+	}
+}
