@@ -137,28 +137,9 @@ func resolvedScopes(filter string) []string {
 // toProviderOptions maps the cmd-built schema.Options onto the CLI-neutral
 // provider.Options consumed by Provider.BuildConfig.
 func toProviderOptions(o schema.Options) provider.Options {
-	return provider.Options{
-		AuthMode:               o.AuthMode,
-		Region:                 o.Region,
-		Effort:                 o.Effort,
-		Scope:                  o.Scope,
-		Version:                o.Version,
-		OpusModel:              o.OpusModel,
-		SonnetModel:            o.SonnetModel,
-		HaikuModel:             o.HaikuModel,
-		FableModel:             o.FableModel,
-		Opusplan:               o.Opusplan,
-		FallbackModels:         o.FallbackModels,
-		AvailableModels:        o.AvailableModels,
-		EnforceAvailableModels: o.EnforceAvailableModels,
-		Use1M:                  o.Use1M,
-		UseMantle:              o.UseMantle,
-		MantleURL:              o.MantleURL,
-		AuthValidated:          o.AuthValidated,
-		PermissionMode:         o.PermissionMode,
-		AlwaysThinking:         o.AlwaysThinking,
-		ServiceTier:            o.ServiceTier,
-	}
+	var po provider.Options
+	po.FromSchemaOptions(o)
+	return po
 }
 
 func resolveMantle() (bool, error) {

@@ -23,12 +23,18 @@ func testConfig() *bedrock.Config {
 
 func baseOpts() Options {
 	return Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Effort:        "high",
-		Scope:         "user",
-		Version:       "9.9.9",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Effort:        "high",
+			Scope:         "user",
+			Version:       "9.9.9",
+			AuthValidated: true,
+		},
+		Region:   "us-west-2",
+		AuthMode: "iam",
+		Scope:    "user",
+		Version:  "9.9.9",
 	}
 }
 
@@ -68,8 +74,8 @@ func TestClaude_BuildConfig_EnvHasBedrockModels(t *testing.T) {
 func TestClaude_BuildConfig_AvailableModels(t *testing.T) {
 	p, _ := Get("claude")
 	opts := baseOpts()
-	opts.AvailableModels = []string{"sonnet", "haiku"}
-	opts.EnforceAvailableModels = true
+	opts.SchemaOpts.AvailableModels = []string{"sonnet", "haiku"}
+	opts.SchemaOpts.EnforceAvailableModels = true
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)

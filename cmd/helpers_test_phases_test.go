@@ -54,59 +54,59 @@ func TestToProviderOptions_FieldsMapped(t *testing.T) {
 	if po.Region != "us-east-1" {
 		t.Errorf("Region = %q, want %q", po.Region, "us-east-1")
 	}
-	if po.Effort != "high" {
-		t.Errorf("Effort = %q, want %q", po.Effort, "high")
+	if po.SchemaOpts.Effort != "high" {
+		t.Errorf("Effort = %q, want %q", po.SchemaOpts.Effort, "high")
 	}
-	if po.Scope != "user" {
-		t.Errorf("Scope = %q, want %q", po.Scope, "user")
+	if po.SchemaOpts.Scope != "user" {
+		t.Errorf("Scope = %q, want %q", po.SchemaOpts.Scope, "user")
 	}
-	if po.Version != "5.4.0" {
-		t.Errorf("Version = %q, want %q", po.Version, "5.4.0")
+	if po.SchemaOpts.Version != "5.4.0" {
+		t.Errorf("Version = %q, want %q", po.SchemaOpts.Version, "5.4.0")
 	}
-	if po.OpusModel != "global.anthropic.claude-opus-4-8" {
-		t.Errorf("OpusModel = %q", po.OpusModel)
+	if po.SchemaOpts.OpusModel != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("OpusModel = %q", po.SchemaOpts.OpusModel)
 	}
-	if po.SonnetModel != "global.anthropic.claude-sonnet-5" {
-		t.Errorf("SonnetModel = %q", po.SonnetModel)
+	if po.SchemaOpts.SonnetModel != "global.anthropic.claude-sonnet-5" {
+		t.Errorf("SonnetModel = %q", po.SchemaOpts.SonnetModel)
 	}
-	if po.HaikuModel != "anthropic.claude-haiku-4-5-20251001-v1:0" {
-		t.Errorf("HaikuModel = %q", po.HaikuModel)
+	if po.SchemaOpts.HaikuModel != "anthropic.claude-haiku-4-5-20251001-v1:0" {
+		t.Errorf("HaikuModel = %q", po.SchemaOpts.HaikuModel)
 	}
-	if po.FableModel != "global.anthropic.claude-fable-5" {
-		t.Errorf("FableModel = %q", po.FableModel)
+	if po.SchemaOpts.FableModel != "global.anthropic.claude-fable-5" {
+		t.Errorf("FableModel = %q", po.SchemaOpts.FableModel)
 	}
-	if !po.Opusplan {
+	if !po.SchemaOpts.Opusplan {
 		t.Error("Opusplan = false, want true")
 	}
-	if len(po.FallbackModels) != 2 || po.FallbackModels[0] != "global.anthropic.claude-opus-4-8" {
-		t.Errorf("FallbackModels = %v", po.FallbackModels)
+	if len(po.SchemaOpts.FallbackModels) != 2 || po.SchemaOpts.FallbackModels[0] != "global.anthropic.claude-opus-4-8" {
+		t.Errorf("FallbackModels = %v", po.SchemaOpts.FallbackModels)
 	}
-	if len(po.AvailableModels) != 2 || po.AvailableModels[0] != "sonnet" {
-		t.Errorf("AvailableModels = %v", po.AvailableModels)
+	if len(po.SchemaOpts.AvailableModels) != 2 || po.SchemaOpts.AvailableModels[0] != "sonnet" {
+		t.Errorf("AvailableModels = %v", po.SchemaOpts.AvailableModels)
 	}
-	if !po.EnforceAvailableModels {
+	if !po.SchemaOpts.EnforceAvailableModels {
 		t.Error("EnforceAvailableModels = false, want true")
 	}
-	if !po.Use1M {
+	if !po.SchemaOpts.Use1M {
 		t.Error("Use1M = false, want true")
 	}
-	if po.UseMantle {
+	if po.SchemaOpts.UseMantle {
 		t.Error("UseMantle = true, want false")
 	}
-	if po.MantleURL != "" {
-		t.Errorf("MantleURL = %q, want empty", po.MantleURL)
+	if po.SchemaOpts.MantleURL != "" {
+		t.Errorf("MantleURL = %q, want empty", po.SchemaOpts.MantleURL)
 	}
-	if !po.AuthValidated {
+	if !po.SchemaOpts.AuthValidated {
 		t.Error("AuthValidated = false, want true")
 	}
-	if po.PermissionMode != "auto" {
-		t.Errorf("PermissionMode = %q, want %q", po.PermissionMode, "auto")
+	if po.SchemaOpts.PermissionMode != "auto" {
+		t.Errorf("PermissionMode = %q, want %q", po.SchemaOpts.PermissionMode, "auto")
 	}
-	if !po.AlwaysThinking {
+	if !po.SchemaOpts.AlwaysThinking {
 		t.Error("AlwaysThinking = false, want true")
 	}
-	if po.ServiceTier != "flex" {
-		t.Errorf("ServiceTier = %q, want %q", po.ServiceTier, "flex")
+	if po.SchemaOpts.ServiceTier != "flex" {
+		t.Errorf("ServiceTier = %q, want %q", po.SchemaOpts.ServiceTier, "flex")
 	}
 }
 
@@ -114,14 +114,15 @@ func TestToProviderOptions_EmptyOptions(t *testing.T) {
 	o := schema.Options{}
 	po := toProviderOptions(o)
 
-	if po.AuthMode != "" || po.Region != "" || po.Effort != "" ||
-		po.Scope != "" || po.Version != "" || po.OpusModel != "" ||
-		po.SonnetModel != "" || po.HaikuModel != "" || po.FableModel != "" ||
-		po.Opusplan || len(po.FallbackModels) > 0 || len(po.AvailableModels) > 0 ||
-		po.EnforceAvailableModels || po.Use1M || po.UseMantle ||
-		po.MantleURL != "" || po.AuthValidated || po.PermissionMode != "" ||
-		po.AlwaysThinking || po.ServiceTier != "" {
-		t.Errorf("expected all-zero provider.Options, got: %+v", po)
+	// SchemaOpts fields should all be zero.
+	if po.SchemaOpts.AuthMode != "" || po.SchemaOpts.Region != "" || po.SchemaOpts.Effort != "" ||
+		po.SchemaOpts.Scope != "" || po.SchemaOpts.Version != "" || po.SchemaOpts.OpusModel != "" ||
+		po.SchemaOpts.SonnetModel != "" || po.SchemaOpts.HaikuModel != "" || po.SchemaOpts.FableModel != "" ||
+		po.SchemaOpts.Opusplan || len(po.SchemaOpts.FallbackModels) > 0 || len(po.SchemaOpts.AvailableModels) > 0 ||
+		po.SchemaOpts.EnforceAvailableModels || po.SchemaOpts.Use1M || po.SchemaOpts.UseMantle ||
+		po.SchemaOpts.MantleURL != "" || po.SchemaOpts.AuthValidated || po.SchemaOpts.PermissionMode != "" ||
+		po.SchemaOpts.AlwaysThinking || po.SchemaOpts.ServiceTier != "" {
+		t.Errorf("expected all-zero SchemaOpts, got: %+v", po.SchemaOpts)
 	}
 }
 
@@ -810,12 +811,18 @@ func TestCommitApply_CollisionRefusal(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	err = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
@@ -854,12 +861,18 @@ func TestCommitApply_KeychainStorage(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      authmode.BedrockAPIKey,
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      authmode.BedrockAPIKey,
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: authmode.BedrockAPIKey,
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	// Pass a non-empty token — commitApply should store it via keychain.SetWithFallback.
@@ -919,12 +932,18 @@ func TestPrintApplyDryRun_NoCollisions(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
@@ -984,12 +1003,18 @@ func TestPrintApplyDryRun_CollisionsNoForce(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
@@ -1516,12 +1541,18 @@ func TestCommitApply_WarningsOutput(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
@@ -1567,12 +1598,18 @@ func TestPrintApplyDryRun_ClaudeLegacyRecovery(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
@@ -2012,12 +2049,18 @@ func TestCommitApply_SuccessPath_ActivationInstalled(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
@@ -2085,12 +2128,18 @@ func TestCommitApply_ForceBypassesCollision(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
+		SchemaOpts: schema.Options{
+			AuthMode:      "iam",
+			Region:        "us-west-2",
+			Scope:         "user",
+			Version:       "5.4.0",
+			Effort:        "high",
+			AuthValidated: true,
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
@@ -2606,13 +2655,19 @@ func TestCommitApply_AutoModeWarning(t *testing.T) {
 	}
 
 	provOpts := provider.Options{
-		AuthMode:       "iam",
-		Region:         "us-west-2",
-		Scope:          "user",
-		Version:        "5.4.0",
-		Effort:         "high",
-		AuthValidated:  true,
-		PermissionMode: "auto",
+		SchemaOpts: schema.Options{
+			AuthMode:       "iam",
+			Region:         "us-west-2",
+			Scope:          "user",
+			Version:        "5.4.0",
+			Effort:         "high",
+			AuthValidated:  true,
+			PermissionMode: "auto",
+		},
+		AuthMode: "iam",
+		Region:   "us-west-2",
+		Scope:    "user",
+		Version:  "5.4.0",
 	}
 
 	out := captureStdout(t, func() {
