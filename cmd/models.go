@@ -10,7 +10,6 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
-	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
 )
 
@@ -195,9 +194,9 @@ func pinStatus(pinned string, anthropic, profiles []discovery.DiscoveredModel) (
 		}
 		return "", false
 	}
-	bare := schema.StripRegionPrefix(pinned)
+	bare := bedrock.StripRegionPrefix(pinned)
 	for _, m := range anthropic {
-		if m.ID == bare || schema.StripRegionPrefix(m.ID) == bare {
+		if m.ID == bare || bedrock.StripRegionPrefix(m.ID) == bare {
 			return m.Status, true
 		}
 	}
@@ -205,7 +204,7 @@ func pinStatus(pinned string, anthropic, profiles []discovery.DiscoveredModel) (
 }
 
 func hasRegionalPrefix(modelID string) bool {
-	return schema.StripRegionPrefix(modelID) != modelID
+	return bedrock.StripRegionPrefix(modelID) != modelID
 }
 
 // activeCandidatesForTier returns every ACTIVE model matching tier, sorted

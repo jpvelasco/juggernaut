@@ -10,7 +10,6 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
-	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 func testBedrockConfigForModels() *bedrock.Config {
@@ -152,8 +151,8 @@ func TestBareModelID_StripsRegionalPrefixes(t *testing.T) {
 		{"", ""},
 	}
 	for _, c := range cases {
-		if got := schema.StripRegionPrefix(c.id); got != c.want {
-			t.Errorf("schema.StripRegionPrefix(%q) = %q, want %q", c.id, got, c.want)
+		if got := bedrock.StripRegionPrefix(c.id); got != c.want {
+			t.Errorf("bedrock.StripRegionPrefix(%q) = %q, want %q", c.id, got, c.want)
 		}
 	}
 }

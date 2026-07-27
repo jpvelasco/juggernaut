@@ -14,6 +14,24 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 )
 
+// RegionalInferencePrefixes are the Bedrock cross-region inference profile
+// prefixes stripped to recover the bare provider model ID. This is the single
+// source of truth — StripRegionPrefix, schema, and all callers use it.
+var RegionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
+
+// StripRegionPrefix removes a cross-region inference profile prefix from a
+// model ID, recovering the bare provider model identifier. This is the single
+// exported function for region-prefix stripping — callers in cmd, bedrock, and
+// schema all use it. Uses RegionalInferencePrefixes as the authoritative list.
+func StripRegionPrefix(modelID string) string {
+	for _, prefix := range RegionalInferencePrefixes {
+		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
+			return rest
+		}
+	}
+	return modelID
+}
+
 const defaultTimeout = 15 * time.Second
 
 // httpClient is the client used for connectivity probes. It is a package var so
@@ -155,20 +173,9 @@ func (r *ConnectivityResult) IsAuthFailure() bool {
 	return r.StatusCode == 401 || r.StatusCode == 403
 }
 
-// stripRegionPrefix removes the Bedrock cross-region inference profile prefix so the
-// model ID is valid for direct API calls (InvokeModel). This mirrors
-// schema.StripRegionPrefix but must live here to avoid a circular import:
-// internal/schema imports internal/bedrock (for bedrock.Config in schema.Build),
-// so internal/bedrock cannot import internal/schema back. The prefix list below
-// is kept identical to schema.RegionalInferencePrefixes; if that list changes,
-// update this one too.
+// stripRegionPrefix delegates to the exported StripRegionPrefix.
 func stripRegionPrefix(modelID string) string {
-	for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
-		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
-			return rest
-		}
-	}
-	return modelID
+	return StripRegionPrefix(modelID)
 }
 
 func formatResponseError(status int, body []byte) string {

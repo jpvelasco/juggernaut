@@ -267,16 +267,11 @@ func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable stri
 }
 
 // StripRegionPrefix removes a cross-region inference profile prefix from a
-// model ID, recovering the bare provider model identifier. This is the single
-// exported function for region-prefix stripping — callers in cmd, bedrock, and
-// schema all use it. Uses RegionalInferencePrefixes as the authoritative list.
+// model ID, recovering the bare provider model identifier. This is a re-export
+// of bedrock.StripRegionPrefix for backward compatibility — the authoritative
+// implementation lives in internal/bedrock.
 func StripRegionPrefix(modelID string) string {
-	for _, prefix := range RegionalInferencePrefixes {
-		if rest, ok := strings.CutPrefix(modelID, prefix); ok {
-			return rest
-		}
-	}
-	return modelID
+	return bedrock.StripRegionPrefix(modelID)
 }
 
 // normalizeModelID strips the [1m] context suffix and regional inference
@@ -358,11 +353,9 @@ func (b *Block) AutoModeAvailable() bool {
 		IsAutoModeCapableModel(b.Models.Fable)
 }
 
-// RegionalInferencePrefixes are the Bedrock cross-region inference profile
-// prefixes stripped to recover the bare provider model ID. Keep this the single
-// source of truth so StripRegionPrefix, supportsClaudeCode1M, and
-// IsAutoModeCapableModel all normalize identically.
-var RegionalInferencePrefixes = []string{"global.", "us.", "us-gov.", "eu.", "apac."}
+// RegionalInferencePrefixes is a re-export of bedrock.RegionalInferencePrefixes
+// for backward compatibility.
+var RegionalInferencePrefixes = bedrock.RegionalInferencePrefixes
 
 func mantleModelID(model string) string {
 	return StripRegionPrefix(model)
