@@ -142,6 +142,18 @@ func resolveMantle() (bool, error) {
 	return applyFlags.mantle || applyFlags.mantleURL != "", nil
 }
 
+// validateMantleAuth ensures that Mantle-only CLIs (Codex, OpenCode, Grok)
+// use a Bedrock API key — IAM/SSO (SigV4) does not reach Mantle. Rejects
+// non-bearer auth modes so we never write a config that can't authenticate.
+func validateMantleAuth(prov provider.Provider, authMode string) error {
+	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
+		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
+			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
+			prov.DisplayName(), authmode.BedrockAPIKey)
+	}
+	return nil
+}
+
 func resolveOpusplanConflict() error {
 	if applyFlags.noOpusplan && applyFlags.opusplan {
 		return fmt.Errorf("--no-opusplan cannot be combined with --opusplan")

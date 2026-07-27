@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 	"github.com/spf13/cobra"
@@ -116,9 +117,6 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Resolve and validate the target CLI. Defaults to Claude Code, so callers
-	// that pass no --cli are unaffected. An unknown name errors here before any
-	// work is done.
 	prov, err := provider.Get(applyFlags.cli)
 	if err != nil {
 		return err
@@ -138,19 +136,10 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Mantle-only CLIs (Codex, OpenCode, Grok) authenticate solely via a bearer
-	// token; IAM/SSO (SigV4) does not reach Mantle. Reject a non-bearer auth mode
-	// for them so we never write a config that can't authenticate — the symptom
-	// is the CLI silently falling back to its own sign-in at launch.
-	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
-		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
-			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
-			prov.DisplayName(), authmode.BedrockAPIKey)
+	if err := validateMantleAuth(prov, authMode); err != nil {
+		return err
 	}
 
-	// Skip credential resolution in dry-run mode: it can prompt interactively
-	// for a Bedrock API key, and a dry-run must have no side effects. The token
-	// is only consumed by commitApply, which dry-run never reaches.
 	var token string
 	if !applyFlags.dryRun {
 		token, err = resolveCredential(authMode, home)
@@ -159,32 +148,54 @@ func runApply(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	useMantle, err := resolveMantle()
+	plan, err := buildApplyPlan(home, region, bCfg, authMode, opusplan)
 	if err != nil {
 		return err
 	}
 
+	return executeApply(home, prov, bCfg, authMode, token, plan)
+}
+
+// applyPlan holds the resolved configuration produced by buildApplyPlan, ready
+// for dry-run display or commit.
+type applyPlan struct {
+	block    *schema.Block
+	provOpts provider.Options
+}
+
+// buildApplyPlan resolves Mantle, models, and options, then builds the schema
+// block and provider options. This is the planning phase — no side effects.
+func buildApplyPlan(home, region string, bCfg *bedrock.Config, authMode string, opusplan bool) (*applyPlan, error) {
+	useMantle, err := resolveMantle()
+	if err != nil {
+		return nil, err
+	}
+
 	models, err := resolveApplyModels()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	opts := buildApplyOptions(authMode, region, opusplan, useMantle, models)
 	block, err := schema.Build(bCfg, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	provOpts, err := buildProviderOptions(home, region, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	return &applyPlan{block: block, provOpts: provOpts}, nil
+}
+
+// executeApply performs the final step: dry-run display or commit.
+func executeApply(home string, prov provider.Provider, bCfg *bedrock.Config, authMode string, token string, plan *applyPlan) error {
 	if applyFlags.dryRun {
-		return printApplyDryRun(home, block, prov, bCfg, provOpts)
+		return printApplyDryRun(home, plan.block, prov, bCfg, plan.provOpts)
 	}
-
-	return commitApply(home, authMode, token, block, prov, bCfg, provOpts)
+	return commitApply(home, authMode, token, plan.block, prov, bCfg, plan.provOpts)
 }
 
 // parseCommaSeparatedModels splits a comma-separated model ID string, then
