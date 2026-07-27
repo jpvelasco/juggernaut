@@ -142,17 +142,10 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 		},
 	}
 
-	var warnings []string
-	if regionMsg != "" {
-		warnings = append(warnings, modelID+" "+regionMsg)
-	}
-	if w := catalogUnavailableWarning(opts.ModelCatalog, modelID, region, "refresh the catalog or select a listed model", g, opts.RefreshedSources); w != "" {
-		warnings = append(warnings, w)
-	}
 	return ConfigPlan{
 		Keys:        keys,
 		ManagedKeys: g.NativeManagedKeys(),
-		Warnings:    warnings,
+		Warnings:    assembleMantleWarnings(regionMsg, modelID, region, "refresh the catalog or select a listed model", " ", g, opts.ModelCatalog, opts.RefreshedSources),
 	}, nil
 }
 

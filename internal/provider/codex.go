@@ -173,17 +173,10 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	}
 	keys["juggernaut"] = blockMap
 
-	var warnings []string
-	if regionMsg != "" {
-		warnings = append(warnings, fmt.Sprintf("%s: %s", m.ModelID, regionMsg))
-	}
-	if w := catalogUnavailableWarning(opts.ModelCatalog, m.ModelID, region, "refresh the catalog or select a listed model", c, opts.RefreshedSources); w != "" {
-		warnings = append(warnings, w)
-	}
 	return ConfigPlan{
 		Keys:        keys,
 		ManagedKeys: c.NativeManagedKeys(),
-		Warnings:    warnings,
+		Warnings:    assembleMantleWarnings(regionMsg, m.ModelID, region, "refresh the catalog or select a listed model", ": ", c, opts.ModelCatalog, opts.RefreshedSources),
 	}, nil
 }
 

@@ -40,3 +40,19 @@ func resolveMantleRegion(requested string, explicit bool, known []string) (regio
 		"not available in %s %s; using %s instead (available: %v)",
 		source, requested, known[0], known), true
 }
+
+// assembleMantleWarnings builds the warning list shared by Mantle-based
+// providers (Codex, Grok). It combines the region-switch message (if any)
+// with the catalog unavailability warning (if applicable). The separator
+// parameter controls how the model ID and region message are joined:
+// Codex uses ": " while Grok uses " ".
+func assembleMantleWarnings(regionMsg, modelID, region, catalogSuffix, sep string, p CatalogProvider, models []CatalogModel, refreshedSources []string) []string {
+	var warnings []string
+	if regionMsg != "" {
+		warnings = append(warnings, modelID+sep+regionMsg)
+	}
+	if w := catalogUnavailableWarning(models, modelID, region, catalogSuffix, p, refreshedSources); w != "" {
+		warnings = append(warnings, w)
+	}
+	return warnings
+}

@@ -129,6 +129,9 @@ func catalogSelectionState(models []CatalogModel, selectedID string, p CatalogPr
 // The suffix parameter allows providers to customize the action text.
 // Returns an empty string when the catalog is absent or the model is available.
 func catalogUnavailableWarning(models []CatalogModel, selectedID, region, suffix string, p CatalogProvider, refreshedSources []string) string {
+	if p == nil {
+		return ""
+	}
 	hasRelevant, selectedAvailable := catalogSelectionState(models, selectedID, p, refreshedSources)
 	if !hasRelevant || selectedAvailable {
 		return ""
