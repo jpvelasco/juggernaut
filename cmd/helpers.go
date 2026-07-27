@@ -151,10 +151,6 @@ func resolveOpusplanConflict() error {
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider) (authMode, region string, opusplan bool, err error) {
 	authMode = applyFlags.auth
-	// Mantle-only CLIs (Codex, OpenCode, Grok) have exactly one valid auth mode:
-	// the Bedrock API key. Pin it up front so neither the interactive prompt, a
-	// re-apply of an existing config (which stores no auth mode), nor the global
-	// default (iam) can steer them to a tokenless mode the launch can't satisfy.
 	if authMode == "" && !prov.Supports(provider.CapNativeAuth) {
 		authMode = authmode.BedrockAPIKey
 	}
@@ -166,57 +162,61 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 
 	existing, herr := readProviderConfig(prov, home, applyFlags.scope)
 	if herr != nil {
-		err = fmt.Errorf("checking existing configuration: %w", herr)
-		return
+		return "", "", false, fmt.Errorf("checking existing configuration: %w", herr)
 	}
-	// Re-apply detection must recognize a config JUGGERNAUT wrote for THIS
-	// provider (Bedrock already configured) — not merely any shared key. A plain
-	// Codex config already has a top-level `model`; treating that as "configured"
-	// would skip the auth prompt on a FIRST apply and default to iam, breaking
-	// Mantle which requires a bearer token. OwnsConfig is the strict check.
+
 	if prov.OwnsConfig(existing) {
-		// Preserve auth mode and permission mode from the existing block when not supplied as flags.
-		{
-			if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
-				if authMode == "" {
-					if auth, ok := jBlock["auth"].(map[string]any); ok {
-						if mode, ok := auth["mode"].(string); ok && mode != "" {
-							authMode = mode
-						}
-					}
-				}
-				if applyFlags.mode == "" {
-					if meta, ok := jBlock["meta"].(map[string]any); ok {
-						if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
-							applyFlags.mode = pmode
-						}
-					}
-				}
-			}
-			// Also adopt a permission mode set outside Juggernaut (e.g. Claude
-			// Code's Shift+Tab writes native permissions.defaultMode without
-			// touching our meta block). Without this, a re-apply with no --mode
-			// would wipe the user's externally-chosen mode.
-			if applyFlags.mode == "" {
-				if perms, ok := existing["permissions"].(map[string]any); ok {
-					if dmode, ok := perms["defaultMode"].(string); ok && dmode != "" {
-						applyFlags.mode = dmode
-					}
-				}
-			}
-		}
-		if authMode == "" {
-			authMode = bCfg.Defaults.AuthMode
-		}
-		return
+		return resolveReApplyInputs(bCfg, authMode, region, opusplan, existing)
 	}
 
-	// authMode is already pinned for Mantle-only CLIs (top of this function), so
-	// this point is reached only by CLIs that support IAM (Claude) with no --auth.
 	if authMode != "" {
-		return
+		return authMode, region, opusplan, nil
 	}
 
+	return promptApplyInputs(bCfg, region, opusplan)
+}
+
+// resolveReApplyInputs preserves settings from an existing Juggernaut-managed
+// config when re-applying. Reads auth mode and permission mode from the
+// juggernaut block and native permissions block, falling back to the global
+// default for auth mode when not supplied as a flag.
+func resolveReApplyInputs(bCfg *bedrock.Config, authMode, region string, opusplan bool, existing map[string]any) (string, string, bool, error) {
+	if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
+		if authMode == "" {
+			if auth, ok := jBlock["auth"].(map[string]any); ok {
+				if mode, ok := auth["mode"].(string); ok && mode != "" {
+					authMode = mode
+				}
+			}
+		}
+		if applyFlags.mode == "" {
+			if meta, ok := jBlock["meta"].(map[string]any); ok {
+				if pmode, ok := meta["permissionMode"].(string); ok && pmode != "" {
+					applyFlags.mode = pmode
+				}
+			}
+		}
+	}
+	// Also adopt a permission mode set outside Juggernaut (e.g. Claude
+	// Code's Shift+Tab writes native permissions.defaultMode without
+	// touching our meta block). Without this, a re-apply with no --mode
+	// would wipe the user's externally-chosen mode.
+	if applyFlags.mode == "" {
+		if perms, ok := existing["permissions"].(map[string]any); ok {
+			if dmode, ok := perms["defaultMode"].(string); ok && dmode != "" {
+				applyFlags.mode = dmode
+			}
+		}
+	}
+	if authMode == "" {
+		authMode = bCfg.Defaults.AuthMode
+	}
+	return authMode, region, opusplan, nil
+}
+
+// promptApplyInputs launches the interactive first-time setup form.
+// Returns auth mode, region, opusplan, and error.
+func promptApplyInputs(bCfg *bedrock.Config, region string, opusplan bool) (authMode, resolvedRegion string, resolvedOpusplan bool, err error) {
 	permMode := applyFlags.mode
 	flushConsoleInput()
 	form := huh.NewForm(
@@ -231,7 +231,7 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 			huh.NewInput().
 				Title("AWS region").
 				Placeholder(bCfg.Defaults.Region).
-				Value(&region),
+				Value(&resolvedRegion),
 			huh.NewSelect[string]().
 				Title("Permission mode").
 				Options(
@@ -243,16 +243,16 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 				Value(&permMode),
 			huh.NewConfirm().
 				Title("Enable opusplan? (routes planning to Opus, execution to Sonnet)").
-				Value(&opusplan),
+				Value(&resolvedOpusplan),
 		),
 	)
 	if err = form.Run(); err != nil {
-		return
+		return "", resolvedRegion, resolvedOpusplan, err
 	}
 	if permMode != "" && applyFlags.mode == "" {
 		applyFlags.mode = permMode
 	}
-	return
+	return authMode, resolvedRegion, resolvedOpusplan, nil
 }
 
 func resolveCredential(authMode string, home string) (string, error) {
