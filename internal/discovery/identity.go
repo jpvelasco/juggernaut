@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -24,9 +23,9 @@ var makeSTSClient = func(cfg aws.Config) stsClient { return sts.NewFromConfig(cf
 // CallerAccount returns the AWS account selected by the default credential
 // chain. It is called only during an explicit catalog refresh.
 func CallerAccount(ctx context.Context, region string) (string, error) {
-	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
+	cfg, err := loadAWSConfig(ctx, region)
 	if err != nil {
-		return "", fmt.Errorf("loading AWS configuration: %w", err)
+		return "", err
 	}
 	result, err := makeSTSClient(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {

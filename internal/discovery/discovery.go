@@ -45,12 +45,22 @@ type bedrockClient interface {
 var loadDefaultAWSConfig = config.LoadDefaultConfig
 var makeBedrockClient = func(cfg aws.Config) bedrockClient { return bedrock.NewFromConfig(cfg) }
 
+// loadAWSConfig returns an AWS config for the given region using the default
+// credential chain. Shared by newClient, CallerAccount, and ListMantleModels.
+func loadAWSConfig(ctx context.Context, region string) (aws.Config, error) {
+	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("loading AWS config: %w", err)
+	}
+	return cfg, nil
+}
+
 // newClient builds a real Bedrock client for region using the default AWS
 // credential chain (IAM/SSO/env — whatever the caller already has configured).
 func newClient(ctx context.Context, region string) (bedrockClient, error) {
-	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
+	cfg, err := loadAWSConfig(ctx, region)
 	if err != nil {
-		return nil, fmt.Errorf("loading AWS config: %w", err)
+		return nil, err
 	}
 	return makeBedrockClient(cfg), nil
 }

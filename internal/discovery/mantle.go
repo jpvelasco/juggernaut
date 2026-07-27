@@ -12,7 +12,6 @@ import (
 	"time"
 
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
-	"github.com/aws/aws-sdk-go-v2/config"
 )
 
 const maxMantleCatalogBytes = 8 << 20
@@ -33,9 +32,9 @@ func ListMantleModels(ctx context.Context, region, bearerToken string) ([]Discov
 
 	var sign requestSigner
 	if bearerToken == "" {
-		cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
+		cfg, err := loadAWSConfig(ctx, region)
 		if err != nil {
-			return nil, fmt.Errorf("loading AWS config: %w", err)
+			return nil, err
 		}
 		creds, err := cfg.Credentials.Retrieve(ctx)
 		if err != nil {
