@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/spf13/cobra"
 )
 
@@ -31,10 +32,14 @@ func runShow(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	scopes := resolvedScopes(showFlags.scope)
+	prov, err := provider.Get("claude")
+	if err != nil {
+		return err
+	}
 
 	results := map[string]any{}
 	for _, scope := range scopes {
-		path, perr := settingsPath(home, scope)
+		path, perr := prov.ConfigPath(home, scope)
 		if perr != nil {
 			warnf("could not determine %s scope path: %v", scope, perr)
 			continue

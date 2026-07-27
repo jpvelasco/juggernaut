@@ -69,13 +69,6 @@ func homeDir() (string, error) {
 	return safepath.HomeDir()
 }
 
-func settingsPath(homeDir, scope string) (string, error) {
-	if scope == "project" {
-		return filepath.Join(".", ".claude", "settings.json"), nil
-	}
-	return safepath.JoinUnder(homeDir, ".claude", "settings.json")
-}
-
 // toMap delegates to the single shared implementation in internal/provider.
 func toMap(v any) (map[string]any, error) {
 	return provider.ToMap(v)

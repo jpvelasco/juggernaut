@@ -246,7 +246,12 @@ func checkConnectivity(r *doctor.Report, home, token string, scopes []string) {
 
 	// Use the same scope(s) as the settings checks.
 	scope := scopes[0]
-	path, err := settingsPath(home, scope)
+	prov, err := provider.Get("claude")
+	if err != nil {
+		r.Check("bedrock connectivity", doctor.Warn, "cannot get claude provider: "+err.Error())
+		return
+	}
+	path, err := prov.ConfigPath(home, scope)
 	if err != nil {
 		r.Check("bedrock connectivity", doctor.Warn, "cannot resolve settings path: "+err.Error())
 		return
