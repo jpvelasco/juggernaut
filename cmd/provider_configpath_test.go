@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 	"github.com/spf13/cobra"
@@ -20,12 +22,14 @@ func TestProviderConfigPath_UserAndProject(t *testing.T) {
 		t.Fatalf("provider.Get(claude) error: %v", err)
 	}
 
+	// User scope should resolve to ~/.claude/settings.json.
 	path, err := prov.ConfigPath(home, "user")
 	if err != nil {
 		t.Fatalf("ConfigPath(user) error: %v", err)
 	}
-	if path == "" {
-		t.Error("ConfigPath(user) returned empty path")
+	want := filepath.Join(home, ".claude", "settings.json")
+	if path != want {
+		t.Errorf("ConfigPath(user) = %q, want %q", path, want)
 	}
 
 	// Project scope should resolve to ./.claude/settings.json.
@@ -33,9 +37,22 @@ func TestProviderConfigPath_UserAndProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigPath(project) error: %v", err)
 	}
-	if path == "" {
-		t.Error("ConfigPath(project) returned empty path")
+	want = filepath.Join(".", ".claude", "settings.json")
+	if path != want {
+		t.Errorf("ConfigPath(project) = %q, want %q", path, want)
 	}
+}
+
+// TestCheckConnectivity_ProviderGetPath covers the checkConnectivity path
+// that calls provider.Get("claude") and prov.ConfigPath — the replacement for
+// the removed settingsPath helper in doctor.go.
+func TestCheckConnectivity_ProviderGetPath(t *testing.T) {
+	home := testutil.NewTestHome(t)
+
+	r := doctor.NewReport()
+	// checkConnectivity with an empty token exercises the provider.Get +
+	// ConfigPath path without making network calls.
+	checkConnectivity(r, home, "", []string{"user"})
 }
 
 // TestShow_ProviderGetPath covers the runShow path that calls
