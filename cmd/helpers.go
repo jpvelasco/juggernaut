@@ -192,7 +192,7 @@ func detectReapplyConfig(prov provider.Provider, home, scope string) (existing m
 	if err != nil {
 		return nil, false, fmt.Errorf("checking existing configuration: %w", err)
 	}
-	if existing == nil || len(existing) == 0 {
+	if len(existing) == 0 {
 		return nil, false, nil
 	}
 	return existing, prov.OwnsConfig(existing), nil
