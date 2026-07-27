@@ -258,6 +258,15 @@ func normalizeModelID(modelID string) string {
 	return normalized
 }
 
+// autoModeCapablePrefixes lists model ID fragments that support auto
+// permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7 or later.
+var autoModeCapablePrefixes = []string{
+	"claude-opus-5",
+	"claude-opus-4-8",
+	"claude-opus-4-7",
+	"claude-sonnet-5",
+}
+
 // IsAutoModeCapableModel reports whether modelID is a model that can use auto
 // permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7 or later
 // (4.7, 4.8, 5). Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified
@@ -267,10 +276,12 @@ func normalizeModelID(modelID string) string {
 // not just "sonnet".
 func IsAutoModeCapableModel(modelID string) bool {
 	normalized := normalizeModelID(modelID)
-	return strings.Contains(normalized, "claude-opus-5") ||
-		strings.Contains(normalized, "claude-opus-4-8") ||
-		strings.Contains(normalized, "claude-opus-4-7") ||
-		strings.Contains(normalized, "claude-sonnet-5")
+	for _, prefix := range autoModeCapablePrefixes {
+		if strings.Contains(normalized, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsFable5Model reports whether modelID refers to Claude Fable 5, regardless
@@ -344,14 +355,21 @@ func claudeCodeContextModelID(model string, use1M bool) string {
 
 func supportsClaudeCode1M(model string) bool {
 	normalized := normalizeModelID(model)
-	return normalized == "opusplan" ||
-		strings.Contains(normalized, "claude-fable-5") ||
-		strings.Contains(normalized, "claude-opus-5") || // 1M context, verified via model card
-		strings.Contains(normalized, "claude-opus-4-8") ||
-		strings.Contains(normalized, "claude-opus-4-7") ||
-		strings.Contains(normalized, "claude-opus-4-6") ||
-		strings.Contains(normalized, "claude-sonnet-5") || // 1M context, verified via model card
-		strings.Contains(normalized, "claude-sonnet-4-6")
+	if normalized == "opusplan" {
+		return true
+	}
+	for _, fragment := range []string{
+		"claude-fable-5",
+		"claude-opus-5",
+		"claude-opus-4-",
+		"claude-sonnet-5",
+		"claude-sonnet-4-6",
+	} {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 // NativeKeys derives the top-level settings.json keys from the block.

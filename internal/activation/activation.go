@@ -1256,20 +1256,10 @@ func readAuthModeFromConfig(path string) string {
 	if err != nil {
 		return ""
 	}
-	block, ok := data["juggernaut"].(map[string]any)
-	if !ok {
-		return ""
+	if jb, ok := config.ParseJuggernautBlock(data); ok {
+		return jb.AuthMode
 	}
-	meta, ok := block["meta"].(map[string]any)
-	if !ok || meta["managedBy"] != "juggernaut" {
-		return ""
-	}
-	auth, ok := block["auth"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	mode, _ := auth["mode"].(string)
-	return mode
+	return ""
 }
 
 func authModes(home string) ([]string, error) {
@@ -1284,20 +1274,8 @@ func authModes(home string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
-		block, ok := data["juggernaut"].(map[string]any)
-		if !ok {
-			continue
-		}
-		meta, ok := block["meta"].(map[string]any)
-		if !ok || meta["managedBy"] != "juggernaut" {
-			continue
-		}
-		auth, ok := block["auth"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if mode, ok := auth["mode"].(string); ok {
-			modes = append(modes, mode)
+		if jb, ok := config.ParseJuggernautBlock(data); ok && jb.AuthMode != "" {
+			modes = append(modes, jb.AuthMode)
 		}
 	}
 	return modes, nil

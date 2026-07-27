@@ -158,49 +158,47 @@ func applyManagedKey(existing map[string]any, k string, v any) error {
 		mergePermissions(existing, v)
 		return nil
 	}
-	switch val := v.(type) {
-	case string:
-		if val != "" {
-			existing[k] = val
-		} else {
-			delete(existing, k)
-		}
-	case bool:
-		if val {
-			existing[k] = val
-		} else {
-			delete(existing, k)
-		}
-	case map[string]any:
-		if len(val) > 0 {
-			existing[k] = val
-		} else {
-			delete(existing, k)
-		}
-	case map[string]string:
-		if len(val) > 0 {
-			existing[k] = val
-		} else {
-			delete(existing, k)
-		}
-	case []string:
-		if len(val) > 0 {
-			existing[k] = val
-		} else {
-			delete(existing, k)
-		}
-	case []any:
-		if len(val) > 0 {
-			existing[k] = val
-		} else {
-			delete(existing, k)
-		}
-	case nil:
+	if isZeroValue(v) {
 		delete(existing, k)
-	default:
+	} else if isSupportedType(v) {
+		existing[k] = v
+	} else {
 		return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, map[string]string, or map[string]any)", v, k)
 	}
 	return nil
+}
+
+// isZeroValue returns true when the value should be deleted rather than set.
+// This drives the set-or-delete semantics used by applyManagedKey.
+func isZeroValue(v any) bool {
+	switch val := v.(type) {
+	case string:
+		return val == ""
+	case bool:
+		return !val
+	case map[string]any:
+		return len(val) == 0
+	case map[string]string:
+		return len(val) == 0
+	case []string:
+		return len(val) == 0
+	case []any:
+		return len(val) == 0
+	case nil:
+		return true
+	default:
+		return false
+	}
+}
+
+// isSupportedType checks whether v is a type that can be stored in the config.
+func isSupportedType(v any) bool {
+	switch v.(type) {
+	case string, bool, map[string]any, map[string]string, []string, []any:
+		return true
+	default:
+		return false
+	}
 }
 
 // MergeConfigPlan merges a provider's ConfigPlan.Keys into the existing config
@@ -457,15 +455,8 @@ func (m *Manager) HasJuggernautBlock() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	block, ok := data["juggernaut"].(map[string]any)
-	if !ok {
-		return false, nil
-	}
-	meta, ok := block["meta"].(map[string]any)
-	if !ok {
-		return false, nil
-	}
-	return meta["managedBy"] == "juggernaut", nil
+	_, ok := ParseJuggernautBlock(data)
+	return ok, nil
 }
 
 func (m *Manager) rotateBackup() error {
