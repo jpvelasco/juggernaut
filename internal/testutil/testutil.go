@@ -2,7 +2,8 @@
 //
 // All test files in cmd/, internal/config, internal/provider, internal/activation,
 // and internal/keychain should import this package instead of defining their
-// own copies of NewTestHome, NestedMapChain, CaptureStdout, etc.
+// own copies of NestedMapChain, CaptureStdout, etc. HOME setup is in
+// internal/testhome (no internal dependencies, so every package can use it).
 package testutil
 
 import (
@@ -14,20 +15,15 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/testhome"
 )
 
 // NewTestHome creates a temp directory and sets HOME/USERPROFILE to it.
-// Replaces the pattern:
-//
-//	home := t.TempDir()
-//	t.Setenv("HOME", home)
-//	t.Setenv("USERPROFILE", home)
+// Re-exported from testhome for backwards compatibility; new code can import
+// testhome directly to avoid the testutil→keychain import cycle.
 func NewTestHome(t *testing.T) string {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	return home
+	return testhome.NewTestHome(t)
 }
 
 // NestedMapChain navigates a chain of keys through nested map[string]any
