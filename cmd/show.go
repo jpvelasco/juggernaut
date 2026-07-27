@@ -32,10 +32,7 @@ func runShow(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	scopes := resolvedScopes(showFlags.scope)
-	prov, err := provider.Get("claude")
-	if err != nil {
-		return err
-	}
+	prov := provider.MustGet("claude")
 
 	results := map[string]any{}
 	for _, scope := range scopes {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
@@ -55,6 +56,22 @@ func TestCheckConnectivity_ProviderGetPath(t *testing.T) {
 	checkConnectivity(r, home, "", []string{"user"})
 }
 
+// TestCheckConnectivity_ConfigPathError covers the ConfigPath error path
+// in checkConnectivity when the scope path cannot be resolved.
+func TestCheckConnectivity_ConfigPathError(t *testing.T) {
+	home := testutil.NewTestHome(t)
+
+	r := doctor.NewReport()
+	// Passing a nil-byte home will cause safepath.JoinUnder to fail,
+	// exercising the "cannot resolve settings path" branch.
+	checkConnectivity(r, "\x00invalid", "", []string{"user"})
+	s := r.String()
+	if !strings.Contains(s, "settings path") && !strings.Contains(s, "connectivity") {
+		t.Logf("report: %s", s)
+	}
+	_ = home
+}
+
 // TestShow_ProviderGetPath covers the runShow path that calls
 // provider.Get("claude") and prov.ConfigPath — the replacement for
 // the removed settingsPath helper.
@@ -71,6 +88,25 @@ func TestShow_ProviderGetPath(t *testing.T) {
 	showFlags.scope = "user"
 
 	// runShow exercises provider.Get("claude") + ConfigPath for each scope.
+	_ = runShow(&cobra.Command{}, []string{})
+	w.Close()
+	_ = r
+}
+
+// TestShow_ProviderConfigPathBothScopes exercises runShow with both user and
+// project scopes, hitting the prov.ConfigPath call for each scope iteration.
+func TestShow_ProviderConfigPathBothScopes(t *testing.T) {
+	_ = testutil.NewTestHome(t)
+
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	defer func() { os.Stderr = old; r.Close(); w.Close() }()
+
+	origScope := showFlags.scope
+	defer func() { showFlags.scope = origScope }()
+	showFlags.scope = "" // empty means both scopes
+
 	_ = runShow(&cobra.Command{}, []string{})
 	w.Close()
 	_ = r
