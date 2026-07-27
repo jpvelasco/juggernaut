@@ -3,6 +3,8 @@ package provider
 import (
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 func TestToMap_MarshalError(t *testing.T) {
@@ -122,5 +124,70 @@ func TestCatalogSelectionState_EmptyCatalogWithRefreshedSource(t *testing.T) {
 	}
 	if selectedAvailable {
 		t.Error("selected model should not be available when catalog is empty")
+	}
+}
+
+func TestFromSchemaOptions_FillsFields(t *testing.T) {
+	src := schema.Options{
+		AuthMode:               "iam",
+		Region:                 "us-west-2",
+		Effort:                 "high",
+		Scope:                  "user",
+		Version:                "5.4.0",
+		OpusModel:              "global.anthropic.claude-opus-4-8",
+		SonnetModel:            "global.anthropic.claude-sonnet-5",
+		HaikuModel:             "anthropic.claude-haiku-4-5",
+		FableModel:             "global.anthropic.claude-fable-5",
+		Opusplan:               true,
+		FallbackModels:         []string{"sonnet", "haiku"},
+		AvailableModels:        []string{"opus"},
+		EnforceAvailableModels: true,
+		Use1M:                  true,
+		UseMantle:              false,
+		MantleURL:              "https://example.com",
+		AuthValidated:          true,
+		PermissionMode:         "auto",
+		AlwaysThinking:         true,
+		ServiceTier:            "flex",
+	}
+	var opts Options
+	opts.FromSchemaOptions(src)
+
+	// Verify SchemaOpts was copied (struct contains slices so compare fields individually).
+	if opts.SchemaOpts.AuthMode != src.AuthMode || opts.SchemaOpts.Region != src.Region {
+		t.Errorf("SchemaOpts not fully copied: got %+v, want %+v", opts.SchemaOpts, src)
+	}
+	if opts.SchemaOpts.OpusModel != src.OpusModel {
+		t.Errorf("SchemaOpts.OpusModel = %q, want %q", opts.SchemaOpts.OpusModel, src.OpusModel)
+	}
+	if opts.SchemaOpts.PermissionMode != src.PermissionMode {
+		t.Errorf("SchemaOpts.PermissionMode = %q, want %q", opts.SchemaOpts.PermissionMode, src.PermissionMode)
+	}
+	if !opts.SchemaOpts.Opusplan || !opts.SchemaOpts.Use1M || !opts.SchemaOpts.AuthValidated {
+		t.Errorf("SchemaOpts booleans not set: opusplan=%v use1m=%v authValidated=%v",
+			opts.SchemaOpts.Opusplan, opts.SchemaOpts.Use1M, opts.SchemaOpts.AuthValidated)
+	}
+	if len(opts.SchemaOpts.FallbackModels) != 2 || opts.SchemaOpts.FallbackModels[0] != "sonnet" {
+		t.Errorf("SchemaOpts.FallbackModels = %v, want [sonnet haiku]", opts.SchemaOpts.FallbackModels)
+	}
+	if opts.Region != "us-west-2" {
+		t.Errorf("Region = %q, want us-west-2", opts.Region)
+	}
+	if opts.AuthMode != "iam" {
+		t.Errorf("AuthMode = %q, want iam", opts.AuthMode)
+	}
+	if opts.Scope != "user" {
+		t.Errorf("Scope = %q, want user", opts.Scope)
+	}
+	if opts.Version != "5.4.0" {
+		t.Errorf("Version = %q, want 5.4.0", opts.Version)
+	}
+}
+
+func TestFromSchemaOptions_Empty(t *testing.T) {
+	var opts Options
+	opts.FromSchemaOptions(schema.Options{})
+	if opts.SchemaOpts.AuthMode != "" || opts.Region != "" || opts.Scope != "" || opts.Version != "" {
+		t.Errorf("expected zero values, got %+v", opts)
 	}
 }
