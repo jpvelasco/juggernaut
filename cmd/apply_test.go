@@ -15,6 +15,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestApply_StorageFlagUnrecognized(t *testing.T) {
@@ -269,8 +270,8 @@ func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 
@@ -308,8 +309,8 @@ func TestUninstall_RemovesBlock(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 
@@ -368,8 +369,8 @@ func TestApply_ReApply_PermissionMode_Preserved(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	perms, ok := settings["permissions"].(map[string]any)
@@ -403,8 +404,8 @@ func TestApply_ReApply_AlwaysThinkingOff_DeletesKey(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, ok := settings["alwaysThinkingEnabled"]; ok {
@@ -466,8 +467,8 @@ func TestApply_PermissionMode_AutoSetsBedrockEnvVar(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 
@@ -510,8 +511,8 @@ func TestApply_FableAndFallbackWritesNativeKeys(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	env, _ := settings["env"].(map[string]any)
@@ -567,8 +568,8 @@ func TestApply_AvailableModelsWritesNativeKeys(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 
@@ -622,8 +623,8 @@ func TestApply_AvailableModelsTrimsWhitespace(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	available, ok := settings["availableModels"].([]any)
@@ -677,8 +678,8 @@ func TestApply_ReApply_AvailableModelsOmittedClearsKey(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, present := settings["availableModels"]; present {
@@ -696,8 +697,8 @@ func TestApply_ServiceTier_WritesEnvVar(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	env, _ := settings["env"].(map[string]any)
@@ -716,8 +717,8 @@ func TestApply_AlwaysThinking_WritesNativeKey(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if settings["alwaysThinkingEnabled"] != true {
@@ -735,8 +736,8 @@ func TestApply_EffortLevel_WritesNativeKey(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if settings["effortLevel"] != "medium" {
@@ -754,8 +755,8 @@ func TestApply_MaxEffortUsesEnvOnly(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, ok := settings["effortLevel"]; ok {
@@ -776,8 +777,8 @@ func TestApply_EffortAutoUsesEnvOnly(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if _, ok := settings["effortLevel"]; ok {
@@ -811,8 +812,8 @@ func TestApply_SkipWebFetchPreflight_AlwaysSet(t *testing.T) {
 	}
 
 	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
+	settings, err := testutil.ParseJSON(data)
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	if settings["skipWebFetchPreflight"] != true {

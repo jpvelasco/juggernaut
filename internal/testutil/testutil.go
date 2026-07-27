@@ -7,6 +7,7 @@ package testutil
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"testing"
@@ -122,4 +123,28 @@ func SkipIfNoKeychain(t *testing.T) *keychain.Store {
 	}
 	_ = store.Delete()
 	return store
+}
+
+// MkdirAll creates a directory (and parents). Returns the error if any.
+func MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
+}
+
+// ParseJSON unmarshals JSON bytes into a map[string]any. Returns the error if any.
+func ParseJSON(data []byte) (map[string]any, error) {
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+// OwnedJuggernautBlock returns the canonical managed-by map used to mark a
+// config as owned by Juggernaut. Replaces inline literals like:
+//
+//	map[string]any{"meta": map[string]any{"managedBy": "juggernaut"}}
+func OwnedJuggernautBlock() map[string]any {
+	return map[string]any{
+		"meta": map[string]any{"managedBy": "juggernaut"},
+	}
 }

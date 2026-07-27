@@ -27,8 +27,8 @@ func readSettingsJSON(t *testing.T, home string) []byte {
 // readJuggernautAuthMode returns the persisted auth.mode from settings.json.
 func readJuggernautAuthMode(t *testing.T, home string) string {
 	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
+	settings, err := testutil.ParseJSON(readSettingsJSON(t, home))
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	block, ok := settings["juggernaut"].(map[string]any)
@@ -47,8 +47,8 @@ func readJuggernautAuthMode(t *testing.T, home string) string {
 // the user-scope settings.json juggernaut block ("" if absent).
 func readJuggernautPermissionMode(t *testing.T, home string) string {
 	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
+	settings, err := testutil.ParseJSON(readSettingsJSON(t, home))
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	block, ok := settings["juggernaut"].(map[string]any)
@@ -66,8 +66,8 @@ func readJuggernautPermissionMode(t *testing.T, home string) string {
 // readNativeDefaultMode returns the native permissions.defaultMode from settings.json.
 func readNativeDefaultMode(t *testing.T, home string) string {
 	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
+	settings, err := testutil.ParseJSON(readSettingsJSON(t, home))
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	perms, ok := settings["permissions"].(map[string]any)
@@ -81,8 +81,8 @@ func readNativeDefaultMode(t *testing.T, home string) string {
 // readNativeEnvValue returns settings.json env[key] ("" if absent).
 func readNativeEnvValue(t *testing.T, home, key string) string {
 	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
+	settings, err := testutil.ParseJSON(readSettingsJSON(t, home))
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	env, ok := settings["env"].(map[string]any)
@@ -98,8 +98,8 @@ func readNativeEnvValue(t *testing.T, home, key string) string {
 // native key without updating Juggernaut's meta block.
 func setNativeDefaultMode(t *testing.T, home, mode string) {
 	t.Helper()
-	var settings map[string]any
-	if err := json.Unmarshal(readSettingsJSON(t, home), &settings); err != nil {
+	settings, err := testutil.ParseJSON(readSettingsJSON(t, home))
+	if err != nil {
 		t.Fatalf("parsing settings.json: %v", err)
 	}
 	perms, ok := settings["permissions"].(map[string]any)
