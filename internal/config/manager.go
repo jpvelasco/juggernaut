@@ -158,11 +158,12 @@ func applyManagedKey(existing map[string]any, k string, v any) error {
 		mergePermissions(existing, v)
 		return nil
 	}
-	if isZeroValue(v) {
+	switch {
+	case isZeroValue(v):
 		delete(existing, k)
-	} else if isSupportedType(v) {
+	case isSupportedType(v):
 		existing[k] = v
-	} else {
+	default:
 		return fmt.Errorf("unsupported type %T for native key %q (expected string, bool, []string, []any, map[string]string, or map[string]any)", v, k)
 	}
 	return nil
