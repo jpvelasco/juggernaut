@@ -313,20 +313,9 @@ func InstalledTargetsWith(home string, psResult *ProfileResolverResult) []string
 func InstalledTargetsForMarkers(home string, psResult *ProfileResolverResult, begin, end string) []string {
 	var paths []string
 
-	if runtime.GOOS == "windows" {
-		result := psResult
-		if result == nil {
-			r := ResolvePowerShellProfilesScoped(home)
-			result = &r
-		}
-		for _, target := range result.ActiveTargets {
-			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
-			if err == nil && HasBlockWithMarkers(string(data), begin, end) {
-				paths = append(paths, target.Path)
-			}
-		}
-	} else if psResult != nil {
-		for _, target := range psResult.ActiveTargets {
+	psResolved := resolveOrUse(home, psResult)
+	if psResolved != nil {
+		for _, target := range psResolved.ActiveTargets {
 			data, err := safepath.ReadFile(filepath.Dir(target.Path), target.Path)
 			if err == nil && HasBlockWithMarkers(string(data), begin, end) {
 				paths = append(paths, target.Path)
@@ -358,15 +347,22 @@ func InstallPowerShellActivationWith(home string, psResult *ProfileResolverResul
 	return installPowerShellActivationForSpec(home, psResult, claudeCLISpec())
 }
 
+// resolveOrUse returns a concrete ProfileResolverResult, resolving PowerShell
+// profiles when psResult is nil and we're on Windows. Returns nil on non-Windows.
+func resolveOrUse(home string, psResult *ProfileResolverResult) *ProfileResolverResult {
+	if psResult != nil {
+		return psResult
+	}
+	r := ResolvePowerShellProfilesScoped(home)
+	return &r
+}
+
 func installPowerShellActivationForSpec(home string, psResult *ProfileResolverResult, spec CLISpec) ([]string, error) {
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
 
-	if psResult == nil {
-		r := ResolvePowerShellProfilesScoped(home)
-		psResult = &r
-	}
+	psResult = resolveOrUse(home, psResult)
 	result := *psResult
 	var installed []string
 
@@ -455,10 +451,7 @@ func UninstallPowerShellActivationWith(home string, psResult *ProfileResolverRes
 		return nil, nil
 	}
 
-	if psResult == nil {
-		r := ResolvePowerShellProfilesScoped(home)
-		psResult = &r
-	}
+	psResult = resolveOrUse(home, psResult)
 	result := *psResult
 	var removed []string
 
@@ -509,10 +502,7 @@ func CheckPowerShellActivationWith(home string, psResult *ProfileResolverResult)
 		return true, "", nil
 	}
 
-	if psResult == nil {
-		r := ResolvePowerShellProfilesScoped(home)
-		psResult = &r
-	}
+	psResult = resolveOrUse(home, psResult)
 	result := *psResult
 
 	// Check effective profiles for the current block (first match wins).
