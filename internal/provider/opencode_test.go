@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestGet_OpenCode(t *testing.T) {
@@ -120,7 +122,7 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	bm, ok := nestedMapChain(plan.Keys, "provider", "bedrock-mantle")
+	bm, ok := testutil.NestedMapChain(plan.Keys, "provider", "bedrock-mantle")
 	if !ok {
 		t.Fatalf("provider.bedrock-mantle missing")
 	}
@@ -131,7 +133,7 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	if bmMap["npm"] != "@ai-sdk/openai-compatible" {
 		t.Errorf("npm = %v, want @ai-sdk/openai-compatible", bmMap["npm"])
 	}
-	optsMap, ok := nestedMapChain(bmMap, "options")
+	optsMap, ok := testutil.NestedMapChain(bmMap, "options")
 	if !ok {
 		t.Fatalf("options missing under bedrock-mantle")
 	}

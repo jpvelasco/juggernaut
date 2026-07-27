@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestMergeConfigPlan_DeepMergeKeys_PreservesSiblings is the data-loss
@@ -249,7 +251,7 @@ func TestMergeNested_RecursivePreservesUserSubKeys(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	aws, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock", "aws")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws missing")
 	}
@@ -291,7 +293,7 @@ func TestRemoveOwnedSubKeys_DotNotation(t *testing.T) {
 		t.Fatalf("RemoveManagedKeysDeep: %v", err)
 	}
 	got, _ := m.Read()
-	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	ab, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock missing")
 	}
@@ -328,7 +330,7 @@ func TestRemoveOwnedSubKeys_DotNotationMissingIntermediate(t *testing.T) {
 		t.Fatalf("should not error when intermediate key is missing: %v", err)
 	}
 	got, _ := m.Read()
-	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	ab, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock missing")
 	}
@@ -362,7 +364,7 @@ func TestRemoveOwnedSubKeys_DotNotationMissingDeepIntermediate(t *testing.T) {
 		t.Fatalf("should not error when deep intermediate is missing: %v", err)
 	}
 	got, _ := m.Read()
-	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	ab, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock missing")
 	}
@@ -439,7 +441,7 @@ func TestMergeNestedPrefix_RecursionGuard(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	ab, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock missing")
 	}
@@ -467,7 +469,7 @@ func TestMergeNestedPrefix_RecursionGuard(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ = m.Read()
-	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	aws, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock", "aws")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws missing")
 	}
@@ -530,7 +532,7 @@ func TestMergeNestedPrefix_RecursiveScalarOverrideMap(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	aws, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock", "aws")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws missing")
 	}
@@ -576,7 +578,7 @@ func TestMergeNestedPrefix_DeeperRecursivePreservesUserSubKeys(t *testing.T) {
 		t.Fatalf("MergeConfigPlanDeep: %v", err)
 	}
 	got, _ := m.Read()
-	creds, ok := readNested(got, "model_providers", "amazon-bedrock", "aws", "credentials")
+	creds, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock", "aws", "credentials")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws.credentials missing")
 	}
@@ -587,7 +589,7 @@ func TestMergeNestedPrefix_DeeperRecursivePreservesUserSubKeys(t *testing.T) {
 	if credsMap["region"] != "us-east-1" {
 		t.Errorf("region not overridden at deep level: %v", credsMap)
 	}
-	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	ab, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock")
 	if !ok || ab.(map[string]any)["name"] != "Amazon Bedrock (Mantle)" {
 		t.Errorf("sibling name lost")
 	}
@@ -620,7 +622,7 @@ func TestRemoveOwnedSubKeys_DotNotationPreservesSiblings(t *testing.T) {
 		t.Fatalf("RemoveManagedKeysDeep: %v", err)
 	}
 	got, _ := m.Read()
-	aws, ok := readNested(got, "model_providers", "amazon-bedrock", "aws")
+	aws, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock", "aws")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws missing")
 	}
@@ -631,7 +633,7 @@ func TestRemoveOwnedSubKeys_DotNotationPreservesSiblings(t *testing.T) {
 	if awsMap["profile"] != "my-profile" {
 		t.Error("sibling profile must survive")
 	}
-	ab, ok := readNested(got, "model_providers", "amazon-bedrock")
+	ab, ok := testutil.NestedMapChain(got, "model_providers", "amazon-bedrock")
 	if !ok || ab.(map[string]any)["name"] != "Amazon Bedrock (Mantle)" {
 		t.Error("sibling name must survive")
 	}

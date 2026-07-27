@@ -3,16 +3,14 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // readSettingsJSON reads the user-scope settings.json from the given home
@@ -122,43 +120,14 @@ func setNativeDefaultMode(t *testing.T, home, mode string) {
 // captureStdout runs fn while redirecting os.Stdout and returns what was printed.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
-	orig := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("closing pipe: %v", err)
-	}
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("reading pipe: %v", err)
-	}
-	return string(out)
+	return testutil.CaptureStdout(t, fn)
 }
 
 // withStdin replaces os.Stdin with a pipe preloaded with input for the duration
 // of fn, so interactive confirmation prompts can be exercised in tests.
 func withStdin(t *testing.T, input string, fn func()) {
 	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	if _, err := w.WriteString(input); err != nil {
-		t.Fatalf("writing stdin: %v", err)
-	}
-	_ = w.Close() // best-effort; test validity depends on reader side
-
-	orig := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() { os.Stdin = orig })
-	fn()
+	testutil.WithStdin(t, input, fn)
 }
 
 // setupMockPSRunner sets a mock PowerShell discovery runner on Windows so
@@ -185,21 +154,7 @@ func setupMockPSRunner(t *testing.T, home string) {
 // The name is intentionally short — macOS security(1) hangs on long names.
 func setupIsolatedKeychain(t *testing.T) *keychain.Store {
 	t.Helper()
-	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-cmd-test")
-	store := keychain.Default()
-	// Probe with a timeout: if Set hangs, the test would block for 10 min.
-	done := make(chan error, 1)
-	go func() { done <- store.Set("probe") }()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Skipf("keychain backend unavailable: %v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Skip("keychain backend timed out")
-	}
-	_ = store.Delete()
-	return store
+	return testutil.SkipIfNoKeychain(t)
 }
 
 // bedrockKeyFlag builds the --bedrock-key flag from a separate literal so no
@@ -220,9 +175,7 @@ func bedrockKeyFlag() string {
 // This is the standard first step for any test that calls ExecuteArgs for apply.
 func setupApplyTest(t *testing.T) string {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	home := testutil.NewTestHome(t)
 	setupMockPSRunner(t, home)
 	return home
 }

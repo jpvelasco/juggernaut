@@ -3,6 +3,8 @@ package provider
 import (
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func catalogModel(id, source string) CatalogModel {
@@ -183,7 +185,7 @@ func TestOpenCode_BuildConfigAddsCompatibleLiveCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, ok := nestedMapChain(plan.Keys, "provider", mantleProviderID, "models")
+	value, ok := testutil.NestedMapChain(plan.Keys, "provider", mantleProviderID, "models")
 	if !ok {
 		t.Fatal("provider model inventory missing")
 	}
