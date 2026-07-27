@@ -180,31 +180,19 @@ func (m *Manager) MergeConfigPlan(keys map[string]any) error {
 // a user's sibling entries survive. All other keys keep whole-value
 // set-or-delete semantics.
 func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) error {
-	deep := make(map[string]bool, len(deepKeys))
-	for _, k := range deepKeys {
-		deep[k] = true
-	}
 	return m.withConfig(func(existing map[string]any) error {
-		for k, v := range keys {
-			if err := m.mergeKey(existing, k, v, deep); err != nil {
-				return err
+		return walkManagedKeys(keys, deepKeys, func(key string, value any, action managedKeyAction) error {
+			switch action {
+			case actionJuggernaut:
+				existing[key] = value
+			case actionDeep:
+				return mergeNested(existing, key, value, m.path)
+			default:
+				return applyManagedKey(existing, key, value)
 			}
-		}
-		return nil
+			return nil
+		})
 	})
-}
-
-// mergeKey handles one key in a merge operation. "juggernaut" is always set
-// verbatim; keys in deepSet are deep-merged; all others use applyManagedKey.
-func (m *Manager) mergeKey(existing map[string]any, k string, v any, deepSet map[string]bool) error {
-	if k == "juggernaut" {
-		existing[k] = v // the managed block is always set verbatim
-		return nil
-	}
-	if deepSet[k] {
-		return mergeNested(existing, k, v, m.path)
-	}
-	return applyManagedKey(existing, k, v)
 }
 
 // mergeNested merges the sub-keys of a nested-table value into existing[k],

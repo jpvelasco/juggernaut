@@ -59,10 +59,15 @@ func lookupNestedKey(tbl map[string]any, parts []string) (any, bool) {
 
 // removeNestedKey walks a slice of path parts through nested maps and deletes
 // the leaf key. Empty parent maps are cleaned up on the way back so orphan
-// tables don't remain.
+// tables don't remain. The base case (single-part path) delegates to
+// walkNestedMap; multi-part paths recurse with the same empty-parent cleanup.
 func removeNestedKey(tbl map[string]any, parts []string, prefix string, path string) error {
 	if len(parts) == 1 {
-		delete(tbl, parts[0])
+		walkNestedMap(tbl, parts, func(parent map[string]any, key string, _ any, present bool, _ bool) {
+			if present {
+				delete(parent, key)
+			}
+		})
 		return nil
 	}
 
@@ -82,8 +87,6 @@ func removeNestedKey(tbl map[string]any, parts []string, prefix string, path str
 	// Clean up empty parent maps.
 	if len(child) == 0 {
 		delete(tbl, key)
-	} else {
-		tbl[key] = child
 	}
 	return nil
 }
@@ -94,4 +97,53 @@ func removeNestedKey(tbl map[string]any, parts []string, prefix string, path str
 func walkDotPath(root map[string]any, dotPath string, visit walkNestedMapVisitor) {
 	parts := strings.Split(dotPath, ".")
 	walkNestedMap(root, parts, visit)
+}
+
+// managedKeyAction represents the disposition of a key during a managed-key walk.
+type managedKeyAction int
+
+const (
+	actionJuggernaut  managedKeyAction = iota // "juggernaut" block — always fully owned
+	actionPermissions                         // "permissions" — special handler
+	actionDeep                                // deep-merge key — sub-key walk
+	actionMap                                 // map value — sub-key iteration
+	actionScalar                              // scalar — whole value
+)
+
+// walkManagedKeyVisitor is called for each key in the plan with its action type.
+type walkManagedKeyVisitor func(key string, value any, action managedKeyAction) error
+
+// walkManagedKeys iterates over the plan keys and dispatches each to the
+// visitor with the appropriate action. It pre-computes the deepKeys set and
+// classifies each key before calling the visitor.
+func walkManagedKeys(plan map[string]any, deepKeys []string, visit walkManagedKeyVisitor) error {
+	deep := make(map[string]bool, len(deepKeys))
+	for _, k := range deepKeys {
+		deep[k] = true
+	}
+	for k, v := range plan {
+		switch {
+		case k == "juggernaut":
+			if err := visit(k, v, actionJuggernaut); err != nil {
+				return err
+			}
+		case k == "permissions":
+			if err := visit(k, v, actionPermissions); err != nil {
+				return err
+			}
+		case deep[k]:
+			if err := visit(k, v, actionDeep); err != nil {
+				return err
+			}
+		case isStringKeyedMap(v):
+			if err := visit(k, v, actionMap); err != nil {
+				return err
+			}
+		default:
+			if err := visit(k, v, actionScalar); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
