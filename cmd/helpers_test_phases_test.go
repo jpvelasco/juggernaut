@@ -453,7 +453,7 @@ func TestFormatCollisions_NonStringValue(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// providerDisplayName
+// provider.DisplayName
 // ---------------------------------------------------------------------------
 
 func TestProviderDisplayName_KnownProviders(t *testing.T) {
@@ -468,23 +468,12 @@ func TestProviderDisplayName_KnownProviders(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := providerDisplayName(tc.name)
+			p, _ := provider.Get(tc.name)
+			got := p.DisplayName()
 			if got != tc.expected {
-				t.Errorf("providerDisplayName(%q) = %q, want %q", tc.name, got, tc.expected)
+				t.Errorf("provider.Get(%q).DisplayName() = %q, want %q", tc.name, got, tc.expected)
 			}
 		})
-	}
-}
-
-func TestProviderDisplayName_Unknown(t *testing.T) {
-	got := providerDisplayName("unknown-cli")
-	// Falls through to strings.Title — should capitalize the first letter.
-	if got == "" {
-		t.Error("expected non-empty display name for unknown provider")
-	}
-	// The default path title-cases the name.
-	if got[0] != 'U' {
-		t.Errorf("expected title-cased name starting with 'U', got %q", got)
 	}
 }
 

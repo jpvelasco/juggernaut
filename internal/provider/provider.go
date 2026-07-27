@@ -76,6 +76,9 @@ type Provider interface {
 	// Supports reports whether the Provider handles a given optional capability,
 	// so cmd/ can gate CLI-specific flags without per-CLI branches.
 	Supports(Capability) bool
+
+	// DisplayName returns the human-facing CLI name for messages.
+	DisplayName() string
 }
 
 // CatalogProvider is an optional extension implemented by providers that can

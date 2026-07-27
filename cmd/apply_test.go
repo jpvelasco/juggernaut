@@ -1152,6 +1152,7 @@ func (s stubProvider) LaunchSpec() provider.LaunchSpec   { return provider.Launc
 func (s stubProvider) Supports(provider.Capability) bool { return false }
 func (s stubProvider) DeepMergeKeys() []string           { return nil }
 func (s stubProvider) OwnedSubKeys() map[string][]string { return nil }
+func (s stubProvider) DisplayName() string               { return "Stub" }
 
 // TestResolveApplyInputs_BadConfigFormat_Errors covers the FormatByName error
 // branch: a provider reporting an unknown config format surfaces an error rather

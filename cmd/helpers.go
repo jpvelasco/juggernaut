@@ -318,7 +318,7 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 		return nil
 	}
 
-	title := providerDisplayName(prov.Name())
+	title := prov.DisplayName()
 	fmt.Printf("Would write juggernaut config to %s\n", path)
 	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
 	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
@@ -463,28 +463,12 @@ func installActivation(home string, prov provider.Provider) {
 		warnf("could not install shell activation: %v", err)
 		return
 	}
-	title := providerDisplayName(prov.Name())
+	title := prov.DisplayName()
 	if len(paths) == 0 {
 		fmt.Printf("  ✓ %s shell activation already up to date\n", title)
 		return
 	}
 	fmt.Printf("  ✓ Updated %s activation in %d shell profile(s)\n", title, len(paths))
-}
-
-// providerDisplayName returns a human-facing CLI name for messages.
-func providerDisplayName(name string) string {
-	switch name {
-	case "claude":
-		return "Claude"
-	case "codex":
-		return "Codex"
-	case "opencode":
-		return "OpenCode"
-	case "grok":
-		return "Grok"
-	default:
-		return strings.Title(name) //nolint:staticcheck // ASCII CLI name fallback
-	}
 }
 
 func reportLegacyRecovery(home string) {

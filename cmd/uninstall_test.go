@@ -17,6 +17,7 @@ import (
 type autoModeCapableStub struct{ stubProvider }
 
 func (autoModeCapableStub) Supports(c provider.Capability) bool { return c == provider.CapAutoMode }
+func (autoModeCapableStub) DisplayName() string                 { return "AutoMode" }
 
 // TestUninstall_DryRun_PreservesBlock verifies that a dry-run reports intended
 // removals but leaves settings.json untouched and never prints completion.
@@ -259,6 +260,7 @@ func TestWarnIfAutoModeWillBeLost_ReadErrorSkipped(t *testing.T) {
 type autoModeReadErrorStub struct{ dirPathProvider }
 
 func (autoModeReadErrorStub) Supports(c provider.Capability) bool { return c == provider.CapAutoMode }
+func (autoModeReadErrorStub) DisplayName() string                 { return "AutoModeError" }
 
 // TestUninstall_NothingInstalled is a clean no-op: uninstall on a fresh home
 // should succeed and still print completion without errors.

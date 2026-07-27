@@ -145,7 +145,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
 		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
 			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
-			providerDisplayName(prov.Name()), authmode.BedrockAPIKey)
+			prov.DisplayName(), authmode.BedrockAPIKey)
 	}
 
 	// Skip credential resolution in dry-run mode: it can prompt interactively
