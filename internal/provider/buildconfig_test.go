@@ -5,6 +5,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // testConfig is a minimal embedded-style bedrock.Config for provider tests.
@@ -208,7 +209,7 @@ func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	}
 	// baseOpts uses the default region us-west-2 (non-explicit). gpt-5.5 is only
 	// in us-east-1/2, so the region auto-switches to us-east-1.
-	region, ok := nestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
 	}
@@ -246,7 +247,7 @@ func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	region, ok := nestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
 	}
@@ -276,7 +277,7 @@ func TestCodex_BuildConfig_Region(t *testing.T) {
 	opts := baseOpts()
 	opts.Region = "us-east-1"
 	plan, _ := p.BuildConfig(testConfig(), opts)
-	region, ok := nestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
 	}
@@ -296,7 +297,7 @@ func TestCodex_BuildConfig_ExplicitServingRegion(t *testing.T) {
 	opts.RegionExplicit = true
 	opts.Model = "gpt-5.5"
 	plan, _ := p.BuildConfig(testConfig(), opts)
-	region, ok := nestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
 	}

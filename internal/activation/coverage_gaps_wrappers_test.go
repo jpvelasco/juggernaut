@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -138,8 +139,7 @@ func TestWrapperDelegation(t *testing.T) {
 	})
 
 	t.Run("Launch", func(t *testing.T) {
-		home := t.TempDir()
-		t.Setenv("HOME", home)
+		home := testutil.NewTestHome(t)
 		t.Setenv("PATH", "")
 		if err := Launch(home, []string{}); err == nil {
 			t.Error("expected error when no binary found")
@@ -423,8 +423,7 @@ func TestLaunchWithOptions(t *testing.T) {
 	})
 
 	t.Run("ExpiredKeyWarning", func(t *testing.T) {
-		home := t.TempDir()
-		t.Setenv("HOME", home)
+		home := testutil.NewTestHome(t)
 
 		expiredURL := "https://bedrock.amazonaws.com/?Action=CallWithBearerToken" +
 			"&X-Amz-Date=20200101T000000Z&X-Amz-Expires=3600"
@@ -495,8 +494,7 @@ func TestLaunchWithOptions(t *testing.T) {
 
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
-				home := t.TempDir()
-				t.Setenv("HOME", home)
+				home := testutil.NewTestHome(t)
 				opts := tc.opts
 				opts.Home = home
 

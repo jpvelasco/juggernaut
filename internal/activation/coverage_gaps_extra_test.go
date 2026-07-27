@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestRemoveLegacyLauncherBlock_NoEndMarker covers the early-return path.
@@ -644,8 +646,7 @@ func TestLaunchWithOptions_EmptyHome(t *testing.T) {
 
 // TestLaunchWithOptions_ZeroTargetDefaultsToClaude covers the default target.
 func TestLaunchWithOptions_ZeroTargetDefaultsToClaude(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	err := LaunchWithOptions(LaunchOptions{
 		Home: home,
 		Path: "/nonexistent",
@@ -660,8 +661,7 @@ func TestLaunchWithOptions_ZeroTargetDefaultsToClaude(t *testing.T) {
 
 // TestLaunchWithOptions_CustomTokenEnvVar covers non-default token env.
 func TestLaunchWithOptions_CustomTokenEnvVar(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	// NeedsToken=true triggers the token path.
 	err := LaunchWithOptions(LaunchOptions{
 		Home: home,
@@ -813,8 +813,7 @@ func TestInstalledTargets_Default(t *testing.T) {
 
 // TestLaunchCLI_ZeroTarget covers the default Claude target.
 func TestLaunchCLI_ZeroTarget(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	// With zero target, it defaults to Claude. PATH is /nonexistent so it fails.
 	err := LaunchCLI(home, []string{}, LaunchTarget{})
 	_ = err // Expect error — either way, no crash.
@@ -822,8 +821,7 @@ func TestLaunchCLI_ZeroTarget(t *testing.T) {
 
 // TestLaunchCLI_NeedsTokenTrue covers the token-injection path.
 func TestLaunchCLI_NeedsTokenTrue(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	err := LaunchCLI(home, []string{}, LaunchTarget{
 		BinaryNames: []string{"test"},
 		NeedsToken:  true,
@@ -834,8 +832,7 @@ func TestLaunchCLI_NeedsTokenTrue(t *testing.T) {
 
 // TestLaunchCLI_NeedsTokenFalse covers the no-token path.
 func TestLaunchCLI_NeedsTokenFalse(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := testutil.NewTestHome(t)
 	err := LaunchCLI(home, []string{}, LaunchTarget{
 		BinaryNames: []string{"test"},
 		NeedsToken:  false,

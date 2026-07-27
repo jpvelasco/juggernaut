@@ -6,6 +6,7 @@ import (
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
@@ -47,15 +48,8 @@ func (c claude) ConfigPath(home, scope string) (string, error) {
 // OwnsConfig recognizes a Claude config Juggernaut wrote by its managed
 // juggernaut block with managedBy == "juggernaut".
 func (c claude) OwnsConfig(data map[string]any) bool {
-	block, ok := data["juggernaut"].(map[string]any)
-	if !ok {
-		return false
-	}
-	meta, ok := block["meta"].(map[string]any)
-	if !ok {
-		return false
-	}
-	return meta["managedBy"] == "juggernaut"
+	_, ok := config.ParseJuggernautBlock(data)
+	return ok
 }
 
 // DeepMergeKeys: Claude's managed keys are all whole-value (Juggernaut fully

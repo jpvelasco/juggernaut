@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestGet_Grok(t *testing.T) {
@@ -148,7 +150,7 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	bg, ok := nestedMapChain(plan.Keys, "model", grokModelName)
+	bg, ok := testutil.NestedMapChain(plan.Keys, "model", grokModelName)
 	if !ok {
 		t.Fatalf("[model.%s] missing", grokModelName)
 	}
@@ -168,7 +170,7 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if bgMap["api_backend"] != "responses" {
 		t.Errorf("api_backend = %v, want responses", bgMap["api_backend"])
 	}
-	modelsDefault, ok := nestedMapChain(plan.Keys, "models", "default")
+	modelsDefault, ok := testutil.NestedMapChain(plan.Keys, "models", "default")
 	if !ok || modelsDefault != "bedrock-grok" {
 		t.Errorf("[models].default = %v, want bedrock-grok", plan.Keys["models"])
 	}
@@ -186,7 +188,7 @@ func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	auth, ok := nestedMapChain(plan.Keys, "auth")
+	auth, ok := testutil.NestedMapChain(plan.Keys, "auth")
 	if !ok {
 		t.Fatalf("[auth] block missing")
 	}
@@ -236,7 +238,7 @@ func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	bg, ok := nestedMapChain(plan.Keys, "model", grokModelName)
+	bg, ok := testutil.NestedMapChain(plan.Keys, "model", grokModelName)
 	if !ok {
 		t.Fatalf("[model.%s] missing", grokModelName)
 	}
@@ -259,7 +261,7 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig should not fail on an unlisted region: %v", err)
 	}
-	bg, ok := nestedMapChain(plan.Keys, "model", grokModelName)
+	bg, ok := testutil.NestedMapChain(plan.Keys, "model", grokModelName)
 	if !ok {
 		t.Fatalf("[model.%s] missing", grokModelName)
 	}
@@ -273,7 +275,7 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	// us-west-2 IS a known grok-4.3 region → kept, silent.
 	opts.Region = "us-west-2"
 	plan, _ = p.BuildConfig(testConfig(), opts)
-	bg, ok = nestedMapChain(plan.Keys, "model", grokModelName)
+	bg, ok = testutil.NestedMapChain(plan.Keys, "model", grokModelName)
 	if !ok {
 		t.Fatalf("[model.%s] missing", grokModelName)
 	}

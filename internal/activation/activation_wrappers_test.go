@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // setupActivationFixture returns a temp home and an injected PowerShell result
@@ -51,9 +52,7 @@ func TestSamePath(t *testing.T) {
 }
 
 func TestDefaultBinDir_EmptyHomeFallsBack(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	testutil.NewTestHome(t)
 	// Empty arg forces the env/UserHomeDir fallback chain.
 	if got := DefaultBinDir(""); got == "" {
 		t.Error("DefaultBinDir(\"\") should resolve a non-empty path via fallbacks")
