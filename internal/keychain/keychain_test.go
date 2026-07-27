@@ -108,15 +108,16 @@ func TestDelete(t *testing.T) {
 }
 
 func TestSetWithFallback_FallsBackToFile(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("keychain Set hangs on macOS CI; file fallback only triggered on Windows")
+	}
 	home := testutil.NewTestHome(t)
 	s := testStore()
 	defer func() { _ = s.DeleteWithFallback(home) }()
 	skipIfUnavailable(t, s)
 
 	// Use a token longer than the Windows keychain limit (2560 bytes) to
-	// force the file fallback path on Windows. On non-Windows the keychain
-	// has no such limit, so the token may land in the keychain — the
-	// GetWithFallback path still proves round-trip correctness.
+	// force the file fallback path on Windows.
 	token := strings.Repeat("x", 2600)
 	if err := s.SetWithFallback(token, home); err != nil {
 		t.Fatalf("SetWithFallback() error: %v", err)
