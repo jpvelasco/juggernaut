@@ -10,6 +10,14 @@ Read `CLAUDE.md` for the detailed architecture, provider inventory, managed
 configuration keys, and current CI/release design. Keep that document accurate
 when architecture or workflows change.
 
+This is a **public** MIT-licensed repository (`github.com/jpvelasco/juggernaut`,
+module `github.com/jpvelasco/juggernaut/v5`), distributed via npm only as
+`juggernaut-bedrock`; `scripts/install.sh` and `scripts/install.ps1` are
+deprecated stubs that print npm instructions. Assume outside contributors and
+forks: keep `README.md`, `QUICKSTART.md`, and `CONTRIBUTING.md` current when
+flags or user-visible behavior change, and never cite a gitignored path
+(`.research/`, `docs/superpowers/`, `.claude/`) as if a fresh clone has it.
+
 ## Common Commands
 
 ```bash
@@ -24,7 +32,13 @@ make codacy                # check Codacy dashboard issues with CODACY_API_TOKEN
 
 go test ./internal/schema/... -v
 go test ./cmd/... -run TestApply_WritesSettings_IAM -v
+
+cd npm && npm test         # npm launcher tests (Node >= 20; CI uses Node 24)
+UPDATE_GOLDEN=1 go test ./cmd/ -run Golden   # only after an INTENTIONAL output change
 ```
+
+Install git hooks once per clone: `scripts/setup-hooks.ps1` (Windows) or
+`bash scripts/setup-hooks.sh` (Linux/macOS). CI is the real gate either way.
 
 On Windows, PowerShell is the default shell. Keep scripts cross-platform unless
 they are explicitly platform-specific.
@@ -40,7 +54,11 @@ they are explicitly platform-specific.
   via `launch`/`launch-cli` while avoiding wrapper recursion.
 - `internal/schema/` builds and validates Claude-specific managed settings.
 - `internal/bedrock/` loads embedded or test Bedrock configuration.
-- `internal/keychain/` stores the shared Bedrock bearer token.
+- `internal/keychain/` stores the shared Bedrock bearer token, with a versioned
+  owner-only file fallback for tokens exceeding the 2560-byte Windows Credential
+  Manager limit. Use the `*WithFallback` methods on real credential paths; the
+  bare `Set`/`Get`/`Delete` are keychain-only.
+- `internal/discovery/` is the only package importing `aws-sdk-go-v2`.
 - `internal/safepath/` provides containment and owner-only filesystem operations.
 - `npm/` contains the npm launcher and platform packages.
 
@@ -86,16 +104,31 @@ with `auth_provider_command` pointing at `juggernaut auth-token`.
 ## Testing
 
 Add focused tests with each behavior change, then run the affected package
-before the full suite. Tests that modify home-directory state should use
-`t.TempDir()` and `t.Setenv("HOME", ...)`. Isolate keychain tests with
-`JUGGERNAUT_KEYCHAIN_SERVICE`; tests should skip when no backend is available.
+before the full suite. Use the existing helpers instead of rewriting boilerplate:
+`internal/testhome.NewTestHome(t)` sets both `HOME` and `USERPROFILE` (Windows
+paths need both), and `internal/testutil` provides `CaptureStdout`, `WithStdin`,
+`NestedMapChain`, `ParseJSON`, `OwnedJuggernautBlock`, and `SkipIfNoKeychain`.
+Isolate keychain tests with `JUGGERNAUT_KEYCHAIN_SERVICE`; tests should skip when
+no backend is available.
+
+Tests never call AWS. `cmd/models.go` and `cmd/model_catalog.go` expose their
+discovery calls as package-level function variables so tests can swap them;
+preserve that seam when adding discovery-backed commands.
+
+`cmd/golden_test.go` diffs Claude's apply output byte-for-byte against
+`cmd/testdata/golden/`, so unintended output drift fails there.
 
 Cobra global flag state persists between `ExecuteArgs()` calls. Use the existing
 `resetFlags()` mechanism when adding or changing flags.
 
 Keep cross-platform behavior in mind. CI runs race-covered Go tests on Linux,
-macOS, and Windows, plus a separate race job, coverage-threshold job, npm tests,
-shellcheck, gosec, CodeQL, and GoReleaser draft checks.
+macOS, and Windows, plus Windows lint, govulncheck, a separate race job, a
+Linux-only coverage-floor job, npm tests, shellcheck, gosec, Trivy, CodeQL, a
+GoReleaser snapshot build, and Socket. Merge-blocking checks are only `lint`, the
+three `test (<os>)` legs, and the two Socket contexts — the rest, including
+Codacy, are informational. The authoritative coverage gate is Codecov (80%
+project and patch, in `codecov.yml`), not the lower in-CI Linux floor. Fork PRs
+skip Codecov upload by design, so a missing Codecov status there is expected.
 
 Before handing off a substantive change, run at least:
 
@@ -117,6 +150,15 @@ discard changes without explicit authorization.
 Use conventional commit subjects when asked to commit. Release tags are `v*`
 and trigger GitHub release publishing plus npm OIDC publish; do not create or
 push a release tag unless explicitly requested.
+
+`main` is protected by a GitHub **ruleset**, not classic branch protection, so
+`gh api repos/.../branches/main/protection` returns 404 — query
+`gh api repos/jpvelasco/juggernaut/rulesets` instead. The active `protect-main`
+ruleset blocks deletion and non-fast-forward, requires a PR with review-thread
+resolution (0 approvals), enforces strict up-to-date status checks, and has **no
+bypass actors** — the required checks apply to the owner too. A separate
+`protect-version-tags` ruleset guards `v*`. Out-of-repo GitHub settings are
+documented and re-appliable via `.github/GITHUB_SETTINGS.md`.
 
 **Protected branches:** `legacy/v3` must never be deleted — it is required for
 older releases. When cleaning up branches, skip any branch named `legacy/*`.
