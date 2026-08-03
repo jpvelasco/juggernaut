@@ -139,6 +139,7 @@ func TestLoadRuntimeStateRejectsMalformedAndMismatchedFiles(t *testing.T) {
 		`{`,
 		`{"schemaVersion":99,"managedBy":"juggernaut","cli":"claude","authMode":"iam"}`,
 		`{"schemaVersion":1,"managedBy":"other","cli":"claude","authMode":"iam"}`,
+		`{"schemaVersion":1,"managedBy":"juggernaut","cli":"claude","authMode":"unknown"}`,
 	} {
 		if err := safepath.WriteFile(home, path, []byte(data)); err != nil {
 			t.Fatal(err)
@@ -146,5 +147,86 @@ func TestLoadRuntimeStateRejectsMalformedAndMismatchedFiles(t *testing.T) {
 		if _, _, err := LoadRuntimeState(home, "claude"); err == nil {
 			t.Fatalf("LoadRuntimeState should reject %s", data)
 		}
+	}
+}
+
+func TestRuntimeStateOperationsRejectInvalidCLI(t *testing.T) {
+	home := testutil.NewTestHome(t)
+
+	if _, found, err := LoadRuntimeState(home, "../claude"); err == nil || found {
+		t.Fatalf("LoadRuntimeState invalid CLI = found %v, err %v; want error", found, err)
+	}
+	if err := RemoveRuntimeState(home, "../claude"); err == nil {
+		t.Fatal("RemoveRuntimeState should reject an invalid CLI")
+	}
+}
+
+func TestSaveRuntimeStateReportsFilesystemFailures(t *testing.T) {
+	state := RuntimeState{AuthMode: authmode.IAM}
+
+	t.Run("write", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		if err := os.WriteFile(filepath.Join(home, ".juggernaut"), []byte("not a directory"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		err := SaveRuntimeState(home, "claude", state)
+		if err == nil || !strings.Contains(err.Error(), "writing runtime state") {
+			t.Fatalf("SaveRuntimeState write error = %v", err)
+		}
+	})
+
+	t.Run("rename cleans temporary file", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		path, err := RuntimeStatePath(home, "claude")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := safepath.MkdirAll(path); err != nil {
+			t.Fatal(err)
+		}
+
+		err = SaveRuntimeState(home, "claude", state)
+		if err == nil || !strings.Contains(err.Error(), "committing runtime state") {
+			t.Fatalf("SaveRuntimeState rename error = %v", err)
+		}
+		if _, statErr := os.Stat(path + ".tmp"); !os.IsNotExist(statErr) {
+			t.Fatalf("temporary runtime state was not cleaned up: %v", statErr)
+		}
+	})
+}
+
+func TestLoadRuntimeStateReportsReadFailure(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	path, err := RuntimeStatePath(home, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := safepath.MkdirAll(path); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, found, err := LoadRuntimeState(home, "claude"); err == nil || found ||
+		!strings.Contains(err.Error(), "reading runtime state") {
+		t.Fatalf("LoadRuntimeState directory = found %v, err %v", found, err)
+	}
+}
+
+func TestRemoveRuntimeStateReportsFilesystemFailure(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	path, err := RuntimeStatePath(home, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := safepath.MkdirAll(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "keep"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err = RemoveRuntimeState(home, "claude")
+	if err == nil || !strings.Contains(err.Error(), "removing runtime state") {
+		t.Fatalf("RemoveRuntimeState error = %v", err)
 	}
 }

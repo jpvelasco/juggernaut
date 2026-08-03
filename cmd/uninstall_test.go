@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -286,4 +287,90 @@ func TestUninstall_NothingInstalled(t *testing.T) {
 	if strings.Contains(out, "Removed juggernaut block") {
 		t.Errorf("clean home should not report a removed block, got:\n%s", out)
 	}
+}
+
+func TestRemoveRuntimeStateGuardsAndFailures(t *testing.T) {
+	originalFlags := uninstallFlags
+	t.Cleanup(func() { uninstallFlags = originalFlags })
+
+	t.Run("project scope preserves user state", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{AuthMode: "iam"}); err != nil {
+			t.Fatal(err)
+		}
+		uninstallFlags.scope = "project"
+		uninstallFlags.dryRun = false
+
+		removeRuntimeState(home, provider.MustGet("claude"))
+		if _, found, err := activation.LoadRuntimeState(home, "claude"); err != nil || !found {
+			t.Fatalf("project uninstall state = found %v, err %v", found, err)
+		}
+	})
+
+	t.Run("provider without persistence preserves state", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		if err := activation.SaveRuntimeState(home, "codex", activation.RuntimeState{AuthMode: "iam"}); err != nil {
+			t.Fatal(err)
+		}
+		uninstallFlags.scope = "user"
+		uninstallFlags.dryRun = false
+
+		removeRuntimeState(home, provider.MustGet("codex"))
+		if _, found, err := activation.LoadRuntimeState(home, "codex"); err != nil || !found {
+			t.Fatalf("non-persistent provider state = found %v, err %v", found, err)
+		}
+	})
+
+	t.Run("dry run ignores missing state", func(t *testing.T) {
+		uninstallFlags.scope = "user"
+		uninstallFlags.dryRun = true
+		out := captureStdout(t, func() {
+			removeRuntimeState(testutil.NewTestHome(t), provider.MustGet("claude"))
+		})
+		if out != "" {
+			t.Fatalf("missing fallback produced dry-run output: %q", out)
+		}
+	})
+
+	t.Run("dry run ignores invalid state", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		path, err := activation.RuntimeStatePath(home, "claude")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := safepath.WriteFile(home, path, []byte(`{`)); err != nil {
+			t.Fatal(err)
+		}
+		uninstallFlags.scope = "user"
+		uninstallFlags.dryRun = true
+		out := captureStdout(t, func() {
+			removeRuntimeState(home, provider.MustGet("claude"))
+		})
+		if out != "" {
+			t.Fatalf("invalid fallback produced dry-run output: %q", out)
+		}
+	})
+
+	t.Run("remove failure warns", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		path, err := activation.RuntimeStatePath(home, "claude")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := safepath.MkdirAll(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "keep"), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		uninstallFlags.scope = "user"
+		uninstallFlags.dryRun = false
+
+		stderr := captureStderr(t, func() {
+			removeRuntimeState(home, provider.MustGet("claude"))
+		})
+		if !strings.Contains(stderr, "could not remove runtime fallback") {
+			t.Fatalf("missing removal warning: %q", stderr)
+		}
+	})
 }

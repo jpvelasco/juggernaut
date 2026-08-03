@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 )
 
 // TestApply_BedrockKey_FlagStoresViaFallback runs a real (non-dry-run) apply
@@ -90,6 +92,59 @@ func TestApply_ProjectScopeDoesNotCreateGlobalRuntimeFallback(t *testing.T) {
 	if _, found, err := activation.LoadRuntimeState(home, "claude"); err != nil || found {
 		t.Fatalf("project apply created global runtime fallback: found %v, err %v", found, err)
 	}
+}
+
+func TestPersistRuntimeStateGuardsAndFailureCleanup(t *testing.T) {
+	originalScope := applyFlags.scope
+	t.Cleanup(func() { applyFlags.scope = originalScope })
+	applyFlags.scope = "user"
+
+	t.Run("provider without persistence", func(t *testing.T) {
+		home := setupApplyTest(t)
+		persistRuntimeState(home, provider.MustGet("codex"), authmode.IAM, provider.ConfigPlan{})
+		if _, found, err := activation.LoadRuntimeState(home, "codex"); err != nil || found {
+			t.Fatalf("non-persistent provider state = found %v, err %v", found, err)
+		}
+	})
+
+	t.Run("case-insensitive token exclusion", func(t *testing.T) {
+		home := setupApplyTest(t)
+		persistRuntimeState(home, provider.MustGet("claude"), authmode.IAM, provider.ConfigPlan{
+			RuntimeEnv: map[string]string{
+				strings.ToLower(authmode.BedrockAuthEnvName): "secret",
+				"AWS_REGION": "us-west-2",
+			},
+		})
+		state, found, err := activation.LoadRuntimeState(home, "claude")
+		if err != nil || !found {
+			t.Fatalf("runtime state = found %v, err %v", found, err)
+		}
+		if _, ok := state.Env[strings.ToLower(authmode.BedrockAuthEnvName)]; ok {
+			t.Fatal("runtime state retained a case-variant bearer token")
+		}
+		if state.Env["CLAUDE_CODE_USE_BEDROCK"] != "1" || state.Env["AWS_REGION"] != "us-west-2" {
+			t.Fatalf("runtime state omitted routing environment: %v", state.Env)
+		}
+	})
+
+	t.Run("failed save removes stale state", func(t *testing.T) {
+		home := setupApplyTest(t)
+		if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{
+			AuthMode: authmode.IAM,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		stderr := captureStderr(t, func() {
+			persistRuntimeState(home, provider.MustGet("claude"), "invalid", provider.ConfigPlan{})
+		})
+		if !strings.Contains(stderr, "could not save runtime fallback") {
+			t.Fatalf("missing persistence warning: %q", stderr)
+		}
+		if _, found, err := activation.LoadRuntimeState(home, "claude"); err != nil || found {
+			t.Fatalf("stale state after failed save = found %v, err %v", found, err)
+		}
+	})
 }
 
 // TestApply_ReapplyWithoutAuth_PreservesExistingMode verifies the documented

@@ -713,6 +713,12 @@ func TestEnvironmentHelpersRespectPlatformKeySemantics(t *testing.T) {
 	}
 }
 
+func TestEnvEntryHasKeyRejectsEntryWithoutSeparator(t *testing.T) {
+	if envEntryHasKey("AWS_REGION", "AWS_REGION") {
+		t.Fatal("environment entry without '=' must not match")
+	}
+}
+
 func TestLaunchWithoutSettingsDoesNotForceBedrockEnv(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
