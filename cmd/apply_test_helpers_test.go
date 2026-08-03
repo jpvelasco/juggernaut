@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -121,6 +123,33 @@ func setNativeDefaultMode(t *testing.T, home, mode string) {
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	return testutil.CaptureStdout(t, fn)
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() {
+		os.Stderr = orig
+		_ = r.Close()
+		_ = w.Close()
+	}()
+
+	fn()
+
+	os.Stderr = orig
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing stderr pipe: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading stderr pipe: %v", err)
+	}
+	return string(out)
 }
 
 // withStdin replaces os.Stdin with a pipe preloaded with input for the duration

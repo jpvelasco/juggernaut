@@ -391,6 +391,82 @@ func TestCheckRuntimeFallback_OKWithManagedConfig(t *testing.T) {
 	}
 }
 
+func TestCheckRuntimeFallbackEdgeCases(t *testing.T) {
+	t.Run("provider without persistence", func(t *testing.T) {
+		r := doctor.NewReport()
+		checkRuntimeFallback(r, provider.MustGet("codex"), testutil.NewTestHome(t))
+		if out := r.String(); out != "" {
+			t.Fatalf("non-persistent provider reported runtime fallback:\n%s", out)
+		}
+	})
+
+	t.Run("missing state", func(t *testing.T) {
+		r := doctor.NewReport()
+		checkRuntimeFallback(r, provider.MustGet("claude"), testutil.NewTestHome(t))
+		if out := r.String(); out != "" {
+			t.Fatalf("missing runtime fallback produced a report:\n%s", out)
+		}
+	})
+
+	t.Run("invalid state", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		path, err := activation.RuntimeStatePath(home, "claude")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := safepath.WriteFile(home, path, []byte(`{`)); err != nil {
+			t.Fatal(err)
+		}
+
+		r := doctor.NewReport()
+		checkRuntimeFallback(r, provider.MustGet("claude"), home)
+		out := r.String()
+		if !strings.Contains(out, "[WARN]") || !strings.Contains(out, "invalid:") ||
+			!strings.Contains(out, "juggernaut apply") {
+			t.Fatalf("invalid fallback report:\n%s", out)
+		}
+	})
+
+	t.Run("unreadable user config", func(t *testing.T) {
+		home := testutil.NewTestHome(t)
+		if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{
+			AuthMode: authmode.IAM,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		configPath, err := provider.MustGet("claude").ConfigPath(home, "user")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := safepath.MkdirAll(configPath); err != nil {
+			t.Fatal(err)
+		}
+
+		r := doctor.NewReport()
+		checkRuntimeFallback(r, provider.MustGet("claude"), home)
+		out := r.String()
+		if !strings.Contains(out, "[WARN]") || !strings.Contains(out, "could not be read") {
+			t.Fatalf("unreadable config report:\n%s", out)
+		}
+	})
+}
+
+func TestDoctorProjectScopeSkipsUserRuntimeFallback(t *testing.T) {
+	home := setupApplyTest(t)
+	if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{
+		AuthMode: authmode.IAM,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		_ = ExecuteArgs([]string{"doctor", "--scope=project"})
+	})
+	if strings.Contains(out, "runtime fallback") {
+		t.Fatalf("project-only doctor reported user runtime fallback:\n%s", out)
+	}
+}
+
 func TestCliBinaryStatus_WarnWhenMissing(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	prov, err := provider.Get("opencode")

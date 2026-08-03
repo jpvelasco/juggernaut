@@ -276,6 +276,7 @@ func TestReadAuthModeFromConfig(t *testing.T) {
 // token injected, no static env).
 func TestLaunchWithOptions_Codex_NoConfigFile(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
 	home := testutil.NewTestHome(t)
 
 	realDir := t.TempDir()
@@ -319,6 +320,7 @@ func TestLaunchWithOptions_Codex_NoConfigFile(t *testing.T) {
 // unmanaged behavior (no token injected).
 func TestLaunchWithOptions_Codex_BadConfigFile(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
 	home := testutil.NewTestHome(t)
 
 	realDir := t.TempDir()
