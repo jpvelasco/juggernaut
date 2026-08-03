@@ -80,6 +80,9 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 			checkFableDataRetention(r, scope, scopeData)
 		}
 	}
+	if doctorFlags.scope != "project" {
+		checkRuntimeFallback(r, prov, home)
+	}
 
 	token, err := keychain.Default().GetWithFallback(home)
 	switch {
@@ -440,6 +443,32 @@ func checkProviderConfigScope(prov provider.Provider, home, scope string, requir
 		return doctor.Fail, "juggernaut-managed config not found — run `juggernaut apply --cli=" + prov.Name() + "`"
 	}
 	return doctor.OK, "not configured"
+}
+
+func checkRuntimeFallback(r *doctor.Report, prov provider.Provider, home string) {
+	if !prov.LaunchSpec().PersistRuntimeState {
+		return
+	}
+	state, found, err := activation.LoadRuntimeState(home, prov.Name())
+	label := prov.Name() + " runtime fallback"
+	if err != nil {
+		r.Check(label, doctor.Warn, "invalid: "+err.Error()+"; re-run `juggernaut apply --cli="+prov.Name()+"`")
+		return
+	}
+	if !found {
+		return
+	}
+
+	data, configErr := readProviderConfig(prov, home, "user")
+	switch {
+	case configErr != nil:
+		r.Check(label, doctor.Warn, "saved for "+state.AuthMode+" auth, but user config could not be read: "+configErr.Error())
+	case !prov.OwnsConfig(data):
+		r.Check(label, doctor.Warn, "available for "+state.AuthMode+
+			" auth because the managed user config is missing; re-run `juggernaut apply --cli="+prov.Name()+"` to restore it")
+	default:
+		r.Check(label, doctor.OK, "saved for "+state.AuthMode+" auth")
+	}
 }
 
 func readScopeData(home, scope string) map[string]any {

@@ -83,11 +83,12 @@ type LaunchOptions struct {
 // provider.LaunchSpec (the activation package stays provider-free; cmd/ maps
 // LaunchSpec → LaunchTarget).
 type LaunchTarget struct {
-	BinaryNames []string
-	TokenEnvVar string
-	StaticEnv   map[string]string
-	NeedsToken  bool
-	ConfigPath  string
+	BinaryNames      []string
+	TokenEnvVar      string
+	StaticEnv        map[string]string
+	NeedsToken       bool
+	ConfigPath       string
+	RuntimeStateName string
 }
 
 // claudeLaunchTarget is the default Target (back-compat with the historical
@@ -98,10 +99,11 @@ func claudeLaunchTarget() LaunchTarget {
 		names = []string{"claude.exe", "claude.cmd", "claude.bat"}
 	}
 	return LaunchTarget{
-		BinaryNames: names,
-		TokenEnvVar: authmode.BedrockAuthEnvName,
-		StaticEnv:   map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
-		NeedsToken:  false,
+		BinaryNames:      names,
+		TokenEnvVar:      authmode.BedrockAuthEnvName,
+		StaticEnv:        map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
+		NeedsToken:       false,
+		RuntimeStateName: "claude",
 	}
 }
 

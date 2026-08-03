@@ -430,6 +430,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return err
 	}
 
+	persistRuntimeState(home, prov, authMode, plan)
 	installActivation(home, prov)
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
@@ -443,6 +444,32 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		warnMantleTradeoffs(block)
 	}
 	return nil
+}
+
+// persistRuntimeState retains only provider-generated, non-secret user-scope
+// launch data. Project applies must not create a global fallback.
+func persistRuntimeState(home string, prov provider.Provider, authMode string, plan provider.ConfigPlan) {
+	spec := prov.LaunchSpec()
+	if applyFlags.scope != "user" || !spec.PersistRuntimeState {
+		return
+	}
+	env := make(map[string]string, len(plan.RuntimeEnv)+len(spec.StaticEnv))
+	for k, v := range plan.RuntimeEnv {
+		if !strings.EqualFold(k, spec.TokenEnvVar) {
+			env[k] = v
+		}
+	}
+	for k, v := range spec.StaticEnv {
+		env[k] = v
+	}
+	if err := activation.SaveRuntimeState(home, prov.Name(), activation.RuntimeState{
+		AuthMode: authMode,
+		Env:      env,
+	}); err != nil {
+		// Never retain stale fallback state after an auth-mode change.
+		_ = activation.RemoveRuntimeState(home, prov.Name())
+		warnf("could not save runtime fallback: %v", err)
+	}
 }
 
 // warnAutoModeModel handles the two --mode=auto outcomes. If at least one

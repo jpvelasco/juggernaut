@@ -94,13 +94,17 @@ func launchNamedCLI(cli string, args []string) error {
 // activation package's LaunchTarget (activation stays provider-free).
 func launchTargetFor(p provider.Provider, cfgPath string) activation.LaunchTarget {
 	spec := p.LaunchSpec()
-	return activation.LaunchTarget{
+	target := activation.LaunchTarget{
 		BinaryNames: p.BinaryNames(),
 		TokenEnvVar: spec.TokenEnvVar,
 		StaticEnv:   spec.StaticEnv,
 		NeedsToken:  spec.NeedsToken,
 		ConfigPath:  cfgPath,
 	}
+	if spec.PersistRuntimeState {
+		target.RuntimeStateName = p.Name()
+	}
+	return target
 }
 
 // resolveSelfPaths returns additional executable paths that resolveBinary should

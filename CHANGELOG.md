@@ -4,6 +4,16 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Claude launch survives `settings.json` drift.** User-scope `apply` now saves
+  the generated non-secret launch environment and auth mode at
+  `~/.juggernaut/runtime/claude.json`. If a Claude Code update removes the
+  Juggernaut block from `settings.json`, the launcher warns and uses this
+  fallback instead of silently dropping Bedrock routing. Bearer tokens are
+  never stored in this file, `doctor` reports the drift, and Windows
+  environment cleanup now matches variable names case-insensitively.
+
 ## [5.6.0] - 2026-07-26
 
 **Minor release — default Opus model bumped to Claude Opus 5.**

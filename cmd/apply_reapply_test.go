@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 )
 
@@ -41,6 +43,52 @@ func TestApply_BedrockKey_FlagStoresViaFallback(t *testing.T) {
 	// And settings.json should carry the API-key auth mode.
 	if mode := readJuggernautAuthMode(t, home); mode != authmode.BedrockAPIKey {
 		t.Errorf("auth mode = %q, want %q", mode, authmode.BedrockAPIKey)
+	}
+}
+
+func TestApply_UserScopePersistsNonSecretRuntimeFallback(t *testing.T) {
+	home := setupApplyTest(t)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	state, found, err := activation.LoadRuntimeState(home, "claude")
+	if err != nil || !found {
+		t.Fatalf("LoadRuntimeState = found %v, err %v", found, err)
+	}
+	if state.AuthMode != authmode.IAM {
+		t.Errorf("runtime auth mode = %q, want iam", state.AuthMode)
+	}
+	if state.Env["CLAUDE_CODE_USE_BEDROCK"] != "1" || state.Env["AWS_REGION"] != "us-west-2" {
+		t.Errorf("runtime env missing Bedrock routing: %v", state.Env)
+	}
+	if _, ok := state.Env[authmode.BedrockAuthEnvName]; ok {
+		t.Error("runtime fallback must never persist a bearer token")
+	}
+}
+
+func TestApply_ProjectScopeDoesNotCreateGlobalRuntimeFallback(t *testing.T) {
+	home := setupApplyTest(t)
+	configBytes, err := os.ReadFile(findBedrockConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalEmbeddedConfig := embeddedConfigBytes
+	SetEmbeddedConfig(configBytes)
+	t.Cleanup(func() { SetEmbeddedConfig(originalEmbeddedConfig) })
+	t.Chdir(t.TempDir())
+
+	if err := ExecuteArgs([]string{
+		"apply", "--scope=project", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("project apply error: %v", err)
+	}
+
+	if _, found, err := activation.LoadRuntimeState(home, "claude"); err != nil || found {
+		t.Fatalf("project apply created global runtime fallback: found %v, err %v", found, err)
 	}
 }
 

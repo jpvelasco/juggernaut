@@ -272,6 +272,9 @@ func TestLaunchTargetFor_Claude(t *testing.T) {
 	if tgt.StaticEnv["CLAUDE_CODE_USE_BEDROCK"] != "1" {
 		t.Errorf("claude should carry the use-bedrock flag, got %v", tgt.StaticEnv)
 	}
+	if tgt.RuntimeStateName != "claude" {
+		t.Errorf("Claude runtime state name = %q, want claude", tgt.RuntimeStateName)
+	}
 }
 
 // TestLaunchTargetFor_Claude_IAM_NeedsNoStaticToken is the regression guard for

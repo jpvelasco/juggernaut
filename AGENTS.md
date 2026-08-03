@@ -58,8 +58,9 @@ they are explicitly platform-specific.
   `NativeManagedKeys`, `DeepMergeKeys`, `OwnedSubKeys`, `BuildConfig`, and
   `LaunchSpec`.
 - `internal/config/` handles atomic JSON/TOML merge, removal, locking, and backups.
-- `internal/activation/` manages marked shell blocks and launches real CLI binaries
-  via `launch`/`launch-cli` while avoiding wrapper recursion.
+- `internal/activation/` manages marked shell blocks, the owner-only non-secret
+  runtime fallback under `~/.juggernaut/runtime/`, and launches real CLI
+  binaries via `launch`/`launch-cli` while avoiding wrapper recursion.
 - `internal/schema/` builds and validates Claude-specific managed settings.
 - `internal/bedrock/` loads embedded or test Bedrock configuration.
 - `internal/keychain/` stores the shared Bedrock bearer token, with a versioned
@@ -97,6 +98,9 @@ with `auth_provider_command` pointing at `juggernaut auth-token`.
   non-Claude provider must not remove it.
 - Preserve compatibility for `launch`, `launch-cli`, hidden auth-token behavior,
   and deprecated flags unless a task explicitly includes a breaking change.
+- Claude user-scope apply persists only generated non-secret runtime state;
+  project apply must not create global fallback state, bearer tokens must never
+  be written there, and user-scope uninstall must remove it.
 - Keep `VERSION`, `bedrock-config.json`'s `version`, and `cmd/root.go`'s
   `Version` synchronized.
 - Do not commit generated binaries, coverage files, or other build artifacts.

@@ -260,7 +260,7 @@ Stuck? Start here:
 juggernaut doctor
 ```
 
-Common fixes: complete Anthropic model access in the Bedrock console (403), refresh SSO (`aws sso login`), or re-run `juggernaut apply`.
+Common fixes: complete Anthropic model access in the Bedrock console (403), refresh SSO (`aws sso login`), or re-run `juggernaut apply`. User-scope Claude applies also keep a non-secret fallback at `~/.juggernaut/runtime/claude.json`, so `doctor` can identify and temporarily recover from a Claude update that replaced `settings.json`.
 
 ## Documentation
 
