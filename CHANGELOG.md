@@ -13,6 +13,9 @@ All notable changes to Juggernaut will be documented in this file.
   fallback instead of silently dropping Bedrock routing. Bearer tokens are
   never stored in this file, `doctor` reports the drift, and Windows
   environment cleanup now matches variable names case-insensitively.
+- **Patched text-processing dependency.** `golang.org/x/text` is updated to
+  v0.39.0 to resolve CVE-2026-56852; its required `golang.org/x/sync`
+  dependency moves to v0.21.0.
 
 ## [5.6.0] - 2026-07-26
 
