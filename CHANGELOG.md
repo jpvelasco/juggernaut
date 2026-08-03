@@ -4,6 +4,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.6.1] - 2026-08-03
+
+**Patch release — restore Claude Bedrock routing after settings drift.**
+
 ### Fixed
 
 - **Claude launch survives `settings.json` drift.** User-scope `apply` now saves
@@ -1175,7 +1179,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.6.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.6.1...HEAD
+[5.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.1
 [5.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.0
 [5.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.5.0
 [5.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.4.0
