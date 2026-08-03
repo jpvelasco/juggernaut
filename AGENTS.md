@@ -47,8 +47,16 @@ they are explicitly platform-specific.
 
 - `main.go` embeds the Bedrock config and calls `cmd.Execute()`.
 - `cmd/` contains Cobra commands, hidden launch/auth commands, and shared helpers.
+  `models.go` defines `models check` (maintainer-facing release gate against the
+  live catalog) and `model_catalog.go` implements `models refresh`/`models list`,
+  caching account/region inventory under `~/.juggernaut/model-catalog.json`.
 - `internal/provider/` owns the multi-CLI provider interface and implementations
-  for `claude`, `codex`, `opencode`, and `grok`.
+  for `claude`, `codex`, `opencode`, and `grok`. `base.go`'s `BaseProvider`
+  supplies the default implementations (`Name`, `BinaryNames`,
+  `ConfigFormatName`, `ActivationMarkers`, `Supports`) that each provider
+  embeds, so per-CLI structs only override `ConfigPath`, `OwnsConfig`,
+  `NativeManagedKeys`, `DeepMergeKeys`, `OwnedSubKeys`, `BuildConfig`, and
+  `LaunchSpec`.
 - `internal/config/` handles atomic JSON/TOML merge, removal, locking, and backups.
 - `internal/activation/` manages marked shell blocks and launches real CLI binaries
   via `launch`/`launch-cli` while avoiding wrapper recursion.
