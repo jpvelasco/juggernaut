@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
@@ -520,6 +521,195 @@ func TestLaunch_IAM_UnsetsBearerTokenIfPreSet(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+}
+
+// TestLaunch_IAM_UsesRuntimeFallbackWhenSettingsDisappear reproduces the
+// Windows/Claude update failure: apply had configured IAM, settings.json was
+// later reset, and re-applying appeared to be the only way to make Claude work.
+func TestLaunch_IAM_UsesRuntimeFallbackWhenSettingsDisappear(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	if err := SaveRuntimeState(home, "claude", RuntimeState{
+		AuthMode: authmode.IAM,
+		Env: map[string]string{
+			"CLAUDE_CODE_USE_BEDROCK":                  "1",
+			"AWS_REGION":                               "us-west-2",
+			"ANTHROPIC_DEFAULT_SONNET_MODEL":           "global.anthropic.claude-sonnet-5",
+			"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+		},
+	}); err != nil {
+		t.Fatalf("SaveRuntimeState: %v", err)
+	}
+
+	realDir := t.TempDir()
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real claude")
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "stale-token")
+
+	tokenCalled := false
+	var warnings []string
+	err := LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		TokenGetter: func() (string, error) {
+			tokenCalled = true
+			return "", errors.New("IAM fallback must not read the keychain")
+		},
+		Warner: func(msg string) { warnings = append(warnings, msg) },
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "CLAUDE_CODE_USE_BEDROCK"); got != "1" {
+				t.Errorf("CLAUDE_CODE_USE_BEDROCK = %q, want 1", got)
+			}
+			if got := envValue(env, "AWS_REGION"); got != "us-west-2" {
+				t.Errorf("AWS_REGION = %q, want us-west-2", got)
+			}
+			if got := envValue(env, "ANTHROPIC_DEFAULT_SONNET_MODEL"); got == "" {
+				t.Error("saved model environment was not restored")
+			}
+			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "" {
+				t.Errorf("stale bearer token survived IAM fallback: %q", got)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions: %v", err)
+	}
+	if tokenCalled {
+		t.Error("IAM fallback read the keychain")
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "last saved user-scope runtime configuration") {
+		t.Errorf("fallback warning = %v", warnings)
+	}
+}
+
+func TestLaunch_APIKey_UsesRuntimeFallbackWhenSettingsDisappear(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	if err := SaveRuntimeState(home, "claude", RuntimeState{
+		AuthMode: authmode.BedrockAPIKey,
+		Env:      map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"},
+	}); err != nil {
+		t.Fatalf("SaveRuntimeState: %v", err)
+	}
+
+	realDir := t.TempDir()
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real claude")
+
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Path:        realDir,
+		TokenGetter: func() (string, error) { return "fallback-token", nil },
+		Warner:      func(string) {},
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "fallback-token" {
+				t.Errorf("AWS_BEARER_TOKEN_BEDROCK = %q, want fallback-token", got)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions: %v", err)
+	}
+}
+
+func TestLaunch_ManagedConfigTakesPrecedenceOverRuntimeFallback(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	writeSettings(t, home, authmode.IAM)
+	if err := SaveRuntimeState(home, "claude", RuntimeState{
+		AuthMode: authmode.BedrockAPIKey,
+		Env:      map[string]string{"AWS_REGION": "fallback-region"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AWS_REGION", "process-region")
+
+	realDir := t.TempDir()
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real claude")
+
+	tokenCalled := false
+	var warnings []string
+	err := LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		TokenGetter: func() (string, error) {
+			tokenCalled = true
+			return "stale-token", nil
+		},
+		Warner: func(msg string) { warnings = append(warnings, msg) },
+		Runner: func(_ string, _ []string, env []string) error {
+			if got := envValue(env, "AWS_REGION"); got != "process-region" {
+				t.Errorf("fallback overrode managed config launch: AWS_REGION=%q", got)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokenCalled {
+		t.Error("stale API-key fallback overrode managed IAM config")
+	}
+	if len(warnings) != 0 {
+		t.Errorf("managed config should not emit fallback warnings: %v", warnings)
+	}
+}
+
+func TestLaunch_InvalidRuntimeFallbackFailsClosed(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	path, err := RuntimeStatePath(home, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := safepath.WriteFile(home, path, []byte(`{`)); err != nil {
+		t.Fatal(err)
+	}
+
+	runnerCalled := false
+	err = LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: t.TempDir(),
+		Runner: func(string, []string, []string) error {
+			runnerCalled = true
+			return nil
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "runtime fallback") ||
+		!strings.Contains(err.Error(), "juggernaut apply") {
+		t.Fatalf("invalid fallback error = %v", err)
+	}
+	if runnerCalled {
+		t.Error("invalid owned fallback must not launch without Bedrock routing")
+	}
+}
+
+func TestEnvironmentHelpersRespectPlatformKeySemantics(t *testing.T) {
+	const key = "AWS_BEARER_TOKEN_BEDROCK"
+	env := []string{"aws_bearer_token_bedrock=old", "KEEP=value"}
+
+	set := setEnv(append([]string(nil), env...), key, "new")
+	unset := unsetEnv(append([]string(nil), env...), key)
+	if runtime.GOOS == "windows" {
+		if len(set) != 2 || envValue(set, key) != "new" {
+			t.Errorf("Windows setEnv should replace case-insensitively: %v", set)
+		}
+		if len(unset) != 1 || unset[0] != "KEEP=value" {
+			t.Errorf("Windows unsetEnv should remove case-insensitively: %v", unset)
+		}
+		return
+	}
+	if len(set) != 3 || len(unset) != 2 {
+		t.Errorf("POSIX env keys must remain case-sensitive: set=%v unset=%v", set, unset)
 	}
 }
 

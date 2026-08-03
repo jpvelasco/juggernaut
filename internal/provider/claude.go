@@ -109,6 +109,7 @@ func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, erro
 		Keys:        keys,
 		ManagedKeys: c.NativeManagedKeys(),
 		Warnings:    block.Warnings,
+		RuntimeEnv:  native.Env,
 	}, nil
 }
 
@@ -120,6 +121,7 @@ func (c claude) LaunchSpec() LaunchSpec {
 		// (IAM/SSO use SigV4 and need NO bearer token; only bedrock-api-key does).
 		// The launcher decides via needsBearerToken(authModes). Forcing true here
 		// would break every Claude+IAM launch with "API key not found".
-		NeedsToken: false,
+		NeedsToken:          false,
+		PersistRuntimeState: true,
 	}
 }

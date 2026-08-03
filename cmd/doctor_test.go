@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -353,6 +354,40 @@ func TestCheckProviderConfigScope_CodexOwnedOK(t *testing.T) {
 	}
 	if !strings.Contains(detail, "present") {
 		t.Errorf("expected present detail, got %q", detail)
+	}
+}
+
+func TestCheckRuntimeFallback_ReportsConfigDrift(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	prov := provider.MustGet("claude")
+	if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{
+		AuthMode: authmode.IAM,
+		Env:      map[string]string{"AWS_REGION": "us-west-2"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := doctor.NewReport()
+	checkRuntimeFallback(r, prov, home)
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") || !strings.Contains(out, "managed user config is missing") {
+		t.Fatalf("expected runtime fallback drift warning, got:\n%s", out)
+	}
+}
+
+func TestCheckRuntimeFallback_OKWithManagedConfig(t *testing.T) {
+	home := setupApplyTest(t)
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := doctor.NewReport()
+	checkRuntimeFallback(r, provider.MustGet("claude"), home)
+	out := r.String()
+	if !strings.Contains(out, "[OK]") || !strings.Contains(out, "saved for iam auth") {
+		t.Fatalf("expected healthy runtime fallback, got:\n%s", out)
 	}
 }
 

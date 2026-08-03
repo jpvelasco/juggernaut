@@ -54,6 +54,7 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 	}
 
 	uninstallSettingsBlocks(home, prov)
+	removeRuntimeState(home, prov)
 	// The Bedrock bearer token is SHARED across all CLIs, so removing it on a
 	// per-CLI uninstall would break any other CLI still configured. Only remove
 	// it when uninstalling Claude (the primary). `--full` broadens shell-block
@@ -68,6 +69,21 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 		fmt.Println("Uninstall complete.")
 	}
 	return nil
+}
+
+func removeRuntimeState(home string, prov provider.Provider) {
+	if uninstallFlags.scope == "project" || !prov.LaunchSpec().PersistRuntimeState {
+		return
+	}
+	if uninstallFlags.dryRun {
+		if _, found, err := activation.LoadRuntimeState(home, prov.Name()); err == nil && found {
+			fmt.Printf("Would remove saved %s runtime fallback\n", prov.Name())
+		}
+		return
+	}
+	if err := activation.RemoveRuntimeState(home, prov.Name()); err != nil {
+		warnf("could not remove runtime fallback: %v", err)
+	}
 }
 
 // warnIfAutoModeWillBeLost prints a heads-up when the config about to be

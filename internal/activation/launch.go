@@ -78,6 +78,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	// is correct regardless of authModes.
 	managed := len(modes) > 0 || target.NeedsToken
 	wantToken := needsBearerToken(modes) || target.NeedsToken
+	var fallbackEnv map[string]string
 
 	// If the target has a config path (non-Claude provider), read the auth mode
 	// from its juggernaut block to decide token injection.
@@ -88,7 +89,30 @@ func LaunchWithOptions(opts LaunchOptions) error {
 		}
 	}
 
+	// Claude Code updates can reset settings.json. When the normal managed
+	// config has disappeared, fall back to the last non-secret user-scope
+	// runtime state written by apply. Config remains authoritative whenever it
+	// is present, so project scope and explicit auth changes keep precedence.
+	if !managed && target.RuntimeStateName != "" {
+		state, found, stateErr := LoadRuntimeState(opts.Home, target.RuntimeStateName)
+		switch {
+		case stateErr != nil:
+			return fmt.Errorf("reading Juggernaut runtime fallback: %w; run `juggernaut apply --cli=%s` to repair it",
+				stateErr, target.RuntimeStateName)
+		case found:
+			managed = true
+			wantToken = authmode.IsBedrockAPIKey(state.AuthMode)
+			fallbackEnv = state.Env
+			opts.Warner("Warning: managed " + target.RuntimeStateName +
+				" config is missing; using the last saved user-scope runtime configuration. " +
+				"Run `juggernaut apply --cli=" + target.RuntimeStateName + "` to restore the full config.")
+		}
+	}
+
 	if managed {
+		for k, v := range fallbackEnv {
+			env = setEnv(env, k, v)
+		}
 		for k, v := range target.StaticEnv {
 			env = setEnv(env, k, v)
 		}
@@ -279,25 +303,35 @@ func RunBinary(path string, args []string, env []string) error {
 }
 
 func setEnv(env []string, key, value string) []string {
-	prefix := key + "="
 	for i, item := range env {
-		if strings.HasPrefix(item, prefix) {
-			env[i] = prefix + value
+		if envEntryHasKey(item, key) {
+			env[i] = key + "=" + value
 			return env
 		}
 	}
-	return append(env, prefix+value)
+	return append(env, key+"="+value)
 }
 
 func unsetEnv(env []string, key string) []string {
-	prefix := key + "="
 	out := env[:0]
 	for _, item := range env {
-		if !strings.HasPrefix(item, prefix) {
+		if !envEntryHasKey(item, key) {
 			out = append(out, item)
 		}
 	}
 	return out
+}
+
+func envEntryHasKey(entry, key string) bool {
+	i := strings.IndexByte(entry, '=')
+	if i < 0 {
+		return false
+	}
+	entryKey := entry[:i]
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(entryKey, key)
+	}
+	return entryKey == key
 }
 
 // --- DefaultBinDir (used by artifact recovery but also by cmd/doctor) ---

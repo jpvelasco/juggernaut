@@ -171,6 +171,9 @@ type ConfigPlan struct {
 	Keys        map[string]any // merged into the config file (provider's format)
 	ManagedKeys []string       // top-level keys Juggernaut owns → removed on uninstall
 	Warnings    []string       // actionable heads-ups (Mantle tradeoffs, auto-mode gating)
+	// RuntimeEnv is the non-secret environment that may be retained separately
+	// when a provider opts into runtime-state fallback.
+	RuntimeEnv map[string]string
 }
 
 // Validate checks the plan is internally coherent before it is written, so a
@@ -188,11 +191,13 @@ func (p ConfigPlan) Validate() error {
 	return nil
 }
 
-// LaunchSpec is what the shell wrapper injects at launch time. Never persisted —
-// the bearer token refreshes and must not land in a config file.
+// LaunchSpec is what the shell wrapper injects at launch time. Providers whose
+// vendor-owned config may be reset can retain non-secret runtime state; bearer
+// tokens are always fetched at launch and never persisted here.
 type LaunchSpec struct {
-	TokenEnvVar string            // env var the keychain bearer token is injected into
-	StaticEnv   map[string]string // static enable-flags, e.g. CLAUDE_CODE_USE_BEDROCK=1
-	NeedsToken  bool              // Mantle: true; native-IAM path: may be false
-	ExtraArgs   []string          // extra args appended to the real CLI invocation (future)
+	TokenEnvVar         string            // env var the keychain bearer token is injected into
+	StaticEnv           map[string]string // static enable-flags, e.g. CLAUDE_CODE_USE_BEDROCK=1
+	NeedsToken          bool              // Mantle: true; native-IAM path: may be false
+	PersistRuntimeState bool              // retain user-scope auth + RuntimeEnv as a drift fallback
+	ExtraArgs           []string          // extra args appended to the real CLI invocation (future)
 }

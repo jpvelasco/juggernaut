@@ -261,7 +261,7 @@ juggernaut apply --auth=iam --mode=auto
 
 ## What Gets Written
 
-Juggernaut writes Bedrock settings to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). It also writes a marked shell activation block to your shell profiles:
+Juggernaut writes Bedrock settings to `~/.claude/settings.json` (user scope) or `./.claude/settings.json` (project scope). A user-scope apply also writes a non-secret launch fallback to `~/.juggernaut/runtime/claude.json`; it contains the generated environment and auth mode, never the bearer token. This keeps Bedrock routing active if a Claude Code update replaces `settings.json`, while `doctor` warns that the full config should be restored. Juggernaut also writes a marked shell activation block to your shell profiles:
 
 ```bash
 # BEGIN: Juggernaut Claude Activation
@@ -342,6 +342,8 @@ juggernaut uninstall --full
 **Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon on Linux.
 
 **SSO session expired** — `aws sso login --profile=<your-profile>` and re-run `claude`.
+
+**Claude stopped using Bedrock after an update** — Run `juggernaut doctor`. If it reports that the managed config is missing and the runtime fallback is available, Claude can continue launching through Bedrock, but re-run `juggernaut apply --cli=claude` to restore the full `settings.json`.
 
 **`juggernaut doctor`** — always the first diagnostic step.
 

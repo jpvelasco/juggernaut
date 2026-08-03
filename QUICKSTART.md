@@ -75,6 +75,7 @@ juggernaut doctor
 - Optimized token limits (32768 output, 65536 thinking)
 - Standard Bedrock inference profiles by default; Mantle is opt-in with `--mantle`
 - Configuration in `~/.claude/settings.json`
+- A non-secret runtime fallback in `~/.juggernaut/runtime/claude.json` so Claude updates cannot silently disable Bedrock routing
 - A marked shell activation block that delegates `claude` to `juggernaut launch`
 
 ## Common Options
@@ -107,5 +108,7 @@ juggernaut show
 **Model not found** — Use global inference profile IDs (Juggernaut does this by default).
 
 **Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon on Linux.
+
+**Claude stopped using Bedrock after an update** — Run `juggernaut doctor`, then re-run `juggernaut apply --cli=claude` if it reports missing managed config. The saved runtime fallback contains no bearer token and keeps launches routed while you repair the full config.
 
 See [README.md](README.md) for full documentation.

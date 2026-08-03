@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
@@ -55,6 +56,9 @@ func TestUninstall_DryRun_PreservesBlock(t *testing.T) {
 	if _, ok := settings["juggernaut"]; !ok {
 		t.Error("dry-run removed the juggernaut block; it should be preserved")
 	}
+	if _, found, err := activation.LoadRuntimeState(home, "claude"); err != nil || !found {
+		t.Errorf("dry-run removed runtime fallback: found %v, err %v", found, err)
+	}
 }
 
 // TestUninstall_ScopeFilter verifies --scope=user only touches the user-scope
@@ -85,6 +89,9 @@ func TestUninstall_ScopeFilter(t *testing.T) {
 	}
 	if _, ok := settings["juggernaut"]; ok {
 		t.Error("user-scope juggernaut block should have been removed")
+	}
+	if _, found, err := activation.LoadRuntimeState(home, "claude"); err != nil || found {
+		t.Errorf("user uninstall left runtime fallback: found %v, err %v", found, err)
 	}
 }
 
