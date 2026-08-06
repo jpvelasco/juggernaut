@@ -447,3 +447,32 @@ func TestRunModelsCheck_SetWithoutWrite_RejectsInvalidID(t *testing.T) {
 		t.Fatal("expected error when --set-opus to an invalid ID, even without --write")
 	}
 }
+
+// TestTierPin_ReturnsPinnedModelID returns the model ID for each tier.
+func TestTierPin_ReturnsPinnedModelID(t *testing.T) {
+	cfg := testBedrockConfigForModels()
+	cases := []struct {
+		tier discovery.Tier
+		want string
+	}{
+		{discovery.TierOpus, cfg.Models.Opus},
+		{discovery.TierSonnet, cfg.Models.Sonnet},
+		{discovery.TierHaiku, cfg.Models.Haiku},
+		{discovery.TierFable, cfg.Models.Fable},
+	}
+	for _, c := range cases {
+		got := tierPin(cfg, c.tier)
+		if got != c.want {
+			t.Errorf("tierPin(%s) = %q, want %q", c.tier, got, c.want)
+		}
+	}
+}
+
+// TestTierPin_UnknownTier returns empty string for an unrecognised tier.
+func TestTierPin_UnknownTier(t *testing.T) {
+	cfg := testBedrockConfigForModels()
+	got := tierPin(cfg, "unknown-tier")
+	if got != "" {
+		t.Errorf("tierPin(unknown) = %q, want empty string", got)
+	}
+}

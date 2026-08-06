@@ -374,3 +374,46 @@ func TestRemoveRuntimeStateGuardsAndFailures(t *testing.T) {
 		}
 	})
 }
+
+// TestUninstallSettingsBlock_DryRun previews removal without writing.
+func TestUninstallSettingsBlock_DryRun(t *testing.T) {
+	home := setupApplyTest(t)
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get provider: %v", err)
+	}
+
+	// First apply so juggernaut-managed keys exist.
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	uninstallFlags.dryRun = true
+	defer func() { uninstallFlags.dryRun = false }()
+
+	out := captureStdout(t, func() {
+		uninstallSettingsBlock(home, "user", prov)
+	})
+	if !strings.Contains(out, "Would remove juggernaut block") {
+		t.Errorf("dry-run should preview removal, got: %q", out)
+	}
+}
+
+// TestUninstallSettingsBlock_NoManagedKeys skips when the config has no
+// juggernaut-managed keys.
+func TestUninstallSettingsBlock_NoManagedKeys(t *testing.T) {
+	home := setupApplyTest(t)
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get provider: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		uninstallSettingsBlock(home, "user", prov)
+	})
+	if out != "" {
+		t.Errorf("expected no output when no managed keys present, got: %q", out)
+	}
+}

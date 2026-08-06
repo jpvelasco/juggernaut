@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -736,5 +737,67 @@ func TestDoctor_ReportsAutoModeReadiness_EndToEnd(t *testing.T) {
 
 	if !strings.Contains(out, "auto-mode readiness") {
 		t.Fatalf("expected doctor output to include auto-mode readiness check, got:\n%s", out)
+	}
+}
+
+// TestCheckBedrockConnectivity_IAMMode: IAM mode always calls
+// CheckIAMConnectivity regardless of token presence.
+func TestCheckBedrockConnectivity_IAMMode(t *testing.T) {
+	result := checkBedrockConnectivity("iam", "us-west-2", "anthropic.claude-opus-4-8", "")
+	// The result depends on whether AWS credentials are available in the
+	// test environment; we only assert the call doesn't panic and returns
+	// a result with the expected auth mode.
+	if result.AuthMode != "iam" {
+		t.Errorf("auth mode = %q, want iam", result.AuthMode)
+	}
+}
+
+// TestCheckConnectivity_MissingBedrockConfig: when bedrock-config.json
+// cannot be loaded, checkConnectivity emits a Warn rather than failing.
+func TestCheckConnectivity_MissingBedrockConfig(t *testing.T) {
+	r := doctor.NewReport()
+	// Use a home directory that has no bedrock-config.json.
+	home := testutil.NewTestHome(t)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(home); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	checkConnectivity(r, home, "", []string{"user"})
+	out := r.String()
+	if !strings.Contains(out, "cannot load bedrock-config.json") {
+		t.Errorf("expected bedrock-config load warning, got: %s", out)
+	}
+}
+
+// TestCheckConnectivity_MissingJuggernautBlock: when settings.json has no
+// juggernaut block, checkConnectivity emits a Warn.
+func TestCheckConnectivity_MissingJuggernautBlock(t *testing.T) {
+	r := doctor.NewReport()
+	home := setupApplyTest(t)
+	// Ensure the .claude directory exists.
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Write a settings.json with no juggernaut block.
+	settings := map[string]any{"other": "value"}
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if err := os.WriteFile(settingsPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	checkConnectivity(r, home, "some-token", []string{"user"})
+	out := r.String()
+	if !strings.Contains(out, "no juggernaut block in settings.json") {
+		t.Errorf("expected missing juggernaut block warning, got: %s", out)
 	}
 }
