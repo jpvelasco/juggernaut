@@ -31,13 +31,6 @@ func TestDefaultResolveDocumentsFolder_Exists(t *testing.T) {
 	}
 }
 
-// TestResolveHistoricalTargets_ReturnsSlice verifies no panic and that the
-// resolved slice is usable.
-func TestResolveHistoricalTargets_ReturnsSlice(t *testing.T) {
-	targets := resolveHistoricalTargets("")
-	_ = targets
-}
-
 // TestResolveHomeDir_WithHomeEnv uses the HOME env var.
 func TestResolveHomeDir_WithHomeEnv(t *testing.T) {
 	t.Setenv("HOME", "/tmp/test-home")

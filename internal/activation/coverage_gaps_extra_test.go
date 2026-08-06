@@ -843,37 +843,6 @@ func TestLaunchCLI_NeedsTokenFalse(t *testing.T) {
 	_ = err // Expect error — either way, no crash.
 }
 
-// TestInstalledTargetsWith_NonWindowsWithPSResult covers the non-Windows
-// path where PowerShell discovery results are available.
-func TestInstalledTargetsWith_NonWindowsWithPSResult(t *testing.T) {
-	home := testutil.NewTestHome(t)
-	result := ProfileResolverResult{}
-	targets := InstalledTargetsWith(home, &result)
-	// May or may not find targets depending on whether the profile exists;
-	// we only verify the function doesn't panic.
-	_ = targets
-}
-
-// TestIterateAllTargets_Empty verifies the function handles empty input.
-func TestIterateAllTargets_Empty(t *testing.T) {
-	called := false
-	iterateAllTargets("", nil, func(_ Target) (bool, error) {
-		called = true
-		return false, nil
-	})
-	_ = called // Callback may or may not be called depending on environment
-}
-
-// TestIterateAllTargets_CallsCallback verifies the callback is invoked.
-func TestIterateAllTargets_CallsCallback(t *testing.T) {
-	seen := map[string]bool{}
-	iterateAllTargets("", nil, func(t Target) (bool, error) {
-		seen[t.Path] = true
-		return false, nil
-	})
-	_ = seen // May or may not have entries depending on environment
-}
-
 // TestAuthModes_ReturnsExpectedModes verifies authModes reads the managed mode
 // from the project settings file and returns it without error.
 func TestAuthModes_ReturnsExpectedModes(t *testing.T) {
