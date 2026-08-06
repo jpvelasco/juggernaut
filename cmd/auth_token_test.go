@@ -156,3 +156,20 @@ func TestAuthToken_Command_ErrorsWhenNoToken(t *testing.T) {
 		t.Errorf("stdout must stay clean on error, got %q", out)
 	}
 }
+
+// TestAuthToken_Command_InvalidFormat: an unrecognised --format value must
+// error immediately without touching the keychain.
+func TestAuthToken_Command_InvalidFormat(t *testing.T) {
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{"auth-token", "--format=xml"})
+		if err == nil {
+			t.Fatal("expected error for invalid --format")
+		}
+		if !strings.Contains(err.Error(), "invalid --format") {
+			t.Errorf("expected 'invalid --format' in error, got: %v", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("expected no stdout on format error, got %q", out)
+	}
+}
