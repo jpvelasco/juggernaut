@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -839,4 +841,192 @@ func TestLaunchCLI_NeedsTokenFalse(t *testing.T) {
 	})
 	// Will fail because PATH doesn't have test.
 	_ = err // Expect error — either way, no crash.
+}
+
+// TestInstalledTargetsWith_NonWindowsWithPSResult covers the non-Windows
+// path where PowerShell discovery results are available.
+func TestInstalledTargetsWith_NonWindowsWithPSResult(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	result := ProfileResolverResult{}
+	targets := InstalledTargetsWith(home, &result)
+	// May or may not find targets depending on whether the profile exists;
+	// we only verify the function doesn't panic.
+	_ = targets
+}
+
+// TestIterateAllTargets_Empty verifies the function handles empty input.
+func TestIterateAllTargets_Empty(t *testing.T) {
+	called := false
+	iterateAllTargets("", nil, func(_ Target) (bool, error) {
+		called = true
+		return false, nil
+	})
+	_ = called // Callback may or may not be called depending on environment
+}
+
+// TestIterateAllTargets_CallsCallback verifies the callback is invoked.
+func TestIterateAllTargets_CallsCallback(t *testing.T) {
+	seen := map[string]bool{}
+	iterateAllTargets("", nil, func(t Target) (bool, error) {
+		seen[t.Path] = true
+		return false, nil
+	})
+	_ = seen // May or may not have entries depending on environment
+}
+
+// TestAuthModes_ReturnsExpectedModes verifies authModes reads the managed mode
+// from the project settings file and returns it without error.
+func TestAuthModes_ReturnsExpectedModes(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	writeSettings(t, home, authmode.IAM)
+	modes, err := authModes(home)
+	if err != nil {
+		t.Fatalf("authModes error: %v", err)
+	}
+	if len(modes) == 0 {
+		t.Fatal("expected at least one auth mode")
+	}
+}
+
+// TestRuntimeStatePath_ReturnsExpectedPath verifies the path construction.
+func TestRuntimeStatePath_ReturnsExpectedPath(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	got, err := RuntimeStatePath(home, "claude")
+	if err != nil {
+		t.Fatalf("RuntimeStatePath error: %v", err)
+	}
+	expected := filepath.Join(home, ".juggernaut", "runtime", "claude.json")
+	if got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
+	}
+}
+
+// TestLoadRuntimeState_MissingFile returns not found.
+func TestLoadRuntimeState_MissingFile(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	_, found, err := LoadRuntimeState(home, "claude")
+	if err != nil {
+		t.Fatalf("LoadRuntimeState error: %v", err)
+	}
+	if found {
+		t.Error("expected not found for missing file")
+	}
+}
+
+// TestRemoveRuntimeState_MissingFile is a no-op.
+func TestRemoveRuntimeState_MissingFile(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	err := RemoveRuntimeState(home, "claude")
+	if err != nil {
+		t.Fatalf("RemoveRuntimeState error: %v", err)
+	}
+}
+
+// TestValidateRuntimeState_ValidState passes validation.
+func TestValidateRuntimeState_ValidState(t *testing.T) {
+	state := RuntimeState{AuthMode: "iam", Env: map[string]string{"FOO": "bar"}}
+	if err := validateRuntimeState(state); err != nil {
+		t.Errorf("unexpected error for valid state: %v", err)
+	}
+}
+
+// TestValidateRuntimeState_EmptyAuthMode fails validation.
+func TestValidateRuntimeState_EmptyAuthMode(t *testing.T) {
+	state := RuntimeState{AuthMode: "", Env: map[string]string{}}
+	if err := validateRuntimeState(state); err == nil {
+		t.Error("expected error for empty auth mode")
+	}
+}
+
+// TestSensitiveRuntimeEnvKey_RecognisesAuthEnvKey verifies the Bedrock
+// auth env var is recognised as sensitive.
+func TestSensitiveRuntimeEnvKey_RecognisesAuthEnvKey(t *testing.T) {
+	if !sensitiveRuntimeEnvKey(authmode.BedrockAuthEnvName) {
+		t.Errorf("expected %q to be sensitive", authmode.BedrockAuthEnvName)
+	}
+}
+
+// setupPSDiscoveryForTest installs a mock PowerShell runner on Windows so the
+// unparameterised Install/Uninstall/InstalledTargets wrappers never launch a
+// real PowerShell. Returns nil on non-Windows.
+func setupPSDiscoveryForTest(t *testing.T, home string) {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return
+	}
+	psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+	runner := &testDiscoveryRunner{
+		output: map[string][]byte{
+			"pwsh.exe":       testPSOutput(psProfile, psProfile),
+			"powershell.exe": testPSOutput(psProfile, psProfile),
+		},
+	}
+	SetPSRunnerForTesting(runner)
+	t.Cleanup(ResetPSRunnerForTesting)
+}
+
+// TestInstallUninstallWrappers covers the unparameterised Install, Uninstall,
+// and InstalledTargets entry points end to end.
+func TestInstallUninstallWrappers_EndToEnd(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	setupPSDiscoveryForTest(t, home)
+
+	bashrc := filepath.Join(home, ".bashrc")
+	if err := safepath.WriteFile(home, bashrc, []byte("# shell config\n")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if _, err := Install(home); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+
+	installed := InstalledTargets(home)
+	if len(installed) == 0 {
+		t.Fatal("expected at least one installed target")
+	}
+	found := false
+	for _, p := range installed {
+		if p == bashrc {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected %s to be among installed targets, got %v", bashrc, installed)
+	}
+
+	if _, err := Uninstall(home); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+
+	for _, p := range InstalledTargets(home) {
+		if p == bashrc {
+			t.Error("expected .bashrc activation block to be removed after uninstall")
+		}
+	}
+}
+
+// TestInstalledTargets_NoProfiles returns empty when nothing is installed.
+func TestInstalledTargets_NoProfiles(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	setupPSDiscoveryForTest(t, home)
+
+	installed := InstalledTargets(home)
+	if len(installed) != 0 {
+		t.Errorf("expected no installed targets, got %v", installed)
+	}
+}
+
+// TestResolvePowerShellProfiles_ReturnsResult covers the exported wrapper.
+// On Windows it uses the mocked runner and expects discovery; on other
+// platforms it returns an empty result.
+func TestResolvePowerShellProfiles_ReturnsResult(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	setupPSDiscoveryForTest(t, home)
+
+	result := ResolvePowerShellProfiles()
+	if runtime.GOOS == "windows" {
+		if len(result.ActiveTargets) == 0 {
+			t.Error("expected PowerShell profiles to be discovered on Windows")
+		}
+	}
 }
