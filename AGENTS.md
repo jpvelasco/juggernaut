@@ -151,6 +151,20 @@ preserve that seam when adding discovery-backed commands.
 Cobra global flag state persists between `ExecuteArgs()` calls. Use the existing
 `resetFlags()` mechanism when adding or changing flags.
 
+### Irreducible coverage floor
+
+- New tests must target a real error path, platform-specific branch, previously
+  untested public behavior, or a documented edge case. Pure line-coverage
+  fillers with no new assertion or failure-mode coverage are rejected (no
+  `_ = fn()` "should not crash" smokes).
+- Prefer one strong test that exercises the real failure over multiple shallow
+  ones.
+- When adding or expanding a `coverage_gaps_*_test.go`, the PR description must
+  state the exact branch/error it closes.
+- Pruning zero-value coverage_gaps tests is fine, but never at the cost of
+  measured coverage — verify with `go test <pkg> -coverprofile` before and
+  after.
+
 Keep cross-platform behavior in mind. CI runs race-covered Go tests on Linux,
 macOS, and Windows, plus Windows lint, govulncheck, a separate race job, a
 Linux-only coverage-floor job, npm tests, shellcheck, gosec, Trivy, CodeQL, a
