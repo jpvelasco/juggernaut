@@ -15,7 +15,7 @@
 
 <p align="center"><strong>Safe Bedrock routing for coding agents — Claude Code, Codex, OpenCode, and Grok</strong></p>
 
-Single cross-platform binary that configures your coding CLI to route through **Amazon Bedrock** instead of vendor APIs — IAM, SSO, or Bedrock API key auth. Juggernaut is the **safe Bedrock arbiter**: it refuses to clobber foreign config, keeps credentials in the OS keychain, and installs marked shell activation that never overwrites the real CLI binary.
+Single cross-platform binary that configures your coding CLI to route through **Amazon Bedrock** instead of vendor APIs — IAM, SSO, or Bedrock API key auth. Juggernaut is the **safe Bedrock arbiter**: it refuses to clobber foreign config, keeps credentials in the OS keychain, and installs marked shell activation that never overwrites the real CLI binary. A generated runtime fallback keeps Bedrock routing alive even if a Claude Code update replaces its own `settings.json` — no silent regression to vendor APIs or vendor billing.
 
 **Install from npm:** [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) — `npm install -g juggernaut-bedrock`
 
@@ -126,9 +126,12 @@ juggernaut apply --cli=grok --auth=bedrock-api-key
 
 Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it.
 
-### Safety defaults
+### Safety model
 
-- **Collision detection** — if a target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force` (a backup is still created).
+Juggernaut treats existing configuration and real CLI binaries as untouchable. Four mechanisms make routing predictable:
+
+- **The Juggernaut law: refuse, don't clobber** — if a target config already has foreign values on keys Juggernaut would write, `apply` refuses unless you pass `--force` (a backup is still created). The check is per-leaf: your own sibling entries in the same config never trigger it, only the exact keys Juggernaut owns.
+- **Runtime fallback** — a user-scope apply writes non-secret launch state to `~/.juggernaut/runtime/` (never the bearer token). If Claude Code later replaces `settings.json`, the fallback keeps Bedrock routing active instead of silently falling back to vendor APIs; `doctor` reports when to re-run `apply` to restore the full config.
 - **Keychain-only secrets** — Bedrock API keys never go into shell profiles or plaintext config.
 - **No binary overwrite** — Juggernaut never installs over an unknown file matching a managed CLI name.
 
