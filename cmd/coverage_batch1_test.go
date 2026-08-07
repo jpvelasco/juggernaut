@@ -272,7 +272,7 @@ func TestRunModelsCheck_WritePersistsAndRecomputes(t *testing.T) {
 		t.Errorf("expected updated message, got:\n%s", out)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, "bedrock-config.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, "bedrock-config.json")) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
 	if err != nil {
 		t.Fatalf("reading rewritten config: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestWriteBedrockConfigFile_CreatesMissingModelsKey(t *testing.T) {
 		t.Fatalf("writeBedrockConfigFile: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, "bedrock-config.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, "bedrock-config.json")) // nosemgrep: go_filesystem_rule-fileread — path under t.TempDir()
 	if err != nil {
 		t.Fatalf("reading config: %v", err)
 	}
@@ -645,7 +645,7 @@ func TestReportLegacyRecovery_ErrorWarns(t *testing.T) {
 	if err := os.Chmod(binDir, 0o555); err != nil {
 		t.Fatalf("chmod binDir: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(binDir, 0o700) })
+	t.Cleanup(func() { _ = os.Chmod(binDir, 0o700) }) // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission, go_file-permissions_rule-fileperm -- restore dir perms for cleanup
 
 	out := captureStderr(t, func() { reportLegacyRecovery(home) })
 	if !strings.Contains(out, "could not recover legacy artifacts") {
