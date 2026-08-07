@@ -189,6 +189,9 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 	if !strings.Contains(err.Error(), "models.default") {
 		t.Errorf("error should name the colliding path, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
+	}
 
 	got, err := safepath.ReadFile(grokDir, configPath)
 	if err != nil {
@@ -235,6 +238,52 @@ func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing
 	}
 	if !strings.Contains(string(got), "bedrock-grok") {
 		t.Error("expected Juggernaut's bedrock-grok block to be written")
+	}
+}
+
+// TestApply_Grok_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting:
+// --dry-run must surface the same refusal information for Grok without writing
+// anything or creating a backup — the Claude dry-run contract applied to Grok.
+// Dry-run never resolves a credential, so no keychain is required.
+func TestApply_Grok_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
+	home := setupApplyTest(t)
+
+	grokDir := filepath.Join(home, ".grok")
+	if err := safepath.MkdirAll(grokDir); err != nil {
+		t.Fatalf("mkdir .grok: %v", err)
+	}
+	configPath := filepath.Join(grokDir, "config.toml")
+	foreign := "[models]\ndefault = \"their-own-default\"\n"
+	if err := safepath.WriteFile(grokDir, configPath, []byte(foreign)); err != nil {
+		t.Fatalf("write foreign grok config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{
+			"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-west-2", "--dry-run", "--skip-preflight",
+		})
+		if err != nil {
+			t.Fatalf("dry-run should not error, it should report: %v", err)
+		}
+	})
+	if !strings.Contains(out, "models.default") {
+		t.Errorf("dry-run should report the colliding path, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--force") {
+		t.Errorf("dry-run should mention --force, got:\n%s", out)
+	}
+
+	got, err := safepath.ReadFile(grokDir, configPath)
+	if err != nil {
+		t.Fatalf("reading config.toml: %v", err)
+	}
+	if string(got) != foreign {
+		t.Error("dry-run must not modify the foreign file")
+	}
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) != 0 {
+		t.Error("dry-run must not create a backup")
 	}
 }
 

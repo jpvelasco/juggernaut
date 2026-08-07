@@ -349,6 +349,80 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	}
 }
 
+// TestUninstall_Grok_PreservesUserSiblingKeys: uninstall --cli=grok removes
+// ONLY Juggernaut's owned leaves — the bedrock-grok model profile, the
+// models.default pointer, and the two auth keys — across three deep-merge
+// tables. A user's own model profiles, models settings, and auth settings
+// must all survive.
+func TestUninstall_Grok_PreservesUserSiblingKeys(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t) // apply stores a real credential; skip if keychain backend hangs (macOS CI)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Inject user-owned sibling content into all three tables Juggernaut writes.
+	configPath := filepath.Join(home, ".grok", "config.toml")
+	tomlFmt, _ := config.FormatByName("toml")
+	mgr := config.NewManagerWithFormat(configPath, tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml: %v", err)
+	}
+	got["model"].(map[string]any)["batwing-coder"] = map[string]any{"base_url": "http://192.168.0.1/v1"}
+	got["models"].(map[string]any)["web_search"] = "batwing-coder"
+	got["auth"].(map[string]any)["extra_user_setting"] = "keep-me"
+	if err := mgr.Write(got); err != nil {
+		t.Fatalf("writing config.toml: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{
+		"uninstall", "--cli=grok", "--force",
+	}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	after, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml after uninstall: %v", err)
+	}
+	modelTbl, ok := after["model"].(map[string]any)
+	if !ok {
+		t.Fatalf("model table vanished — user profiles must survive, got: %v", after["model"])
+	}
+	if _, ok := modelTbl["bedrock-grok"]; ok {
+		t.Error("Juggernaut's bedrock-grok profile should be removed")
+	}
+	if _, ok := modelTbl["batwing-coder"]; !ok {
+		t.Error("user's own model profile lost on uninstall — data loss!")
+	}
+	modelsTbl, ok := after["models"].(map[string]any)
+	if !ok {
+		t.Fatalf("models table vanished — user settings must survive, got: %v", after["models"])
+	}
+	if _, ok := modelsTbl["default"]; ok {
+		t.Error("Juggernaut's models.default pointer should be removed")
+	}
+	if modelsTbl["web_search"] != "batwing-coder" {
+		t.Error("user's models.web_search setting lost on uninstall — data loss!")
+	}
+	authTbl, ok := after["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("auth table vanished — user settings must survive, got: %v", after["auth"])
+	}
+	for _, key := range []string{"auth_provider_command", "auth_provider_label"} {
+		if _, ok := authTbl[key]; ok {
+			t.Errorf("Juggernaut's auth.%s should be removed", key)
+		}
+	}
+	if authTbl["extra_user_setting"] != "keep-me" {
+		t.Error("user's own auth setting lost on uninstall — data loss!")
+	}
+}
+
 // TestApply_Codex_IAM_Allowed: Codex now supports IAM via the AWS SDK credential
 // chain, so apply --cli=codex --auth=iam must succeed (not rejected).
 func TestApply_Codex_IAM_Allowed(t *testing.T) {
