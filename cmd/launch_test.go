@@ -292,6 +292,63 @@ func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
 	}
 }
 
+// TestUninstall_OpenCode_PreservesUserSiblingKeys: uninstall --cli=opencode
+// removes ONLY Juggernaut's owned leaves — the top-level "model" key and the
+// bedrock-mantle provider block. A user's own provider entries and their own
+// top-level keys must survive.
+func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t) // apply stores a real credential; skip if keychain backend hangs (macOS CI)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Inject user-owned sibling content: a top-level key and a provider of
+	// their own next to the bedrock-mantle block Juggernaut wrote.
+	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	mgr := config.NewManager(configPath)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse opencode.json: %v", err)
+	}
+	got["theme"] = "dark"
+	prov := got["provider"].(map[string]any)
+	prov["anthropic"] = map[string]any{"npm": "@ai-sdk/anthropic", "options": map[string]any{"apiKey": "sk-ant-own-key"}}
+	if err := mgr.Write(got); err != nil {
+		t.Fatalf("writing opencode.json: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{
+		"uninstall", "--cli=opencode", "--force",
+	}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	after, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse opencode.json after uninstall: %v", err)
+	}
+	if _, ok := after["model"]; ok {
+		t.Error("managed 'model' key should be removed")
+	}
+	if after["theme"] != "dark" {
+		t.Errorf("user's top-level 'theme' key must survive, got: %v", after["theme"])
+	}
+	provAfter, ok := after["provider"].(map[string]any)
+	if !ok {
+		t.Fatalf("provider table vanished — user providers must survive, got: %v", after["provider"])
+	}
+	if _, ok := provAfter["bedrock-mantle"]; ok {
+		t.Error("Juggernaut's bedrock-mantle provider should be removed")
+	}
+	if _, ok := provAfter["anthropic"]; !ok {
+		t.Error("user's own provider entry lost on uninstall — data loss!")
+	}
+}
+
 // TestApply_Codex_IAM_Allowed: Codex now supports IAM via the AWS SDK credential
 // chain, so apply --cli=codex --auth=iam must succeed (not rejected).
 func TestApply_Codex_IAM_Allowed(t *testing.T) {
