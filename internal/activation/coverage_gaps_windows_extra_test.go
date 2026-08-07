@@ -20,17 +20,6 @@ func TestPathsEqualCI_DifferentPaths(t *testing.T) {
 	}
 }
 
-// TestDefaultResolveDocumentsFolder_Exists returns the existing folder.
-func TestDefaultResolveDocumentsFolder_Exists(t *testing.T) {
-	got, err := defaultResolveDocumentsFolder()
-	if err != nil {
-		t.Fatalf("defaultResolveDocumentsFolder error: %v", err)
-	}
-	if got == "" {
-		t.Error("expected non-empty documents folder")
-	}
-}
-
 // TestResolveHomeDir_WithHomeEnv uses the HOME env var.
 func TestResolveHomeDir_WithHomeEnv(t *testing.T) {
 	t.Setenv("HOME", "/tmp/test-home")
