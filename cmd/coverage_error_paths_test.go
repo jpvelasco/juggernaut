@@ -51,16 +51,17 @@ func isolateDoctorKeychain(t *testing.T) {
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-doctor-coverage")
 }
 
-// blockSettingsLock replaces the settings.json lock file with a DIRECTORY so
-// the next config Write fails deterministically at flock acquisition.
-func blockSettingsLock(t *testing.T, home string) {
+// blockSettingsWrite replaces settings.json.tmp with a DIRECTORY so the next
+// config Write fails deterministically at the temp-file step on every platform
+// (os.WriteFile cannot open a directory).
+func blockSettingsWrite(t *testing.T, home string) {
 	t.Helper()
-	lockPath := filepath.Join(home, ".claude", "settings.json.lock")
-	if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
-		t.Fatalf("removing stale lock: %v", err)
+	tmpPath := filepath.Join(home, ".claude", "settings.json.tmp")
+	if err := os.Remove(tmpPath); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("removing stale temp file: %v", err)
 	}
-	if err := safepath.MkdirAll(lockPath); err != nil {
-		t.Fatalf("mkdir lock path: %v", err)
+	if err := safepath.MkdirAll(tmpPath); err != nil {
+		t.Fatalf("mkdir temp path: %v", err)
 	}
 }
 
@@ -514,10 +515,10 @@ func TestCommitApply_CollisionReadError(t *testing.T) {
 	}
 }
 
-// TestCommitApply_MergeError_WhenLockBlocked covers the config-write failure
-// branch: a settings.json.lock path that is a DIRECTORY makes flock acquisition
-// fail deterministically after collision detection passes.
-func TestCommitApply_MergeError_WhenLockBlocked(t *testing.T) {
+// TestCommitApply_WriteError_WhenTempBlocked covers the config-write failure
+// branch: a settings.json.tmp path that is a DIRECTORY makes the temp write
+// fail deterministically on every platform after collision detection passes.
+func TestCommitApply_WriteError_WhenTempBlocked(t *testing.T) {
 	defer resetFlags()
 	resetFlags()
 	home := setupApplyTest(t)
@@ -546,11 +547,11 @@ func TestCommitApply_MergeError_WhenLockBlocked(t *testing.T) {
 		t.Fatalf("schema.Build: %v", err)
 	}
 
-	blockSettingsLock(t, home)
+	blockSettingsWrite(t, home)
 
 	err = commitApply(home, "iam", "", block, prov, bCfg, opts)
-	if err == nil || !strings.Contains(err.Error(), "lock") {
-		t.Errorf("expected lock acquisition error, got: %v", err)
+	if err == nil {
+		t.Error("expected config-write error, got nil")
 	}
 }
 
@@ -593,7 +594,7 @@ func TestUninstallSettingsBlock_HasManagedKeysError(t *testing.T) {
 }
 
 // TestUninstallSettingsBlock_RemoveError covers the warnf when removing managed
-// keys fails (flock blocked by a directory at the lock path).
+// keys fails (the config write is blocked by a directory at the temp path).
 func TestUninstallSettingsBlock_RemoveError(t *testing.T) {
 	defer resetFlags()
 	resetFlags()
@@ -604,7 +605,7 @@ func TestUninstallSettingsBlock_RemoveError(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 
-	blockSettingsLock(t, home)
+	blockSettingsWrite(t, home)
 
 	out := captureStderr(t, func() {
 		uninstallSettingsBlock(home, "user", provider.MustGet("claude"))
