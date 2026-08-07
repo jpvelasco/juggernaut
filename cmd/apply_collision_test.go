@@ -189,6 +189,9 @@ func TestApply_Grok_ForeignConfig_Refuses(t *testing.T) {
 	if !strings.Contains(err.Error(), "models.default") {
 		t.Errorf("error should name the colliding path, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
+	}
 
 	got, err := safepath.ReadFile(grokDir, configPath)
 	if err != nil {
@@ -238,6 +241,75 @@ func TestApply_Grok_ForeignConfig_SiblingProfileSurvivesNoForceNeeded(t *testing
 	}
 }
 
+// TestApply_DryRun_ForeignConfig_TOML_ReportsCollisionsWithoutWriting:
+// --dry-run must surface the same refusal information for the TOML providers
+// (Codex's exact colliding dotted path, Grok's models.default) without
+// writing anything or creating a backup. This is the same contract Claude's
+// dry-run test locks in — provider-agnostic behavior that only Claude was
+// pinning down. Dry-run never resolves a credential, so no keychain is
+// required.
+func TestApply_DryRun_ForeignConfig_TOML_ReportsCollisionsWithoutWriting(t *testing.T) {
+	cases := []struct {
+		name             string
+		cli, dir, region string
+		foreign          string
+		wantCollision    string
+	}{
+		{
+			name: "codex", cli: "codex", dir: ".codex", region: "us-east-1",
+			foreign:       "model = \"their-model\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"eu-west-1\"\n",
+			wantCollision: "model_providers.amazon-bedrock.aws.region",
+		},
+		{
+			name: "grok", cli: "grok", dir: ".grok", region: "us-west-2",
+			foreign:       "[models]\ndefault = \"their-own-default\"\n",
+			wantCollision: "models.default",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			home := setupApplyTest(t)
+
+			configDir := filepath.Join(home, c.dir)
+			if err := safepath.MkdirAll(configDir); err != nil {
+				t.Fatalf("mkdir %s: %v", c.dir, err)
+			}
+			configPath := filepath.Join(configDir, "config.toml")
+			if err := safepath.WriteFile(configDir, configPath, []byte(c.foreign)); err != nil {
+				t.Fatalf("write foreign %s config: %v", c.cli, err)
+			}
+
+			out := captureStdout(t, func() {
+				err := ExecuteArgs([]string{
+					"apply", "--cli=" + c.cli, "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+					"--region=" + c.region, "--dry-run", "--skip-preflight",
+				})
+				if err != nil {
+					t.Fatalf("dry-run should not error, it should report: %v", err)
+				}
+			})
+			if !strings.Contains(out, c.wantCollision) {
+				t.Errorf("dry-run should report the colliding path, got:\n%s", out)
+			}
+			if !strings.Contains(out, "--force") {
+				t.Errorf("dry-run should mention --force, got:\n%s", out)
+			}
+
+			got, err := safepath.ReadFile(configDir, configPath)
+			if err != nil {
+				t.Fatalf("reading config.toml: %v", err)
+			}
+			if string(got) != c.foreign {
+				t.Error("dry-run must not modify the foreign file")
+			}
+			matches, _ := filepath.Glob(configPath + ".backup.*")
+			if len(matches) != 0 {
+				t.Error("dry-run must not create a backup")
+			}
+		})
+	}
+}
+
 // TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses: Codex's owned
 // leaf (model_providers.amazon-bedrock.aws.region) already present under a
 // foreign config triggers a refusal, even though the config has no
@@ -277,53 +349,6 @@ func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
 	}
 	if string(got) != foreign {
 		t.Errorf("foreign codex config must be untouched on refusal, got: %s", got)
-	}
-}
-
-// TestApply_Codex_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting:
-// --dry-run must surface the same refusal information for Codex (the exact
-// colliding dotted path, plus the --force hint) without writing anything or
-// creating a backup. This is the same contract Claude's dry-run test locks
-// in — provider-agnostic behavior that only Claude was pinning down.
-func TestApply_Codex_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
-	home := setupApplyTest(t)
-
-	codexDir := filepath.Join(home, ".codex")
-	if err := safepath.MkdirAll(codexDir); err != nil {
-		t.Fatalf("mkdir .codex: %v", err)
-	}
-	configPath := filepath.Join(codexDir, "config.toml")
-	foreign := "model = \"their-model\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"eu-west-1\"\n"
-	if err := safepath.WriteFile(codexDir, configPath, []byte(foreign)); err != nil {
-		t.Fatalf("write foreign codex config: %v", err)
-	}
-
-	out := captureStdout(t, func() {
-		err := ExecuteArgs([]string{
-			"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
-			"--region=us-east-1", "--dry-run", "--skip-preflight",
-		})
-		if err != nil {
-			t.Fatalf("dry-run should not error, it should report: %v", err)
-		}
-	})
-	if !strings.Contains(out, "model_providers.amazon-bedrock.aws.region") {
-		t.Errorf("dry-run should report the colliding dotted path, got:\n%s", out)
-	}
-	if !strings.Contains(out, "--force") {
-		t.Errorf("dry-run should mention --force, got:\n%s", out)
-	}
-
-	got, err := safepath.ReadFile(codexDir, configPath)
-	if err != nil {
-		t.Fatalf("reading config.toml: %v", err)
-	}
-	if string(got) != foreign {
-		t.Error("dry-run must not modify the foreign file")
-	}
-	matches, _ := filepath.Glob(configPath + ".backup.*")
-	if len(matches) != 0 {
-		t.Error("dry-run must not create a backup")
 	}
 }
 

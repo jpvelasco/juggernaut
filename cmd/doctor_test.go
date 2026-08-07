@@ -444,6 +444,52 @@ func TestDoctor_OpenCode_HealthyAfterApply(t *testing.T) {
 	}
 }
 
+// TestDoctor_Grok_MissingConfig_FailsWithGuidance: doctor --cli=grok on a
+// fresh home fails the config check with actionable apply guidance. Grok is
+// always user-scoped — the check line must not mention a project scope.
+func TestDoctor_Grok_MissingConfig_FailsWithGuidance(t *testing.T) {
+	_ = setupApplyTest(t)
+
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{"doctor", "--cli=grok"})
+		if err == nil {
+			t.Fatal("expected doctor to fail when grok is not configured")
+		}
+	})
+	if !strings.Contains(out, "config.toml (user)") {
+		t.Errorf("expected the grok config check line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "run `juggernaut apply --cli=grok`") {
+		t.Errorf("expected apply --cli=grok guidance, got:\n%s", out)
+	}
+	if strings.Contains(out, "config.toml (project)") {
+		t.Errorf("grok must never report a project-scope config check, got:\n%s", out)
+	}
+}
+
+// TestDoctor_Grok_HealthyAfterApply: after a real grok apply, doctor
+// --cli=grok reports the user config as juggernaut-managed and finds no
+// failures.
+func TestDoctor_Grok_HealthyAfterApply(t *testing.T) {
+	_ = setupApplyTest(t)
+	setupIsolatedKeychain(t) // stores a real credential; skip if keychain backend hangs (macOS CI)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --cli=grok: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"doctor", "--cli=grok"}); err != nil {
+			t.Fatalf("doctor --cli=grok should find no failures after apply: %v", err)
+		}
+	})
+	if !strings.Contains(out, "juggernaut-managed Bedrock config present") {
+		t.Errorf("expected managed-config OK check, got:\n%s", out)
+	}
+}
+
 func TestCheckRuntimeFallback_ReportsConfigDrift(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	prov := provider.MustGet("claude")
