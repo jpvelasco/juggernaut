@@ -781,7 +781,7 @@ func TestCheckConnectivity_MissingJuggernautBlock(t *testing.T) {
 	home := setupApplyTest(t)
 	// Ensure the .claude directory exists.
 	claudeDir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
+	if err := os.MkdirAll(claudeDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	// Write a settings.json with no juggernaut block.
