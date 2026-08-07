@@ -199,6 +199,16 @@ Use conventional commit subjects when asked to commit. Release tags are `v*`
 and trigger GitHub release publishing plus npm OIDC publish; do not create or
 push a release tag unless explicitly requested.
 
+Installed git hooks (`scripts/setup-hooks.{sh,ps1}`, sourced from `.githooks/`)
+enforce more than conventional defaults and will fail your commit/push:
+
+- `commit-msg` — first line must be a **single-type** Conventional Commit:
+  `docs+test: ...` is rejected, `type(scope?): description` is required.
+- `pre-commit` — fails if `go fmt` / `go mod tidy` would change staged Go files.
+- `pre-push` — fails if a changed Go file gains a function at 0.0% coverage. An
+  early warning only — CI's Codecov patch gate is the authority. Documented
+  emergency bypass: `git push --no-verify`.
+
 `main` is protected by a GitHub **ruleset**, not classic branch protection, so
 `gh api repos/.../branches/main/protection` returns 404 — query
 `gh api repos/jpvelasco/juggernaut/rulesets` instead. The active `protect-main`
