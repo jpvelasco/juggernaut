@@ -55,7 +55,7 @@ func (b BaseProvider) ConfigFormatName() string { return b.configFormat }
 func (b BaseProvider) ActivationMarkers() (begin, end string) {
 	title := b.displayName
 	if title == "" {
-		title = strings.Title(b.name) //nolint:staticcheck // ASCII CLI name fallback
+		title = titleCaseASCII(b.name)
 	}
 	return "# BEGIN: Juggernaut " + title + " Activation", "# END: Juggernaut " + title + " Activation"
 }
@@ -113,7 +113,18 @@ func (b BaseProvider) DisplayName() string {
 	if b.displayName != "" {
 		return b.displayName
 	}
-	return strings.Title(b.name) //nolint:staticcheck // ASCII CLI name fallback
+	return titleCaseASCII(b.name)
+}
+
+// titleCaseASCII uppercases the first letter of a single-token ASCII name.
+// Equivalent to the deprecated strings.Title for the single-word CLI names
+// that reach this fallback; multi-word display names must be set explicitly
+// via the displayName field.
+func titleCaseASCII(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // SupportedNames returns a sorted, comma-separated list of registered provider names.
