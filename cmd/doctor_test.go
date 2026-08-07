@@ -402,6 +402,48 @@ func TestDoctor_Codex_HealthyAfterApply(t *testing.T) {
 	}
 }
 
+// TestDoctor_OpenCode_MissingConfig_FailsWithGuidance: doctor --cli=opencode
+// on a fresh home fails the config check with actionable apply guidance.
+func TestDoctor_OpenCode_MissingConfig_FailsWithGuidance(t *testing.T) {
+	_ = setupApplyTest(t)
+
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{"doctor", "--cli=opencode"})
+		if err == nil {
+			t.Fatal("expected doctor to fail when opencode is not configured")
+		}
+	})
+	if !strings.Contains(out, "opencode.json (user)") {
+		t.Errorf("expected the opencode config check line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "run `juggernaut apply --cli=opencode`") {
+		t.Errorf("expected apply --cli=opencode guidance, got:\n%s", out)
+	}
+}
+
+// TestDoctor_OpenCode_HealthyAfterApply: after a real opencode apply, doctor
+// --cli=opencode reports the user config as juggernaut-managed and finds no
+// failures.
+func TestDoctor_OpenCode_HealthyAfterApply(t *testing.T) {
+	_ = setupApplyTest(t)
+	setupIsolatedKeychain(t) // stores a real credential; skip if keychain backend hangs (macOS CI)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --cli=opencode: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"doctor", "--cli=opencode"}); err != nil {
+			t.Fatalf("doctor --cli=opencode should find no failures after apply: %v", err)
+		}
+	})
+	if !strings.Contains(out, "juggernaut-managed Bedrock config present") {
+		t.Errorf("expected managed-config OK check, got:\n%s", out)
+	}
+}
+
 func TestCheckRuntimeFallback_ReportsConfigDrift(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	prov := provider.MustGet("claude")

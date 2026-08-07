@@ -354,6 +354,9 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 	if !strings.Contains(err.Error(), "model") {
 		t.Errorf("error should name the colliding path, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
+	}
 
 	got, err := safepath.ReadFile(opencodeDir, configPath)
 	if err != nil {
@@ -361,6 +364,52 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 	}
 	if string(got) != foreign {
 		t.Errorf("foreign opencode config must be untouched on refusal, got: %s", got)
+	}
+}
+
+// TestApply_OpenCode_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting:
+// --dry-run must surface the same refusal information for OpenCode without
+// writing anything or creating a backup — the Claude dry-run contract applied
+// to OpenCode.
+func TestApply_OpenCode_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
+	home := setupApplyTest(t)
+
+	opencodeDir := filepath.Join(home, ".config", "opencode")
+	if err := safepath.MkdirAll(opencodeDir); err != nil {
+		t.Fatalf("mkdir opencode config dir: %v", err)
+	}
+	configPath := filepath.Join(opencodeDir, "opencode.json")
+	foreign := `{"model": "their-own-provider/their-own-model"}`
+	if err := safepath.WriteFile(opencodeDir, configPath, []byte(foreign)); err != nil {
+		t.Fatalf("write foreign opencode config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{
+			"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-west-2", "--dry-run", "--skip-preflight",
+		})
+		if err != nil {
+			t.Fatalf("dry-run should not error, it should report: %v", err)
+		}
+	})
+	if !strings.Contains(out, "model") {
+		t.Errorf("dry-run should report the colliding key, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--force") {
+		t.Errorf("dry-run should mention --force, got:\n%s", out)
+	}
+
+	got, err := safepath.ReadFile(opencodeDir, configPath)
+	if err != nil {
+		t.Fatalf("reading opencode.json: %v", err)
+	}
+	if string(got) != foreign {
+		t.Error("dry-run must not modify the foreign file")
+	}
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) != 0 {
+		t.Error("dry-run must not create a backup")
 	}
 }
 
