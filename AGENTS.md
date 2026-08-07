@@ -35,6 +35,9 @@ go test ./cmd/... -run TestApply_WritesSettings_IAM -v
 
 cd npm && npm test         # npm launcher tests (Node >= 20; CI uses Node 24)
 UPDATE_GOLDEN=1 go test ./cmd/ -run Golden   # only after an INTENTIONAL output change
+
+# measure cmd coverage (make test-cover uses POSIX `tail`, so on Windows use:)
+go test ./cmd/ -coverprofile=$env:TEMP\cov.out; go tool cover -func=$env:TEMP\cov.out | Select-Object -Last 1
 ```
 
 Install git hooks once per clone: `scripts/setup-hooks.ps1` (Windows) or
@@ -122,6 +125,21 @@ paths need both), and `internal/testutil` provides `CaptureStdout`, `WithStdin`,
 `NestedMapChain`, `ParseJSON`, `OwnedJuggernautBlock`, and `SkipIfNoKeychain`.
 Isolate keychain tests with `JUGGERNAUT_KEYCHAIN_SERVICE`; tests should skip when
 no backend is available.
+
+For `cmd` command-level tests, reuse `cmd/apply_test_helpers_test.go` and the
+`cmd/coverage_batch{1,2}_test.go` files instead of inventing new fixtures:
+`setupApplyTest(t)` (fake home + mock PS runner on Windows), `setupApplyTestWithReset`,
+`captureStdout`/`captureStderr`, `mockPSRunner`/`mockPSOutputJSON`,
+`noHomeEnv`, `blockCredentialWrite`, `chdirTo`, `withBrokenEmbeddedConfig`,
+`swapActiveModelsForWrite`, `writeTempBedrockConfig`, and the `stubProvider`
+family. Quirks worth knowing:
+- `homeDir()` failure branches are tested by clearing the env with `noHomeEnv`,
+  and the error text is platform-specific (`$HOME` vs `%userprofile%`) — use
+  `assertHomeDirError` rather than matching a substring like `"HOME"`.
+- `models --write` tests must `chdirTo` a temp dir holding a `bedrock-config.json`
+  copy so the repo-root `../bedrock-config.json` fallback is never mutated.
+- Tests never call `t.Parallel()` — `os.Chdir` is a process-global side effect,
+  so chdir-based tests are safe only in sequence.
 
 Tests never call AWS. `cmd/models.go` and `cmd/model_catalog.go` expose their
 discovery calls as package-level function variables so tests can swap them;
