@@ -185,6 +185,10 @@ git diff --check
 Run `make ci` when the required local tools are available and the change merits
 the broader check.
 
+Static-analysis suppressions (`//nolint`, `#nosec`, `// nosemgrep`) are
+documented with rationale in `docs/ci-suppressions.md`. Prefer a small code
+adjustment over a suppression; never add one without documenting it there.
+
 ## Git and Scope
 
 The worktree may contain user changes. Inspect `git status` and relevant diffs
