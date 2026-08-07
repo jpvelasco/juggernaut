@@ -358,6 +358,50 @@ func TestCheckProviderConfigScope_CodexOwnedOK(t *testing.T) {
 	}
 }
 
+// TestDoctor_Codex_MissingConfig_FailsWithGuidance: doctor --cli=codex on a
+// fresh home fails the config check with actionable apply guidance — the
+// end-to-end wiring of checkProviderConfigScope into runDoctor for a
+// non-Claude CLI.
+func TestDoctor_Codex_MissingConfig_FailsWithGuidance(t *testing.T) {
+	_ = setupApplyTest(t)
+
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{"doctor", "--cli=codex"})
+		if err == nil {
+			t.Fatal("expected doctor to fail when codex is not configured")
+		}
+	})
+	if !strings.Contains(out, "config.toml (user)") {
+		t.Errorf("expected the codex config check line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "run `juggernaut apply --cli=codex`") {
+		t.Errorf("expected apply --cli=codex guidance, got:\n%s", out)
+	}
+}
+
+// TestDoctor_Codex_HealthyAfterApply: after a real codex apply, doctor
+// --cli=codex reports the user config as juggernaut-managed and finds no
+// failures — the mirror image of the missing-config case.
+func TestDoctor_Codex_HealthyAfterApply(t *testing.T) {
+	_ = setupApplyTest(t)
+	setupIsolatedKeychain(t) // stores a real credential; skip if keychain backend hangs (macOS CI)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply --cli=codex: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"doctor", "--cli=codex"}); err != nil {
+			t.Fatalf("doctor --cli=codex should find no failures after apply: %v", err)
+		}
+	})
+	if !strings.Contains(out, "juggernaut-managed Bedrock config present") {
+		t.Errorf("expected managed-config OK check, got:\n%s", out)
+	}
+}
+
 func TestCheckRuntimeFallback_ReportsConfigDrift(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	prov := provider.MustGet("claude")
