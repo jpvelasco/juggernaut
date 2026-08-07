@@ -266,6 +266,65 @@ func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
 	if !strings.Contains(err.Error(), "model_providers.amazon-bedrock.aws.region") {
 		t.Errorf("error should name the colliding dotted path, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
+	}
+
+	// The foreign file must be untouched — refusal happens before any write.
+	got, err := safepath.ReadFile(codexDir, configPath)
+	if err != nil {
+		t.Fatalf("reading config.toml: %v", err)
+	}
+	if string(got) != foreign {
+		t.Errorf("foreign codex config must be untouched on refusal, got: %s", got)
+	}
+}
+
+// TestApply_Codex_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting:
+// --dry-run must surface the same refusal information for Codex (the exact
+// colliding dotted path, plus the --force hint) without writing anything or
+// creating a backup. This is the same contract Claude's dry-run test locks
+// in — provider-agnostic behavior that only Claude was pinning down.
+func TestApply_Codex_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
+	home := setupApplyTest(t)
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := safepath.MkdirAll(codexDir); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	configPath := filepath.Join(codexDir, "config.toml")
+	foreign := "model = \"their-model\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"eu-west-1\"\n"
+	if err := safepath.WriteFile(codexDir, configPath, []byte(foreign)); err != nil {
+		t.Fatalf("write foreign codex config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{
+			"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-east-1", "--dry-run", "--skip-preflight",
+		})
+		if err != nil {
+			t.Fatalf("dry-run should not error, it should report: %v", err)
+		}
+	})
+	if !strings.Contains(out, "model_providers.amazon-bedrock.aws.region") {
+		t.Errorf("dry-run should report the colliding dotted path, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--force") {
+		t.Errorf("dry-run should mention --force, got:\n%s", out)
+	}
+
+	got, err := safepath.ReadFile(codexDir, configPath)
+	if err != nil {
+		t.Fatalf("reading config.toml: %v", err)
+	}
+	if string(got) != foreign {
+		t.Error("dry-run must not modify the foreign file")
+	}
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) != 0 {
+		t.Error("dry-run must not create a backup")
+	}
 }
 
 // TestApply_OpenCode_ForeignConfig_Refuses: OpenCode's whole-value "model" key

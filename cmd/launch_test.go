@@ -225,6 +225,73 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 	}
 }
 
+// TestUninstall_Codex_PreservesUserSiblingKeys: uninstall removes ONLY the
+// leaves Juggernaut owns. A user's own top-level keys, their own
+// model_providers entries, and sibling settings inside the
+// model_providers.amazon-bedrock.aws table must survive — uninstall is a
+// leaf-prune, not a data wipe.
+func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t) // apply stores a real credential; skip if keychain backend hangs (macOS CI)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value", "--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Inject user-owned sibling content: a top-level key, a provider entry of
+	// their own, and a sibling inside the same aws table Juggernaut writes into.
+	cfgPath := filepath.Join(home, ".codex", "config.toml")
+	tomlFmt, _ := config.FormatByName("toml")
+	mgr := config.NewManagerWithFormat(cfgPath, tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml: %v", err)
+	}
+	got["telemetry"] = false
+	mp := got["model_providers"].(map[string]any)
+	mp["my-own"] = map[string]any{"base_url": "http://192.168.0.1/v1", "env_key": "MY_OWN_KEY"}
+	aws := mp["amazon-bedrock"].(map[string]any)["aws"].(map[string]any)
+	aws["profile"] = "bedrock-ops"
+	if err := mgr.Write(got); err != nil {
+		t.Fatalf("writing config.toml: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{
+		"uninstall", "--cli=codex", "--force",
+	}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	after, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse config.toml after uninstall: %v", err)
+	}
+	for _, key := range []string{"model", "model_provider", "juggernaut"} {
+		if _, ok := after[key]; ok {
+			t.Errorf("managed key %q should be removed, got: %v", key, after[key])
+		}
+	}
+	if after["telemetry"] != false {
+		t.Errorf("user's top-level 'telemetry' key must survive, got: %v", after["telemetry"])
+	}
+	mpAfter, ok := after["model_providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("model_providers table vanished — user providers must survive, got: %v", after["model_providers"])
+	}
+	if _, ok := mpAfter["my-own"]; !ok {
+		t.Error("user's own provider entry lost on uninstall — data loss!")
+	}
+	awsAfter := mpAfter["amazon-bedrock"].(map[string]any)["aws"].(map[string]any)
+	if _, ok := awsAfter["region"]; ok {
+		t.Error("Juggernaut's region leaf should be removed")
+	}
+	if awsAfter["profile"] != "bedrock-ops" {
+		t.Error("user's aws.profile sibling must survive uninstall")
+	}
+}
+
 // TestApply_Codex_IAM_Allowed: Codex now supports IAM via the AWS SDK credential
 // chain, so apply --cli=codex --auth=iam must succeed (not rejected).
 func TestApply_Codex_IAM_Allowed(t *testing.T) {
