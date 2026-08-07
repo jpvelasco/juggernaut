@@ -66,11 +66,11 @@ make codacy
 
 Hooks live in `.githooks/` (tracked) and are installed into `.git/hooks/` via `scripts/setup-hooks.sh`/`.ps1` (see Commands above) — install once per clone.
 
-- **pre-commit**: runs `gofmt -l` and `go vet` on staged Go files, then `go mod tidy` (fails if `go.mod`/`go.sum` change)
-- **commit-msg**: enforces Conventional Commits (`feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert`)
-- **pre-push**: fails if any changed non-test Go file has a function at 0.0% coverage (early catch; bypass with `git push --no-verify` in emergencies)
+- **pre-commit**: runs `gofmt` and `go mod tidy` against staged Go files; fails if either would change a file (i.e. `go vet` is not run here — that's a separate `make vet`/CI step)
+- **commit-msg**: enforces a **single-type** Conventional Commit on the first line — `type(scope?): description` with `type` one of `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert`; a combined type like `docs+test: ...` is rejected
+- **pre-push**: fails if any changed non-test Go file has a function at exactly 0.0% coverage (bypass with `git push --no-verify` in emergencies)
 
-The hooks are a convenience — **CI is the real gate**: Codecov's `patch` status (target 80%, in `codecov.yml`) runs on every PR and cannot be bypassed locally.
+The hooks are an early warning, not the authority — **CI is the real gate**: Codecov's `patch` status (target 80%, in `codecov.yml`) runs on every PR and cannot be bypassed locally.
 
 ## Architecture
 
