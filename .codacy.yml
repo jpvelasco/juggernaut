@@ -5,6 +5,11 @@ exclude_paths:
   - "mcps/**"
 
 engines:
+  # These per-engine excludes are honored by Codacy Cloud analysis (0 issues on
+  # main). The local analysis CLI (codacy.config.json, remote-sourced) does not
+  # carry per-engine excludes, so `analyze` over-reports ESLint 8 findings in
+  # npm/** and in JSON/YAML files treated as JS modules. Cloud is authoritative;
+  # treat extra local findings as known noise unless a real pattern applies.
   eslint-8:
     exclude_paths:
       - ".remember/**"
