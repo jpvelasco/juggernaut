@@ -2,3 +2,4 @@ logs/
 *.sarif
 server-issues.json
 generated/
+codacy.config.baseline.json
