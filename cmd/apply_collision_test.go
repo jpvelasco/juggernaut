@@ -392,90 +392,80 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 	}
 }
 
-// TestApply_OpenCode_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting:
-// --dry-run must surface the same refusal information for OpenCode without
-// writing anything or creating a backup — the Claude dry-run contract applied
-// to OpenCode.
-func TestApply_OpenCode_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
-	home := setupApplyTest(t)
-
-	opencodeDir := filepath.Join(home, ".config", "opencode")
-	if err := safepath.MkdirAll(opencodeDir); err != nil {
-		t.Fatalf("mkdir opencode config dir: %v", err)
+// TestApply_DryRun_ForeignConfig_JSON_ReportsCollisionsWithoutWriting:
+// --dry-run must surface the same refusal information for the JSON providers
+// (Claude's settings.json, OpenCode's opencode.json) without writing anything
+// or creating a backup. This is the same contract the TOML providers' dry-run
+// table locks in — provider-agnostic behavior that only Claude was pinning
+// down. Dry-run never resolves a credential, so no keychain is required.
+func TestApply_DryRun_ForeignConfig_JSON_ReportsCollisionsWithoutWriting(t *testing.T) {
+	cases := []struct {
+		name           string
+		cli, dir, file string
+		auth, region   string
+		keyFlag        string
+		foreign        string
+		wantCollision  string
+	}{
+		{
+			name: "claude", cli: "", dir: ".claude", file: "settings.json",
+			region: "us-west-2", auth: authmode.IAM,
+			foreign:       `{"model": "my-own-model-id"}`,
+			wantCollision: "model",
+		},
+		{
+			name: "opencode", cli: "opencode", dir: filepath.Join(".config", "opencode"), file: "opencode.json",
+			region: "us-west-2", auth: authmode.BedrockAPIKey, keyFlag: bedrockKeyFlag(),
+			foreign:       `{"model": "their-own-provider/their-own-model"}`,
+			wantCollision: "model",
+		},
 	}
-	configPath := filepath.Join(opencodeDir, "opencode.json")
-	foreign := `{"model": "their-own-provider/their-own-model"}`
-	if err := safepath.WriteFile(opencodeDir, configPath, []byte(foreign)); err != nil {
-		t.Fatalf("write foreign opencode config: %v", err)
-	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			home := setupApplyTest(t)
 
-	out := captureStdout(t, func() {
-		err := ExecuteArgs([]string{
-			"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
-			"--region=us-west-2", "--dry-run", "--skip-preflight",
+			configDir := filepath.Join(home, c.dir)
+			if err := safepath.MkdirAll(configDir); err != nil {
+				t.Fatalf("mkdir %s: %v", c.dir, err)
+			}
+			configPath := filepath.Join(configDir, c.file)
+			if err := safepath.WriteFile(configDir, configPath, []byte(c.foreign)); err != nil {
+				t.Fatalf("write foreign %s config: %v", c.name, err)
+			}
+
+			args := []string{"apply"}
+			if c.cli != "" {
+				args = append(args, "--cli="+c.cli)
+			}
+			args = append(args, "--auth="+c.auth, "--region="+c.region, "--dry-run", "--skip-preflight")
+			if c.keyFlag != "" {
+				args = append(args, c.keyFlag)
+			}
+			out := captureStdout(t, func() {
+				err := ExecuteArgs(args)
+				if err != nil {
+					t.Fatalf("dry-run should not error, it should report: %v", err)
+				}
+			})
+			if !strings.Contains(out, c.wantCollision) {
+				t.Errorf("dry-run should report the colliding key, got:\n%s", out)
+			}
+			if !strings.Contains(out, "--force") {
+				t.Errorf("dry-run should mention --force, got:\n%s", out)
+			}
+
+			got, err := safepath.ReadFile(configDir, configPath)
+			if err != nil {
+				t.Fatalf("reading %s: %v", c.file, err)
+			}
+			if string(got) != c.foreign {
+				t.Error("dry-run must not modify the foreign file")
+			}
+			matches, _ := filepath.Glob(configPath + ".backup.*")
+			if len(matches) != 0 {
+				t.Error("dry-run must not create a backup")
+			}
 		})
-		if err != nil {
-			t.Fatalf("dry-run should not error, it should report: %v", err)
-		}
-	})
-	if !strings.Contains(out, "model") {
-		t.Errorf("dry-run should report the colliding key, got:\n%s", out)
-	}
-	if !strings.Contains(out, "--force") {
-		t.Errorf("dry-run should mention --force, got:\n%s", out)
-	}
-
-	got, err := safepath.ReadFile(opencodeDir, configPath)
-	if err != nil {
-		t.Fatalf("reading opencode.json: %v", err)
-	}
-	if string(got) != foreign {
-		t.Error("dry-run must not modify the foreign file")
-	}
-	matches, _ := filepath.Glob(configPath + ".backup.*")
-	if len(matches) != 0 {
-		t.Error("dry-run must not create a backup")
-	}
-}
-
-// TestApply_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting: --dry-run
-// must surface the same refusal information without writing anything or
-// creating a backup.
-func TestApply_DryRun_ForeignConfig_ReportsCollisionsWithoutWriting(t *testing.T) {
-	home := setupApplyTest(t)
-
-	claudeDir := filepath.Join(home, ".claude")
-	if err := safepath.MkdirAll(claudeDir); err != nil {
-		t.Fatalf("mkdir .claude: %v", err)
-	}
-	settingsPath := filepath.Join(claudeDir, "settings.json")
-	foreign := `{"model": "my-own-model-id"}`
-	if err := safepath.WriteFile(claudeDir, settingsPath, []byte(foreign)); err != nil {
-		t.Fatalf("write foreign settings.json: %v", err)
-	}
-
-	out := captureStdout(t, func() {
-		err := ExecuteArgs([]string{
-			"apply", "--auth=iam", "--region=us-west-2", "--dry-run", "--skip-preflight",
-		})
-		if err != nil {
-			t.Fatalf("dry-run should not error, it should report: %v", err)
-		}
-	})
-	if !strings.Contains(out, "model") {
-		t.Errorf("dry-run should report the colliding key, got:\n%s", out)
-	}
-
-	got, err := safepath.ReadFile(claudeDir, settingsPath)
-	if err != nil {
-		t.Fatalf("reading settings.json: %v", err)
-	}
-	if string(got) != foreign {
-		t.Error("dry-run must not modify the foreign file")
-	}
-	matches, _ := filepath.Glob(settingsPath + ".backup.*")
-	if len(matches) != 0 {
-		t.Error("dry-run must not create a backup")
 	}
 }
 
