@@ -1,18 +1,30 @@
 # Quick Start Guide
 
-## New Machine Setup (5 Minutes)
+## Get Started in 60 Seconds
 
-### 1. Prerequisites Check
 ```bash
-# Install Claude Code if needed
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Check AWS CLI is installed (for IAM/SSO auth)
-aws --version
+npm install -g juggernaut-bedrock
+juggernaut apply --auth=iam   # or --auth=bedrock-api-key
+# restart shell, then:
+claude
 ```
 
-### 2. AWS Setup (IAM/SSO only — skip for Bedrock API key)
+Claude Code from Anthropic is a prerequisite:
+
 ```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Run `juggernaut apply` without flags for an interactive first-run prompt. Apply will not enable Bedrock routing unless a valid credential source is confirmed; if the target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force`.
+
+Upgrading from an older Juggernaut? Install v5 directly with npm; there is no required v3 → v4 → v5 chain. Windows v3 API-key users who need to keep an old DPAPI-stored key should use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
+
+## Prerequisites (if using IAM/SSO)
+
+```bash
+# Check AWS CLI is installed
+aws --version
+
 # Method A: AWS Configure
 aws configure
 
@@ -24,39 +36,19 @@ export AWS_PROFILE=<your-profile>
 aws sts get-caller-identity
 ```
 
-### 3. Install Juggernaut
+Using `--auth=bedrock-api-key` instead? Skip AWS setup entirely — the key is stored securely in your OS keychain.
+
+## Other Coding CLIs
+
+Codex / OpenCode / Grok route through Mantle and require a Bedrock API key (not IAM):
 
 ```bash
-npm install -g juggernaut-bedrock
-```
-
-Upgrading from an older Juggernaut? Install v5 directly with npm; there is no required v3 → v4 → v5 chain. Windows v3 API-key users who need to keep an old DPAPI-stored key should use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
-
-### 4. Configure
-```bash
-# IAM / SSO (recommended for organizations) — Claude Code default
-juggernaut apply --auth=iam
-
-# Bedrock API key (key stored securely in OS keychain)
-juggernaut apply --auth=bedrock-api-key
-
-# Other coding CLIs (Mantle routes require a Bedrock API key, not IAM)
 juggernaut apply --cli=opencode --auth=bedrock-api-key
 juggernaut apply --cli=codex --auth=bedrock-api-key
 juggernaut apply --cli=grok --auth=bedrock-api-key
 ```
 
-Run without flags for an interactive first-run prompt.
-
-`juggernaut apply` will not enable Bedrock routing unless a valid credential source is confirmed. If the target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force`.
-
-### 5. Launch
-```bash
-claude
-# or codex / opencode / grok after apply --cli=<name>
-```
-
-Restart your shell, or source the updated profile, then run the CLI normally. Juggernaut installs a marked shell function and never overwrites the real binary.
+Activation blocks for different CLIs coexist in one shell profile. Juggernaut installs a marked shell function and never overwrites the real binary. Restart your shell, or source the updated profile, then run the CLI normally.
 
 ## Verify Setup
 
@@ -100,7 +92,6 @@ juggernaut apply --auth=iam --dry-run
 juggernaut show
 ```
 
-
 ## Troubleshooting
 
 **403 Access Denied** — Complete the Anthropic model access request in the AWS Bedrock console.
@@ -109,6 +100,6 @@ juggernaut show
 
 **Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon on Linux.
 
-**Claude stopped using Bedrock after an update** — Run `juggernaut doctor`, then re-run `juggernaut apply --cli=claude` if it reports missing managed config. The saved runtime fallback contains no bearer token and keeps launches routed while you repair the full config.
+**Claude stopped using Bedrock after an update** — Run `juggernaut doctor`; if it reports missing managed config, re-run `juggernaut apply --cli=claude`. The runtime fallback keeps launches routed while you repair.
 
 See [README.md](README.md) for full documentation.

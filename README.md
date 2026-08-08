@@ -15,9 +15,24 @@
 
 <p align="center"><strong>Safe Bedrock routing for coding agents — Claude Code, Codex, OpenCode, and Grok</strong></p>
 
-Single cross-platform binary that configures your coding CLI to route through **Amazon Bedrock** instead of vendor APIs — IAM, SSO, or Bedrock API key auth. Juggernaut is the **safe Bedrock arbiter**: it refuses to clobber foreign config, keeps credentials in the OS keychain, and installs marked shell activation that never overwrites the real CLI binary. A generated runtime fallback keeps Bedrock routing alive even if a Claude Code update replaces its own `settings.json` — no silent regression to vendor APIs or vendor billing.
+**Safe Bedrock on-ramp for coding CLIs — not a proxy, not another agent harness.**
+
+For teams already on AWS who want Claude Code, Codex, OpenCode, or Grok on Bedrock without hand-editing configs or MITMing traffic.
 
 **Install from npm:** [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock) — `npm install -g juggernaut-bedrock`
+
+## Why Juggernaut (not a proxy)
+
+- **Configures native CLI settings; does not sit in the request path** — Bedrock traffic flows directly from your CLI to AWS, no intermediate service.
+- **Refuses foreign config leaves (Juggernaut law)** — `apply` never clobbers keys you configured elsewhere unless you pass `--force` (a backup is still created).
+- **Keychain-only secrets; never overwrites the real CLI binary** — credentials stay in the OS keychain, and Juggernaut never installs over an unknown file matching a managed CLI name.
+- **Survives Claude Code updates** — a non-secret runtime fallback keeps Bedrock routing active if an update replaces `settings.json`; `doctor` guides the repair.
+
+## Non-goals
+
+- Not a multi-model jailbreak for Claude Code
+- Not an agent orchestrator
+- Not affiliated with Anthropic or Amazon Web Services
 
 ## Why Bedrock?
 
@@ -32,7 +47,7 @@ Single cross-platform binary that configures your coding CLI to route through **
 
 ## Install
 
-Install Claude Code from Anthropic, then install Juggernaut from npm.
+**Prerequisite:** install Claude Code from Anthropic, then install Juggernaut from npm.
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
@@ -41,57 +56,14 @@ npm install -g juggernaut-bedrock
 
 The old `scripts/install.sh` and `scripts/install.ps1` installers are deprecated stubs in v5. Juggernaut is published through [`juggernaut-bedrock`](https://www.npmjs.com/package/juggernaut-bedrock).
 
-### Upgrade from older Juggernaut
-
-Go straight to v5 with npm. You do not need to install an intermediate v3 or v4 release first.
+### 60-second path
 
 ```bash
-npm install -g juggernaut-bedrock@latest
-juggernaut version
+npm install -g juggernaut-bedrock
+juggernaut apply --auth=iam   # or --auth=bedrock-api-key
+# restart shell, then:
+claude
 ```
-
-Then re-run `apply` with your preferred auth mode:
-
-```bash
-juggernaut apply --auth=iam
-juggernaut apply --auth=bedrock-api-key
-```
-
-#### Windows v3 API-key installs
-
-If you are upgrading an old Windows installer-based v3 setup and want to keep a DPAPI-stored Bedrock API key, call the npm v5 binary explicitly and bridge the old key once:
-
-```powershell
-npm install -g juggernaut-bedrock@latest
-
-$NpmPrefix = (npm prefix -g).Trim()
-$Candidates = @(
-  (Join-Path $NpmPrefix "juggernaut.cmd"),
-  (Join-Path $NpmPrefix "bin\juggernaut.cmd"),
-  (Join-Path $env:APPDATA "npm\juggernaut.cmd"),
-  (Join-Path $HOME ".npm-global\juggernaut.cmd")
-)
-
-$Juggernaut = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $Juggernaut) { throw "npm Juggernaut binary not found" }
-
-& $Juggernaut version
-
-. "$HOME\.juggernaut\lib\keychain.ps1"
-$probe = Read-BearerToken
-if (-not $probe -or -not $probe.Value) { throw "Old v3 API key not found" }
-
-& $Juggernaut apply `
-  --auth=bedrock-api-key `
-  --bedrock-key $probe.Value `
-  --region=us-west-2 `
-  --mode=auto `
-  --effort=high
-
-& $Juggernaut doctor
-```
-
-Close and reopen PowerShell after `doctor` is green. This avoids the old `C:\Users\<you>\.juggernaut` launcher taking precedence during the upgrade.
 
 ## Configure
 
@@ -335,6 +307,58 @@ juggernaut uninstall --dry-run
 juggernaut uninstall --full
 ```
 
+## Migrating from v3/v4
+
+Go straight to v5 with npm. You do not need to install an intermediate v3 or v4 release first.
+
+```bash
+npm install -g juggernaut-bedrock@latest
+juggernaut version
+```
+
+Then re-run `apply` with your preferred auth mode:
+
+```bash
+juggernaut apply --auth=iam
+juggernaut apply --auth=bedrock-api-key
+```
+
+### Windows v3 API-key installs
+
+If you are upgrading an old Windows installer-based v3 setup and want to keep a DPAPI-stored Bedrock API key, call the npm v5 binary explicitly and bridge the old key once:
+
+```powershell
+npm install -g juggernaut-bedrock@latest
+
+$NpmPrefix = (npm prefix -g).Trim()
+$Candidates = @(
+  (Join-Path $NpmPrefix "juggernaut.cmd"),
+  (Join-Path $NpmPrefix "bin\juggernaut.cmd"),
+  (Join-Path $env:APPDATA "npm\juggernaut.cmd"),
+  (Join-Path $HOME ".npm-global\juggernaut.cmd")
+)
+
+$Juggernaut = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $Juggernaut) { throw "npm Juggernaut binary not found" }
+
+& $Juggernaut version
+
+. "$HOME\.juggernaut\lib\keychain.ps1"
+$probe = Read-BearerToken
+if (-not $probe -or -not $probe.Value) { throw "Old v3 API key not found" }
+
+& $Juggernaut apply `
+  --auth=bedrock-api-key `
+  --bedrock-key $probe.Value `
+  --region=us-west-2 `
+  --mode=auto `
+  --effort=high
+
+& $Juggernaut doctor
+```
+
+Close and reopen PowerShell after `doctor` is green. This avoids the old `C:\Users\<you>\.juggernaut` launcher taking precedence during the upgrade.
+
 ## Troubleshooting
 
 **403 Access Denied** — Complete the Anthropic model access request in the AWS Bedrock console.
@@ -353,4 +377,3 @@ juggernaut uninstall --full
 
 - `/login` and `/logout` are disabled when using Bedrock
 - `AWS_REGION` is set explicitly by Juggernaut (Claude Code does not read it from `~/.aws/config`)
-- Juggernaut is an independent tool, not affiliated with Anthropic or Amazon Web Services
