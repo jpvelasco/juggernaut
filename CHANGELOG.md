@@ -4,6 +4,27 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [5.6.2] - 2026-08-10
+
+**Patch release — README polish, CI quality, and dependency updates.**
+
+### Fixed
+
+- **Retired Go Report Card badge removed from README.** The service is gone, so
+  the badge no longer resolves; the README now links to the live quality gates
+  (CI, Codecov, Codacy) instead.
+
+### Other
+
+- **Docs polish.** README and QUICKSTART first impressions sharpened
+  (safety differentiators, project overview), and AGENTS.md/CLAUDE.md now
+  document the installed git hooks and the `cmd` test harness conventions.
+- **Test hardening.** Coverage raised through provider-parity tests for Codex,
+  OpenCode, and Grok, table-driven dry-run collision tests, activation and
+  doctor error-path coverage, and an irreducible coverage floor enforced by CI.
+- **Dependency updates.** `github/codeql-action` 4.37.3→4.37.6,
+  `actions/checkout` 7.0.0→7.0.1, and `actions/download-artifact` 4.3.0→8.0.1.
+
 ## [5.6.1] - 2026-08-03
 
 **Patch release — restore Claude Bedrock routing after settings drift.**
