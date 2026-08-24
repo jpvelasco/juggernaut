@@ -59,7 +59,13 @@ func runShow(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	for scope, block := range results {
+	// Iterate the canonical scopes order, not the map — Go randomizes map
+	// iteration and scripts diff this output.
+	for _, scope := range scopes {
+		block, found := results[scope]
+		if !found {
+			continue
+		}
 		fmt.Printf("=== %s scope ===\n", scope)
 		if block == nil {
 			fmt.Println("  (not configured)")
