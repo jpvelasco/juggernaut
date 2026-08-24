@@ -217,12 +217,12 @@ describe("safeResolveBin", function() {
   function makeLayout(root, pkgName) {
     // Flat node_modules layout produced by local installs, npx cache runs,
     // pnpm, and yarn: platform package is a SIBLING of the launcher dir.
-    var launcherDir = path.join(root, "node_modules", "juggernaut-bedrock");
-    var platformDir = path.join(root, "node_modules", pkgName);
-    fs.mkdirSync(path.join(platformDir, "bin"), {recursive: true});
-    fs.writeFileSync(path.join(platformDir, "bin", "juggernaut"), "#stub\n");
+    var launcherDir = path.join(root, "node_modules", "juggernaut-bedrock"); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- test fixture under mkdtemp/tmpdir roots
+    var platformDir = path.join(root, "node_modules", pkgName); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript_pathtraversal_rule-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
+    fs.mkdirSync(path.join(platformDir, "bin"), {recursive: true}); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
+    fs.writeFileSync(path.join(platformDir, "bin", "juggernaut"), "#stub\n"); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
     return {launcherDir: launcherDir, platformDir: platformDir,
-      bin: path.join(platformDir, "bin", "juggernaut")};
+      bin: path.join(platformDir, "bin", "juggernaut")}; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- test fixture under mkdtemp/tmpdir roots
   }
 
   // Given the documented non-global install flows (npx, project-local, pnpm),
@@ -234,7 +234,7 @@ describe("safeResolveBin", function() {
     try {
       var layout = makeLayout(root, "juggernaut-bedrock-win32-x64");
       var resolved = safeResolveBin(layout.bin, layout.platformDir);
-      assert.strictEqual(resolved, fs.realpathSync(layout.bin));
+      assert.strictEqual(resolved, fs.realpathSync(layout.bin)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
     }
@@ -249,11 +249,11 @@ describe("safeResolveBin", function() {
       var layout = makeLayout(root, "juggernaut-bedrock-darwin-arm64");
       var nested = path.join(layout.launcherDir, "node_modules",
         "juggernaut-bedrock-darwin-arm64");
-      fs.mkdirSync(path.join(nested, "bin"), {recursive: true});
+      fs.mkdirSync(path.join(nested, "bin"), {recursive: true}); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
       fs.copyFileSync(layout.bin, path.join(nested, "bin", "juggernaut"));
       var bin = path.join(nested, "bin", "juggernaut");
       var resolved = safeResolveBin(bin, nested);
-      assert.strictEqual(resolved, fs.realpathSync(bin));
+      assert.strictEqual(resolved, fs.realpathSync(bin)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
     }
@@ -266,7 +266,7 @@ describe("safeResolveBin", function() {
     try {
       var layout = makeLayout(root, "juggernaut-bedrock-win32-x64");
       var rogueDir = path.join(root, "rogue");
-      fs.mkdirSync(rogueDir, {recursive: true});
+      fs.mkdirSync(rogueDir, {recursive: true}); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
       fs.copyFileSync(layout.bin, path.join(rogueDir, "juggernaut"));
       assert.throws(function() {
         safeResolveBin(path.join(rogueDir, "juggernaut"), layout.platformDir);

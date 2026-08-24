@@ -30,13 +30,14 @@ adding or removing suppressions.
 | `internal/activation/powershell_discovery.go:52` | `nosemgrep dangerous-exec-command` | exec with a variable command | `exe` comes from a fixed candidate list (`pwsh.exe`/`powershell.exe`) with fixed script args; the selection loop requires a variable. |
 | `internal/keychain/crypter_windows.go:53,67,77` | `#nosec G115,G103` + `nosemgrep use-of-unsafe-block` | integer conversion / unsafe | DPAPI `DATA_BLOB` marshalling requires `unsafe`; sizes are bounded by the keychain limit well under 4GB. |
 
-### npm launcher (`npm/index.js`, 10 sites)
+### npm launcher (`npm/index.js`, `npm/index.test.js`)
 
 `nosemgrep path-traversal` / `detect-non-literal-fs-filename` on path joins and
 fs calls. All are false positives by construction: package names pass the
 `VALID_PACKAGES` allowlist before any join, `safeResolveBin` realpaths and
-asserts containment under `__dirname`, and staging uses `fs.mkdtempSync` with a
-constant prefix plus `COPYFILE_EXCL`.
+asserts containment under the owning platform package dir, staging uses
+`fs.mkdtempSync` with a constant prefix plus `COPYFILE_EXCL`, and test
+fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
 
 ### Test-only Go suppressions (~45 sites)
 
