@@ -3,6 +3,7 @@ package activation
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -58,7 +59,11 @@ func TestLaunchWithOptions_CorruptSettingsFallsBackToRuntimeState(t *testing.T) 
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	stub := filepath.Join(binDir, "claude")
+	stubName := "claude"
+	if runtime.GOOS == "windows" {
+		stubName = "claude.cmd"
+	}
+	stub := filepath.Join(binDir, stubName)
 	if err := os.WriteFile(stub, []byte("#!/bin/sh\n"), 0o755); err != nil { // #nosec G306 -- stub must be executable
 		t.Fatal(err)
 	}

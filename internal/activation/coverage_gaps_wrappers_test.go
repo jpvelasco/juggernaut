@@ -352,10 +352,7 @@ func TestAuthModes_EmptyConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	modes, err := authModes(home)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	modes := authModes(home, nil)
 	if len(modes) != 0 {
 		t.Errorf("expected no auth modes from empty config, got %v", modes)
 	}

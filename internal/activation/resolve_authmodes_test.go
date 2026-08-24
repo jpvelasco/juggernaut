@@ -164,10 +164,7 @@ func TestAuthModes_SkipsMalformedSettings(t *testing.T) {
 		}
 	}`)
 
-	modes, err := authModes(home)
-	if err != nil {
-		t.Fatalf("authModes: %v", err)
-	}
+	modes := authModes(home, nil)
 	if len(modes) != 0 {
 		t.Errorf("a block without managedBy==juggernaut must be ignored, got %v", modes)
 	}
@@ -186,10 +183,7 @@ func TestAuthModes_ReadsManagedMode(t *testing.T) {
 		}
 	}`)
 
-	modes, err := authModes(home)
-	if err != nil {
-		t.Fatalf("authModes: %v", err)
-	}
+	modes := authModes(home, nil)
 	if len(modes) != 1 || modes[0] != "iam" {
 		t.Errorf("expected [iam], got %v", modes)
 	}

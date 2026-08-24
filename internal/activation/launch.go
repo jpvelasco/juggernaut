@@ -65,10 +65,7 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	}
 
 	env := os.Environ()
-	modes, err := authModes(opts.Home)
-	if err != nil {
-		return err
-	}
+	modes := authModes(opts.Home, opts.Warner)
 
 	// Determine whether this launch is Juggernaut-managed and whether it needs a
 	// bearer token. Claude declares its auth mode in ~/.claude/settings.json
@@ -267,7 +264,11 @@ func readAuthModeFromConfig(path string) string {
 	return ""
 }
 
-func authModes(home string) ([]string, error) {
+// authModes probes Claude settings files for persisted auth modes. The read
+// is advisory: a corrupt-but-present file must never hard-block the wrapped
+// CLI, so failures degrade to a warning naming the offending path (missing
+// files are silently skipped).
+func authModes(home string, warnf func(string)) []string {
 	paths := []string{
 		filepath.Join(".", ".claude", "settings.json"),
 		filepath.Join(home, ".claude", "settings.json"),
@@ -277,13 +278,17 @@ func authModes(home string) ([]string, error) {
 		mgr := config.NewManager(path)
 		data, err := mgr.Read()
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", path, err)
+			if warnf != nil {
+				warnf("Warning: could not read " + path +
+					" (" + err.Error() + "); ignoring it for launch decisions")
+			}
+			continue
 		}
 		if jb, ok := config.ParseJuggernautBlock(data); ok && jb.AuthMode != "" {
 			modes = append(modes, jb.AuthMode)
 		}
 	}
-	return modes, nil
+	return modes
 }
 
 // --- Environment helpers ---
