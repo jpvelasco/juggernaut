@@ -234,7 +234,7 @@ describe("safeResolveBin", function() {
     try {
       var layout = makeLayout(root, "juggernaut-bedrock-win32-x64");
       var resolved = safeResolveBin(layout.bin, layout.platformDir);
-      assert.strictEqual(resolved, fs.realpathSync(layout.bin)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
+      assert.strictEqual(resolved, fs.realpathSync(layout.bin)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename, javascript_pathtraversal_rule-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
     }
@@ -247,13 +247,13 @@ describe("safeResolveBin", function() {
     var root = fs.mkdtempSync(path.join(os.tmpdir(), "jug-nested-"));
     try {
       var layout = makeLayout(root, "juggernaut-bedrock-darwin-arm64");
-      var nested = path.join(layout.launcherDir, "node_modules",
+      var nested = path.join(layout.launcherDir, "node_modules", // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- test fixture under mkdtemp/tmpdir roots
         "juggernaut-bedrock-darwin-arm64");
       fs.mkdirSync(path.join(nested, "bin"), {recursive: true}); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
-      fs.copyFileSync(layout.bin, path.join(nested, "bin", "juggernaut"));
-      var bin = path.join(nested, "bin", "juggernaut");
+      fs.copyFileSync(layout.bin, path.join(nested, "bin", "juggernaut")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
+      var bin = path.join(nested, "bin", "juggernaut"); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- test fixture under mkdtemp/tmpdir roots
       var resolved = safeResolveBin(bin, nested);
-      assert.strictEqual(resolved, fs.realpathSync(bin)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
+      assert.strictEqual(resolved, fs.realpathSync(bin)); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename, javascript_pathtraversal_rule-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
     }
@@ -267,7 +267,7 @@ describe("safeResolveBin", function() {
       var layout = makeLayout(root, "juggernaut-bedrock-win32-x64");
       var rogueDir = path.join(root, "rogue");
       fs.mkdirSync(rogueDir, {recursive: true}); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
-      fs.copyFileSync(layout.bin, path.join(rogueDir, "juggernaut"));
+      fs.copyFileSync(layout.bin, path.join(rogueDir, "juggernaut")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename -- test fixture under mkdtemp/tmpdir roots
       assert.throws(function() {
         safeResolveBin(path.join(rogueDir, "juggernaut"), layout.platformDir);
       }, /escapes|outside/i);
