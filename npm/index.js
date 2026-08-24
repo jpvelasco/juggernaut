@@ -72,15 +72,19 @@ function getBinaryPath(pkgName, platform) {
 
 /**
  * Resolves bin to a real absolute path and asserts it stays within
- * __dirname, preventing any tainted or traversed path from executing.
+ * allowedBase — the directory of the allowlisted platform package that owns
+ * the binary. Callers pass resolvePkgDir(pkg), where pkgName is validated
+ * against VALID_PACKAGES, so only a binary belonging to that known package
+ * can execute.
  * @param {string} binPath
+ * @param {string} allowedBase owning platform package directory
  * @returns {string}
  */
-function safeResolveBin(binPath) {
+function safeResolveBin(binPath, allowedBase) {
   var real = fs.realpathSync(binPath); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
-  var base = fs.realpathSync(__dirname); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  var base = fs.realpathSync(allowedBase); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   if (!real.startsWith(base + path.sep) && real !== base) {
-    throw new Error("binary path escapes package directory: " + real);
+    throw new Error("binary path escapes " + allowedBase + ": " + real);
   }
   return real;
 }
@@ -106,7 +110,8 @@ function isLongRunningLaunch(args) {
  * long-running Windows launch. Windows locks a running .exe; running this copy
  * leaves npm free to replace or remove the installed package during a session.
  *
- * Safety: `bin` is validated by safeResolveBin (realpath'd + under __dirname).
+ * Safety: `bin` is validated by safeResolveBin (realpath'd + under the owning
+ * platform package dir).
  * The temp dir is OS-generated via mkdtempSync (unique, unpredictable suffix).
  * The staged filename is a fixed constant. No user input reaches any path.
  *
@@ -181,14 +186,14 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  var bin = safeResolveBin(binRaw);
+  var bin = safeResolveBin(binRaw, resolvePkgDir(pkg));
   var rootVersion = readPkgVersion(path.join(__dirname, "package.json"));
   // Read the version from the package that owns the binary we just validated,
   // not by re-resolving `pkg` independently — so the skew check compares the
   // version of the exact binary we are about to execute. `bin` was realpath'd
-  // and asserted to be contained under __dirname by safeResolveBin above, so
-  // binPkgDir is derived from an already-validated path (the path-join finding
-  // below is a false positive on that basis).
+  // and asserted to be contained under the owning platform package directory
+  // by safeResolveBin above, so binPkgDir is derived from an already-validated
+  // path.
   var binPkgDir = path.dirname(path.dirname(bin));
   var binVersion = readPkgVersion(path.join(binPkgDir, "package.json")); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   if (!versionsMatch(rootVersion, binVersion)) {
@@ -243,5 +248,6 @@ module.exports = {
   safeForwardArgs: safeForwardArgs,
   isLongRunningLaunch: isLongRunningLaunch,
   stageLaunchBinary: stageLaunchBinary,
-  versionsMatch: versionsMatch
+  versionsMatch: versionsMatch,
+  safeResolveBin: safeResolveBin
 };
