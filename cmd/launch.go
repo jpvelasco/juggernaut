@@ -17,7 +17,11 @@ var launchCmd = &cobra.Command{
 	Short:              "Launch a CLI (default: Claude Code) with Juggernaut Bedrock activation",
 	Hidden:             true,
 	DisableFlagParsing: true,
-	RunE:               runLaunch,
+	// Passthrough exec: the child's output and exit status are the result, so
+	// never print cobra's "Error:" line or usage dump around them.
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE:          runLaunch,
 }
 
 // launchCLICmd gives non-Claude activation blocks a version-skew-safe entry
@@ -28,6 +32,8 @@ var launchCLICmd = &cobra.Command{
 	Short:              "Launch a named CLI with Juggernaut Bedrock activation",
 	Hidden:             true,
 	DisableFlagParsing: true,
+	SilenceUsage:       true,
+	SilenceErrors:      true,
 	RunE:               runLaunchCLI,
 }
 

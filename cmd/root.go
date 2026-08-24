@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -20,6 +22,13 @@ var rootCmd = &cobra.Command{
 // Execute is the main entry point for the CLI.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		// Launched CLIs pass through this process: their exit status IS the
+		// result. Propagate it verbatim instead of collapsing every failure
+		// to 1 with "exit status N" noise — scripts key on those codes.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
