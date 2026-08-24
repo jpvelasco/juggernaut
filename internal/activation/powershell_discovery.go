@@ -99,27 +99,16 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 	}
 	result := ProfileResolverResult{}
 
-	// Resolve the base directory for path containment validation.
-	// This prevents PowerShell from returning paths that escape the
-	// user's home directory (e.g. UNC paths, symlink escapes).
-	// Use the Known Documents folder when available (it may be under
-	// OneDrive or another redirected location); fall back to $HOME.
-	baseDir := home
-	docs, err := resolveDocumentsFolder()
-	if err == nil {
-		// Ensure the Documents folder is under $HOME; if it is, use it
-		// as the tighter containment boundary.
-		rel, relErr := filepath.Rel(home, docs)
-		if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			baseDir = docs
-		}
-	}
-
-	// Primary Documents tree (Known Folder, or $HOME/Documents). Used for
-	// install fallback so we never write activation into every alternate
-	// Documents layout — only the one Windows currently points at.
+	// Resolve the trusted containment roots for path validation.
+	// This prevents PowerShell from returning paths that escape the user's
+	// profile tree (e.g. UNC paths, symlink escapes). Two roots are trusted:
+	// $HOME and the OS-resolved Documents Known Folder, which domain folder
+	// redirection may place outside $HOME entirely. Fall back to $HOME-only
+	// when the Known Folder API is unavailable.
+	docsRoot := ""
 	primaryDocs := filepath.Join(home, "Documents")
 	if docs, err := resolveDocumentsFolder(); err == nil && docs != "" {
+		docsRoot = docs
 		primaryDocs = docs
 	}
 	primaryHistorical := resolveHistoricalTargets(primaryDocs)
@@ -138,8 +127,8 @@ func discoverPowerShellProfilesScoped(home string) ProfileResolverResult {
 
 		if dr.DiscoveryOK {
 			result.EditionsDiscovered = append(result.EditionsDiscovered, ed.Name)
-			allHosts := validateAndCanonicalizePath(dr.AllHosts, baseDir)
-			currentHost := validateAndCanonicalizePath(dr.CurrentHost, baseDir)
+			allHosts := validateUnderTrustedRoots(dr.AllHosts, home, docsRoot)
+			currentHost := validateUnderTrustedRoots(dr.CurrentHost, home, docsRoot)
 
 			if allHosts != "" && !containsTargetPathCI(result.ActiveTargets, allHosts) {
 				result.ActiveTargets = append(result.ActiveTargets,
