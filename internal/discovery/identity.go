@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -72,8 +73,55 @@ func CredentialScope(home string) (string, error) {
 			}
 			writeHashField(hash, "contents", string(data))
 		}
+		hashSSOCache(hash, home)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// hashSSOCache folds the aws-cli SSO token cache (~/.aws/sso/cache) into the
+// credential fingerprint. Switching accounts in the SSO portal refreshes that
+// cache while leaving ~/.aws/config and credentials untouched, so without it
+// the scope cannot distinguish accounts and apply/doctor would serve another
+// account's cached model inventory. Contents are hashed with sorted relative
+// paths for determinism; a missing directory hashes as an explicit marker.
+func hashSSOCache(hash hashWriter, home string) {
+	dir := filepath.Join(home, ".aws", "sso", "cache")
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		writeHashField(hash, "sso-cache", "<absent>")
+		return
+	}
+
+	type cachedFile struct{ rel, body string }
+	var files []cachedFile
+	walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			files = append(files, cachedFile{rel: path, body: "<walk-error: " + err.Error() + ">"})
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			rel = path
+		}
+		data, readErr := os.ReadFile(path) // #nosec G304 -- path is walked from a fixed root, not user input
+		if readErr != nil {
+			files = append(files, cachedFile{rel: rel, body: "<read-error: " + readErr.Error() + ">"})
+			return nil
+		}
+		files = append(files, cachedFile{rel: rel, body: string(data)})
+		return nil
+	})
+	if walkErr != nil {
+		writeHashField(hash, "sso-cache-walk-error", walkErr.Error())
+		return
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].rel < files[j].rel })
+	for _, f := range files {
+		writeHashField(hash, "sso-cache:"+f.rel, f.body)
+	}
 }
 
 type hashWriter interface {

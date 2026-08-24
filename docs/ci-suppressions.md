@@ -26,6 +26,7 @@ adding or removing suppressions.
 | --- | --- | --- | --- |
 | `internal/activation/artifact.go:59,97` | `#nosec G703,G501` + `nosemgrep go_filesystem_rule-fileread` | file-read of a variable path | Reads candidate v4.2.6 shim paths resolved from `binDir` + fixed name lists; read-only, errors handled. |
 | `internal/activation/launch.go:212,224` | `#nosec G703` | os.Stat on variable path | Candidates come from PATH/known config paths; both Stat errors are handled. |
+| `internal/discovery/identity.go` (`hashSSOCache`) | `#nosec G304` | os.ReadFile on variable path | Path is produced by `filepath.WalkDir` under the fixed `~/.aws/sso/cache` root (not user input); read errors fold into the fingerprint instead of failing. |
 | `internal/activation/launch.go:297` | `nosemgrep dangerous-exec-command` | exec with a variable command | Executes the real CLI binary resolved by `resolveBinaryFrom`, which skips the Juggernaut binary itself and known v4.2.6 artifacts; a fixed name would break the launch contract. |
 | `internal/activation/powershell_discovery.go:52` | `nosemgrep dangerous-exec-command` | exec with a variable command | `exe` comes from a fixed candidate list (`pwsh.exe`/`powershell.exe`) with fixed script args; the selection loop requires a variable. |
 | `internal/keychain/crypter_windows.go:53,67,77` | `#nosec G115,G103` + `nosemgrep use-of-unsafe-block` | integer conversion / unsafe | DPAPI `DATA_BLOB` marshalling requires `unsafe`; sizes are bounded by the keychain limit well under 4GB. |
