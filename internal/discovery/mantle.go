@@ -24,6 +24,14 @@ type requestSigner func(context.Context, *http.Request) error
 
 var mantleHTTPClient httpDoer = http.DefaultClient
 
+// mantleRequestTimeout bounds each Mantle catalog fetch even when the caller
+// passes a context without a deadline (cmd callers pass cmd.Context()).
+// Without it, a black-holed connection — VPN drop, DROP-mode firewall,
+// stalled TLS handshake — hangs `models refresh` indefinitely. Mirrors
+// bedrock connectivity's client timeout for the same class of probe.
+// Test-visible so the bound can be tightened without real network waits.
+var mantleRequestTimeout = 15 * time.Second
+
 // ListMantleModels queries the account- and region-specific Mantle Models API.
 // A bearer token is used when supplied; otherwise the request is SigV4-signed
 // with the default AWS credential chain and service name "bedrock-mantle".
@@ -56,6 +64,8 @@ func listMantleModelsWith(
 	client httpDoer,
 	sign requestSigner,
 ) ([]DiscoveredModel, error) {
+	ctx, cancel := context.WithTimeout(ctx, mantleRequestTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating Mantle models request: %w", err)
