@@ -73,25 +73,3 @@ func validateAndCanonicalizePath(p, baseDir string) string {
 	}
 	return p
 }
-
-// validateUnderTrustedRoots canonicalizes p via validateAndCanonicalizePath
-// and accepts it when it falls under ANY of the given OS-trusted roots.
-// PowerShell profiles legitimately live under $HOME or under the Documents
-// Known Folder (which domain redirection may place outside $HOME), while
-// hostile PowerShell output escaping both is rejected.
-func validateUnderTrustedRoots(p string, roots ...string) string {
-	hasRoot := false
-	for _, root := range roots {
-		if root == "" {
-			continue
-		}
-		hasRoot = true
-		if v := validateAndCanonicalizePath(p, root); v != "" {
-			return v
-		}
-	}
-	if !hasRoot {
-		return validateAndCanonicalizePath(p, "")
-	}
-	return ""
-}
