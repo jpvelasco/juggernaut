@@ -63,8 +63,9 @@ func TestWrite_RenameFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("JoinUnder: %v", err)
 	}
-	_ = os.MkdirAll(readonlyDir, 0o555) //nolint:gosec // test-only — intentionally read-only dir to test write-failure path
-	defer func() { _ = os.Chmod(readonlyDir, 0o700) }()
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission,go_file-permissions_rule-mkdir -- test-only, intentionally read-only dir to test write-failure path
+	_ = os.MkdirAll(readonlyDir, 0o555)                 //nolint:gosec // test-only — intentionally read-only dir to test write-failure path
+	defer func() { _ = os.Chmod(readonlyDir, 0o700) }() // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- restore perms for cleanup
 
 	path, err := safepath.JoinUnder(readonlyDir, "settings.json")
 	if err != nil {

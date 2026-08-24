@@ -1492,7 +1492,7 @@ func TestReportLegacyRecovery_ErrorPath(t *testing.T) {
 	if err := os.Chmod(binDir, 0o000); err != nil {
 		t.Skipf("cannot chmod (not root): %v", err)
 	}
-	defer func() { _ = os.Chmod(binDir, 0o700) }() // restore for cleanup
+	defer func() { _ = os.Chmod(binDir, 0o700) }() // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission,go_file-permissions_rule-fileperm -- restore dir perms for cleanup
 
 	// reportLegacyRecovery prints to stderr on error; stdout should be empty.
 	out := captureStdout(t, func() {

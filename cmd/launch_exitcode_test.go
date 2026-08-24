@@ -39,6 +39,7 @@ func writeClaudeStub(t *testing.T, dir string, code int) {
 		stub = filepath.Join(dir, "claude")
 		body = "#!/bin/sh\nexit " + strconv.Itoa(code) + "\n"
 	}
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission,go_file-permissions_rule-fileperm -- executable stub needs 0o755
 	if err := os.WriteFile(stub, []byte(body), 0o755); err != nil { // #nosec G306 -- stub must be executable
 		t.Fatalf("writing claude stub: %v", err)
 	}
@@ -51,7 +52,7 @@ func writeClaudeStub(t *testing.T, dir string, code int) {
 func TestExecute_PropagatesLaunchedCLIExitCode(t *testing.T) {
 	home := t.TempDir()
 	stubDir := filepath.Join(home, "bin")
-	if err := os.MkdirAll(stubDir, 0o755); err != nil {
+	if err := os.MkdirAll(stubDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- owner-only temp dir
 		t.Fatal(err)
 	}
 	writeClaudeStub(t, stubDir, 2)
@@ -65,6 +66,7 @@ func TestExecute_PropagatesLaunchedCLIExitCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("locating test binary: %v", err)
 	}
+	// nosemgrep: go_subproc_rule-subproc,go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- fixed os.Executable() target
 	out, err := exec.Command(exe).CombinedOutput() // #nosec G204 -- spawns this test binary in wrapper-child mode
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) {
