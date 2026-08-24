@@ -11,10 +11,16 @@ import (
 
 type stalledDoer struct{ delay time.Duration }
 
-func (d stalledDoer) Do(*http.Request) (*http.Response, error) {
-	time.Sleep(d.delay)
-	body := io.NopCloser(strings.NewReader(`{"data":[{"id":"anthropic.claude-sonnet-4-5"}]}`))
-	return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+func (d stalledDoer) Do(req *http.Request) (*http.Response, error) {
+	timer := time.NewTimer(d.delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		body := io.NopCloser(strings.NewReader(`{"data":[{"id":"anthropic.claude-sonnet-4-5"}]}`))
+		return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+	case <-req.Context().Done():
+		return nil, req.Context().Err()
+	}
 }
 
 // Given the Mantle endpoint stalls (VPN black-hole, DROP-mode firewall),
