@@ -41,6 +41,11 @@ func TestApply_AcceptsExactAuthModes(t *testing.T) {
 	for _, mode := range []string{authmode.IAM, authmode.BedrockAPIKey} {
 		t.Run(mode, func(t *testing.T) {
 			home := setupApplyTestWithReset(t)
+			if mode == authmode.BedrockAPIKey {
+				// The api-key apply persists a credential; isolate the
+				// keychain so CI never touches (or hangs on) a live backend.
+				setupIsolatedKeychain(t)
+			}
 			args := []string{
 				"apply", "--cli=claude", "--scope=user", "--region=us-west-2",
 				"--skip-preflight", "--auth=" + mode,
