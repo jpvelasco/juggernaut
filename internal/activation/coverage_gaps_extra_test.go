@@ -538,10 +538,7 @@ func TestSpecOrClaude_Populated(t *testing.T) {
 func TestAuthModes_ReturnsExpectedModes(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	writeSettings(t, home, authmode.IAM)
-	modes, err := authModes(home)
-	if err != nil {
-		t.Fatalf("authModes error: %v", err)
-	}
+	modes := authModes(home, nil)
 	if len(modes) == 0 {
 		t.Fatal("expected at least one auth mode")
 	}
