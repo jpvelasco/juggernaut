@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -72,8 +73,63 @@ func CredentialScope(home string) (string, error) {
 			}
 			writeHashField(hash, "contents", string(data))
 		}
+		hashSSOCache(hash, home)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// hashSSOCache folds the aws-cli SSO token cache (~/.aws/sso/cache) into the
+// credential fingerprint. Switching accounts in the SSO portal refreshes that
+// cache while leaving ~/.aws/config and credentials untouched, so without it
+// the scope cannot distinguish accounts and apply/doctor would serve another
+// account's cached model inventory. Relative paths are collected first, then
+// read outside the walk (no filesystem operations inside the WalkDir
+// callback), and sorted for deterministic hashing. Read errors fold into the
+// fingerprint instead of failing; a missing directory hashes as an explicit
+// marker.
+func hashSSOCache(hash hashWriter, home string) {
+	dir := filepath.Join(home, ".aws", "sso", "cache")
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		writeHashField(hash, "sso-cache", "<absent>")
+		return
+	}
+
+	type ssoCacheEntry struct {
+		rel     string
+		walkErr string
+	}
+	var entries []ssoCacheEntry
+	// Walk errors surface through the callback (including a failed root
+	// listing) and fold into the fingerprint like any other entry.
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			entries = append(entries, ssoCacheEntry{rel: path, walkErr: err.Error()})
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		// path is walked beneath dir, so Rel always succeeds.
+		rel, _ := filepath.Rel(dir, path)
+		entries = append(entries, ssoCacheEntry{rel: rel})
+		return nil
+	})
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
+	for _, entry := range entries {
+		switch {
+		case entry.walkErr != "":
+			writeHashField(hash, "sso-cache:"+entry.rel, "<walk-error: "+entry.walkErr+">")
+		default:
+			data, readErr := os.ReadFile(filepath.Join(dir, entry.rel))
+			if readErr != nil {
+				writeHashField(hash, "sso-cache:"+entry.rel, "<read-error: "+readErr.Error()+">")
+				continue
+			}
+			writeHashField(hash, "sso-cache:"+entry.rel, string(data))
+		}
+	}
 }
 
 type hashWriter interface {
