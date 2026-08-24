@@ -142,6 +142,20 @@ func resolveMantle() (bool, error) {
 	return applyFlags.mantle || applyFlags.mantleURL != "", nil
 }
 
+// validateAuthFlag rejects unknown --auth values up front. Every downstream
+// consumer compares the mode by exact string, so a typo would otherwise fall
+// into the IAM path, silently drop --bedrock-key, and still write a config
+// reporting success.
+func validateAuthFlag() error {
+	if applyFlags.auth == "" ||
+		applyFlags.auth == authmode.IAM ||
+		authmode.IsBedrockAPIKey(applyFlags.auth) {
+		return nil
+	}
+	return fmt.Errorf("unknown --auth mode %q; valid modes are %q and %q",
+		applyFlags.auth, authmode.IAM, authmode.BedrockAPIKey)
+}
+
 // validateMantleAuth ensures that Mantle-only CLIs (Codex, OpenCode, Grok)
 // use a Bedrock API key — IAM/SSO (SigV4) does not reach Mantle. Rejects
 // non-bearer auth modes so we never write a config that can't authenticate.
