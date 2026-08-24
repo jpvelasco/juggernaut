@@ -57,9 +57,11 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 	removeRuntimeState(home, prov)
 	// The Bedrock bearer token is SHARED across all CLIs, so removing it on a
 	// per-CLI uninstall would break any other CLI still configured. Only remove
-	// it when uninstalling Claude (the primary). `--full` broadens shell-block
-	// removal, NOT shared-credential removal.
-	if !uninstallFlags.dryRun && prov.Name() == "claude" {
+	// it when uninstalling Claude (the primary) — and never on a scoped
+	// partial removal: --scope=project must leave the credential that
+	// user-scope Claude and non-Claude providers still reference. `--full`
+	// broadens shell-block removal, NOT shared-credential removal.
+	if !uninstallFlags.dryRun && prov.Name() == "claude" && uninstallFlags.scope != "project" {
 		removeKeychainToken(home)
 	}
 	if uninstallFlags.full {
