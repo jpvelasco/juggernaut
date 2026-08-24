@@ -166,6 +166,43 @@ function readPkgVersion(pkgJsonPath) {
     return void 0;
   }
 }
+var SIGNAL_NUMBERS = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGQUIT: 3,
+  SIGKILL: 9,
+  SIGTERM: 15
+};
+
+/**
+ * Describes a spawnSync outcome for the launcher's exit path.
+ * - result.error: the binary could not be launched (AV lock, EACCES, racing
+ *   upgrade). Without this branch the launcher would exit 1 printing nothing,
+ *   indistinguishable from a normal CLI failure.
+ * - result.signal: the child died from a signal; reported via the POSIX
+ *   convention 128+signum so scripts can distinguish it from a normal exit.
+ * @param {{status:number|null, signal:string|null, error:Error|null}} result
+ * @returns {{exitCode:number, message:string}} message is "" when the child
+ * ran and exited normally (no extra output).
+ */
+function describeSpawnOutcome(result) {
+  if (result.error) {
+    var code = result.error.code ? result.error.code + " " : "";
+    return {
+      exitCode: 1,
+      message: "juggernaut-bedrock: failed to launch binary: " + code + result.error.message
+    };
+  }
+  if (result.signal) {
+    var signum = SIGNAL_NUMBERS[result.signal];
+    return {
+      exitCode: signum ? 128 + signum : 1,
+      message: "juggernaut-bedrock: binary terminated by signal " + result.signal
+    };
+  }
+  return {exitCode: result.status !== null && result.status !== undefined ? result.status : 1, message: ""};
+}
+
 if (require.main === module) {
   var pkg = getPlatformPackage(process.platform, process.arch);
   if (!pkg) {
@@ -238,7 +275,11 @@ if (require.main === module) {
       }
     }
   }
-  process.exit(result.status !== null ? result.status : 1);
+  var outcome = describeSpawnOutcome(result);
+  if (outcome.message) {
+    process.stderr.write(outcome.message + "\n");
+  }
+  process.exit(outcome.exitCode);
 }
 
 module.exports = {
@@ -249,5 +290,6 @@ module.exports = {
   isLongRunningLaunch: isLongRunningLaunch,
   stageLaunchBinary: stageLaunchBinary,
   versionsMatch: versionsMatch,
-  safeResolveBin: safeResolveBin
+  safeResolveBin: safeResolveBin,
+  describeSpawnOutcome: describeSpawnOutcome
 };
