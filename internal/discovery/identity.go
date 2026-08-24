@@ -82,8 +82,11 @@ func CredentialScope(home string) (string, error) {
 // credential fingerprint. Switching accounts in the SSO portal refreshes that
 // cache while leaving ~/.aws/config and credentials untouched, so without it
 // the scope cannot distinguish accounts and apply/doctor would serve another
-// account's cached model inventory. Contents are hashed with sorted relative
-// paths for determinism; a missing directory hashes as an explicit marker.
+// account's cached model inventory. Relative paths are collected first, then
+// read outside the walk (no filesystem operations inside the WalkDir
+// callback), and sorted for deterministic hashing. Read errors fold into the
+// fingerprint instead of failing; a missing directory hashes as an explicit
+// marker.
 func hashSSOCache(hash hashWriter, home string) {
 	dir := filepath.Join(home, ".aws", "sso", "cache")
 	info, err := os.Stat(dir)
@@ -92,11 +95,14 @@ func hashSSOCache(hash hashWriter, home string) {
 		return
 	}
 
-	type cachedFile struct{ rel, body string }
-	var files []cachedFile
+	type ssoCacheEntry struct {
+		rel     string
+		walkErr string
+	}
+	var entries []ssoCacheEntry
 	walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			files = append(files, cachedFile{rel: path, body: "<walk-error: " + err.Error() + ">"})
+			entries = append(entries, ssoCacheEntry{rel: path, walkErr: err.Error()})
 			return nil
 		}
 		if d.IsDir() {
@@ -106,21 +112,27 @@ func hashSSOCache(hash hashWriter, home string) {
 		if relErr != nil {
 			rel = path
 		}
-		data, readErr := os.ReadFile(path) // #nosec G304 -- path is walked from a fixed root, not user input
-		if readErr != nil {
-			files = append(files, cachedFile{rel: rel, body: "<read-error: " + readErr.Error() + ">"})
-			return nil
-		}
-		files = append(files, cachedFile{rel: rel, body: string(data)})
+		entries = append(entries, ssoCacheEntry{rel: rel})
 		return nil
 	})
 	if walkErr != nil {
 		writeHashField(hash, "sso-cache-walk-error", walkErr.Error())
 		return
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].rel < files[j].rel })
-	for _, f := range files {
-		writeHashField(hash, "sso-cache:"+f.rel, f.body)
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
+	for _, entry := range entries {
+		switch {
+		case entry.walkErr != "":
+			writeHashField(hash, "sso-cache:"+entry.rel, "<walk-error: "+entry.walkErr+">")
+		default:
+			data, readErr := os.ReadFile(filepath.Join(dir, entry.rel))
+			if readErr != nil {
+				writeHashField(hash, "sso-cache:"+entry.rel, "<read-error: "+readErr.Error()+">")
+				continue
+			}
+			writeHashField(hash, "sso-cache:"+entry.rel, string(data))
+		}
 	}
 }
 

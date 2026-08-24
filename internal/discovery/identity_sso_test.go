@@ -79,3 +79,38 @@ func TestCredentialScope_IncludesSSOCacheContents(t *testing.T) {
 		t.Fatal("scope drifted without any input change")
 	}
 }
+
+// Given a cache entry that cannot be read (broken symlink),
+// When the fingerprint is computed,
+// Then the unreadable entry folds in deterministically instead of failing.
+func TestCredentialScope_SSOCacheUnreadableEntryFoldsIn(t *testing.T) {
+	home := testhome.NewTestHome(t)
+	clearSSORelevantEnv(t)
+	ssoCacheFile(t, home, "good.json", `{"accountId":"111122223333"}`)
+
+	broken := filepath.Join(home, ".aws", "sso", "cache", "broken.json")
+	if err := os.Symlink(filepath.Join(home, ".aws", "sso", "cache", "missing"), broken); err != nil {
+		t.Skipf("symlinks unavailable on this platform: %v", err)
+	}
+
+	first, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("scope with unreadable cache entry: %v", err)
+	}
+	second, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("stable rescope with unreadable entry: %v", err)
+	}
+	if first != second {
+		t.Fatal("scope drifted while the unreadable entry stayed constant")
+	}
+
+	ssoCacheFile(t, home, "another.json", `{}`)
+	third, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("rescope after cache change: %v", err)
+	}
+	if third == first {
+		t.Fatal("readable-entry change did not alter the scope alongside an unreadable one")
+	}
+}
