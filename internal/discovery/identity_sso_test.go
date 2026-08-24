@@ -80,6 +80,41 @@ func TestCredentialScope_IncludesSSOCacheContents(t *testing.T) {
 	}
 }
 
+// Given an SSO cache entry that is a symlink escaping the cache directory,
+// When the outside file's contents change,
+// Then the credential scope must not move — cache reads must stay contained
+// in the SSO cache root, so hostile or stray links cannot steer the
+// fingerprint to arbitrary files.
+func TestCredentialScope_SSOCacheSymlinkEscapeIsContained(t *testing.T) {
+	home := testhome.NewTestHome(t)
+	clearSSORelevantEnv(t)
+	ssoCacheFile(t, home, "inside.json", `{"accountId":"A1111222233"}`)
+
+	outside := filepath.Join(home, "outside-secret.txt")
+	if err := os.WriteFile(outside, []byte("AAA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, ".aws", "sso", "cache", "leak.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable on this platform: %v", err)
+	}
+
+	beforeLeakChange, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("scope with escaped symlink entry: %v", err)
+	}
+	if err := os.WriteFile(outside, []byte("BBB"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	afterLeakChange, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("rescope after outside change: %v", err)
+	}
+	if beforeLeakChange != afterLeakChange {
+		t.Fatal("outside content leaked into the fingerprint via a symlinked cache entry")
+	}
+}
+
 // Given a cache entry that cannot be read (broken symlink),
 // When the fingerprint is computed,
 // Then the unreadable entry folds in deterministically instead of failing.
