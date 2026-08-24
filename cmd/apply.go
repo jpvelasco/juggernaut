@@ -117,6 +117,12 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Fail fast on a typo'd mode before reading or writing any state, so an
+	// invalid value can never produce a "successful" broken config.
+	if err := validateAuthFlag(); err != nil {
+		return err
+	}
+
 	prov, err := provider.Get(applyFlags.cli)
 	if err != nil {
 		return err
