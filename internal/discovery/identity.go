@@ -89,11 +89,12 @@ func CredentialScope(home string) (string, error) {
 // marker.
 func hashSSOCache(hash hashWriter, home string) {
 	dir := filepath.Join(home, ".aws", "sso", "cache")
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
 		writeHashField(hash, "sso-cache", "<absent>")
 		return
 	}
+	defer root.Close()
 
 	type ssoCacheEntry struct {
 		rel     string
@@ -122,7 +123,10 @@ func hashSSOCache(hash hashWriter, home string) {
 		case entry.walkErr != "":
 			writeHashField(hash, "sso-cache:"+entry.rel, "<walk-error: "+entry.walkErr+">")
 		default:
-			data, readErr := os.ReadFile(filepath.Join(dir, entry.rel))
+			// Root-scoped read: symlinks and traversal inside a cache entry
+			// are refused, so the fingerprint can only ever hash bytes that
+			// genuinely live in the SSO cache directory.
+			data, readErr := root.ReadFile(entry.rel)
 			if readErr != nil {
 				writeHashField(hash, "sso-cache:"+entry.rel, "<read-error: "+readErr.Error()+">")
 				continue

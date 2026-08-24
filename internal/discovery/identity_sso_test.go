@@ -25,7 +25,7 @@ func clearSSORelevantEnv(t *testing.T) {
 func ssoCacheFile(t *testing.T, home, name, body string) {
 	t.Helper()
 	dir := filepath.Join(home, ".aws", "sso", "cache")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- owner-only temp fixture dir
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
@@ -46,7 +46,7 @@ func TestCredentialScope_IncludesSSOCacheContents(t *testing.T) {
 		t.Fatalf("scope without sso cache: %v", err)
 	}
 
-	ssoCacheFile(t, home, "account-a.json", `{"accountId":"111122223333"}`)
+	ssoCacheFile(t, home, "account-a.json", `{"accountId":"A1111222233"}`)
 
 	afterLoginA, err := CredentialScope(home)
 	if err != nil {
@@ -59,7 +59,7 @@ func TestCredentialScope_IncludesSSOCacheContents(t *testing.T) {
 	// Given the user switches accounts in the SSO portal,
 	// When aws-cli refreshes the cache for account B,
 	// Then the scope must change so stale account-A caches are not served.
-	ssoCacheFile(t, home, "account-b.json", `{"accountId":"444455556666"}`)
+	ssoCacheFile(t, home, "account-b.json", `{"accountId":"B4444555566"}`)
 	afterSwitchB, err := CredentialScope(home)
 	if err != nil {
 		t.Fatalf("scope with account B: %v", err)
@@ -80,13 +80,48 @@ func TestCredentialScope_IncludesSSOCacheContents(t *testing.T) {
 	}
 }
 
+// Given an SSO cache entry that is a symlink escaping the cache directory,
+// When the outside file's contents change,
+// Then the credential scope must not move — cache reads must stay contained
+// in the SSO cache root, so hostile or stray links cannot steer the
+// fingerprint to arbitrary files.
+func TestCredentialScope_SSOCacheSymlinkEscapeIsContained(t *testing.T) {
+	home := testhome.NewTestHome(t)
+	clearSSORelevantEnv(t)
+	ssoCacheFile(t, home, "inside.json", `{"accountId":"A1111222233"}`)
+
+	outside := filepath.Join(home, "outside-secret.txt")
+	if err := os.WriteFile(outside, []byte("AAA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, ".aws", "sso", "cache", "leak.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable on this platform: %v", err)
+	}
+
+	beforeLeakChange, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("scope with escaped symlink entry: %v", err)
+	}
+	if err := os.WriteFile(outside, []byte("BBB"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	afterLeakChange, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("rescope after outside change: %v", err)
+	}
+	if beforeLeakChange != afterLeakChange {
+		t.Fatal("outside content leaked into the fingerprint via a symlinked cache entry")
+	}
+}
+
 // Given a cache entry that cannot be read (broken symlink),
 // When the fingerprint is computed,
 // Then the unreadable entry folds in deterministically instead of failing.
 func TestCredentialScope_SSOCacheUnreadableEntryFoldsIn(t *testing.T) {
 	home := testhome.NewTestHome(t)
 	clearSSORelevantEnv(t)
-	ssoCacheFile(t, home, "good.json", `{"accountId":"111122223333"}`)
+	ssoCacheFile(t, home, "good.json", `{"accountId":"A1111222233"}`)
 
 	broken := filepath.Join(home, ".aws", "sso", "cache", "broken.json")
 	if err := os.Symlink(filepath.Join(home, ".aws", "sso", "cache", "missing"), broken); err != nil {
