@@ -210,3 +210,70 @@ describe("versionsMatch", function() {
   });
   return void 0;
 });
+
+describe("safeResolveBin", function() {
+  var safeResolveBin = index.safeResolveBin;
+
+  function makeLayout(root, pkgName) {
+    // Flat node_modules layout produced by local installs, npx cache runs,
+    // pnpm, and yarn: platform package is a SIBLING of the launcher dir.
+    var launcherDir = path.join(root, "node_modules", "juggernaut-bedrock");
+    var platformDir = path.join(root, "node_modules", pkgName);
+    fs.mkdirSync(path.join(platformDir, "bin"), {recursive: true});
+    fs.writeFileSync(path.join(platformDir, "bin", "juggernaut"), "#stub\n");
+    return {launcherDir: launcherDir, platformDir: platformDir,
+      bin: path.join(platformDir, "bin", "juggernaut")};
+  }
+
+  // Given the documented non-global install flows (npx, project-local, pnpm),
+  // When the resolved binary lives in the sibling platform package,
+  // Then safeResolveBin must accept it when containment is checked against
+  // that owning platform package directory.
+  it("accepts sibling-layout binary under its own platform package", function() {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "jug-sibling-"));
+    try {
+      var layout = makeLayout(root, "juggernaut-bedrock-win32-x64");
+      var resolved = safeResolveBin(layout.bin, layout.platformDir);
+      assert.strictEqual(resolved, fs.realpathSync(layout.bin));
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  // Given a global install where optionals nest inside the launcher tree,
+  // When the binary resolves within the platform package there,
+  // Then it must be accepted.
+  it("accepts nested-layout binary under its own platform package", function() {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "jug-nested-"));
+    try {
+      var layout = makeLayout(root, "juggernaut-bedrock-darwin-arm64");
+      var nested = path.join(layout.launcherDir, "node_modules",
+        "juggernaut-bedrock-darwin-arm64");
+      fs.mkdirSync(path.join(nested, "bin"), {recursive: true});
+      fs.copyFileSync(layout.bin, path.join(nested, "bin", "juggernaut"));
+      var bin = path.join(nested, "bin", "juggernaut");
+      var resolved = safeResolveBin(bin, nested);
+      assert.strictEqual(resolved, fs.realpathSync(bin));
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  // Given any layout, When the binary resolves OUTSIDE the allowlisted
+  // owning package directory, Then it must still be rejected.
+  it("rejects binary outside the owning platform package", function() {
+    var root = fs.mkdtempSync(path.join(os.tmpdir(), "jug-escape-"));
+    try {
+      var layout = makeLayout(root, "juggernaut-bedrock-win32-x64");
+      var rogueDir = path.join(root, "rogue");
+      fs.mkdirSync(rogueDir, {recursive: true});
+      fs.copyFileSync(layout.bin, path.join(rogueDir, "juggernaut"));
+      assert.throws(function() {
+        safeResolveBin(path.join(rogueDir, "juggernaut"), layout.platformDir);
+      }, /escapes|outside/i);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+  return void 0;
+});
