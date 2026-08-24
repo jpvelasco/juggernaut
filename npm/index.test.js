@@ -277,3 +277,46 @@ describe("safeResolveBin", function() {
   });
   return void 0;
 });
+
+describe("describeSpawnOutcome", function() {
+  var describeSpawnOutcome = index.describeSpawnOutcome;
+
+  // Given the wrapped binary cannot be spawned (AV lock, EACCES, racing
+  // upgrade), When the launcher inspects the spawnSync result,
+  // Then it must produce exit code 1 and a diagnostic naming the failure.
+  it("surfaces spawn errors with a diagnostic", function() {
+    var err = new Error("spawn juggernaut EACCES");
+    err.code = "EACCES";
+    var outcome = describeSpawnOutcome({status: null, signal: null, error: err});
+    assert.strictEqual(outcome.exitCode, 1);
+    assert.ok(outcome.message.indexOf("EACCES") !== -1, "message should name the error code");
+    return void 0;
+  });
+
+  // Given the child was killed by a signal, When the outcome is described,
+  // Then it maps to the POSIX convention 128+signum with a note on stderr.
+  it("maps signal deaths to 128+signum", function() {
+    var outcome = describeSpawnOutcome({status: null, signal: "SIGTERM", error: null});
+    assert.strictEqual(outcome.exitCode, 143);
+    assert.ok(outcome.message.indexOf("SIGTERM") !== -1);
+    return void 0;
+  });
+
+  // Given the child ran and exited normally, When the outcome is described,
+  // Then the child's status passes through untouched with no extra output.
+  it("passes normal statuses through untouched", function() {
+    var outcome = describeSpawnOutcome({status: 7, signal: null, error: null});
+    assert.strictEqual(outcome.exitCode, 7);
+    assert.strictEqual(outcome.message, "");
+    return void 0;
+  });
+
+  // Given a degenerate result with no status, signal, or error,
+  // When the outcome is described, Then the launcher exits 1 safely.
+  it("exits 1 for a degenerate result", function() {
+    var outcome = describeSpawnOutcome({status: null, signal: null, error: null});
+    assert.strictEqual(outcome.exitCode, 1);
+    return void 0;
+  });
+  return void 0;
+});
