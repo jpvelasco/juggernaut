@@ -98,9 +98,15 @@ with `auth_provider_command` pointing at `juggernaut auth-token`.
   name matches a managed CLI binary.
 - Activation blocks for different CLIs must coexist in the same shell profile.
 - The Bedrock bearer token is shared across providers. Uninstalling one
-  non-Claude provider must not remove it.
+  non-Claude provider must not remove it, and neither may a Claude
+  `--scope=project` removal while user-scope or non-Claude configs remain.
 - Preserve compatibility for `launch`, `launch-cli`, hidden auth-token behavior,
-  and deprecated flags unless a task explicitly includes a breaking change.
+  deprecated flags, and launched-CLI exit-code passthrough (`Execute()` exits
+  with the wrapped CLI's own status; launch commands silence cobra error/usage
+  output) unless a task explicitly includes a breaking change.
+- `apply --auth` accepts exactly `iam` or `bedrock-api-key` and is validated
+  before any state is written (`validateAuthFlag`), so typos can never produce
+  a "successful" broken config.
 - Claude user-scope apply persists only generated non-secret runtime state;
   project apply must not create global fallback state, bearer tokens must never
   be written there, and user-scope uninstall must remove it.
@@ -140,6 +146,15 @@ family. Quirks worth knowing:
   copy so the repo-root `../bedrock-config.json` fallback is never mutated.
 - Tests never call `t.Parallel()` — `os.Chdir` is a process-global side effect,
   so chdir-based tests are safe only in sequence.
+- `cmd` has a `TestMain` subprocess harness (`cmd/launch_exitcode_test.go`):
+  with `JUGGERNAUT_TEST_WRAPPER_CHILD=1` the test binary re-execs itself as
+  the wrapped CLI so `Execute()`'s exit-status translation can be asserted
+  from a parent. Never set that env var in other tests; new top-level env-var
+  branches belong in that `TestMain` switch.
+- The shared `captureStdout` drains only after `fn()` returns — captured
+  output larger than the OS pipe buffer deadlocks. For large-output captures
+  use a concurrent-drain helper like `captureStreaming`
+  (`cmd/show_order_test.go`).
 
 Tests never call AWS. `cmd/models.go` and `cmd/model_catalog.go` expose their
 discovery calls as package-level function variables so tests can swap them;
