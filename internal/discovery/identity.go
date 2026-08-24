@@ -100,7 +100,9 @@ func hashSSOCache(hash hashWriter, home string) {
 		walkErr string
 	}
 	var entries []ssoCacheEntry
-	walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	// Walk errors surface through the callback (including a failed root
+	// listing) and fold into the fingerprint like any other entry.
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			entries = append(entries, ssoCacheEntry{rel: path, walkErr: err.Error()})
 			return nil
@@ -108,17 +110,11 @@ func hashSSOCache(hash hashWriter, home string) {
 		if d.IsDir() {
 			return nil
 		}
-		rel, relErr := filepath.Rel(dir, path)
-		if relErr != nil {
-			rel = path
-		}
+		// path is walked beneath dir, so Rel always succeeds.
+		rel, _ := filepath.Rel(dir, path)
 		entries = append(entries, ssoCacheEntry{rel: rel})
 		return nil
 	})
-	if walkErr != nil {
-		writeHashField(hash, "sso-cache-walk-error", walkErr.Error())
-		return
-	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
 	for _, entry := range entries {
