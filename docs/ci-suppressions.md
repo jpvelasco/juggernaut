@@ -54,3 +54,6 @@ constant prefix plus `COPYFILE_EXCL`.
 - `internal/activation/artifact.go:92` `//nolint:unused` — `isLegacyClaudeShim`
   is retained for future v4.2.6 artifact recovery; covered by tests, not yet
   called from production code.
+- `cmd/launch_exitcode_test.go` - `#nosec G204` + `nosemgrep go_subproc_rule-subproc,dangerous-exec-command` on the wrapper-child harness spawning `os.Executable()` (the test binary itself) so exit-code propagation through `Execute()` can be asserted.
+- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the launch pipeline to resolve and run them.
+- `internal/config/write_test.go` and `cmd/helpers_test_phases_test.go` - `nosemgrep mkdir/fileperm/incorrect-default-permission` alongside the existing `//nolint:gosec` on the intentional read-only dir and its cleanup chmod restore.

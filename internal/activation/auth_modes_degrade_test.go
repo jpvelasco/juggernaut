@@ -11,7 +11,7 @@ import (
 func writeCorruptClaudeSettings(t *testing.T, home string) {
 	t.Helper()
 	dir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- owner-only temp fixture dir
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte("<<<<<<< merge conflict"), 0o600); err != nil {
@@ -56,7 +56,7 @@ func TestLaunchWithOptions_CorruptSettingsFallsBackToRuntimeState(t *testing.T) 
 	}
 
 	binDir := filepath.Join(home, "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- owner-only temp dir
 		t.Fatal(err)
 	}
 	stubName := "claude"
@@ -64,6 +64,7 @@ func TestLaunchWithOptions_CorruptSettingsFallsBackToRuntimeState(t *testing.T) 
 		stubName = "claude.cmd"
 	}
 	stub := filepath.Join(binDir, stubName)
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission,go_file-permissions_rule-fileperm -- executable stub needs 0o755
 	if err := os.WriteFile(stub, []byte("#!/bin/sh\n"), 0o755); err != nil { // #nosec G306 -- stub must be executable
 		t.Fatal(err)
 	}
