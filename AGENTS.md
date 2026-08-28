@@ -112,6 +112,9 @@ with `auth_provider_command` pointing at `juggernaut auth-token`.
   be written there, and user-scope uninstall must remove it.
 - Keep `VERSION`, `bedrock-config.json`'s `version`, and `cmd/root.go`'s
   `Version` synchronized.
+- Go toolchain is pinned to `go 1.26.6` in `go.mod` (bumped for stdlib
+  vulnerability fixes). Use that exact version; `go mod download` may
+  reject newer patch versions.
 - Do not commit generated binaries, coverage files, or other build artifacts.
 - Mantle is opt-in for standard Bedrock Claude routing; non-Claude providers
   route through Mantle because native Bedrock is Claude-only.
