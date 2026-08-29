@@ -132,7 +132,7 @@ func init() {
 		configFormat:   "toml",
 		binaryName:     "codex",
 		capabilities:   []Capability{CapEffortLevels, CapNativeAuth},
-		catalogSources: []string{"mantle"},
+		catalogSources: []string{"foundation", "profile"},
 	}})
 	register(opencode{BaseProvider: BaseProvider{
 		name:           "opencode",
@@ -147,7 +147,8 @@ func init() {
 		displayName:    "Grok",
 		configFormat:   "toml",
 		binaryName:     "grok",
-		catalogSources: []string{"mantle"},
+		capabilities:   []Capability{CapNativeAuth},
+		catalogSources: []string{"foundation", "profile"},
 	}})
 }
 

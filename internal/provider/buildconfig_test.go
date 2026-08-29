@@ -152,18 +152,14 @@ func TestClaude_Supports(t *testing.T) {
 	}
 }
 
-// TestMantleOnlyCLIs_NoNativeAuth: Grok routes only through Mantle, so must
-// NOT claim CapNativeAuth. OpenCode now supports native via amazon-bedrock.
+// TestMantleOnlyCLIs_NoNativeAuth: after native migration, no CLI is Mantle-only.
+// All CLIs now support CapNativeAuth (IAM) via native bedrock-runtime.
 func TestMantleOnlyCLIs_NoNativeAuth(t *testing.T) {
-	for _, name := range []string{"grok"} {
+	for _, name := range []string{"codex", "opencode", "grok"} {
 		p, _ := Get(name)
-		if p.Supports(CapNativeAuth) {
-			t.Errorf("%s is Mantle-only and must NOT support CapNativeAuth", name)
+		if !p.Supports(CapNativeAuth) {
+			t.Errorf("%s should support CapNativeAuth after native migration", name)
 		}
-	}
-	// OpenCode now supports native (IAM) via built-in amazon-bedrock.
-	if p, _ := Get("opencode"); !p.Supports(CapNativeAuth) {
-		t.Error("opencode should support CapNativeAuth after native migration")
 	}
 }
 
@@ -201,9 +197,7 @@ func TestCodex_Supports(t *testing.T) {
 
 // TestCodex_BuildConfig_AmazonBedrockProvider verifies the Codex plan writes
 // the built-in amazon-bedrock provider shape: model, model_provider, and a
-// nested [model_providers.amazon-bedrock.aws] table with region. This provider
-// ships a model catalog (eliminates "Model metadata not found" warnings and
-// /model 404s that occurred with a custom bedrock-mantle provider).
+// nested [model_providers.amazon-bedrock.aws] table with region.
 func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	p, _ := Get("codex")
 	plan, err := p.BuildConfig(testConfig(), baseOpts())
@@ -213,20 +207,20 @@ func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	if plan.Keys["model_provider"] != "amazon-bedrock" {
 		t.Errorf("model_provider = %v, want amazon-bedrock", plan.Keys["model_provider"])
 	}
-	if plan.Keys["model"] != "openai.gpt-5.5" {
-		t.Errorf("model = %v, want openai.gpt-5.5", plan.Keys["model"])
+	if plan.Keys["model"] != "openai.gpt-5.6-sol" {
+		t.Errorf("model = %v, want openai.gpt-5.6-sol", plan.Keys["model"])
 	}
-	// baseOpts uses the default region us-west-2 (non-explicit). gpt-5.5 is only
-	// in us-east-1/2, so the region auto-switches to us-east-1.
+	// baseOpts uses the default region us-west-2 (non-explicit). sol is available
+	// in us-west-2, so no auto-switch.
 	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
 	if !ok {
 		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
 	}
-	if got := region.(string); got != "us-east-1" {
-		t.Errorf("region = %q, want us-east-1 (auto-switched from default us-west-2)", got)
+	if got := region.(string); got != "us-west-2" {
+		t.Errorf("region = %q, want us-west-2", got)
 	}
-	if len(plan.Warnings) == 0 {
-		t.Error("expected an auto-switch heads-up when the default region can't serve gpt-5.5")
+	if len(plan.Warnings) != 0 {
+		t.Errorf("us-west-2 serves sol and should not warn, got %v", plan.Warnings)
 	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("Codex plan should validate: %v", err)
@@ -243,14 +237,14 @@ func TestCodex_BuildConfig_UnknownModel(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_RegionIronFist: gpt-5.5 is us-east-1/2 only, so ANY
+// TestCodex_BuildConfig_RegionIronFist: sol is us-east-1/2 and us-west-2, so ANY
 // non-serving region — even one the user passed explicitly — is overridden to a
 // known-good region. Juggernaut never writes a config that can't reach the model.
 func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
-	opts.Model = "gpt-5.5"
-	opts.Region = "eu-west-1" // not in gpt-5.5's known regions
+	opts.Model = "sol"
+	opts.Region = "eu-west-1" // not in sol's known regions
 	opts.RegionExplicit = true
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
@@ -297,14 +291,13 @@ func TestCodex_BuildConfig_Region(t *testing.T) {
 
 // TestCodex_BuildConfig_ExplicitServingRegion: when the user explicitly
 // requests a region that serves the model, no warning is emitted and the
-// region is kept as-is. This covers the "happy path" that resolveMantleRegion
-// takes when the explicit region is already in the known set.
+// region is kept as-is.
 func TestCodex_BuildConfig_ExplicitServingRegion(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
 	opts.Region = "us-east-1"
 	opts.RegionExplicit = true
-	opts.Model = "gpt-5.5"
+	opts.Model = "sol"
 	plan, _ := p.BuildConfig(testConfig(), opts)
 	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
 	if !ok {

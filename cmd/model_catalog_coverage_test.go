@@ -461,10 +461,10 @@ func TestProviderSupportsCatalogModel_UsesProviderCheck(t *testing.T) {
 	}{
 		{"claude", "anthropic.claude-opus-4-8", "foundation", true},
 		{"claude", "openai.gpt-5.5", "mantle", false},
-		{"codex", "openai.gpt-5.5", "mantle", true},
+		{"codex", "openai.gpt-5.6-sol", "foundation", true},
 		{"codex", "anthropic.claude-opus-4-8", "foundation", false},
-		{"grok", "xai.grok-4.3", "mantle", true},
-		{"grok", "moonshotai.kimi-k2.5", "mantle", false},
+		{"grok", "xai.grok-4.6", "foundation", true},
+		{"grok", "moonshotai.kimi-k2.5", "foundation", false},
 		{"opencode", "moonshotai.kimi-k2.5", "foundation", true},
 	}
 	for _, tt := range tests {
@@ -485,8 +485,8 @@ func TestCatalogSourcesFor_ReturnsExpected(t *testing.T) {
 		want []string
 	}{
 		{"claude", []string{"foundation", "profile"}},
-		{"codex", []string{"mantle"}},
-		{"grok", []string{"mantle"}},
+		{"codex", []string{"foundation", "profile"}},
+		{"grok", []string{"foundation", "profile"}},
 		{"opencode", []string{"foundation", "profile"}},
 	}
 	for _, tt := range tests {

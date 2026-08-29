@@ -63,53 +63,55 @@ func (c codex) OwnedSubKeys() map[string][]string {
 	return map[string][]string{"model_providers": {"amazon-bedrock.aws.region"}}
 }
 
-// codexMantleModel describes one OpenAI-family model reachable through Bedrock
-// Mantle from Codex. gpt-5.5 hard-rejects chat/completions (Responses-API-only),
-// live-verified 2026-07-03.
-type codexMantleModel struct {
-	ModelID string   // Bedrock Mantle model ID, e.g. "openai.gpt-5.5"
-	Regions []string // regions where live-servable (informational)
+// codexBedrockModel describes one OpenAI-family model reachable through native
+// Bedrock from Codex. Sourced from foundation model verification (2026-08-29).
+type codexBedrockModel struct {
+	ModelID string   // Bedrock foundation model ID, e.g. "openai.gpt-5.6-sol"
+	Regions []string // regions where available (informational)
 }
 
-// codexModels maps a friendly key to its verified Mantle facts. Sourced from AWS
-// model cards + live inference against bedrock-mantle (see mantle-model-matrix).
-var codexModels = map[string]codexMantleModel{
-	"gpt-5.5": {
-		ModelID: "openai.gpt-5.5",
-		Regions: []string{"us-east-1", "us-east-2"},
+// codexModels maps a friendly key to its verified native facts.
+var codexModels = map[string]codexBedrockModel{
+	"sol": {
+		ModelID: "openai.gpt-5.6-sol",
+		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
 	},
-	"gpt-5.4": {
-		ModelID: "openai.gpt-5.4",
+	"terra": {
+		ModelID: "openai.gpt-5.6-terra",
+		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
+	},
+	"luna": {
+		ModelID: "openai.gpt-5.6-luna",
 		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
 	},
 	// NOTE: gpt-oss is intentionally absent. Current Codex is Responses-API-only
-	// (it rejects `wire_api = "chat"` at config load — openai/codex
-	// CHAT_WIRE_API_REMOVED_ERROR), but gpt-oss on Mantle serves only Chat
-	// Completions on /v1 and has no Responses endpoint, so Codex cannot reach it.
+	// (it rejects `wire_api = "chat"` at config load), but gpt-oss on Bedrock
+	// serves only Chat Completions, so Codex cannot reach it.
 	// gpt-oss remains available via OpenCode (which speaks Chat Completions).
 }
 
-func codexModel(key string) (codexMantleModel, bool) {
+func codexModel(key string) (codexBedrockModel, bool) {
 	m, ok := codexModels[key]
 	if ok {
 		return m, true
 	}
-	if strings.HasPrefix(key, "gpt-5.") {
-		return codexMantleModel{ModelID: "openai." + key}, true
+	// Handle full IDs like "openai.gpt-5.6-sol" and short "gpt-5.6-sol"
+	if strings.HasPrefix(key, "gpt-5.6-") {
+		return codexBedrockModel{ModelID: "openai." + key}, true
 	}
-	if strings.HasPrefix(key, "openai.gpt-5.") {
-		return codexMantleModel{ModelID: key}, true
+	if strings.HasPrefix(key, "openai.gpt-5.6-") {
+		return codexBedrockModel{ModelID: key}, true
 	}
 	return m, ok
 }
 
-// codexDefaultModel is GPT-5.5 — the flagship, mirroring the native Codex CLI.
-func codexDefaultModel() string { return "gpt-5.5" }
+// codexDefaultModel is sol — the flagship for GPT-5.6.
+func codexDefaultModel() string { return "sol" }
 
 // BuildConfig writes Codex's config.toml using the built-in amazon-bedrock
-// provider. This provider ships a model catalog with the dotted Mantle wire IDs
-// (openai.gpt-5.5 etc.), eliminating the "Model metadata not found" warning and
-// the /model 404 that occurred with a custom bedrock-mantle provider.
+// provider. This provider ships a model catalog with native Bedrock foundation
+// IDs (openai.gpt-5.6-sol etc.), eliminating the "Model metadata not found"
+// warning.
 //
 // The built-in provider uses the standard AWS credential chain:
 // AWS_BEARER_TOKEN_BEDROCK env var (injected by Juggernaut's launch wrapper) or
@@ -117,10 +119,10 @@ func codexDefaultModel() string { return "gpt-5.5" }
 //
 // Config shape:
 //
-//	model = "openai.gpt-5.5"
+//	model = "openai.gpt-5.6-sol"
 //	model_provider = "amazon-bedrock"
 //	[model_providers.amazon-bedrock.aws]
-//	  region = "us-east-1"
+//	  region = "us-west-2"
 func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
@@ -128,7 +130,7 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	}
 	m, ok := codexModel(key)
 	if !ok {
-		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-5.* model)", key)
+		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-5.6-* model: sol, terra, luna)", key)
 	}
 
 	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", c, func(region string) (ConfigPlan, error) {
@@ -174,11 +176,11 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 	return c.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
-		if m.Source != "mantle" {
-			return ModelSupport{Reason: "Codex's Amazon Bedrock provider uses Mantle"}
+		if m.Source == "mantle" {
+			return ModelSupport{Reason: "Codex no longer uses Mantle (native only)"}
 		}
-		if !strings.HasPrefix(m.ID, "openai.gpt-5.") {
-			return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5 models"}
+		if !strings.HasPrefix(m.ID, "openai.gpt-5.6") {
+			return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5.6 models (sol, terra, luna)"}
 		}
 		return ModelSupport{Supported: true, Reason: "Codex Responses model"}
 	})

@@ -10,10 +10,11 @@ import (
 )
 
 // grok is the OFFICIAL xAI Grok CLI provider (grok / grok.exe, config TOML at
-// ~/.grok/config.toml). Juggernaut routes to Grok 4.3 on Bedrock Mantle by
-// writing a [model.bedrock-grok] block (base_url → Mantle /openai/v1) selected
-// via [models].default, PLUS an [auth] block whose auth_provider_command runs
-// `juggernaut auth-token` to supply the keychain bearer token.
+// ~/.grok/config.toml). Juggernaut routes to Grok 4.6 on native Bedrock
+// (bedrock-runtime /openai/v1) by writing a [model.bedrock-grok] block
+// (base_url → bedrock-runtime) selected via [models].default, PLUS an [auth]
+// block whose auth_provider_command runs `juggernaut auth-token` to supply the
+// keychain bearer token.
 //
 // Why the [auth] block (not env_key): Grok's per-model credential order is
 // api_key → env_key → XAI_API_KEY, but a custom [model.*] block does NOT satisfy
@@ -34,8 +35,9 @@ const grokModelName = "bedrock-grok"
 // token as {"access_token":...,"expires_in":...}.
 const grokAuthCommand = "juggernaut auth-token"
 
-// grokRegions are the regions where xai.grok-4.3 is verified available on Mantle
-// (live-checked 2026-07-03). apply warns—does not fail—outside this set.
+// grokRegions are the regions where xai.grok-4.6 is verified available on native
+// Bedrock (live-checked 2026-08-29, foundation in us-west-2). apply warns—does
+// not fail—outside this set.
 var grokRegions = []string{"us-east-1", "us-east-2", "us-west-2"}
 
 // ConfigPath is ALWAYS ~/.grok/config.toml. Grok's project-scoped
@@ -85,17 +87,17 @@ func (g grok) LaunchSpec() LaunchSpec {
 	// Grok gets its token from the [auth] auth_provider_command (which reads the
 	// keychain directly), so the launch wrapper does not strictly need to inject
 	// the token. NeedsToken stays true: the shared token is still injected as an
-	// env var (harmless), and apply's Mantle-only IAM guard keys off NeedsToken.
+	// env var (harmless) and the launch wrapper can use it for bearer mode.
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  true,
 	}
 }
 
-// BuildConfig writes a [model.bedrock-grok] block routing to Grok 4.3 on Mantle,
-// [models].default, and an [auth] block whose auth_provider_command supplies the
-// keychain bearer token so Grok skips its interactive sign-in. Grok 4.3 is the
-// only xAI model on Mantle, so there's no model table/passthrough.
+// BuildConfig writes a [model.bedrock-grok] block routing to Grok 4.6 on native
+// Bedrock (bedrock-runtime /openai/v1), [models].default, and an [auth] block
+// whose auth_provider_command supplies the keychain bearer token so Grok skips
+// its interactive sign-in.
 //
 // Deliberately NO env_key on the model block: with env_key set, Grok's session
 // still falls through to interactive login. The [auth] block is the documented
@@ -103,7 +105,7 @@ func (g grok) LaunchSpec() LaunchSpec {
 func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	modelID := opts.Model
 	if modelID == "" {
-		modelID = "xai.grok-4.3"
+		modelID = "xai.grok-4.6"
 	} else if strings.HasPrefix(modelID, "grok-") {
 		modelID = "xai." + modelID
 	}
@@ -111,22 +113,21 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 		return ConfigPlan{}, fmt.Errorf("unknown Grok model %q (expected a discovered xai.grok-* model)", opts.Model)
 	}
 
-	// Iron Fist: route to a region that actually serves grok-4.3 rather than
-	// writing a config that can't reach it (see resolveMantleRegion).
+	// Route to a region that actually serves grok-4.6 rather than writing a
+	// config that can't reach it.
 	modelRegions := grokRegions
-	if modelID != "xai.grok-4.3" {
+	if modelID != "xai.grok-4.6" {
 		modelRegions = nil
 	}
 
 	return buildWithRegionWarnings(opts, modelID, modelRegions, " ", g, func(region string) (ConfigPlan, error) {
-		baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
+		baseURL := fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/openai/v1", region)
 		modelBlock := map[string]any{
-			"model":       modelID,
-			"base_url":    baseURL,
-			"name":        modelID + " (Amazon Bedrock Mantle)",
-			"api_backend": "responses",
+			"model":    modelID,
+			"base_url": baseURL,
+			"name":     modelID + " (Amazon Bedrock)",
 		}
-		if modelID == "xai.grok-4.3" {
+		if modelID == "xai.grok-4.6" {
 			modelBlock["context_window"] = 1000000
 		}
 		keys := map[string]any{
@@ -151,12 +152,12 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 
 func (g grok) SupportsModel(model CatalogModel) ModelSupport {
 	return g.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
-		if m.Source != "mantle" {
-			return ModelSupport{Reason: "Grok routes through Mantle"}
+		if m.Source == "mantle" {
+			return ModelSupport{Reason: "Grok no longer uses Mantle (native only)"}
 		}
 		if !strings.HasPrefix(m.ID, "xai.grok-") {
 			return ModelSupport{Reason: "the Grok client supports xAI Grok models"}
 		}
-		return ModelSupport{Supported: true, Reason: "xAI Responses model"}
+		return ModelSupport{Supported: true, Reason: "xAI native model"}
 	})
 }

@@ -137,9 +137,9 @@ func TestGrok_OwnsConfig(t *testing.T) {
 	}
 }
 
-// TestGrok_BuildConfig writes the [model.bedrock-grok] block (base_url→Mantle
-// /openai/v1, api_backend=responses, model xai.grok-4.3) + [models].default +
-// an [auth] block. Crucially it does NOT set env_key: with env_key, Grok's
+// TestGrok_BuildConfig writes the [model.bedrock-grok] block (base_url→
+// bedrock-runtime /openai/v1, model xai.grok-4.6) + [models].default + an
+// [auth] block. Crucially it does NOT set env_key: with env_key, Grok's
 // credential order (api_key→env_key→XAI_API_KEY) still runs the interactive
 // login for the session. The [auth] auth_provider_command is what replaces login.
 func TestGrok_BuildConfig(t *testing.T) {
@@ -158,17 +158,17 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("[model.%s] not a map: %T", grokModelName, bg)
 	}
-	if bgMap["model"] != "xai.grok-4.3" {
-		t.Errorf("model = %v, want xai.grok-4.3", bgMap["model"])
+	if bgMap["model"] != "xai.grok-4.6" {
+		t.Errorf("model = %v, want xai.grok-4.6", bgMap["model"])
 	}
-	if base, _ := bgMap["base_url"].(string); base != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
+	if base, _ := bgMap["base_url"].(string); base != "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1" {
 		t.Errorf("base_url = %q, want .../openai/v1", base)
 	}
 	if _, hasEnvKey := bgMap["env_key"]; hasEnvKey {
 		t.Errorf("env_key must NOT be set (it keeps Grok's login flow alive); got %v", bgMap["env_key"])
 	}
-	if bgMap["api_backend"] != "responses" {
-		t.Errorf("api_backend = %v, want responses", bgMap["api_backend"])
+	if _, hasBackend := bgMap["api_backend"]; hasBackend {
+		t.Errorf("api_backend must NOT be set for native bedrock-runtime (was Mantle only), got %v", bgMap["api_backend"])
 	}
 	modelsDefault, ok := testutil.NestedMapChain(plan.Keys, "models", "default")
 	if !ok || modelsDefault != "bedrock-grok" {
@@ -246,9 +246,9 @@ func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
 	if bgMap["model"] != "xai.grok-4.4" {
 		t.Errorf("model = %v, want xai.grok-4.4", bgMap["model"])
 	}
-	// Non-4.3 models don't get context_window
+	// Non-4.6 models don't get context_window
 	if _, hasContext := bgMap["context_window"]; hasContext {
-		t.Error("non-4.3 model must not have context_window")
+		t.Error("non-4.6 model must not have context_window")
 	}
 }
 
@@ -270,9 +270,9 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 		t.Errorf("base_url must not use the non-serving region eu-west-1, got %q", base)
 	}
 	if len(plan.Warnings) == 0 {
-		t.Error("expected a region-override message for grok-4.3 in eu-west-1")
+		t.Error("expected a region-override message for grok-4.6 in eu-west-1")
 	}
-	// us-west-2 IS a known grok-4.3 region → kept, silent.
+	// us-west-2 IS a known grok-4.6 region → kept, silent.
 	opts.Region = "us-west-2"
 	plan, _ = p.BuildConfig(testConfig(), opts)
 	bg, ok = testutil.NestedMapChain(plan.Keys, "model", grokModelName)
@@ -281,7 +281,7 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	}
 	bgMap = bg.(map[string]any)
 	if base := bgMap["base_url"].(string); !strings.Contains(base, "us-west-2") {
-		t.Errorf("us-west-2 serves grok-4.3 and must be kept, got %q", base)
+		t.Errorf("us-west-2 serves grok-4.6 and must be kept, got %q", base)
 	}
 	if len(plan.Warnings) != 0 {
 		t.Errorf("us-west-2 is a known region and must not warn, got %v", plan.Warnings)

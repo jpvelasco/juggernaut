@@ -70,8 +70,8 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse config.toml: %v", err)
 	}
-	if got["model"] != "openai.gpt-5.5" {
-		t.Errorf("model = %v, want openai.gpt-5.5", got["model"])
+	if got["model"] != "openai.gpt-5.6-sol" {
+		t.Errorf("model = %v, want openai.gpt-5.6-sol", got["model"])
 	}
 	if got["model_provider"] != "amazon-bedrock" {
 		t.Errorf("model_provider = %v, want amazon-bedrock", got["model_provider"])
@@ -93,31 +93,29 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	}
 }
 
-// TestApply_Codex_ModelFlag_Respected: --model=gpt-5.4 must produce a gpt-5.4
-// config, not the GPT-5.5 default. Regression for the P2 bug where --model never
-// reached provider.Options.Model. (Uses gpt-5.4 rather than gpt-oss because
-// current Codex is Responses-only and gpt-oss — Chat-only on Mantle — is no
-// longer a valid Codex model.)
+// TestApply_Codex_ModelFlag_Respected: --model=terra must produce a gpt-5.6-terra
+// config, not the sol default. Regression for the P2 bug where --model never
+// reached provider.Options.Model.
 func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--model=gpt-5.4",
+		"apply", "--cli=codex", "--model=terra",
 		"--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value",
 		"--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	if !containsStr(data, "openai.gpt-5.4") {
-		t.Errorf("expected gpt-5.4 model, got:\n%s", data)
+	if !containsStr(data, "openai.gpt-5.6-terra") {
+		t.Errorf("expected gpt-5.6-terra model, got:\n%s", data)
 	}
-	if containsStr(data, "openai.gpt-5.5") {
-		t.Errorf("must not fall back to gpt-5.5 when --model given:\n%s", data)
+	if containsStr(data, "openai.gpt-5.6-sol") {
+		t.Errorf("must not fall back to sol when --model=terra given:\n%s", data)
 	}
 	if !containsStr(data, `model_provider = "amazon-bedrock"`) {
-		t.Errorf("gpt-5.4 should use amazon-bedrock provider, got:\n%s", data)
+		t.Errorf("terra should use amazon-bedrock provider, got:\n%s", data)
 	}
 }
 

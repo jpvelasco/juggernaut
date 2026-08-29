@@ -87,7 +87,7 @@ func TestResolveAuthMode_Table(t *testing.T) {
 		{
 			name: "Grok_no_flag_defaults_bedrock_api_key", flagVal: "",
 			prov: mustProvider(t, "grok"), bCfg: bCfgIAM, existing: nil,
-			want: authmode.BedrockAPIKey,
+			want: authmode.IAM,
 		},
 		// Claude with no flag reads from existing block
 		{
