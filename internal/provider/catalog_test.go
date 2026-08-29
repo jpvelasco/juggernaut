@@ -22,15 +22,15 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 		{"claude", catalogModel("amazon.nova-pro", "foundation"), false},
 		{"codex", catalogModel("openai.gpt-5.6", "mantle"), true},
 		{"codex", catalogModel("openai.gpt-oss-120b", "mantle"), false},
-		{"opencode", catalogModel("moonshotai.kimi-k2.5", "mantle"), true},
-		{"opencode", catalogModel("zai.glm-5", "mantle"), true},
-		{"opencode", catalogModel("qwen.qwen3-coder-next", "mantle"), true},
-		{"opencode", catalogModel("openai.gpt-5.6", "mantle"), false},
+		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), true},
+		{"opencode", catalogModel("zai.glm-5", "foundation"), true},
+		{"opencode", catalogModel("qwen.qwen3-coder-480b-a35b-v1:0", "foundation"), true},
+		{"opencode", catalogModel("openai.gpt-oss-120b-1:0", "foundation"), true},
 		{"grok", catalogModel("xai.grok-4.4", "mantle"), true},
 		{"grok", catalogModel("moonshotai.kimi-k2.5", "mantle"), false},
 		{"claude", catalogModel("anthropic.claude-opus-4-8", "mantle"), false},
 		{"codex", catalogModel("openai.gpt-5.6", "foundation"), false},
-		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), false},
+		{"opencode", catalogModel("moonshotai.kimi-k2.5", "mantle"), false},
 		{"grok", catalogModel("xai.grok-4.4", "foundation"), false},
 	}
 	for _, tt := range tests {
@@ -51,7 +51,7 @@ func TestProviders_CatalogSources(t *testing.T) {
 	}{
 		{cli: "claude", want: "foundation,profile"},
 		{cli: "codex", want: "mantle"},
-		{cli: "opencode", want: "mantle"},
+		{cli: "opencode", want: "foundation,profile"},
 		{cli: "grok", want: "mantle"},
 	}
 	for _, tt := range tests {
@@ -175,29 +175,46 @@ func TestOpenCode_BuildConfigAddsCompatibleLiveCatalog(t *testing.T) {
 	p, _ := Get("opencode")
 	opts := baseOpts()
 	opts.ModelCatalog = []CatalogModel{
-		catalogModel("moonshotai.kimi-k2.5", "mantle"),
-		catalogModel("zai.glm-5", "mantle"),
-		catalogModel("qwen.qwen3-coder-next", "mantle"),
-		catalogModel("openai.gpt-5.5", "mantle"),
-		{ID: "minimax.minimax-m2", Source: "mantle", Status: "INACTIVE", Availability: "AVAILABLE"},
+		catalogModel("moonshotai.kimi-k2.5", "foundation"),
+		catalogModel("zai.glm-5", "foundation"),
+		catalogModel("qwen.qwen3-coder-480b-a35b-v1:0", "foundation"),
+		catalogModel("openai.gpt-oss-120b-1:0", "foundation"),
+		{ID: "minimax.minimax-m2", Source: "foundation", Status: "INACTIVE", Availability: "AVAILABLE"},
 	}
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, ok := testutil.NestedMapChain(plan.Keys, "provider", mantleProviderID, "models")
+	value, ok := testutil.NestedMapChain(plan.Keys, "provider", bedrockProviderID, "models")
 	if !ok {
 		t.Fatal("provider model inventory missing")
 	}
 	models := value.(map[string]any)
-	for _, id := range []string{"openai.gpt-oss-120b", "moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-next"} {
+	for _, id := range []string{"openai.gpt-oss-120b-1:0", "moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-480b-a35b-v1:0"} {
 		if _, ok := models[id]; !ok {
 			t.Errorf("compatible/default model %q was not configured: %v", id, models)
 		}
 	}
-	for _, id := range []string{"openai.gpt-5.5", "minimax.minimax-m2"} {
+	for _, id := range []string{"minimax.minimax-m2"} {
 		if _, ok := models[id]; ok {
 			t.Errorf("incompatible model %q was configured: %v", id, models)
+		}
+	}
+	// whitelist must be populated for native
+	if wl, ok := testutil.NestedMapChain(plan.Keys, "provider", bedrockProviderID, "whitelist"); !ok {
+		t.Error("whitelist missing for native provider")
+	} else {
+		switch v := wl.(type) {
+		case []string:
+			if len(v) == 0 {
+				t.Error("whitelist should not be empty")
+			}
+		case []any:
+			if len(v) == 0 {
+				t.Error("whitelist should not be empty")
+			}
+		default:
+			t.Errorf("whitelist has unexpected type %T", wl)
 		}
 	}
 }

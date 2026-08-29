@@ -152,15 +152,18 @@ func TestClaude_Supports(t *testing.T) {
 	}
 }
 
-// TestMantleOnlyCLIs_NoNativeAuth: OpenCode and Grok route only through Mantle,
-// which requires a bearer token, so they must NOT claim CapNativeAuth (IAM/SSO).
-// Codex now supports IAM via the AWS SDK credential chain.
+// TestMantleOnlyCLIs_NoNativeAuth: Grok routes only through Mantle, so must
+// NOT claim CapNativeAuth. OpenCode now supports native via amazon-bedrock.
 func TestMantleOnlyCLIs_NoNativeAuth(t *testing.T) {
-	for _, name := range []string{"opencode", "grok"} {
+	for _, name := range []string{"grok"} {
 		p, _ := Get(name)
 		if p.Supports(CapNativeAuth) {
 			t.Errorf("%s is Mantle-only and must NOT support CapNativeAuth", name)
 		}
+	}
+	// OpenCode now supports native (IAM) via built-in amazon-bedrock.
+	if p, _ := Get("opencode"); !p.Supports(CapNativeAuth) {
+		t.Error("opencode should support CapNativeAuth after native migration")
 	}
 }
 

@@ -290,7 +290,7 @@ func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
 
 // TestUninstall_OpenCode_PreservesUserSiblingKeys: uninstall --cli=opencode
 // removes ONLY Juggernaut's owned leaves — the top-level "model" key and the
-// bedrock-mantle provider block. A user's own provider entries and their own
+// amazon-bedrock provider block. A user's own provider entries and their own
 // top-level keys must survive.
 func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	home := setupApplyTest(t)
@@ -303,7 +303,7 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	}
 
 	// Inject user-owned sibling content: a top-level key and a provider of
-	// their own next to the bedrock-mantle block Juggernaut wrote.
+	// their own next to the amazon-bedrock block Juggernaut wrote.
 	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
 	mgr := config.NewManager(configPath)
 	got, err := mgr.Read()
@@ -337,8 +337,8 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("provider table vanished — user providers must survive, got: %v", after["provider"])
 	}
-	if _, ok := provAfter["bedrock-mantle"]; ok {
-		t.Error("Juggernaut's bedrock-mantle provider should be removed")
+	if _, ok := provAfter["amazon-bedrock"]; ok {
+		t.Error("Juggernaut's amazon-bedrock provider should be removed")
 	}
 	if _, ok := provAfter["anthropic"]; !ok {
 		t.Error("user's own provider entry lost on uninstall — data loss!")

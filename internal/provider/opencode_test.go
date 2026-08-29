@@ -72,8 +72,7 @@ func TestOpenCode_ActivationMarkers(t *testing.T) {
 func TestOpenCode_LaunchSpec(t *testing.T) {
 	p, _ := Get("opencode")
 	ls := p.LaunchSpec()
-	// OpenCode routes via config; token supplied through {env:VAR}. No static
-	// enable flag, but the bearer token is still needed (Mantle).
+	// OpenCode routes via config; built-in amazon-bedrock uses AWS chain (IAM or bearer).
 	if len(ls.StaticEnv) != 0 {
 		t.Errorf("OpenCode should have no static enable flag, got %v", ls.StaticEnv)
 	}
@@ -81,7 +80,7 @@ func TestOpenCode_LaunchSpec(t *testing.T) {
 		t.Errorf("TokenEnvVar = %q", ls.TokenEnvVar)
 	}
 	if !ls.NeedsToken {
-		t.Error("OpenCode via Mantle needs a token")
+		t.Error("OpenCode via native still needs token env for bearer mode")
 	}
 }
 
@@ -99,21 +98,21 @@ func TestOpenCode_Supports_None(t *testing.T) {
 func TestOpenCode_OwnsConfig(t *testing.T) {
 	p, _ := Get("opencode")
 	if !p.OwnsConfig(map[string]any{
-		"provider": map[string]any{"bedrock-mantle": map[string]any{"npm": "@ai-sdk/openai-compatible"}},
+		"provider": map[string]any{"amazon-bedrock": map[string]any{"options": map[string]any{"region": "us-west-2"}}},
 	}) {
-		t.Error("should own a config containing our bedrock-mantle provider")
+		t.Error("should own a config containing our amazon-bedrock provider")
 	}
 	// Plain user config with other providers → not ours.
 	if p.OwnsConfig(map[string]any{"provider": map[string]any{"anthropic": map[string]any{}}}) {
-		t.Error("must not claim a config without our bedrock-mantle provider")
+		t.Error("must not claim a config without our amazon-bedrock provider")
 	}
 	if p.OwnsConfig(map[string]any{"model": "anthropic/claude"}) {
 		t.Error("must not claim a plain config")
 	}
 }
 
-// TestOpenCode_BuildConfig_DefaultAlias: default (gpt-oss) writes a custom
-// openai-compatible provider block pointing at Mantle /v1, plus top-level model.
+// TestOpenCode_BuildConfig_DefaultAlias: default (gpt-oss) writes the built-in
+// amazon-bedrock provider block (region + live models + whitelist), plus top-level model.
 func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	p, _ := Get("opencode")
 	opts := baseOpts()
@@ -122,31 +121,41 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	bm, ok := testutil.NestedMapChain(plan.Keys, "provider", "bedrock-mantle")
+	bm, ok := testutil.NestedMapChain(plan.Keys, "provider", "amazon-bedrock")
 	if !ok {
-		t.Fatalf("provider.bedrock-mantle missing")
+		t.Fatalf("provider.amazon-bedrock missing")
 	}
 	bmMap, ok := bm.(map[string]any)
 	if !ok {
-		t.Fatalf("bedrock-mantle provider not a map: %T", bm)
+		t.Fatalf("amazon-bedrock provider not a map: %T", bm)
 	}
-	if bmMap["npm"] != "@ai-sdk/openai-compatible" {
-		t.Errorf("npm = %v, want @ai-sdk/openai-compatible", bmMap["npm"])
+	if _, hasNPM := bmMap["npm"]; hasNPM {
+		t.Errorf("must not have npm for built-in provider")
 	}
 	optsMap, ok := testutil.NestedMapChain(bmMap, "options")
 	if !ok {
-		t.Fatalf("options missing under bedrock-mantle")
+		t.Fatalf("options missing under amazon-bedrock")
 	}
 	optsNested := optsMap.(map[string]any)
-	if base, _ := optsNested["baseURL"].(string); base != "https://bedrock-mantle.us-west-2.api.aws/v1" {
-		t.Errorf("baseURL = %q, want .../v1", base)
+	if region, _ := optsNested["region"].(string); region != "us-west-2" {
+		t.Errorf("region = %q, want us-west-2", region)
 	}
-	if api, _ := optsNested["apiKey"].(string); api != "{env:AWS_BEARER_TOKEN_BEDROCK}" {
-		t.Errorf("apiKey = %q, want {env:AWS_BEARER_TOKEN_BEDROCK}", api)
+	if _, hasBaseURL := optsNested["baseURL"]; hasBaseURL {
+		t.Errorf("must not have baseURL for built-in provider")
 	}
-	// top-level model must be provider_id/model_id
-	if m, _ := plan.Keys["model"].(string); m != "bedrock-mantle/openai.gpt-oss-120b" {
-		t.Errorf("model = %q, want bedrock-mantle/openai.gpt-oss-120b", m)
+	if _, hasAPIKey := optsNested["apiKey"]; hasAPIKey {
+		t.Errorf("must not have apiKey for built-in provider")
+	}
+	// models and whitelist must be present
+	if _, ok := bmMap["models"]; !ok {
+		t.Error("models should be present")
+	}
+	if _, ok := bmMap["whitelist"]; !ok {
+		t.Error("whitelist should be present")
+	}
+	// top-level model must be provider_id/model_id with native ID
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/openai.gpt-oss-120b-1:0" {
+		t.Errorf("model = %q, want amazon-bedrock/openai.gpt-oss-120b-1:0", m)
 	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("plan should validate: %v", err)
@@ -154,15 +163,15 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 }
 
 // TestOpenCode_BuildConfig_Aliases: common convenience names resolve to their
-// Mantle model IDs without acting as the authoritative availability roster.
+// native Bedrock model IDs without acting as the authoritative availability roster.
 func TestOpenCode_BuildConfig_Aliases(t *testing.T) {
 	cases := map[string]string{
 		"glm-4.7":       "zai.glm-4.7",
 		"glm-5":         "zai.glm-5",
 		"kimi-k2.5":     "moonshotai.kimi-k2.5",
 		"deepseek-v3.2": "deepseek.v3.2",
-		"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-instruct",
-		"grok-4.3":      "xai.grok-4.3",
+		"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-v1:0",
+		"grok-4.3":      "xai.grok-4.6",
 	}
 	p, _ := Get("opencode")
 	for key, wantID := range cases {
@@ -173,8 +182,8 @@ func TestOpenCode_BuildConfig_Aliases(t *testing.T) {
 			t.Errorf("%s: BuildConfig: %v", key, err)
 			continue
 		}
-		if m, _ := plan.Keys["model"].(string); m != "bedrock-mantle/"+wantID {
-			t.Errorf("%s: model = %q, want bedrock-mantle/%s", key, m, wantID)
+		if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/"+wantID {
+			t.Errorf("%s: model = %q, want amazon-bedrock/%s", key, m, wantID)
 		}
 	}
 }
@@ -189,7 +198,7 @@ func TestOpenCode_BuildConfig_Passthrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("passthrough should not error: %v", err)
 	}
-	if m, _ := plan.Keys["model"].(string); m != "bedrock-mantle/some.exotic-model-v9" {
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/some.exotic-model-v9" {
 		t.Errorf("passthrough model = %q, want verbatim id", m)
 	}
 	if len(plan.Warnings) == 0 {

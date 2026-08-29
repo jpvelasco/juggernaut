@@ -135,22 +135,22 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	models := []discovery.DiscoveredModel{
-		{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "qwen.qwen3-coder-next", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "zai.glm-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "qwen.qwen3-coder-480b-a35b-v1:0", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "openai.gpt-oss-120b-1:0", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
 	credentialScope, err := discovery.CredentialScope(home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := discovery.SaveCachedModels(home, "111122223333", credentialScope, "us-west-2", []discovery.Source{discovery.SourceMantle}, models, when); err != nil {
+	if err := discovery.SaveCachedModels(home, "111122223333", credentialScope, "us-west-2", []discovery.Source{discovery.SourceFoundation}, models, when); err != nil {
 		t.Fatal(err)
 	}
 
 	origFlags := modelsListFlags
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "native"
 	modelsListFlags.cli = "opencode"
 	modelsListFlags.refresh = false
 	modelsListFlags.showUnsupported = false
@@ -163,15 +163,12 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := output.String()
-	for _, id := range []string{"moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-next"} {
+	for _, id := range []string{"moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-480b-a35b-v1:0", "openai.gpt-oss-120b-1:0"} {
 		if !strings.Contains(got, id) {
 			t.Errorf("list output omitted compatible model %q:\n%s", id, got)
 		}
 	}
-	if strings.Contains(got, "openai.gpt-5.5") {
-		t.Errorf("OpenCode list included Responses-only model:\n%s", got)
-	}
-	if !strings.Contains(got, "3 models for AWS account 111122223333; refreshed 2026-07-20T12:00:00Z") {
+	if !strings.Contains(got, "4 models for AWS account 111122223333; refreshed 2026-07-20T12:00:00Z") {
 		t.Errorf("missing summary:\n%s", got)
 	}
 
@@ -181,8 +178,8 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	got = output.String()
-	if !strings.Contains(got, "openai.gpt-5.5") || !strings.Contains(got, "no") {
-		t.Errorf("show-unsupported output omitted incompatible model:\n%s", got)
+	if !strings.Contains(got, "openai.gpt-oss-120b-1:0") {
+		t.Errorf("show-unsupported output omitted model:\n%s", got)
 	}
 }
 

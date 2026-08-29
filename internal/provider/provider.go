@@ -139,7 +139,8 @@ func init() {
 		displayName:    "OpenCode",
 		configFormat:   "json",
 		binaryName:     "opencode",
-		catalogSources: []string{"mantle"},
+		capabilities:   []Capability{CapNativeAuth},
+		catalogSources: []string{"foundation", "profile"},
 	}})
 	register(grok{BaseProvider: BaseProvider{
 		name:           "grok",

@@ -465,7 +465,7 @@ func TestProviderSupportsCatalogModel_UsesProviderCheck(t *testing.T) {
 		{"codex", "anthropic.claude-opus-4-8", "foundation", false},
 		{"grok", "xai.grok-4.3", "mantle", true},
 		{"grok", "moonshotai.kimi-k2.5", "mantle", false},
-		{"opencode", "moonshotai.kimi-k2.5", "mantle", true},
+		{"opencode", "moonshotai.kimi-k2.5", "foundation", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.cli+"/"+tt.id, func(t *testing.T) {
@@ -487,7 +487,7 @@ func TestCatalogSourcesFor_ReturnsExpected(t *testing.T) {
 		{"claude", []string{"foundation", "profile"}},
 		{"codex", []string{"mantle"}},
 		{"grok", []string{"mantle"}},
-		{"opencode", []string{"mantle"}},
+		{"opencode", []string{"foundation", "profile"}},
 	}
 	for _, tt := range tests {
 		p, _ := provider.Get(tt.cli)
