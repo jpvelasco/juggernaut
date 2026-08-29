@@ -143,8 +143,6 @@ func TestFromSchemaOptions_FillsFields(t *testing.T) {
 		AvailableModels:        []string{"opus"},
 		EnforceAvailableModels: true,
 		Use1M:                  true,
-		UseMantle:              false,
-		MantleURL:              "https://example.com",
 		AuthValidated:          true,
 		PermissionMode:         "auto",
 		AlwaysThinking:         true,

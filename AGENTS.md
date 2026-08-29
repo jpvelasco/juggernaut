@@ -80,9 +80,11 @@ and registering it in `internal/provider/provider.go`.
 
 Provider config details belong in providers: Codex writes TOML under
 `~/.codex/config.toml` using the built-in `amazon-bedrock` provider, OpenCode
-writes JSON under `~/.config/opencode/opencode.json` using an OpenAI-compatible
-provider block, and Grok writes user-scope-only TOML under `~/.grok/config.toml`
-with `auth_provider_command` pointing at `juggernaut auth-token`.
+writes JSON under `~/.config/opencode/opencode.json` using the built-in
+`amazon-bedrock` provider block (region + live-discovered `models` + `whitelist`),
+and Grok writes user-scope-only TOML under `~/.grok/config.toml` with
+`base_url = https://bedrock-runtime.{region}.amazonaws.com/openai/v1` plus
+`auth_provider_command` pointing at `juggernaut auth-token`.
 
 ## Engineering Constraints
 
@@ -116,8 +118,8 @@ with `auth_provider_command` pointing at `juggernaut auth-token`.
   vulnerability fixes). Use that exact version; `go mod download` may
   reject newer patch versions.
 - Do not commit generated binaries, coverage files, or other build artifacts.
-- Mantle is opt-in for standard Bedrock Claude routing; non-Claude providers
-  route through Mantle because native Bedrock is Claude-only.
+- All CLIs route natively via `bedrock-runtime` (Mantle removed in v6; re-run
+  `juggernaut models refresh --source native --region <region>` after upgrading).
 - `apply --mode=auto` must keep the Bedrock auto-mode guardrails: it writes
   `CLAUDE_CODE_ENABLE_AUTO_MODE=1`, but should warn unless the resolved active
   model is Opus 4.7-or-later capable, including Opus 5.

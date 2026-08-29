@@ -196,66 +196,6 @@ func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
 	}
 }
 
-func TestApply_DefaultMantleDisabledPreservesInferenceProfiles(t *testing.T) {
-	home := setupApplyTest(t)
-
-	if err := ExecuteArgs([]string{
-		"apply",
-		"--auth=iam",
-		"--region=us-west-2",
-		"--skip-preflight",
-	}); err != nil {
-		t.Fatalf("apply error: %v", err)
-	}
-
-	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		t.Fatalf("settings.json is not valid JSON: %v", err)
-	}
-	env := settings["env"].(map[string]any)
-	if _, ok := env["CLAUDE_CODE_USE_MANTLE"]; ok {
-		t.Fatal("Mantle should be disabled by default")
-	}
-	overrides := settings["modelOverrides"].(map[string]any)
-	if overrides["sonnet"] != "global.anthropic.claude-sonnet-5" {
-		t.Errorf("expected global Sonnet inference profile by default, got %v", overrides["sonnet"])
-	}
-	block := settings["juggernaut"].(map[string]any)
-	meta := block["meta"].(map[string]any)
-	if meta["useMantle"] != false {
-		t.Errorf("expected juggernaut.meta.useMantle=false by default, got %v", meta["useMantle"])
-	}
-}
-
-func TestApply_MantleFlagStripsInferenceProfilePrefix(t *testing.T) {
-	home := setupApplyTest(t)
-
-	if err := ExecuteArgs([]string{
-		"apply",
-		"--auth=iam",
-		"--region=us-west-2",
-		"--mantle",
-		"--skip-preflight",
-	}); err != nil {
-		t.Fatalf("apply error: %v", err)
-	}
-
-	data := readSettingsJSON(t, home)
-	var settings map[string]any
-	if err := json.Unmarshal(data, &settings); err != nil {
-		t.Fatalf("settings.json is not valid JSON: %v", err)
-	}
-	env := settings["env"].(map[string]any)
-	if env["CLAUDE_CODE_USE_MANTLE"] != "1" {
-		t.Fatalf("expected CLAUDE_CODE_USE_MANTLE=1 with --mantle, got %v", env["CLAUDE_CODE_USE_MANTLE"])
-	}
-	overrides := settings["modelOverrides"].(map[string]any)
-	if overrides["sonnet"] != "anthropic.claude-sonnet-5" {
-		t.Errorf("expected raw Sonnet model ID with --mantle, got %v", overrides["sonnet"])
-	}
-}
-
 func TestApply_ModelFlag_OverridesAll(t *testing.T) {
 	home := setupApplyTest(t)
 
@@ -971,75 +911,6 @@ func TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention(t *testing.T) {
 	}
 }
 
-func TestApply_Mantle_WarnsAboutPromptCaching(t *testing.T) {
-	_ = setupApplyTest(t)
-
-	out := captureStdout(t, func() {
-		if err := ExecuteArgs([]string{
-			"apply", "--auth=iam", "--region=us-west-2", "--mantle", "--skip-preflight",
-		}); err != nil {
-			t.Fatalf("apply error: %v", err)
-		}
-	})
-
-	if !strings.Contains(out, "prompt caching") {
-		t.Errorf("expected Mantle warning about prompt caching, got:\n%s", out)
-	}
-}
-
-func TestApply_MantleURL_WarnsAboutPromptCaching(t *testing.T) {
-	_ = setupApplyTest(t)
-
-	out := captureStdout(t, func() {
-		if err := ExecuteArgs([]string{
-			"apply", "--auth=iam", "--region=us-west-2",
-			"--mantle-url=https://example.test", "--skip-preflight",
-		}); err != nil {
-			t.Fatalf("apply error: %v", err)
-		}
-	})
-
-	if !strings.Contains(out, "prompt caching") {
-		t.Errorf("expected Mantle warning about prompt caching with --mantle-url, got:\n%s", out)
-	}
-}
-
-func TestApply_MantleDryRun_WarnsAboutPromptCaching(t *testing.T) {
-	_ = setupApplyTest(t)
-
-	out := captureStdout(t, func() {
-		if err := ExecuteArgs([]string{
-			"apply", "--auth=iam", "--region=us-west-2",
-			"--mantle", "--dry-run", "--skip-preflight",
-		}); err != nil {
-			t.Fatalf("apply error: %v", err)
-		}
-	})
-
-	if !strings.Contains(out, "Dry run — no changes written.") {
-		t.Errorf("expected dry-run output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "prompt caching") {
-		t.Errorf("expected Mantle warning on dry run, got:\n%s", out)
-	}
-}
-
-func TestApply_NoMantleDryRun_NoMantleWarning(t *testing.T) {
-	_ = setupApplyTest(t)
-
-	out := captureStdout(t, func() {
-		if err := ExecuteArgs([]string{
-			"apply", "--auth=iam", "--region=us-west-2", "--dry-run", "--skip-preflight",
-		}); err != nil {
-			t.Fatalf("apply error: %v", err)
-		}
-	})
-
-	if strings.Contains(out, "prompt caching") {
-		t.Errorf("did not expect Mantle warning on dry run without Mantle, got:\n%s", out)
-	}
-}
-
 func TestUninstall_Codex_PreservesSharedToken(t *testing.T) {
 	_ = setupApplyTest(t)
 
@@ -1248,21 +1119,5 @@ func TestApply_ExplicitClaudeCLI_Works(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "settings.json")); err != nil {
 		t.Errorf("expected settings.json written for --cli=claude: %v", err)
-	}
-}
-
-func TestApply_NoMantle_NoMantleWarning(t *testing.T) {
-	_ = setupApplyTest(t)
-
-	out := captureStdout(t, func() {
-		if err := ExecuteArgs([]string{
-			"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
-		}); err != nil {
-			t.Fatalf("apply error: %v", err)
-		}
-	})
-
-	if strings.Contains(out, "prompt caching") {
-		t.Errorf("did not expect Mantle warning when Mantle is off, got:\n%s", out)
 	}
 }

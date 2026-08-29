@@ -30,11 +30,11 @@ func containsStr(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
-// TestApply_MantleOnlyCLI_RejectsIAM: OpenCode and Grok route only through
-// Mantle (bearer token required), so an explicit --auth=iam must be rejected with
-// an actionable error. Codex now supports IAM via the AWS SDK credential chain.
-func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
-	for _, cli := range []string{"opencode", "grok"} {
+// TestApply_NativeCLIs_AcceptIAM: after native bedrock-runtime migration (v6),
+// every CLI (including OpenCode and Grok) supports IAM via SigV4. An explicit
+// --auth=iam must be accepted and should not error.
+func TestApply_NativeCLIs_AcceptIAM(t *testing.T) {
+	for _, cli := range []string{"opencode", "grok", "codex"} {
 		t.Run(cli, func(t *testing.T) {
 			_ = setupApplyTest(t)
 
@@ -42,12 +42,8 @@ func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
 				"apply", "--cli=" + cli, "--auth=iam",
 				"--region=us-east-1", "--skip-preflight",
 			})
-			if err == nil {
-				t.Fatalf("%s: expected --auth=iam to be rejected (Mantle needs a bearer token)", cli)
-			}
-			msg := strings.ToLower(err.Error())
-			if !strings.Contains(msg, "iam") && !strings.Contains(msg, "bedrock api key") {
-				t.Errorf("%s: error should explain IAM is unsupported, got: %v", cli, err)
+			if err != nil {
+				t.Fatalf("%s: expected --auth=iam to be accepted on native bedrock-runtime, got error: %v", cli, err)
 			}
 		})
 	}
