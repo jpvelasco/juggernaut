@@ -4,6 +4,72 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-08-30
+
+**Major release — consolidated on native Bedrock. Mantle is removed.**
+
+### Breaking Changes
+
+- **Consolidated on native Bedrock; Mantle is removed.** Juggernaut
+  previously routed non-Claude CLIs through the Bedrock Mantle
+  (OpenAI-compatible) endpoint and used it as a model catalog source.
+  v6 drops Mantle entirely: Claude, Codex, OpenCode, and Grok all route
+  natively through `bedrock-runtime.{region}.amazonaws.com`, and
+  `models refresh` only sources `native`/`foundation`/`profile`
+  (`mantle` is gone).
+- **v5 configs and catalogs are stale — you must re-apply after upgrading.**
+  - `~/.codex/config.toml` and `~/.grok/config.toml` previously pointed at the
+    Mantle endpoint; Grok's `base_url` is now
+    `https://bedrock-runtime.{region}.amazonaws.com/openai/v1`. Re-applying
+    rewrites them.
+  - Defaults moved with the consolidation: Codex `gpt-5.5` →
+    `openai.gpt-5.6-sol` (sol/terra/luna), Grok `xai.grok-4.3` →
+    `xai.grok-4.6`. OpenCode model inventories come from live native
+    discovery, so refresh the catalog to get current IDs.
+  - Upgrade: `juggernaut models refresh --source native --region <region>`,
+    then `juggernaut apply ...` with your usual flags. (Claude's settings were
+    already on `bedrock-runtime` — but refresh + re-apply still applies so the
+    catalog and any provider blocks line up.)
+  - `--mantle`, `--no-mantle`, `--mantle-url` flags no longer exist (they'll
+    be rejected as unknown).
+
+### Fixed
+
+- **Corrupt Claude settings degrade instead of block.** A malformed
+  `settings.json` no longer blocks activation; launches warn and use the
+  runtime fallback instead of failing.
+- **Model catalog cache invalidated on SSO account switch.** The
+  credential-fingerprint check now clears the catalog when the AWS account
+  changes, preventing stale cross-account model data.
+- **SSO cache reads contained via `os.Root`.** Cache reads under
+  `~/.juggernaut` are confined to the base directory (semgrep security rows
+  cleared).
+- **Corrupt-fixture / launch-exit fixes.** Launch commands now propagate the
+  wrapped CLI's real exit code instead of collapsing to 1, and `apply --auth`
+  rejects unknown modes (exactly `iam` or `bedrock-api-key`) before writing
+  anything.
+- **`uninstall --scope=project` preserves the shared bearer token.**
+  Project-scope removal no longer deletes the token when user-scope or
+  non-Claude configs remain.
+- **PowerShell profiles under redirected Documents accepted.** Activation no
+  longer reports a false discovery failure when `$PROFILE` lives under a
+  redirected user-profile layout.
+- **npm launcher spawn diagnostics.** Spawn failures and signal deaths now
+  surface actionable diagnostics; flat-install layouts are accepted by
+  `safeResolveBin`.
+- **`show` output is deterministic.** Text output uses canonical scope
+  ordering, so output is stable across runs.
+
+### Other
+
+- **Go toolchain bumped to 1.26.6** (stdlib vulnerability fixes; `go.mod`
+  pins `go 1.26.6`).
+- **Docs:** npm README/keywords aligned with v6 native routing; AGENTS.md
+  condensed to a tighter single-source reference; repo-root CLAUDE.md trimmed
+  to a pointer; Go toolchain version and session/test contracts documented.
+- **Test hygiene:** least-privilege fixture permissions and documented
+  semgrep annotations across Go and npm fixtures.
+
 ## [5.6.2] - 2026-08-10
 
 **Patch release — README polish, CI quality, and dependency updates.**
@@ -1200,7 +1266,9 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v5.6.1...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.0.0...HEAD
+[6.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.0.0
+[5.6.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.2
 [5.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.1
 [5.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.0
 [5.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.5.0
