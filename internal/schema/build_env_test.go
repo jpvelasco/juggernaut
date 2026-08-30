@@ -133,43 +133,6 @@ func TestBuildEnv_Use1M_False(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_UseMantle(t *testing.T) {
-	cfg := testConfig()
-	opts := schema.Options{
-		Region:        "us-west-2",
-		Effort:        "high",
-		Use1M:         true,
-		UseMantle:     true,
-		AuthValidated: true,
-	}
-	block, err := schema.Build(cfg, opts)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if block.Env["CLAUDE_CODE_USE_MANTLE"] != "1" {
-		t.Errorf("expected CLAUDE_CODE_USE_MANTLE=1, got %q", block.Env["CLAUDE_CODE_USE_MANTLE"])
-	}
-}
-
-func TestBuildEnv_UseMantleWithURL(t *testing.T) {
-	cfg := testConfig()
-	opts := schema.Options{
-		Region:        "us-west-2",
-		Effort:        "high",
-		Use1M:         true,
-		UseMantle:     true,
-		MantleURL:     "https://mantle.example.com",
-		AuthValidated: true,
-	}
-	block, err := schema.Build(cfg, opts)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if block.Env["ANTHROPIC_BEDROCK_MANTLE_BASE_URL"] != "https://mantle.example.com" {
-		t.Errorf("expected Mantle URL, got %q", block.Env["ANTHROPIC_BEDROCK_MANTLE_BASE_URL"])
-	}
-}
-
 func TestBuildEnv_FableModel(t *testing.T) {
 	cfg := testConfig()
 	opts := schema.Options{

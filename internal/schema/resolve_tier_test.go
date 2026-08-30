@@ -172,10 +172,6 @@ func TestAssembleBlock_OutputIdentity(t *testing.T) {
 			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true},
 		},
 		{
-			name: "mantle",
-			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true, UseMantle: true},
-		},
-		{
 			name: "opusplan",
 			opts: Options{AuthMode: "iam", Region: "us-west-2", Effort: "high", Scope: "user", Version: "4.0.0", AuthValidated: true, Opusplan: true},
 		},
@@ -213,9 +209,6 @@ func TestAssembleBlock_OutputIdentity(t *testing.T) {
 			}
 			if block.Meta.Opusplan != tc.opts.Opusplan {
 				t.Errorf("meta.opusplan = %v, want %v", block.Meta.Opusplan, tc.opts.Opusplan)
-			}
-			if block.Meta.UseMantle != tc.opts.UseMantle {
-				t.Errorf("meta.useMantle = %v, want %v", block.Meta.UseMantle, tc.opts.UseMantle)
 			}
 			if block.Meta.PermissionMode != tc.opts.PermissionMode {
 				t.Errorf("meta.permissionMode = %q, want %q", block.Meta.PermissionMode, tc.opts.PermissionMode)

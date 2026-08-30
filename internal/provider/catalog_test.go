@@ -20,18 +20,18 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 		{"claude", catalogModel("anthropic.claude-opus-4-8", "foundation"), true},
 		{"claude", catalogModel("global.anthropic.claude-opus-4-8", "profile"), true},
 		{"claude", catalogModel("amazon.nova-pro", "foundation"), false},
-		{"codex", catalogModel("openai.gpt-5.6", "mantle"), true},
-		{"codex", catalogModel("openai.gpt-oss-120b", "mantle"), false},
-		{"opencode", catalogModel("moonshotai.kimi-k2.5", "mantle"), true},
-		{"opencode", catalogModel("zai.glm-5", "mantle"), true},
-		{"opencode", catalogModel("qwen.qwen3-coder-next", "mantle"), true},
-		{"opencode", catalogModel("openai.gpt-5.6", "mantle"), false},
-		{"grok", catalogModel("xai.grok-4.4", "mantle"), true},
-		{"grok", catalogModel("moonshotai.kimi-k2.5", "mantle"), false},
+		{"codex", catalogModel("openai.gpt-5.6-sol", "foundation"), true},
+		{"codex", catalogModel("openai.gpt-oss-120b-1:0", "foundation"), false},
+		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), true},
+		{"opencode", catalogModel("zai.glm-5", "foundation"), true},
+		{"opencode", catalogModel("qwen.qwen3-coder-480b-a35b-v1:0", "foundation"), true},
+		{"opencode", catalogModel("openai.gpt-oss-120b-1:0", "foundation"), true},
+		{"grok", catalogModel("xai.grok-4.6", "foundation"), true},
+		{"grok", catalogModel("moonshotai.kimi-k2.5", "foundation"), false},
 		{"claude", catalogModel("anthropic.claude-opus-4-8", "mantle"), false},
-		{"codex", catalogModel("openai.gpt-5.6", "foundation"), false},
-		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), false},
-		{"grok", catalogModel("xai.grok-4.4", "foundation"), false},
+		{"codex", catalogModel("openai.gpt-5.6-sol", "mantle"), false},
+		{"opencode", catalogModel("moonshotai.kimi-k2.5", "mantle"), false},
+		{"grok", catalogModel("xai.grok-4.6", "mantle"), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.cli+"/"+tt.model.ID, func(t *testing.T) {
@@ -50,9 +50,9 @@ func TestProviders_CatalogSources(t *testing.T) {
 		want string
 	}{
 		{cli: "claude", want: "foundation,profile"},
-		{cli: "codex", want: "mantle"},
-		{cli: "opencode", want: "mantle"},
-		{cli: "grok", want: "mantle"},
+		{cli: "codex", want: "foundation,profile"},
+		{cli: "opencode", want: "foundation,profile"},
+		{cli: "grok", want: "foundation,profile"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.cli, func(t *testing.T) {
@@ -68,8 +68,8 @@ func TestProviders_CatalogSources(t *testing.T) {
 }
 
 func TestCodexModel_AcceptsRawDiscoveredID(t *testing.T) {
-	model, ok := codexModel("openai.gpt-5.7")
-	if !ok || model.ModelID != "openai.gpt-5.7" {
+	model, ok := codexModel("openai.gpt-5.6-sol")
+	if !ok || model.ModelID != "openai.gpt-5.6-sol" {
 		t.Fatalf("codexModel(raw ID) = %+v, %v", model, ok)
 	}
 }
@@ -77,14 +77,14 @@ func TestCodexModel_AcceptsRawDiscoveredID(t *testing.T) {
 func TestProviders_RejectInactiveAndUnavailableCatalogModels(t *testing.T) {
 	for _, cli := range []string{"claude", "codex", "opencode", "grok"} {
 		p, _ := Get(cli)
-		id, source := "moonshotai.kimi-k2.5", "mantle"
+		id, source := "moonshotai.kimi-k2.5", "foundation"
 		switch cli {
 		case "claude":
 			id, source = "anthropic.claude-opus-4-8", "foundation"
 		case "codex":
-			id = "openai.gpt-5.5"
+			id, source = "openai.gpt-5.6-sol", "foundation"
 		case "grok":
-			id = "xai.grok-4.3"
+			id, source = "xai.grok-4.6", "foundation"
 		}
 		inactive := catalogModel(id, source)
 		inactive.Status = "LEGACY"
@@ -175,29 +175,46 @@ func TestOpenCode_BuildConfigAddsCompatibleLiveCatalog(t *testing.T) {
 	p, _ := Get("opencode")
 	opts := baseOpts()
 	opts.ModelCatalog = []CatalogModel{
-		catalogModel("moonshotai.kimi-k2.5", "mantle"),
-		catalogModel("zai.glm-5", "mantle"),
-		catalogModel("qwen.qwen3-coder-next", "mantle"),
-		catalogModel("openai.gpt-5.5", "mantle"),
-		{ID: "minimax.minimax-m2", Source: "mantle", Status: "INACTIVE", Availability: "AVAILABLE"},
+		catalogModel("moonshotai.kimi-k2.5", "foundation"),
+		catalogModel("zai.glm-5", "foundation"),
+		catalogModel("qwen.qwen3-coder-480b-a35b-v1:0", "foundation"),
+		catalogModel("openai.gpt-oss-120b-1:0", "foundation"),
+		{ID: "minimax.minimax-m2", Source: "foundation", Status: "INACTIVE", Availability: "AVAILABLE"},
 	}
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, ok := testutil.NestedMapChain(plan.Keys, "provider", mantleProviderID, "models")
+	value, ok := testutil.NestedMapChain(plan.Keys, "provider", bedrockProviderID, "models")
 	if !ok {
 		t.Fatal("provider model inventory missing")
 	}
 	models := value.(map[string]any)
-	for _, id := range []string{"openai.gpt-oss-120b", "moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-next"} {
+	for _, id := range []string{"openai.gpt-oss-120b-1:0", "moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-480b-a35b-v1:0"} {
 		if _, ok := models[id]; !ok {
 			t.Errorf("compatible/default model %q was not configured: %v", id, models)
 		}
 	}
-	for _, id := range []string{"openai.gpt-5.5", "minimax.minimax-m2"} {
+	for _, id := range []string{"minimax.minimax-m2"} {
 		if _, ok := models[id]; ok {
 			t.Errorf("incompatible model %q was configured: %v", id, models)
+		}
+	}
+	// whitelist must be populated for native
+	if wl, ok := testutil.NestedMapChain(plan.Keys, "provider", bedrockProviderID, "whitelist"); !ok {
+		t.Error("whitelist missing for native provider")
+	} else {
+		switch v := wl.(type) {
+		case []string:
+			if len(v) == 0 {
+				t.Error("whitelist should not be empty")
+			}
+		case []any:
+			if len(v) == 0 {
+				t.Error("whitelist should not be empty")
+			}
+		default:
+			t.Errorf("whitelist has unexpected type %T", wl)
 		}
 	}
 }
@@ -208,15 +225,15 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 		model string
 		id    string
 	}{
-		{"codex", "gpt-5.6", "openai.gpt-5.6"},
-		{"grok", "grok-4.4", "xai.grok-4.4"},
+		{"codex", "sol", "openai.gpt-5.6-sol"},
+		{"grok", "grok-4.6", "xai.grok-4.6"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.cli, func(t *testing.T) {
 			p, _ := Get(tt.cli)
 			opts := baseOpts()
 			opts.Model = tt.model
-			opts.ModelCatalog = []CatalogModel{catalogModel(tt.id, "mantle")}
+			opts.ModelCatalog = []CatalogModel{catalogModel(tt.id, "foundation")}
 			plan, err := p.BuildConfig(testConfig(), opts)
 			if err != nil {
 				t.Fatalf("BuildConfig: %v", err)
@@ -225,7 +242,7 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 				t.Fatalf("available dynamic model warnings = %v", plan.Warnings)
 			}
 
-			opts.ModelCatalog = []CatalogModel{catalogModel("unrelated.model", "mantle")}
+			opts.ModelCatalog = []CatalogModel{catalogModel("unrelated.model", "foundation")}
 			plan, err = p.BuildConfig(testConfig(), opts)
 			if err != nil {
 				t.Fatal(err)

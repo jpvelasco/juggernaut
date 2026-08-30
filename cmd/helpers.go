@@ -135,13 +135,6 @@ func toProviderOptions(o schema.Options) provider.Options {
 	return po
 }
 
-func resolveMantle() (bool, error) {
-	if applyFlags.noMantle && (applyFlags.mantle || applyFlags.mantleURL != "") {
-		return false, fmt.Errorf("--no-mantle cannot be combined with --mantle or --mantle-url")
-	}
-	return applyFlags.mantle || applyFlags.mantleURL != "", nil
-}
-
 // validateAuthFlag rejects unknown --auth values up front. Every downstream
 // consumer compares the mode by exact string, so a typo would otherwise fall
 // into the IAM path, silently drop --bedrock-key, and still write a config
@@ -154,18 +147,6 @@ func validateAuthFlag() error {
 	}
 	return fmt.Errorf("unknown --auth mode %q; valid modes are %q and %q",
 		applyFlags.auth, authmode.IAM, authmode.BedrockAPIKey)
-}
-
-// validateMantleAuth ensures that Mantle-only CLIs (Codex, OpenCode, Grok)
-// use a Bedrock API key — IAM/SSO (SigV4) does not reach Mantle. Rejects
-// non-bearer auth modes so we never write a config that can't authenticate.
-func validateMantleAuth(prov provider.Provider, authMode string) error {
-	if !prov.Supports(provider.CapNativeAuth) && !authmode.IsBedrockAPIKey(authMode) {
-		return fmt.Errorf("%s routes through Bedrock Mantle, which requires a Bedrock API key — "+
-			"re-run with --auth=%s (IAM/SSO is not supported for this CLI)",
-			prov.DisplayName(), authmode.BedrockAPIKey)
-	}
-	return nil
 }
 
 func resolveOpusplanConflict() error {
@@ -371,9 +352,6 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 	if prov.Name() == "claude" {
 		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
 	}
-	if prov.Supports(provider.CapThinking) {
-		warnMantleTradeoffs(block)
-	}
 	return nil
 }
 
@@ -454,9 +432,6 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if prov.Supports(provider.CapAutoMode) {
 		warnAutoModeModel(block)
 	}
-	if prov.Supports(provider.CapThinking) {
-		warnMantleTradeoffs(block)
-	}
 	return nil
 }
 
@@ -510,21 +485,6 @@ func warnAutoModeModel(block *schema.Block) {
 	fmt.Println("  On Bedrock auto mode requires Sonnet 5, or Opus 4.7 or later (Claude Code")
 	fmt.Println("  v2.1.158+). Configure one of those (e.g. keep the default Opus alias) and")
 	fmt.Println("  re-run with --mode=auto.")
-}
-
-// warnMantleTradeoffs alerts the user that routing through Mantle disables
-// features that native bedrock-runtime provides.
-func warnMantleTradeoffs(block *schema.Block) {
-	if !block.Meta.UseMantle {
-		return
-	}
-	fmt.Println()
-	fmt.Println("⚠ Mantle routing is enabled. Compared with native Bedrock (bedrock-runtime):")
-	fmt.Println("  • prompt caching is unavailable on Mantle — repeated context is re-read")
-	fmt.Println("    every turn, which costs more and adds latency for large codebases.")
-	fmt.Println("  • only current-generation Claude models are reachable (Sonnet 5, Opus 4.7/4.8,")
-	fmt.Println("    Haiku 4.5, Fable 5); older models stay on bedrock-runtime.")
-	fmt.Println("  Leave Mantle off unless you specifically need it (e.g. non-Anthropic models).")
 }
 
 func installActivation(home string, prov provider.Provider) {

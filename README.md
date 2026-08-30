@@ -90,13 +90,15 @@ juggernaut apply
 | Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
 
 ```bash
-# Codex / OpenCode / Grok route through Mantle and require a Bedrock API key (not IAM)
-juggernaut apply --cli=opencode --auth=bedrock-api-key
-juggernaut apply --cli=codex --auth=bedrock-api-key
-juggernaut apply --cli=grok --auth=bedrock-api-key
+# Every CLI routes natively via bedrock-runtime (IAM or Bedrock API key)
+juggernaut apply --cli=opencode --auth=iam              # or --auth=bedrock-api-key
+juggernaut apply --cli=codex --auth=iam
+juggernaut apply --cli=grok --auth=iam
+# Re-populate the account/region catalog after upgrading from a Mantle release:
+juggernaut models refresh --source native --region us-west-2
 ```
 
-Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it.
+Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it (only the last dependent CLI clears it).
 
 ### Safety model
 
@@ -119,7 +121,6 @@ juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: defa
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
 juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5
 juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
-juggernaut apply --auth=iam --mantle                # enable Mantle routing
 juggernaut apply --auth=iam --dry-run               # preview without writing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
 juggernaut apply --auth=iam --force                 # overwrite colliding foreign leaves (backup kept)
@@ -142,8 +143,8 @@ claude          # after apply --cli=claude (default)
 | `show` | Print the current Juggernaut-managed config from user and project scopes. |
 | `doctor` | Read-only diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts. Supports `--cli=claude\|codex\|opencode\|grok`. |
 | `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
-| `models refresh` | Discover the models available to the current AWS account and region from native Bedrock and Mantle, then cache the result locally. |
-| `models list` | List the cached inventory, optionally filtered to models compatible with a specific CLI. |
+| `models refresh` | Discover the models available to the current AWS account and region from native Bedrock (`foundation` + `profile` sources), then cache locally. |
+| `models list` | List the cached inventory, optionally filtered to models compatible with a specific CLI (`--cli=codex\|opencode\|grok`). |
 | `models check` | Maintainer tool: check `bedrock-config.json`'s pinned models against AWS Bedrock's live catalog; `--write --set-<tier>=<id>` to update a stale pin. |
 | `version` | Print the installed version. |
 
@@ -152,21 +153,22 @@ claude          # after apply --cli=claude (default)
 Juggernaut can configure the model inventory the account actually exposes instead of relying on a release-time roster:
 
 ```bash
-# Query native Bedrock plus the Mantle /v1/models endpoint with the default AWS profile
+# Query native Bedrock (foundation models + inference profiles) with the default AWS profile
 juggernaut models refresh --region=us-west-2
+# Alias for the same native sources:
+juggernaut models refresh --region=us-west-2 --source native
 
-# See the OpenCode-compatible subset (for example Kimi, GLM, Qwen,
-# GPT OSS, DeepSeek, MiniMax, and future compatible models)
+# See the OpenCode-compatible subset (e.g. Kimi, GLM, Qwen, GPT-OSS, DeepSeek, Grok, GPT-5.6)
 juggernaut models list --region=us-west-2 --cli=opencode
 
-# Refresh or inspect one endpoint family only
-juggernaut models refresh --region=us-east-1 --source=mantle
-juggernaut models list --region=us-east-1 --source=native
+# Inspect one catalog family only
+juggernaut models list --region=us-east-1 --source=foundation
+juggernaut models list --region=us-east-1 --source=profile
 ```
 
 The inventory is partitioned by AWS account and region at `~/.juggernaut/model-catalog.json` with owner-only permissions. The current profile or environment credential selection is bound to the caller account during refresh, so switching accounts cannot reuse another account's inventory. `apply` reads the matching cached account/region and never makes an implicit network call, so configuration remains deterministic and works offline. Run `models refresh` again when AWS adds models or the account's access changes; `models list --refresh` combines both steps.
 
-Each provider filters the live inventory by what its client protocol can use: Claude Code accepts native Anthropic models and inference profiles, Codex accepts Mantle GPT-5 models, OpenCode accepts general OpenAI-compatible Mantle models, and Grok accepts Mantle xAI Grok models. This small compatibility policy prevents Juggernaut from advertising a model to a client that cannot speak its API while avoiding a maintained model roster. Explicit `--model` selections remain supported and receive an actionable warning when a relevant cached catalog says they are unavailable.
+Each provider filters the live inventory by what its client protocol can use: Claude Code accepts `foundation`/`profile` Anthropic models, Codex accepts `foundation`/`profile` OpenAI GPT-5.6 (`sol`/`terra`/`luna`), OpenCode accepts `foundation`/`profile` OpenAI-compatible models (injected into its built-in `provider.amazon-bedrock` block with `whitelist`), and Grok accepts `foundation`/`profile` xAI Grok models over the native `bedrock-runtime` OpenAI-compatible endpoint (`https://bedrock-runtime.{region}.amazonaws.com/openai/v1`). This compatibility policy prevents advertising a model to a client that cannot speak its API while avoiding a maintained roster. Explicit `--model` selections remain supported and warn when the cached catalog says they are unavailable in the chosen region.
 
 ## Default Models
 
@@ -285,7 +287,6 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "bedrock:ListFoundationModels",
     "bedrock:GetFoundationModelAvailability",
     "bedrock:ListInferenceProfiles",
-    "bedrock-mantle:ListModels",
     "sts:GetCallerIdentity"
   ],
   "Resource": "*"
@@ -307,9 +308,9 @@ juggernaut uninstall --dry-run
 juggernaut uninstall --full
 ```
 
-## Migrating from v3/v4
+## Migrating from v3/v4 and upgrading to v6
 
-Go straight to v5 with npm. You do not need to install an intermediate v3 or v4 release first.
+Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Mantle routing is removed — every CLI now uses `bedrock-runtime`. After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone, Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6`, OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
 
 ```bash
 npm install -g juggernaut-bedrock@latest

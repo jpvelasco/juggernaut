@@ -40,7 +40,6 @@ var modelsListFlags struct {
 
 // These functions are variables so command tests never call real AWS.
 var listFoundationCatalog = discovery.ListFoundationModels
-var listMantleCatalog = discovery.ListMantleModels
 var catalogCallerAccount = discovery.CallerAccount
 var catalogCredentialScope = discovery.CredentialScope
 var catalogNow = time.Now
@@ -48,11 +47,11 @@ var catalogNow = time.Now
 func init() {
 	rf := modelsRefreshCmd.Flags()
 	rf.StringVar(&modelsRefreshFlags.region, "region", "us-west-2", "AWS region to query")
-	rf.StringVar(&modelsRefreshFlags.source, "source", "all", "catalog source: all, mantle, or native")
+	rf.StringVar(&modelsRefreshFlags.source, "source", "all", "catalog source: all, foundation, profile, or native")
 
 	lf := modelsListCmd.Flags()
 	lf.StringVar(&modelsListFlags.region, "region", "us-west-2", "AWS region to list")
-	lf.StringVar(&modelsListFlags.source, "source", "all", "catalog source: all, mantle, or native")
+	lf.StringVar(&modelsListFlags.source, "source", "all", "catalog source: all, foundation, profile, or native")
 	lf.StringVar(&modelsListFlags.cli, "cli", "", "show models compatible with this CLI: "+provider.SupportedNames())
 	lf.BoolVar(&modelsListFlags.refresh, "refresh", false, "refresh from AWS before listing")
 	lf.BoolVar(&modelsListFlags.showUnsupported, "show-unsupported", false, "with --cli, include incompatible models and reasons")
@@ -73,7 +72,7 @@ func runModelsRefresh(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	models, err := refreshCatalog(cmd.Context(), modelsRefreshFlags.region, sources, "")
+	models, err := refreshCatalog(cmd.Context(), modelsRefreshFlags.region, sources)
 	if err != nil {
 		return err
 	}
@@ -110,7 +109,7 @@ func runModelsList(cmd *cobra.Command, _ []string) error {
 		if accountErr != nil {
 			return accountErr
 		}
-		models, refreshErr := refreshCatalog(cmd.Context(), modelsListFlags.region, sources, "")
+		models, refreshErr := refreshCatalog(cmd.Context(), modelsListFlags.region, sources)
 		if refreshErr != nil {
 			return refreshErr
 		}
@@ -182,14 +181,14 @@ func runModelsList(cmd *cobra.Command, _ []string) error {
 
 func parseCatalogSources(value string) ([]discovery.Source, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "all":
-		return []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle}, nil
-	case "native":
+	case "all", "native":
 		return []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile}, nil
-	case "mantle":
-		return []discovery.Source{discovery.SourceMantle}, nil
+	case "foundation":
+		return []discovery.Source{discovery.SourceFoundation}, nil
+	case "profile":
+		return []discovery.Source{discovery.SourceProfile}, nil
 	default:
-		return nil, fmt.Errorf("invalid catalog source %q (expected all, mantle, or native)", value)
+		return nil, fmt.Errorf("invalid catalog source %q (expected all, foundation, profile, or native)", value)
 	}
 }
 
@@ -197,7 +196,6 @@ func refreshCatalog(
 	ctx context.Context,
 	region string,
 	sources []discovery.Source,
-	bearerToken string,
 ) ([]discovery.DiscoveredModel, error) {
 	wanted := make(map[discovery.Source]bool, len(sources))
 	for _, source := range sources {
@@ -215,13 +213,6 @@ func refreshCatalog(
 		found, err := listInferenceProfiles(ctx, region)
 		if err != nil {
 			return nil, fmt.Errorf("querying Bedrock inference profiles: %w", err)
-		}
-		models = append(models, found...)
-	}
-	if wanted[discovery.SourceMantle] {
-		found, err := listMantleCatalog(ctx, region, bearerToken)
-		if err != nil {
-			return nil, fmt.Errorf("querying Bedrock Mantle models: %w", err)
 		}
 		models = append(models, found...)
 	}

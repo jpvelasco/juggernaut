@@ -55,19 +55,23 @@ func TestCodex_ActivationMarkers(t *testing.T) {
 	}
 }
 
-// --- Per-model table (all facts live-verified 2026-07-03 against Mantle) ---
+// --- Per-model table (all facts live-verified 2026-08-29 native Bedrock) ---
 
-// TestCodexModel_GPT55 pins the GPT-5.5 model ID and region availability.
+// TestCodexModel_GPT55 pins the GPT-5.6-sol model ID and region availability.
 func TestCodexModel_GPT55(t *testing.T) {
-	m, ok := codexModel("gpt-5.5")
+	m, ok := codexModel("sol")
 	if !ok {
-		t.Fatal("gpt-5.5 not in Codex model table")
+		t.Fatal("sol not in Codex model table")
 	}
-	if m.ModelID != "openai.gpt-5.5" {
-		t.Errorf("ModelID = %q, want openai.gpt-5.5", m.ModelID)
+	if m.ModelID != "openai.gpt-5.6-sol" {
+		t.Errorf("ModelID = %q, want openai.gpt-5.6-sol", m.ModelID)
 	}
 	if len(m.Regions) == 0 {
-		t.Error("gpt-5.5 should have non-empty regions")
+		t.Error("sol should have non-empty regions")
+	}
+	// Old gpt-5.5 should be retired.
+	if _, ok := codexModel("gpt-5.5"); ok {
+		t.Error("gpt-5.5 should no longer be in Codex model table (retired)")
 	}
 }
 
@@ -106,10 +110,10 @@ func TestCodexModel_AllModelsHaveRegions(t *testing.T) {
 	}
 }
 
-// TestCodex_DefaultModel is GPT-5.5 (the flagship, mirroring native Codex).
+// TestCodex_DefaultModel is sol (the flagship for GPT-5.6).
 func TestCodex_DefaultModel(t *testing.T) {
-	if got := codexDefaultModel(); got != "gpt-5.5" {
-		t.Errorf("default Codex model = %q, want gpt-5.5", got)
+	if got := codexDefaultModel(); got != "sol" {
+		t.Errorf("default Codex model = %q, want sol", got)
 	}
 }
 

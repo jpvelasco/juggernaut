@@ -66,12 +66,12 @@ func TestConfigPlan_Validate_Ok(t *testing.T) {
 // contains only a source the provider doesn't use, it's treated as no cache.
 func TestCatalogSelectionState_NoRelevantSource(t *testing.T) {
 	models := []CatalogModel{
-		{ID: "anthropic.claude-opus-4-8", Source: "foundation", Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "anthropic.claude-opus-4-8", Source: "mantle", Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
 	p, _ := Get("grok")
-	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.3", p.(CatalogProvider), nil)
+	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.6", p.(CatalogProvider), nil)
 	if hasRelevant {
-		t.Error("grok should not find relevant source in foundation-only cache")
+		t.Error("grok should not find relevant source in mantle-only cache (now native)")
 	}
 	if selectedAvailable {
 		t.Error("selected model should not be available when no relevant source")
@@ -83,12 +83,12 @@ func TestCatalogSelectionState_NoRelevantSource(t *testing.T) {
 // exists in the right source but is not supported by the provider.
 func TestCatalogSelectionState_RelevantButModelNotSupported(t *testing.T) {
 	models := []CatalogModel{
-		{ID: "moonshotai.kimi-k2.5", Source: "mantle", Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "moonshotai.kimi-k2.5", Source: "foundation", Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
 	p, _ := Get("grok")
-	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.3", p.(CatalogProvider), nil)
+	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.6", p.(CatalogProvider), nil)
 	if !hasRelevant {
-		t.Error("grok should find relevant source in mantle cache")
+		t.Error("grok should find relevant source in foundation cache")
 	}
 	if selectedAvailable {
 		t.Error("selected grok model should not be available when not in catalog")
@@ -99,10 +99,10 @@ func TestCatalogSelectionState_RelevantButModelNotSupported(t *testing.T) {
 // selected model is found in the relevant source and is supported.
 func TestCatalogSelectionState_FullyAvailable(t *testing.T) {
 	models := []CatalogModel{
-		{ID: "xai.grok-4.3", Source: "mantle", Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "xai.grok-4.6", Source: "foundation", Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
 	p, _ := Get("grok")
-	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.3", p.(CatalogProvider), nil)
+	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.6", p.(CatalogProvider), nil)
 	if !hasRelevant {
 		t.Error("expected hasRelevantSource=true")
 	}
@@ -118,9 +118,9 @@ func TestCatalogSelectionState_EmptyCatalogWithRefreshedSource(t *testing.T) {
 	// Empty model list — the refresh returned nothing
 	var models []CatalogModel
 	p, _ := Get("grok")
-	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.3", p.(CatalogProvider), []string{"mantle"})
+	hasRelevant, selectedAvailable := catalogSelectionState(models, "xai.grok-4.6", p.(CatalogProvider), []string{"foundation"})
 	if !hasRelevant {
-		t.Error("expected hasRelevantSource=true when mantle source was refreshed but empty")
+		t.Error("expected hasRelevantSource=true when foundation source was refreshed but empty")
 	}
 	if selectedAvailable {
 		t.Error("selected model should not be available when catalog is empty")
@@ -143,8 +143,6 @@ func TestFromSchemaOptions_FillsFields(t *testing.T) {
 		AvailableModels:        []string{"opus"},
 		EnforceAvailableModels: true,
 		Use1M:                  true,
-		UseMantle:              false,
-		MantleURL:              "https://example.com",
 		AuthValidated:          true,
 		PermissionMode:         "auto",
 		AlwaysThinking:         true,

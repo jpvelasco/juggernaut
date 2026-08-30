@@ -638,77 +638,6 @@ func TestNativeKeys_AlwaysThinking(t *testing.T) {
 	}
 }
 
-func TestBuild_Mantle_StripsGlobalPrefix(t *testing.T) {
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Effort:        "xhigh",
-		Scope:         "user",
-		Version:       "4.0.0",
-		AuthValidated: true,
-		UseMantle:     true,
-	}
-	block, err := schema.Build(testConfig(), opts)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if block.Models.Opus != "anthropic.claude-opus-5" {
-		t.Errorf("expected opus without global. prefix, got %s", block.Models.Opus)
-	}
-	if block.Models.Sonnet != "anthropic.claude-sonnet-5" {
-		t.Errorf("expected sonnet without global. prefix, got %s", block.Models.Sonnet)
-	}
-	if block.Models.Haiku != "anthropic.claude-haiku-4-5-20251001-v1:0" {
-		t.Errorf("expected haiku without global. prefix, got %s", block.Models.Haiku)
-	}
-	if block.Models.Fable != "anthropic.claude-fable-5" {
-		t.Errorf("expected fable without global. prefix, got %s", block.Models.Fable)
-	}
-}
-
-func TestBuild_Mantle_StripsRegionalInferenceProfilePrefix(t *testing.T) {
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Effort:        "xhigh",
-		Scope:         "user",
-		Version:       "4.0.0",
-		AuthValidated: true,
-		UseMantle:     true,
-		SonnetModel:   "us.anthropic.claude-sonnet-4-6",
-	}
-	block, err := schema.Build(testConfig(), opts)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if block.Models.Sonnet != "anthropic.claude-sonnet-4-6" {
-		t.Errorf("expected sonnet without us. prefix, got %s", block.Models.Sonnet)
-	}
-}
-
-// TestBuild_Mantle_StripsGovCloudPrefix covers the us-gov. regional inference
-// profile prefix, which must be stripped for Mantle routing just like us./eu./
-// apac. (previously only IsAutoModeCapableModel handled us-gov.).
-func TestBuild_Mantle_StripsGovCloudPrefix(t *testing.T) {
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Effort:        "xhigh",
-		Scope:         "user",
-		Version:       "4.0.0",
-		AuthValidated: true,
-		UseMantle:     true,
-		SonnetModel:   "us-gov.anthropic.claude-sonnet-4-6",
-	}
-	block, err := schema.Build(testConfig(), opts)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if block.Models.Sonnet != "anthropic.claude-sonnet-4-6" {
-		t.Errorf("expected sonnet without us-gov. prefix, got %s", block.Models.Sonnet)
-	}
-}
-
 // TestBuild_Use1M_RecognizesGovCloudOpus covers the us-gov. prefix in the 1M
 // context support check: a GovCloud Opus model must still be annotated [1m].
 func TestBuild_Use1M_RecognizesGovCloudOpus(t *testing.T) {
@@ -729,25 +658,6 @@ func TestBuild_Use1M_RecognizesGovCloudOpus(t *testing.T) {
 	got := block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"]
 	if got != "us-gov.anthropic.claude-opus-4-8[1m]" {
 		t.Errorf("expected GovCloud Opus annotated with [1m], got %q", got)
-	}
-}
-
-func TestBuild_NoMantle_KeepsGlobalPrefix(t *testing.T) {
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Effort:        "xhigh",
-		Scope:         "user",
-		Version:       "4.0.0",
-		AuthValidated: true,
-		UseMantle:     false,
-	}
-	block, err := schema.Build(testConfig(), opts)
-	if err != nil {
-		t.Fatalf("Build() error: %v", err)
-	}
-	if block.Models.Opus != "global.anthropic.claude-opus-5" {
-		t.Errorf("expected opus with global. prefix preserved, got %s", block.Models.Opus)
 	}
 }
 

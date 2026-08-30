@@ -30,11 +30,11 @@ func containsStr(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
-// TestApply_MantleOnlyCLI_RejectsIAM: OpenCode and Grok route only through
-// Mantle (bearer token required), so an explicit --auth=iam must be rejected with
-// an actionable error. Codex now supports IAM via the AWS SDK credential chain.
-func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
-	for _, cli := range []string{"opencode", "grok"} {
+// TestApply_NativeCLIs_AcceptIAM: after native bedrock-runtime migration (v6),
+// every CLI (including OpenCode and Grok) supports IAM via SigV4. An explicit
+// --auth=iam must be accepted and should not error.
+func TestApply_NativeCLIs_AcceptIAM(t *testing.T) {
+	for _, cli := range []string{"opencode", "grok", "codex"} {
 		t.Run(cli, func(t *testing.T) {
 			_ = setupApplyTest(t)
 
@@ -42,12 +42,8 @@ func TestApply_MantleOnlyCLI_RejectsIAM(t *testing.T) {
 				"apply", "--cli=" + cli, "--auth=iam",
 				"--region=us-east-1", "--skip-preflight",
 			})
-			if err == nil {
-				t.Fatalf("%s: expected --auth=iam to be rejected (Mantle needs a bearer token)", cli)
-			}
-			msg := strings.ToLower(err.Error())
-			if !strings.Contains(msg, "iam") && !strings.Contains(msg, "bedrock api key") {
-				t.Errorf("%s: error should explain IAM is unsupported, got: %v", cli, err)
+			if err != nil {
+				t.Fatalf("%s: expected --auth=iam to be accepted on native bedrock-runtime, got error: %v", cli, err)
 			}
 		})
 	}
@@ -74,8 +70,8 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse config.toml: %v", err)
 	}
-	if got["model"] != "openai.gpt-5.5" {
-		t.Errorf("model = %v, want openai.gpt-5.5", got["model"])
+	if got["model"] != "openai.gpt-5.6-sol" {
+		t.Errorf("model = %v, want openai.gpt-5.6-sol", got["model"])
 	}
 	if got["model_provider"] != "amazon-bedrock" {
 		t.Errorf("model_provider = %v, want amazon-bedrock", got["model_provider"])
@@ -97,31 +93,29 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	}
 }
 
-// TestApply_Codex_ModelFlag_Respected: --model=gpt-5.4 must produce a gpt-5.4
-// config, not the GPT-5.5 default. Regression for the P2 bug where --model never
-// reached provider.Options.Model. (Uses gpt-5.4 rather than gpt-oss because
-// current Codex is Responses-only and gpt-oss — Chat-only on Mantle — is no
-// longer a valid Codex model.)
+// TestApply_Codex_ModelFlag_Respected: --model=terra must produce a gpt-5.6-terra
+// config, not the sol default. Regression for the P2 bug where --model never
+// reached provider.Options.Model.
 func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
 
 	if err := ExecuteArgs([]string{
-		"apply", "--cli=codex", "--model=gpt-5.4",
+		"apply", "--cli=codex", "--model=terra",
 		"--auth=" + authmode.BedrockAPIKey, "--bedrock-key=test-key-value",
 		"--region=us-east-1", "--skip-preflight",
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	if !containsStr(data, "openai.gpt-5.4") {
-		t.Errorf("expected gpt-5.4 model, got:\n%s", data)
+	if !containsStr(data, "openai.gpt-5.6-terra") {
+		t.Errorf("expected gpt-5.6-terra model, got:\n%s", data)
 	}
-	if containsStr(data, "openai.gpt-5.5") {
-		t.Errorf("must not fall back to gpt-5.5 when --model given:\n%s", data)
+	if containsStr(data, "openai.gpt-5.6-sol") {
+		t.Errorf("must not fall back to sol when --model=terra given:\n%s", data)
 	}
 	if !containsStr(data, `model_provider = "amazon-bedrock"`) {
-		t.Errorf("gpt-5.4 should use amazon-bedrock provider, got:\n%s", data)
+		t.Errorf("terra should use amazon-bedrock provider, got:\n%s", data)
 	}
 }
 
@@ -294,7 +288,7 @@ func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
 
 // TestUninstall_OpenCode_PreservesUserSiblingKeys: uninstall --cli=opencode
 // removes ONLY Juggernaut's owned leaves — the top-level "model" key and the
-// bedrock-mantle provider block. A user's own provider entries and their own
+// amazon-bedrock provider block. A user's own provider entries and their own
 // top-level keys must survive.
 func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	home := setupApplyTest(t)
@@ -307,7 +301,7 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	}
 
 	// Inject user-owned sibling content: a top-level key and a provider of
-	// their own next to the bedrock-mantle block Juggernaut wrote.
+	// their own next to the amazon-bedrock block Juggernaut wrote.
 	configPath := filepath.Join(home, ".config", "opencode", "opencode.json")
 	mgr := config.NewManager(configPath)
 	got, err := mgr.Read()
@@ -341,8 +335,8 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("provider table vanished — user providers must survive, got: %v", after["provider"])
 	}
-	if _, ok := provAfter["bedrock-mantle"]; ok {
-		t.Error("Juggernaut's bedrock-mantle provider should be removed")
+	if _, ok := provAfter["amazon-bedrock"]; ok {
+		t.Error("Juggernaut's amazon-bedrock provider should be removed")
 	}
 	if _, ok := provAfter["anthropic"]; !ok {
 		t.Error("user's own provider entry lost on uninstall — data loss!")

@@ -19,7 +19,6 @@ type Source string
 const (
 	SourceFoundation Source = "foundation"
 	SourceProfile    Source = "profile"
-	SourceMantle     Source = "mantle"
 )
 
 // DiscoveredModel is Juggernaut's own view of a Bedrock model or inference
@@ -29,7 +28,7 @@ type DiscoveredModel struct {
 	Status       string `json:"status"`       // "ACTIVE", "LEGACY", or "UNKNOWN" if AWS omits lifecycle info
 	Availability string `json:"availability"` // "AVAILABLE", "NOT_AVAILABLE", or "UNKNOWN"
 	Provider     string `json:"provider"`     // e.g. "Anthropic"; empty when the endpoint omits it
-	Source       Source `json:"source"`       // foundation, profile, or mantle
+	Source       Source `json:"source"`       // foundation or profile
 }
 
 // bedrockClient is the subset of the real AWS SDK client this package needs.
@@ -46,7 +45,7 @@ var loadDefaultAWSConfig = config.LoadDefaultConfig
 var makeBedrockClient = func(cfg aws.Config) bedrockClient { return bedrock.NewFromConfig(cfg) }
 
 // loadAWSConfig returns an AWS config for the given region using the default
-// credential chain. Shared by newClient, CallerAccount, and ListMantleModels.
+// credential chain. Shared by newClient and CallerAccount.
 func loadAWSConfig(ctx context.Context, region string) (aws.Config, error) {
 	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
 	if err != nil {

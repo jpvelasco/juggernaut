@@ -3,7 +3,6 @@ package provider
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -11,22 +10,20 @@ import (
 )
 
 // opencode is the OpenCode CLI provider (sst/anomalyco, config JSON at
-// ~/.config/opencode/opencode.json). OpenCode is model-agnostic, so it routes to
-// Bedrock via a custom OpenAI-compatible provider block
-// (npm "@ai-sdk/openai-compatible", options.baseURL → Mantle, apiKey via
-// {env:VAR}). Unlike Codex it has no "use bedrock" env var — routing lives in the
-// config; the bearer token is injected via the apiKey env interpolation.
+// ~/.config/opencode/opencode.json). OpenCode is model-agnostic, so it routes
+// via the built-in amazon-bedrock provider (options.region + live-discovered
+// models + whitelist). Unlike Codex it has no "use bedrock" env var — routing
+// lives in the config; the bearer token / IAM SigV4 chain is used at runtime.
 //
-// OpenCode targets any Mantle model compatible with Chat Completions. Juggernaut
-// injects the account's cached live inventory instead of maintaining a roster.
-// Mantle currently omits protocol metadata, so the compatibility rule is broad
-// with a narrow exclusion for the known Responses-only OpenAI GPT-5 family.
+// OpenCode targets any native Bedrock model compatible with Chat Completions.
+// Juggernaut injects the account's cached live inventory (foundation + profile)
+// instead of maintaining a roster.
 type opencode struct {
 	BaseProvider
 }
 
-// mantleProviderID is the provider key written into opencode.json.
-const mantleProviderID = "bedrock-mantle"
+// bedrockProviderID is the provider key written into opencode.json.
+const bedrockProviderID = "amazon-bedrock"
 
 // ConfigPath is ~/.config/opencode/opencode.json (user) or ./opencode.json
 // (project).
@@ -43,16 +40,16 @@ func (o opencode) NativeManagedKeys() []string {
 }
 
 // DeepMergeKeys: "provider" is a nested map where a user may have their own
-// providers (anthropic, openai, …); merge only our bedrock-mantle entry.
+// providers (anthropic, openai, …); merge only our amazon-bedrock entry.
 func (o opencode) DeepMergeKeys() []string { return []string{"provider"} }
 
-// OwnedSubKeys: uninstall removes only our bedrock-mantle provider from the
+// OwnedSubKeys: uninstall removes only our amazon-bedrock provider from the
 // provider map (the model leaf is removed whole).
 func (o opencode) OwnedSubKeys() map[string][]string {
-	return map[string][]string{"provider": {mantleProviderID}}
+	return map[string][]string{"provider": {bedrockProviderID}}
 }
 
-// OwnsConfig recognizes a config Juggernaut wrote by our bedrock-mantle provider
+// OwnsConfig recognizes a config Juggernaut wrote by our amazon-bedrock provider
 // under the "provider" map — NOT a plain user opencode.json that merely has a
 // "provider" block for other vendors or a "model" key.
 func (o opencode) OwnsConfig(data map[string]any) bool {
@@ -60,14 +57,14 @@ func (o opencode) OwnsConfig(data map[string]any) bool {
 	if !ok {
 		return false
 	}
-	_, ok = prov[mantleProviderID]
+	_, ok = prov[bedrockProviderID]
 	return ok
 }
 
 func (o opencode) LaunchSpec() LaunchSpec {
-	// OpenCode routes via config; the bearer token is injected through the
-	// apiKey {env:...} interpolation, so no static enable flag — but the token
-	// is still required (Mantle).
+	// OpenCode routes via config; the built-in amazon-bedrock provider uses
+	// the AWS credential chain (SigV4 or AWS_BEARER_TOKEN_BEDROCK), so no static
+	// enable flag. Token is still injected for bearer mode, but IAM also works.
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  true,
@@ -75,25 +72,28 @@ func (o opencode) LaunchSpec() LaunchSpec {
 }
 
 // opencodeModelAliases are convenience spellings, not an availability roster.
-// The live account/region catalog remains authoritative.
+// The live account/region catalog remains authoritative. IDs are native
+// Bedrock foundation IDs verified via `models list --source native` (2026-08-29).
 var opencodeModelAliases = map[string]string{
-	"gpt-oss-120b":  "openai.gpt-oss-120b",
-	"gpt-oss-20b":   "openai.gpt-oss-20b",
+	"gpt-oss-120b":  "openai.gpt-oss-120b-1:0",
+	"gpt-oss-20b":   "openai.gpt-oss-20b-1:0",
 	"glm-4.7":       "zai.glm-4.7",
 	"glm-5":         "zai.glm-5",
 	"kimi-k2.5":     "moonshotai.kimi-k2.5",
 	"deepseek-v3.2": "deepseek.v3.2",
-	"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-instruct",
-	"grok-4.3":      "xai.grok-4.3",
+	"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-v1:0",
+	"grok-4.6":      "xai.grok-4.6",
+	"grok-4.3":      "xai.grok-4.6", // deprecated: kept for backwards compat; prefer grok-4.6
 }
 
 func opencodeDefaultModel() string { return "gpt-oss-120b" }
 
-// BuildConfig writes OpenCode's config: a custom OpenAI-compatible provider block
-// pointing at Mantle /v1, plus a top-level default model "provider_id/model_id".
-// A convenience alias resolves to a Mantle model ID; any other value is passed
-// through verbatim. Every compatible discovered model is added to the provider
-// block so OpenCode's model picker can use the account's actual inventory.
+// BuildConfig writes OpenCode's config: the built-in amazon-bedrock provider
+// (options.region + live-discovered models + whitelist) plus a top-level
+// default model "provider_id/model_id". A convenience alias resolves to a
+// native Bedrock model ID; any other value is passed through verbatim. Every
+// compatible discovered model is added to the provider block so OpenCode's
+// model picker can use the account's actual inventory.
 func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
@@ -103,37 +103,35 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 	var warnings []string
 	modelID, aliased := opencodeModelAliases[key]
 	if !aliased {
-		// Passthrough: treat the given value as a raw Mantle model ID. Honest
-		// about the risk — we haven't verified its API/path.
+		// Passthrough: treat the given value as a raw native Bedrock model ID.
 		modelID = key
 		warnings = append(warnings, fmt.Sprintf(
-			"model %q is not a known convenience alias — writing it verbatim as a Mantle model. "+
+			"model %q is not a known convenience alias — writing it verbatim as a native Bedrock model. "+
 				"It may use a different API/path than Chat Completions and fail at runtime; "+
 				"verify against the model card if it doesn't work.", key))
 	}
 
-	models := map[string]any{modelID: map[string]any{"name": modelID}}
+	models := map[string]any{modelID: map[string]any{"id": modelID, "name": modelID}}
+	var whitelist []string
 	for _, discovered := range opts.ModelCatalog {
 		if support := o.SupportsModel(discovered); support.Supported {
-			models[discovered.ID] = map[string]any{"name": discovered.ID}
+			models[discovered.ID] = map[string]any{"id": discovered.ID, "name": discovered.ID}
+			whitelist = append(whitelist, discovered.ID)
 		}
 	}
 	if w := catalogUnavailableWarning(opts.ModelCatalog, modelID, opts.Region, "it remains configured for explicit use", o, opts.RefreshedSources); w != "" {
 		warnings = append(warnings, w)
 	}
 
-	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/v1", opts.Region)
 	keys := map[string]any{
-		"model": mantleProviderID + "/" + modelID,
+		"model": bedrockProviderID + "/" + modelID,
 		"provider": map[string]any{
-			mantleProviderID: map[string]any{
-				"npm":  "@ai-sdk/openai-compatible",
-				"name": "Amazon Bedrock (Mantle)",
+			bedrockProviderID: map[string]any{
 				"options": map[string]any{
-					"baseURL": baseURL,
-					"apiKey":  "{env:" + authmode.BedrockAuthEnvName + "}",
+					"region": opts.Region,
 				},
-				"models": models,
+				"models":    models,
+				"whitelist": whitelist,
 			},
 		},
 	}
@@ -147,12 +145,9 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 
 func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
 	return o.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
-		if m.Source != "mantle" {
-			return ModelSupport{Reason: "OpenCode's Bedrock provider routes through Mantle"}
+		if m.Source == "mantle" {
+			return ModelSupport{Reason: "OpenCode's Bedrock provider no longer uses Mantle (native only)"}
 		}
-		if strings.HasPrefix(m.ID, "openai.gpt-5.") {
-			return ModelSupport{Reason: "GPT-5 on Mantle requires the Responses API"}
-		}
-		return ModelSupport{Supported: true, Reason: "Mantle Chat-compatible candidate"}
+		return ModelSupport{Supported: true, Reason: "native Bedrock Chat-compatible candidate"}
 	})
 }

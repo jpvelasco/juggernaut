@@ -43,9 +43,12 @@ func TestParseCatalogSources(t *testing.T) {
 		input string
 		want  []discovery.Source
 	}{
-		{"all", []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle}},
+		{"all", []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile}},
 		{" NATIVE ", []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile}},
-		{"Mantle", []discovery.Source{discovery.SourceMantle}},
+		{"foundation", []discovery.Source{discovery.SourceFoundation}},
+		{"profile", []discovery.Source{discovery.SourceProfile}},
+		{"Foundation", []discovery.Source{discovery.SourceFoundation}},
+		{"PROFILE", []discovery.Source{discovery.SourceProfile}},
 	}
 	for _, tt := range tests {
 		got, err := parseCatalogSources(tt.input)
@@ -66,12 +69,15 @@ func TestParseCatalogSources(t *testing.T) {
 	if _, err := parseCatalogSources("curated"); err == nil {
 		t.Fatal("expected invalid-source error")
 	}
+	if _, err := parseCatalogSources("mantle"); err == nil || !strings.Contains(err.Error(), "expected all, foundation, profile") {
+		t.Fatalf("mantle source should be invalid after removal: %v", err)
+	}
 }
 
 func TestRefreshCatalog_QueriesOnlyRequestedSources(t *testing.T) {
-	origFoundation, origProfiles, origMantle := listFoundationCatalog, listInferenceProfiles, listMantleCatalog
+	origFoundation, origProfiles := listFoundationCatalog, listInferenceProfiles
 	t.Cleanup(func() {
-		listFoundationCatalog, listInferenceProfiles, listMantleCatalog = origFoundation, origProfiles, origMantle
+		listFoundationCatalog, listInferenceProfiles = origFoundation, origProfiles
 	})
 	calls := map[string]int{}
 	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
@@ -82,40 +88,51 @@ func TestRefreshCatalog_QueriesOnlyRequestedSources(t *testing.T) {
 		calls["profile"]++
 		return []discovery.DiscoveredModel{{ID: "profile", Source: discovery.SourceProfile}}, nil
 	}
-	listMantleCatalog = func(_ context.Context, region, token string) ([]discovery.DiscoveredModel, error) {
-		calls["mantle"]++
-		if region != "us-west-2" || token != "token" {
-			t.Fatalf("Mantle args = region %q token %q", region, token)
-		}
-		return []discovery.DiscoveredModel{{ID: "mantle", Source: discovery.SourceMantle}}, nil
-	}
 
-	models, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceMantle}, "token")
+	models, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceFoundation})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(models) != 1 || models[0].ID != "mantle" {
+	if len(models) != 1 || models[0].ID != "native" {
 		t.Fatalf("models = %+v", models)
 	}
-	if calls["mantle"] != 1 || calls["foundation"] != 0 || calls["profile"] != 0 {
+	if calls["foundation"] != 1 || calls["profile"] != 0 {
+		t.Fatalf("source calls = %v", calls)
+	}
+
+	calls = map[string]int{}
+	models, err = refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceProfile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != "profile" {
+		t.Fatalf("models = %+v", models)
+	}
+	if calls["profile"] != 1 || calls["foundation"] != 0 {
+		t.Fatalf("source calls = %v", calls)
+	}
+
+	calls = map[string]int{}
+	models, err = refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("models = %+v, want 2", models)
+	}
+	if calls["foundation"] != 1 || calls["profile"] != 1 {
 		t.Fatalf("source calls = %v", calls)
 	}
 }
 
 func TestRefreshCatalog_IdentifiesProfileAndMantleFailures(t *testing.T) {
-	origProfiles, origMantle := listInferenceProfiles, listMantleCatalog
-	t.Cleanup(func() { listInferenceProfiles, listMantleCatalog = origProfiles, origMantle })
+	origProfiles := listInferenceProfiles
+	t.Cleanup(func() { listInferenceProfiles = origProfiles })
 	listInferenceProfiles = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return nil, errors.New("profiles denied")
 	}
-	if _, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceProfile}, ""); err == nil || !strings.Contains(err.Error(), "inference profiles") {
+	if _, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceProfile}); err == nil || !strings.Contains(err.Error(), "inference profiles") {
 		t.Fatalf("profile error = %v", err)
-	}
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return nil, errors.New("mantle denied")
-	}
-	if _, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceMantle}, ""); err == nil || !strings.Contains(err.Error(), "Mantle models") {
-		t.Fatalf("Mantle error = %v", err)
 	}
 }
 
@@ -125,7 +142,7 @@ func TestRefreshCatalog_IdentifiesFailingSource(t *testing.T) {
 	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return nil, errors.New("denied")
 	}
-	_, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceFoundation}, "")
+	_, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{discovery.SourceFoundation})
 	if err == nil || !strings.Contains(err.Error(), "querying Bedrock foundation models") {
 		t.Fatalf("error = %v", err)
 	}
@@ -135,22 +152,22 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	models := []discovery.DiscoveredModel{
-		{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "qwen.qwen3-coder-next", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-		{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "zai.glm-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "qwen.qwen3-coder-480b-a35b-v1:0", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "openai.gpt-oss-120b-1:0", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
 	credentialScope, err := discovery.CredentialScope(home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := discovery.SaveCachedModels(home, "111122223333", credentialScope, "us-west-2", []discovery.Source{discovery.SourceMantle}, models, when); err != nil {
+	if err := discovery.SaveCachedModels(home, "111122223333", credentialScope, "us-west-2", []discovery.Source{discovery.SourceFoundation}, models, when); err != nil {
 		t.Fatal(err)
 	}
 
 	origFlags := modelsListFlags
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "native"
 	modelsListFlags.cli = "opencode"
 	modelsListFlags.refresh = false
 	modelsListFlags.showUnsupported = false
@@ -163,15 +180,12 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := output.String()
-	for _, id := range []string{"moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-next"} {
+	for _, id := range []string{"moonshotai.kimi-k2.5", "zai.glm-5", "qwen.qwen3-coder-480b-a35b-v1:0", "openai.gpt-oss-120b-1:0"} {
 		if !strings.Contains(got, id) {
 			t.Errorf("list output omitted compatible model %q:\n%s", id, got)
 		}
 	}
-	if strings.Contains(got, "openai.gpt-5.5") {
-		t.Errorf("OpenCode list included Responses-only model:\n%s", got)
-	}
-	if !strings.Contains(got, "3 models for AWS account 111122223333; refreshed 2026-07-20T12:00:00Z") {
+	if !strings.Contains(got, "4 models for AWS account 111122223333; refreshed 2026-07-20T12:00:00Z") {
 		t.Errorf("missing summary:\n%s", got)
 	}
 
@@ -181,8 +195,8 @@ func TestModelsList_FiltersLiveCatalogByCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	got = output.String()
-	if !strings.Contains(got, "openai.gpt-5.5") || !strings.Contains(got, "no") {
-		t.Errorf("show-unsupported output omitted incompatible model:\n%s", got)
+	if !strings.Contains(got, "openai.gpt-oss-120b-1:0") {
+		t.Errorf("show-unsupported output omitted model:\n%s", got)
 	}
 }
 
@@ -217,7 +231,7 @@ func TestModelsRefresh_ReportsInvalidSourceAndIdentityFailure(t *testing.T) {
 		t.Fatalf("invalid source error = %v", err)
 	}
 
-	modelsRefreshFlags.source = "mantle"
+	modelsRefreshFlags.source = "foundation"
 	catalogCredentialScope = func(string) (string, error) { return "", errors.New("scope failed") }
 	if err := runModelsRefresh(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "scope failed") {
 		t.Fatalf("identity error = %v", err)
@@ -229,11 +243,11 @@ func TestModelsRefresh_CachesAllSources(t *testing.T) {
 	when := time.Date(2026, 7, 20, 15, 0, 0, 0, time.UTC)
 
 	origFlags := modelsRefreshFlags
-	origFoundation, origProfiles, origMantle := listFoundationCatalog, listInferenceProfiles, listMantleCatalog
+	origFoundation, origProfiles := listFoundationCatalog, listInferenceProfiles
 	origAccount, origScope, origNow := catalogCallerAccount, catalogCredentialScope, catalogNow
 	t.Cleanup(func() {
 		modelsRefreshFlags = origFlags
-		listFoundationCatalog, listInferenceProfiles, listMantleCatalog = origFoundation, origProfiles, origMantle
+		listFoundationCatalog, listInferenceProfiles = origFoundation, origProfiles
 		catalogCallerAccount, catalogCredentialScope, catalogNow = origAccount, origScope, origNow
 	})
 	modelsRefreshFlags.region = "us-east-1"
@@ -247,9 +261,6 @@ func TestModelsRefresh_CachesAllSources(t *testing.T) {
 	listInferenceProfiles = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{{ID: "profile", Source: discovery.SourceProfile}}, nil
 	}
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return []discovery.DiscoveredModel{{ID: "mantle", Source: discovery.SourceMantle}}, nil
-	}
 
 	var output bytes.Buffer
 	command := &cobra.Command{}
@@ -257,11 +268,11 @@ func TestModelsRefresh_CachesAllSources(t *testing.T) {
 	if err := runModelsRefresh(command, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "Cached 3 models for AWS account 111122223333 in us-east-1") {
+	if !strings.Contains(output.String(), "Cached 2 models for AWS account 111122223333 in us-east-1") {
 		t.Fatalf("output = %q", output.String())
 	}
 	snapshot, found, err := discovery.LoadCachedModels(home, "scope", "us-east-1")
-	if err != nil || !found || len(snapshot.Models) != 3 {
+	if err != nil || !found || len(snapshot.Models) != 2 {
 		t.Fatalf("snapshot = %+v, found %v, err %v", snapshot, found, err)
 	}
 }
@@ -270,20 +281,20 @@ func TestModelsRefresh_PropagatesDiscoveryAndCacheErrors(t *testing.T) {
 	home := testutil.NewTestHome(t)
 
 	origFlags := modelsRefreshFlags
-	origMantle := listMantleCatalog
+	origFoundation := listFoundationCatalog
 	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
 	t.Cleanup(func() {
 		modelsRefreshFlags = origFlags
-		listMantleCatalog = origMantle
+		listFoundationCatalog = origFoundation
 		catalogCallerAccount, catalogCredentialScope = origAccount, origScope
 	})
 	modelsRefreshFlags.region = "us-west-2"
-	modelsRefreshFlags.source = "mantle"
+	modelsRefreshFlags.source = "foundation"
 	catalogCallerAccount = func(context.Context, string) (string, error) { return "111122223333", nil }
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 
 	discoveryErr := errors.New("discovery failed")
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return nil, discoveryErr
 	}
 	if err := runModelsRefresh(&cobra.Command{}, nil); !errors.Is(err, discoveryErr) {
@@ -291,8 +302,8 @@ func TestModelsRefresh_PropagatesDiscoveryAndCacheErrors(t *testing.T) {
 	}
 
 	writeMalformedCatalogCache(t, home)
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return []discovery.DiscoveredModel{{ID: "zai.glm-5", Source: discovery.SourceMantle}}, nil
+	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{{ID: "zai.glm-5", Source: discovery.SourceFoundation}}, nil
 	}
 	if err := runModelsRefresh(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
 		t.Fatalf("cache error = %v", err)
@@ -304,24 +315,24 @@ func TestModelsList_RefreshesAndListsWithoutCLIFilter(t *testing.T) {
 	when := time.Date(2026, 7, 20, 16, 0, 0, 0, time.UTC)
 
 	origFlags := modelsListFlags
-	origMantle := listMantleCatalog
+	origFoundation := listFoundationCatalog
 	origAccount, origScope, origNow := catalogCallerAccount, catalogCredentialScope, catalogNow
 	t.Cleanup(func() {
 		modelsListFlags = origFlags
-		listMantleCatalog = origMantle
+		listFoundationCatalog = origFoundation
 		catalogCallerAccount, catalogCredentialScope, catalogNow = origAccount, origScope, origNow
 	})
 	modelsListFlags.region = "us-west-1"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "foundation"
 	modelsListFlags.cli = ""
 	modelsListFlags.refresh = true
 	modelsListFlags.showUnsupported = false
 	catalogCallerAccount = func(context.Context, string) (string, error) { return "444455556666", nil }
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 	catalogNow = func() time.Time { return when }
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{{
-			ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE",
+			ID: "zai.glm-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE",
 		}}, nil
 	}
 
@@ -342,11 +353,11 @@ func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
 	home := testutil.NewTestHome(t)
 
 	origFlags := modelsListFlags
-	origMantle := listMantleCatalog
+	origFoundation := listFoundationCatalog
 	origAccount, origScope := catalogCallerAccount, catalogCredentialScope
 	t.Cleanup(func() {
 		modelsListFlags = origFlags
-		listMantleCatalog = origMantle
+		listFoundationCatalog = origFoundation
 		catalogCallerAccount, catalogCredentialScope = origAccount, origScope
 	})
 	modelsListFlags.region = "us-west-2"
@@ -355,7 +366,7 @@ func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
 		t.Fatalf("source error = %v", err)
 	}
 
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "foundation"
 	scopeErr := errors.New("scope failed")
 	catalogCredentialScope = func(string) (string, error) { return "", scopeErr }
 	if err := runModelsList(&cobra.Command{}, nil); !errors.Is(err, scopeErr) {
@@ -366,7 +377,7 @@ func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
 	modelsListFlags.refresh = true
 	catalogCallerAccount = func(context.Context, string) (string, error) { return "111122223333", nil }
 	discoveryErr := errors.New("discovery failed")
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
+	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return nil, discoveryErr
 	}
 	if err := runModelsList(&cobra.Command{}, nil); !errors.Is(err, discoveryErr) {
@@ -374,8 +385,8 @@ func TestModelsList_PropagatesInputRefreshAndCacheErrors(t *testing.T) {
 	}
 
 	writeMalformedCatalogCache(t, home)
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return []discovery.DiscoveredModel{{ID: "zai.glm-5", Source: discovery.SourceMantle}}, nil
+	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
+		return []discovery.DiscoveredModel{{ID: "zai.glm-5", Source: discovery.SourceFoundation}}, nil
 	}
 	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
 		t.Fatalf("refresh cache error = %v", err)
@@ -391,12 +402,12 @@ func TestModelsList_FiltersSourcesAndPropagatesWriterErrors(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 17, 0, 0, 0, time.UTC)
 	models := []discovery.DiscoveredModel{
-		{ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+		{ID: "zai.glm-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 		{ID: "global.anthropic.claude-sonnet-5", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE"},
 		{ID: "anthropic.claude-sonnet-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 	}
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{
-		discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle,
+		discovery.SourceFoundation, discovery.SourceProfile,
 	}, models, when); err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +419,7 @@ func TestModelsList_FiltersSourcesAndPropagatesWriterErrors(t *testing.T) {
 		catalogCredentialScope = origScope
 	})
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "native"
+	modelsListFlags.source = "profile"
 	modelsListFlags.cli = ""
 	modelsListFlags.refresh = false
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
@@ -420,19 +431,34 @@ func TestModelsList_FiltersSourcesAndPropagatesWriterErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := output.String()
-	if strings.Contains(got, "zai.glm-5") {
-		t.Fatalf("native source listing included Mantle model:\n%s", got)
+	if !strings.Contains(got, "global.anthropic.claude-sonnet-5") {
+		t.Errorf("profile source listing omitted %q:\n%s", "global.anthropic.claude-sonnet-5", got)
 	}
-	for _, id := range []string{"anthropic.claude-sonnet-5", "global.anthropic.claude-sonnet-5"} {
-		if !strings.Contains(got, id) {
-			t.Errorf("native source listing omitted %q:\n%s", id, got)
-		}
+	if strings.Contains(got, "zai.glm-5") {
+		t.Fatalf("profile source listing included Foundation model:\n%s", got)
 	}
 
 	writeErr := errors.New("output failed")
 	command.SetOut(errorWriter{err: writeErr})
 	if err := runModelsList(command, nil); !errors.Is(err, writeErr) {
 		t.Fatalf("writer error = %v, want %v", err, writeErr)
+	}
+
+	// Also verify foundation filter excludes profile.
+	modelsListFlags.source = "foundation"
+	output.Reset()
+	command.SetOut(&output)
+	if err := runModelsList(command, nil); err != nil {
+		t.Fatal(err)
+	}
+	got = output.String()
+	if strings.Contains(got, "global.anthropic.claude-sonnet-5") {
+		t.Fatalf("foundation source listing included Profile model:\n%s", got)
+	}
+	for _, id := range []string{"anthropic.claude-sonnet-5", "zai.glm-5"} {
+		if !strings.Contains(got, id) {
+			t.Errorf("foundation source listing omitted %q:\n%s", id, got)
+		}
 	}
 }
 
@@ -455,9 +481,9 @@ func TestCachedProviderModels_MapsCachedInventory(t *testing.T) {
 	t.Cleanup(func() { catalogCredentialScope = origScope })
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 	model := discovery.DiscoveredModel{
-		ID: "zai.glm-5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE", Provider: "zai",
+		ID: "zai.glm-5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE", Provider: "zai",
 	}
-	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{discovery.SourceMantle}, []discovery.DiscoveredModel{model}, time.Now()); err != nil {
+	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{discovery.SourceFoundation}, []discovery.DiscoveredModel{model}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	models, _, err := cachedProviderCatalog(home, "us-west-2")
@@ -477,17 +503,17 @@ func TestModelCatalogCommands_PropagateIdentityAndProviderErrors(t *testing.T) {
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 	catalogCallerAccount = func(context.Context, string) (string, error) { return "", errors.New("identity denied") }
 
-	modelsRefreshFlags.region, modelsRefreshFlags.source = "us-west-2", "mantle"
+	modelsRefreshFlags.region, modelsRefreshFlags.source = "us-west-2", "foundation"
 	if err := runModelsRefresh(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "identity denied") {
 		t.Fatalf("refresh identity error = %v", err)
 	}
 
-	modelsListFlags.region, modelsListFlags.source, modelsListFlags.refresh = "us-west-2", "mantle", true
+	modelsListFlags.region, modelsListFlags.source, modelsListFlags.refresh = "us-west-2", "foundation", true
 	if err := runModelsList(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "identity denied") {
 		t.Fatalf("list identity error = %v", err)
 	}
 
-	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{discovery.SourceMantle}, nil, time.Now()); err != nil {
+	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2", []discovery.Source{discovery.SourceFoundation}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	modelsListFlags.cli, modelsListFlags.refresh = "unknown", false
@@ -502,7 +528,7 @@ func TestModelCatalogCommands_PropagateIdentityAndProviderErrors(t *testing.T) {
 }
 
 func TestResetFlags_ResetsNestedModelCommands(t *testing.T) {
-	if err := modelsRefreshCmd.Flags().Set("source", "mantle"); err != nil {
+	if err := modelsRefreshCmd.Flags().Set("source", "foundation"); err != nil {
 		t.Fatal(err)
 	}
 	if err := modelsListCmd.Flags().Set("show-unsupported", "true"); err != nil {

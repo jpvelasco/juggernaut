@@ -29,8 +29,6 @@ type Options struct {
 	AvailableModels        []string
 	EnforceAvailableModels bool
 	Use1M                  bool
-	UseMantle              bool
-	MantleURL              string
 	AuthValidated          bool
 	PermissionMode         string // "", "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"
 	AlwaysThinking         bool
@@ -72,8 +70,6 @@ type Meta struct {
 	AppliedAt              string   `json:"appliedAt"`
 	Opusplan               bool     `json:"opusplan"`
 	Use1M                  bool     `json:"use1mContext"`
-	UseMantle              bool     `json:"useMantle"`
-	MantleURL              string   `json:"mantleBaseUrl,omitempty"`
 	Effort                 string   `json:"effort"`
 	FallbackModels         []string `json:"fallbackModels,omitempty"`
 	AvailableModels        []string `json:"availableModels,omitempty"`
@@ -131,12 +127,6 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 
 	opus, sonnet, haiku, fable := resolveTierModels(cfg, opts)
-	if opts.UseMantle {
-		opus = mantleModelID(opus)
-		sonnet = mantleModelID(sonnet)
-		haiku = mantleModelID(haiku)
-		fable = mantleModelID(fable)
-	}
 
 	fallbackModels, err := ValidateModelList(opts.FallbackModels, "fallback model chain")
 	if err != nil {
@@ -185,8 +175,6 @@ func assembleBlock(opts Options, opus, sonnet, haiku, fable string, env map[stri
 			AppliedAt:              time.Now().UTC().Format(time.RFC3339),
 			Opusplan:               opts.Opusplan,
 			Use1M:                  opts.Use1M,
-			UseMantle:              opts.UseMantle,
-			MantleURL:              opts.MantleURL,
 			Effort:                 opts.Effort,
 			FallbackModels:         fallbackModels,
 			AvailableModels:        availableModels,
@@ -221,8 +209,6 @@ func resolveTierModels(cfg *bedrock.Config, opts Options) (opus, sonnet, haiku, 
 }
 
 // buildEnv constructs the environment map for the Juggernaut block.
-// The resolved tier models are passed in so Mantle normalization is applied
-// before env values are set.
 func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable string) map[string]string {
 	env := make(map[string]string, len(cfg.Environment))
 	maps.Copy(env, cfg.Environment)
@@ -249,12 +235,6 @@ func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable stri
 	}
 	if !opts.Use1M {
 		env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] = "1"
-	}
-	if opts.UseMantle {
-		env["CLAUDE_CODE_USE_MANTLE"] = "1"
-		if opts.MantleURL != "" {
-			env["ANTHROPIC_BEDROCK_MANTLE_BASE_URL"] = opts.MantleURL
-		}
 	}
 	// Enable auto mode when it's the requested mode AND at least one configured
 	// model can use it (Opus/Sonnet/Fable; Haiku never qualifies). The var only
@@ -363,10 +343,6 @@ func (b *Block) AutoModeAvailable() bool {
 // RegionalInferencePrefixes is a re-export of bedrock.RegionalInferencePrefixes
 // for backward compatibility.
 var RegionalInferencePrefixes = bedrock.RegionalInferencePrefixes
-
-func mantleModelID(model string) string {
-	return StripRegionPrefix(model)
-}
 
 func claudeCodeContextModelID(model string, use1M bool) string {
 	if !use1M || strings.HasSuffix(model, "[1m]") || !supportsClaudeCode1M(model) {

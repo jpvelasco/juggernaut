@@ -36,7 +36,7 @@ Juggernaut is a local CLI that writes coding-agent configuration and optional sh
 ### Trust boundaries
 
 1. **User machine** — Juggernaut and the target coding CLI run as the user; compromise of the user account implies compromise of keys and config.
-2. **AWS / Bedrock** — Inference traffic goes to AWS endpoints (or Mantle when configured). Juggernaut does not proxy prompts.
+2. **AWS / Bedrock** — Inference traffic goes to AWS `bedrock-runtime` endpoints (`bedrock-runtime.{region}.amazonaws.com` and `bedrock-runtime.{region}.amazonaws.com/openai/v1` for OpenAI-compatible models). Juggernaut does not proxy prompts.
 3. **npm distribution** — Prebuilt binaries ship via `juggernaut-bedrock` optional platform packages; the Node shim resolves an allowlisted package only.
 4. **Upstream coding CLIs** — Claude Code, Codex, OpenCode, Grok are external binaries; Juggernaut must not overwrite unknown files matching their names.
 
@@ -49,7 +49,7 @@ Juggernaut is a local CLI that writes coding-agent configuration and optional sh
 | Credential leakage via UserData / plaintext profiles | Bedrock API keys go to the **OS keychain only** — never shell profiles or agent config as plaintext secrets |
 | Path traversal under user-controlled bases | `internal/safepath` containment + owner-only file modes for writes under controlled roots |
 | Recursive/wrapper confusion | Activation resolves the real target binary; never installs over unknown `claude`/`codex`/… binaries |
-| Auth-gated Bedrock without credentials | `CLAUDE_CODE_USE_BEDROCK=1` (and equivalents) only written when auth is validated |
+| Auth-gated Bedrock without credentials | `CLAUDE_CODE_USE_BEDROCK=1` (and native provider selection per CLI) only written when auth is validated |
 | Tampering with governance lists in user settings | Documented limitation: `availableModels` in user/project scope is not OS-managed enforcement; org policy requires Claude Code managed settings paths Juggernaut does not write |
 
 ### Explicit non-goals
@@ -61,9 +61,9 @@ Juggernaut is a local CLI that writes coding-agent configuration and optional sh
 
 ## Credential handling
 
-- **Prefer IAM/SSO** (`--auth=iam`) so no long-lived Bedrock API key is stored.
-- **Bedrock API key** (`--auth=bedrock-api-key`) is stored in the OS keychain only.
-- Uninstalling one non-Claude CLI does **not** remove the shared bearer token; only uninstall paths that intentionally clear credentials do.
+- **Prefer IAM/SSO** (`--auth=iam`) so no long-lived Bedrock API key is stored (supported for every CLI on native `bedrock-runtime`).
+- **Bedrock API key** (`--auth=bedrock-api-key`) is stored in the OS keychain only and injected as `AWS_BEARER_TOKEN_BEDROCK` at launch (or via per-CLI `auth_provider_command`).
+- Uninstalling one non-Claude CLI does **not** remove the shared bearer token; only the last dependent CLI's uninstall clears it (and never on `--scope=project` when user-scope configs remain).
 - Do not commit `.backup.*` files, `.env`, or real keys. Redact `doctor` output before sharing.
 
 ## Recommendations for operators

@@ -38,6 +38,13 @@ func CachePath(home string) (string, error) {
 	return safepath.JoinUnder(home, ".juggernaut", "model-catalog.json")
 }
 
+// knownSource reports whether a catalog source is still supported. Old caches
+// may contain "mantle" entries from before the native-only migration; those
+// are silently dropped so callers never need a manual cache invalidation.
+func knownSource(source Source) bool {
+	return source == SourceFoundation || source == SourceProfile
+}
+
 // LoadCachedModels loads the region snapshot associated with the current local
 // AWS credential scope. A missing cache, binding, account, or region returns
 // found=false.
@@ -55,7 +62,28 @@ func LoadCachedModels(home, credentialScope, region string) (snapshot RegionCata
 		return RegionCatalog{}, false, nil
 	}
 	snapshot, found = account.Regions[region]
+	if found {
+		snapshot = filterSnapshot(snapshot)
+	}
 	return snapshot, found, nil
+}
+
+func filterSnapshot(snapshot RegionCatalog) RegionCatalog {
+	filteredModels := make([]DiscoveredModel, 0, len(snapshot.Models))
+	for _, model := range snapshot.Models {
+		if knownSource(model.Source) {
+			filteredModels = append(filteredModels, model)
+		}
+	}
+	snapshot.Models = filteredModels
+	filteredSources := make([]Source, 0, len(snapshot.Sources))
+	for _, source := range snapshot.Sources {
+		if knownSource(source) {
+			filteredSources = append(filteredSources, source)
+		}
+	}
+	snapshot.Sources = filteredSources
+	return snapshot
 }
 
 // SaveCachedModels replaces only the refreshed sources for one account and
@@ -104,12 +132,18 @@ func SaveCachedModels(
 	merged := make([]DiscoveredModel, 0, len(models))
 	if previous, ok := account.Regions[region]; ok {
 		for _, model := range previous.Models {
+			if !knownSource(model.Source) {
+				continue
+			}
 			if !touched[model.Source] {
 				merged = append(merged, model)
 			}
 		}
 	}
 	for _, model := range models {
+		if !knownSource(model.Source) {
+			continue
+		}
 		if touched[model.Source] {
 			merged = append(merged, model)
 		}
@@ -178,6 +212,12 @@ func loadCache(home string) (catalogCache, bool, error) {
 		return catalogCache{}, false, fmt.Errorf(
 			"unsupported model catalog cache version %d (expected %d); run models refresh",
 			cache.Version, catalogCacheVersion)
+	}
+	for accountID, account := range cache.Accounts {
+		for region, snapshot := range account.Regions {
+			account.Regions[region] = filterSnapshot(snapshot)
+		}
+		cache.Accounts[accountID] = account
 	}
 	return cache, true, nil
 }

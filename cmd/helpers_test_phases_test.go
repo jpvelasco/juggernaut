@@ -39,8 +39,6 @@ func TestToProviderOptions_FieldsMapped(t *testing.T) {
 		AvailableModels:        []string{"sonnet", "haiku"},
 		EnforceAvailableModels: true,
 		Use1M:                  true,
-		UseMantle:              false,
-		MantleURL:              "",
 		AuthValidated:          true,
 		PermissionMode:         "auto",
 		AlwaysThinking:         true,
@@ -91,12 +89,6 @@ func TestToProviderOptions_FieldsMapped(t *testing.T) {
 	if !po.SchemaOpts.Use1M {
 		t.Error("Use1M = false, want true")
 	}
-	if po.SchemaOpts.UseMantle {
-		t.Error("UseMantle = true, want false")
-	}
-	if po.SchemaOpts.MantleURL != "" {
-		t.Errorf("MantleURL = %q, want empty", po.SchemaOpts.MantleURL)
-	}
 	if !po.SchemaOpts.AuthValidated {
 		t.Error("AuthValidated = false, want true")
 	}
@@ -120,105 +112,12 @@ func TestToProviderOptions_EmptyOptions(t *testing.T) {
 		po.SchemaOpts.Scope != "" || po.SchemaOpts.Version != "" || po.SchemaOpts.OpusModel != "" ||
 		po.SchemaOpts.SonnetModel != "" || po.SchemaOpts.HaikuModel != "" || po.SchemaOpts.FableModel != "" ||
 		po.SchemaOpts.Opusplan || len(po.SchemaOpts.FallbackModels) > 0 || len(po.SchemaOpts.AvailableModels) > 0 ||
-		po.SchemaOpts.EnforceAvailableModels || po.SchemaOpts.Use1M || po.SchemaOpts.UseMantle ||
-		po.SchemaOpts.MantleURL != "" || po.SchemaOpts.AuthValidated || po.SchemaOpts.PermissionMode != "" ||
+		po.SchemaOpts.EnforceAvailableModels || po.SchemaOpts.Use1M ||
+		po.SchemaOpts.AuthValidated || po.SchemaOpts.PermissionMode != "" ||
 		po.SchemaOpts.AlwaysThinking || po.SchemaOpts.ServiceTier != "" {
 		t.Errorf("expected all-zero SchemaOpts, got: %+v", po.SchemaOpts)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// resolveMantle
-// ---------------------------------------------------------------------------
-
-func TestResolveMantle_DefaultOff(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-
-	enabled, err := resolveMantle()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if enabled {
-		t.Error("expected mantle to be disabled by default")
-	}
-}
-
-func TestResolveMantle_FlagOn(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.mantle = true
-
-	enabled, err := resolveMantle()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !enabled {
-		t.Error("expected mantle to be enabled when --mantle is set")
-	}
-}
-
-func TestResolveMantle_URLOn(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.mantleURL = "https://mantle.example.com"
-
-	enabled, err := resolveMantle()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !enabled {
-		t.Error("expected mantle to be enabled when --mantle-url is set")
-	}
-}
-
-func TestResolveMantle_Conflict_NoMantleAndMantle(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.noMantle = true
-	applyFlags.mantle = true
-
-	_, err := resolveMantle()
-	if err == nil {
-		t.Fatal("expected error when --no-mantle and --mantle are both set")
-	}
-	if !strings.Contains(err.Error(), "--no-mantle cannot be combined") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestResolveMantle_Conflict_NoMantleAndURL(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.noMantle = true
-	applyFlags.mantleURL = "https://mantle.example.com"
-
-	_, err := resolveMantle()
-	if err == nil {
-		t.Fatal("expected error when --no-mantle and --mantle-url are both set")
-	}
-	if !strings.Contains(err.Error(), "--no-mantle cannot be combined") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestResolveMantle_NoMantleAlone(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.noMantle = true
-
-	enabled, err := resolveMantle()
-	if err != nil {
-		t.Fatalf("--no-mantle alone should not error: %v", err)
-	}
-	if enabled {
-		t.Error("expected mantle to be disabled when only --no-mantle is set")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// resolveOpusplanConflict
-// ---------------------------------------------------------------------------
 
 func TestResolveOpusplanConflict_NoConflict(t *testing.T) {
 	defer resetFlags()
@@ -538,43 +437,7 @@ func TestWarnAutoModeModel_NotAvailable(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// warnMantleTradeoffs
-// ---------------------------------------------------------------------------
-
-func TestWarnMantleTradeoffs_NotMantle(t *testing.T) {
-	block := &schema.Block{
-		Meta: schema.Meta{UseMantle: false},
-	}
-	out := captureStdout(t, func() {
-		warnMantleTradeoffs(block)
-	})
-	if out != "" {
-		t.Errorf("expected no output when mantle is off, got: %q", out)
-	}
-}
-
-func TestWarnMantleTradeoffs_MantleEnabled(t *testing.T) {
-	block := &schema.Block{
-		Meta: schema.Meta{UseMantle: true},
-	}
-	out := captureStdout(t, func() {
-		warnMantleTradeoffs(block)
-	})
-	if !strings.Contains(out, "Mantle routing is enabled") {
-		t.Errorf("expected Mantle warning header, got:\n%s", out)
-	}
-	if !strings.Contains(out, "prompt caching is unavailable") {
-		t.Errorf("expected prompt caching warning, got:\n%s", out)
-	}
-	if !strings.Contains(out, "only current-generation Claude models") {
-		t.Errorf("expected current-generation model warning, got:\n%s", out)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // resolveCredential
-// ---------------------------------------------------------------------------
-
 func TestResolveCredential_IAM_NoKeyNeeded(t *testing.T) {
 	token, err := resolveCredential("iam", "/tmp")
 	if err != nil {
@@ -1214,67 +1077,6 @@ func TestInstallActivation_AlreadyUpToDate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// warnMantleTradeoffs
-// ---------------------------------------------------------------------------
-
-func TestWarnMantleTradeoffs_BlockNotMantle(t *testing.T) {
-	block := &schema.Block{}
-	out := captureStdout(t, func() {
-		warnMantleTradeoffs(block)
-	})
-	if strings.Contains(out, "Mantle") {
-		t.Errorf("expected no output when Mantle is off, got: %s", out)
-	}
-}
-
-func TestWarnMantleTradeoffs_BlockMantle(t *testing.T) {
-	block := &schema.Block{Meta: schema.Meta{UseMantle: true}}
-	out := captureStdout(t, func() {
-		warnMantleTradeoffs(block)
-	})
-	if !strings.Contains(out, "Mantle") {
-		t.Errorf("expected Mantle warning, got: %s", out)
-	}
-	if !strings.Contains(out, "prompt caching") {
-		t.Errorf("expected prompt caching mention, got: %s", out)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// resolveApplyInputs
-// ---------------------------------------------------------------------------
-
-func TestResolveApplyInputs_MantleOnlyPinsBedrockAPIKey(t *testing.T) {
-	defer resetFlags()
-	resetFlags()
-	applyFlags.scope = "user"
-
-	// Grok does NOT support CapNativeAuth — if --auth is omitted,
-	// resolveApplyInputs should auto-pin to bedrock-api-key.
-	home := setupApplyTest(t)
-
-	bCfg, err := loadBedrockConfig()
-	if err != nil {
-		t.Skipf("no bedrock config: %v", err)
-	}
-	prov, err := provider.Get("grok")
-	if err != nil {
-		t.Fatalf("get grok provider: %v", err)
-	}
-
-	authMode, region, _, err := resolveApplyInputs(home, bCfg, prov)
-	if err != nil {
-		t.Fatalf("resolveApplyInputs: %v", err)
-	}
-	if authMode != authmode.BedrockAPIKey {
-		t.Errorf("authMode = %q, want %q (mantle-only CLI should auto-pin to bedrock-api-key)", authMode, authmode.BedrockAPIKey)
-	}
-	// Region should default from config.
-	if region != bCfg.Defaults.Region {
-		t.Errorf("region = %q, want %q", region, bCfg.Defaults.Region)
-	}
-}
-
 func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
 	defer resetFlags()
 	resetFlags()

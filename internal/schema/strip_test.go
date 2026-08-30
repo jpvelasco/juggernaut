@@ -20,7 +20,7 @@ func TestStripRegionPrefix_TableDriven(t *testing.T) {
 		{"apac-prefix", "apac.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
 		{"empty", "", ""},
 		{"partial-match-us", "user.anthropic.claude-opus-4-8", "user.anthropic.claude-opus-4-8"},
-		{"mantle-model", "xai.grok-4-3", "xai.grok-4-3"},
+		{"example-model", "xai.grok-4-3", "xai.grok-4-3"},
 		{"gpt-model", "gpt-5-codex", "gpt-5-codex"},
 	}
 
@@ -31,24 +31,6 @@ func TestStripRegionPrefix_TableDriven(t *testing.T) {
 				t.Errorf("StripRegionPrefix(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
-	}
-}
-
-// TestStripRegionPrefix_IdentityWithMantleModelID verifies mantleModelID
-// produces identical output to StripRegionPrefix (it delegates to it).
-func TestStripRegionPrefix_IdentityWithMantleModelID(t *testing.T) {
-	for _, model := range []string{
-		"global.anthropic.claude-opus-4-8",
-		"us.anthropic.claude-sonnet-4-20250514",
-		"eu.anthropic.claude-haiku-3-5-20241022",
-		"anthropic.claude-opus-4-8",
-		"xai.grok-4-3",
-	} {
-		got := mantleModelID(model)
-		want := StripRegionPrefix(model)
-		if got != want {
-			t.Errorf("mantleModelID(%q) = %q, want %q (StripRegionPrefix output)", model, got, want)
-		}
 	}
 }
 

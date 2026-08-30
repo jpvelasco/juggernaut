@@ -37,9 +37,6 @@ var applyFlags struct {
 	opusplan               bool
 	noOpusplan             bool
 	no1m                   bool
-	mantle                 bool
-	noMantle               bool
-	mantleURL              string
 	scope                  string
 	dryRun                 bool
 	mode                   string
@@ -71,9 +68,6 @@ func init() {
 	var deprecated1m bool
 	f.BoolVar(&deprecated1m, "1m-context", true, "")
 	_ = f.MarkHidden("1m-context")
-	f.BoolVar(&applyFlags.mantle, "mantle", false, "enable Mantle routing")
-	f.BoolVar(&applyFlags.noMantle, "no-mantle", false, "disable Mantle routing (accepted for compatibility; Mantle is disabled by default)")
-	f.StringVar(&applyFlags.mantleURL, "mantle-url", "", "custom Mantle base URL")
 	f.StringVar(&applyFlags.scope, "scope", "user", "settings scope: user or project")
 	f.BoolVar(&applyFlags.dryRun, "dry-run", false, "preview without writing")
 	// Deprecated: --skip-preflight never gated any check and is now a no-op.
@@ -142,10 +136,6 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if err := validateMantleAuth(prov, authMode); err != nil {
-		return err
-	}
-
 	var token string
 	if !applyFlags.dryRun {
 		token, err = resolveCredential(authMode, home)
@@ -169,20 +159,15 @@ type applyPlan struct {
 	provOpts provider.Options
 }
 
-// buildApplyPlan resolves Mantle, models, and options, then builds the schema
+// buildApplyPlan resolves models and options, then builds the schema
 // block and provider options. This is the planning phase — no side effects.
 func buildApplyPlan(home, region string, bCfg *bedrock.Config, authMode string, opusplan bool) (*applyPlan, error) {
-	useMantle, err := resolveMantle()
-	if err != nil {
-		return nil, err
-	}
-
 	models, err := resolveApplyModels()
 	if err != nil {
 		return nil, err
 	}
 
-	opts := buildApplyOptions(authMode, region, opusplan, useMantle, models)
+	opts := buildApplyOptions(authMode, region, opusplan, models)
 	block, err := schema.Build(bCfg, opts)
 	if err != nil {
 		return nil, err
@@ -270,7 +255,7 @@ func resolveApplyModels() (*resolvedModels, error) {
 }
 
 // buildApplyOptions constructs the schema.Options from resolved inputs.
-func buildApplyOptions(authMode, region string, opusplan, useMantle bool, models *resolvedModels) schema.Options {
+func buildApplyOptions(authMode, region string, opusplan bool, models *resolvedModels) schema.Options {
 	return schema.Options{
 		AuthMode:               authMode,
 		Region:                 region,
@@ -286,8 +271,6 @@ func buildApplyOptions(authMode, region string, opusplan, useMantle bool, models
 		EnforceAvailableModels: models.enforceAvailableModels,
 		Opusplan:               opusplan,
 		Use1M:                  !applyFlags.no1m,
-		UseMantle:              useMantle,
-		MantleURL:              applyFlags.mantleURL,
 		AuthValidated:          true,
 		PermissionMode:         applyFlags.mode,
 		AlwaysThinking:         applyFlags.alwaysThinking,
@@ -304,7 +287,7 @@ func buildProviderOptions(home, region string, scopts schema.Options) (provider.
 	// provider selects the right model instead of silently defaulting.
 	provOpts.Model = applyFlags.model
 	// Whether the region was explicitly chosen (vs filled from the global
-	// default). Mantle providers auto-switch a model to a region that serves it
+	// default). Providers auto-switch a model to a region that serves it
 	// only when the region was defaulted; an explicit --region is honored.
 	provOpts.RegionExplicit = applyFlags.region != ""
 	catalog, sources, err := cachedProviderCatalog(home, region)
