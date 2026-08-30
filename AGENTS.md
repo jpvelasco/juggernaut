@@ -2,241 +2,92 @@
 
 ## Project
 
-Juggernaut is a cross-platform Go CLI that configures Claude Code, Codex,
-OpenCode, and Grok to use Amazon Bedrock. The binary embeds
-`bedrock-config.json`; rebuild after changing that file.
+Juggernaut is a cross-platform Go CLI that configures Claude Code, Codex, OpenCode, and Grok to use Amazon Bedrock. Binary embeds `bedrock-config.json` — rebuild after editing. Module `github.com/jpvelasco/juggernaut/v5`, public MIT, npm-only as `juggernaut-bedrock` (`scripts/install.sh|ps1` are deprecated stubs). Keep `README.md`, `QUICKSTART.md`, `CONTRIBUTING.md` current when flags/behavior change; never cite gitignored `.research/`, `docs/superpowers/`, `.claude/` as if present in a fresh clone.
 
-Read `CLAUDE.md` for the detailed architecture, provider inventory, managed
-configuration keys, and current CI/release design. Keep that document accurate
-when architecture or workflows change.
+`CLAUDE.md` is a pointer to this file — this is the single tracked reference. Keep it accurate when architecture/workflows change.
 
-This is a **public** MIT-licensed repository (`github.com/jpvelasco/juggernaut`,
-module `github.com/jpvelasco/juggernaut/v5`), distributed via npm only as
-`juggernaut-bedrock`; `scripts/install.sh` and `scripts/install.ps1` are
-deprecated stubs that print npm instructions. Assume outside contributors and
-forks: keep `README.md`, `QUICKSTART.md`, and `CONTRIBUTING.md` current when
-flags or user-visible behavior change, and never cite a gitignored path
-(`.research/`, `docs/superpowers/`, `.claude/`) as if a fresh clone has it.
-
-## Common Commands
+## Commands
 
 ```bash
-make build                 # build bin/juggernaut
-make test                  # run all Go tests
-make test-race             # run with race detector
-make test-cover            # generate coverage.out and print total
-make lint                  # run golangci-lint
-make fmt vet               # format and vet
-make ci                    # tidy, format, vet, lint, test
-make codacy                # check Codacy dashboard issues with CODACY_API_TOKEN
+make build                 # bin/juggernaut (ldflags inject VERSION)
+make test                  # go test ./... -v
+make test-race             # -race
+make test-cover            # coverage.out + total (POSIX tail — see Windows note)
+make lint                  # golangci-lint
+make fmt vet               # go fmt + go vet
+make ci                    # tidy, fmt, vet, lint, test
+make codacy                # needs CODACY_API_TOKEN
 
 go test ./internal/schema/... -v
 go test ./cmd/... -run TestApply_WritesSettings_IAM -v
+cd npm && npm test         # Node >=20, CI uses 24
+UPDATE_GOLDEN=1 go test ./cmd/ -run Golden   # only after intentional output change
 
-cd npm && npm test         # npm launcher tests (Node >= 20; CI uses Node 24)
-UPDATE_GOLDEN=1 go test ./cmd/ -run Golden   # only after an INTENTIONAL output change
-
-# measure cmd coverage (make test-cover uses POSIX `tail`, so on Windows use:)
+# Windows: make test-cover uses tail, run instead:
 go test ./cmd/ -coverprofile=$env:TEMP\cov.out; go tool cover -func=$env:TEMP\cov.out | Select-Object -Last 1
 ```
 
-Install git hooks once per clone: `scripts/setup-hooks.ps1` (Windows) or
-`bash scripts/setup-hooks.sh` (Linux/macOS). CI is the real gate either way.
-
-On Windows, PowerShell is the default shell. Keep scripts cross-platform unless
-they are explicitly platform-specific.
+Hooks: `scripts/setup-hooks.ps1` (Windows) or `bash scripts/setup-hooks.sh` (Linux/macOS). PowerShell 7 is default shell on Windows; keep scripts cross-platform.
 
 ## Architecture
 
-- `main.go` embeds the Bedrock config and calls `cmd.Execute()`.
-- `cmd/` contains Cobra commands, hidden launch/auth commands, and shared helpers.
-  `models.go` defines `models check` (maintainer-facing release gate against the
-  live catalog) and `model_catalog.go` implements `models refresh`/`models list`,
-  caching account/region inventory under `~/.juggernaut/model-catalog.json`.
-- `internal/provider/` owns the multi-CLI provider interface and implementations
-  for `claude`, `codex`, `opencode`, and `grok`. `base.go`'s `BaseProvider`
-  supplies the default implementations (`Name`, `BinaryNames`,
-  `ConfigFormatName`, `ActivationMarkers`, `Supports`) that each provider
-  embeds, so per-CLI structs only override `ConfigPath`, `OwnsConfig`,
-  `NativeManagedKeys`, `DeepMergeKeys`, `OwnedSubKeys`, `BuildConfig`, and
-  `LaunchSpec`.
-- `internal/config/` handles atomic JSON/TOML merge, removal, locking, and backups.
-- `internal/activation/` manages marked shell blocks, the owner-only non-secret
-  runtime fallback under `~/.juggernaut/runtime/`, and launches real CLI
-  binaries via `launch`/`launch-cli` while avoiding wrapper recursion.
-- `internal/schema/` builds and validates Claude-specific managed settings.
-- `internal/bedrock/` loads embedded or test Bedrock configuration.
-- `internal/keychain/` stores the shared Bedrock bearer token, with a versioned
-  owner-only file fallback for tokens exceeding the 2560-byte Windows Credential
-  Manager limit. Use the `*WithFallback` methods on real credential paths; the
-  bare `Set`/`Get`/`Delete` are keychain-only.
-- `internal/discovery/` is the only package importing `aws-sdk-go-v2`.
-- `internal/safepath/` provides containment and owner-only filesystem operations.
-- `npm/` contains the npm launcher and platform packages.
+- `main.go` embeds Bedrock config → `cmd.Execute()` (Cobra).
+- `cmd/` — commands, hidden `launch`/`launch-cli`/`auth-token`, shared helpers (`helpers.go`). `models.go` (`models check` release gate) and `model_catalog.go` (`models refresh`/`list`, cache `~/.juggernaut/model-catalog.json` per account+region).
+- `internal/provider/` — `Provider` interface + 4 implementations (`claude`, `codex`, `opencode`, `grok`). `base.go:BaseProvider` supplies `Name`, `BinaryNames`, `ConfigFormatName`, `ActivationMarkers`, `Supports`; providers override `ConfigPath`, `OwnsConfig`, `NativeManagedKeys`, `DeepMergeKeys`, `OwnedSubKeys`, `BuildConfig`, `LaunchSpec`. New CLI = one file + `register()` in `provider.go`; new knobs = `Capability`, not `if cli=="..."` in `cmd/`.
+- `internal/config/` — atomic JSON/TOML merge, removal, locking, backups. Respects `DeepMergeKeys`/`OwnedSubKeys` for nested tables.
+- `internal/activation/` — marked shell blocks (one per CLI, coexist in same profile) + owner-only runtime fallback `~/.juggernaut/runtime/` + launch wrapper that resolves real CLI binary and avoids recursion.
+- `internal/schema/` — builds/validates Claude managed settings (`settings.json`).
+- `internal/bedrock/` — loads embedded/test Bedrock config. `bedrock-config.json` is Claude-only (non-Claude providers render from live discovery + shared token).
+- `internal/keychain/` — shared bearer token; `*WithFallback` methods are the real path (handles 2560-byte Windows Credential Manager limit via versioned owner-only file). Bare `Set`/`Get`/`Delete` are keychain-only.
+- `internal/discovery/` — only package importing `aws-sdk-go-v2`.
+- `internal/safepath/` — containment + owner-only FS ops. Use for anything under user-controlled bases.
+- `npm/` — launcher + platform packages.
 
-Provider-specific behavior belongs behind `provider.Provider`; avoid adding
-CLI-name conditionals in `cmd/`. Add a provider by implementing the interface
-and registering it in `internal/provider/provider.go`.
+Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json` (project) — the only CLI with both scopes; Codex `~/.codex/config.toml` / `./.codex/config.toml` via `amazon-bedrock` provider; OpenCode `~/.config/opencode/opencode.json` / `./opencode.json` via `provider.amazon-bedrock` (region + discovered `models` + `whitelist`); Grok `~/.grok/config.toml` user-only (`base_url=https://bedrock-runtime.{region}.amazonaws.com/openai/v1` + `auth_provider_command="juggernaut auth-token"`).
 
-Provider config details belong in providers: Codex writes TOML under
-`~/.codex/config.toml` using the built-in `amazon-bedrock` provider, OpenCode
-writes JSON under `~/.config/opencode/opencode.json` using the built-in
-`amazon-bedrock` provider block (region + live-discovered `models` + `whitelist`),
-and Grok writes user-scope-only TOML under `~/.grok/config.toml` with
-`base_url = https://bedrock-runtime.{region}.amazonaws.com/openai/v1` plus
-`auth_provider_command` pointing at `juggernaut auth-token`.
+## Constraints
 
-## Engineering Constraints
-
-- Reuse helpers in `cmd/helpers.go`; do not duplicate their behavior.
-- Use `internal/safepath` for files beneath user-controlled base directories.
-- Preserve unknown user configuration. For nested provider tables, use the
-  provider's `DeepMergeKeys()` and `OwnedSubKeys()` contract.
-- For Claude, Juggernaut manages native keys `env`, `model`, `modelOverrides`,
-  `fallbackModel`, `effortLevel`, `alwaysThinkingEnabled`,
-  `skipWebFetchPreflight`, and `permissions`; uninstall should remove only
-  managed keys.
-- Never install, overwrite, move, symlink over, or delete an unknown file whose
-  name matches a managed CLI binary.
-- Activation blocks for different CLIs must coexist in the same shell profile.
-- The Bedrock bearer token is shared across providers. Uninstalling one
-  non-Claude provider must not remove it, and neither may a Claude
-  `--scope=project` removal while user-scope or non-Claude configs remain.
-- Preserve compatibility for `launch`, `launch-cli`, hidden auth-token behavior,
-  deprecated flags, and launched-CLI exit-code passthrough (`Execute()` exits
-  with the wrapped CLI's own status; launch commands silence cobra error/usage
-  output) unless a task explicitly includes a breaking change.
-- `apply --auth` accepts exactly `iam` or `bedrock-api-key` and is validated
-  before any state is written (`validateAuthFlag`), so typos can never produce
-  a "successful" broken config.
-- Claude user-scope apply persists only generated non-secret runtime state;
-  project apply must not create global fallback state, bearer tokens must never
-  be written there, and user-scope uninstall must remove it.
-- Keep `VERSION`, `bedrock-config.json`'s `version`, and `cmd/root.go`'s
-  `Version` synchronized.
-- Go toolchain is pinned to `go 1.26.6` in `go.mod` (bumped for stdlib
-  vulnerability fixes). Use that exact version; `go mod download` may
-  reject newer patch versions.
-- Do not commit generated binaries, coverage files, or other build artifacts.
-- All CLIs route natively via `bedrock-runtime` (Mantle removed in v6; re-run
-  `juggernaut models refresh --source native --region <region>` after upgrading).
-- `apply --mode=auto` must keep the Bedrock auto-mode guardrails: it writes
-  `CLAUDE_CODE_ENABLE_AUTO_MODE=1`, but should warn unless the resolved active
-  model is Opus 4.7-or-later capable, including Opus 5.
-- `--fallback-model`, `--service-tier`, `--always-thinking`, `--effort`, and
-  `skipWebFetchPreflight` are managed settings; `max` and `auto` effort levels
-  are env-only, while fixed levels also persist as native `effortLevel`.
+- Reuse `cmd/helpers.go`; don't duplicate. Use `internal/safepath` for user-controlled paths.
+- Preserve unknown user config. Nested provider tables must use `DeepMergeKeys`/`OwnedSubKeys` — never replace whole table.
+- Claude managed keys: `env`, `model`, `modelOverrides`, `fallbackModel`, `effortLevel`, `alwaysThinkingEnabled`, `skipWebFetchPreflight`, `permissions`. Uninstall removes only managed keys.
+- Never install/overwrite/move/symlink/delete an unknown file matching a managed CLI binary. Activation blocks for different CLIs must coexist.
+- Bearer token is shared across providers. Uninstalling one non-Claude provider must not delete it; Claude `--scope=project` uninstall must not either while user-scope or non-Claude configs remain.
+- Keep `VERSION`, `bedrock-config.json:version`, `cmd/root.go:Version` in sync (CI verifies).
+- Go toolchain pinned to `go 1.26.6` in `go.mod`; use exact version.
+- `apply --auth` is validated before any write — only `iam` or `bedrock-api-key` accepted (`validateAuthFlag`).
+- Claude user-scope apply writes only non-secret runtime state to `~/.juggernaut/runtime/`; project apply must not create global fallback, and tokens must never be written there; user-scope uninstall removes it.
+- `apply --mode=auto` writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` but must warn unless active model is Opus 4.7+ (incl. Opus 5).
+- `--fallback-model`, `--service-tier`, `--always-thinking`, `--effort`, `skipWebFetchPreflight` are managed; `max`/`auto` effort are env-only, fixed levels also persist as native `effortLevel`.
+- Preserve compat for `launch`/`launch-cli`, hidden `auth-token`, deprecated flags, and exit-code passthrough (`Execute()` exits with wrapped CLI's status; launch commands silence cobra error/usage).
+- Mantle removed in v6 — all CLIs route via `bedrock-runtime`; after upgrade `juggernaut models refresh --source native --region <region>`.
+- Suppressions (`//nolint`, `#nosec`, `// nosemgrep`) require rationale in `docs/ci-suppressions.md`; prefer code fix over suppression.
 
 ## Testing
 
-Add focused tests with each behavior change, then run the affected package
-before the full suite. Use the existing helpers instead of rewriting boilerplate:
-`internal/testhome.NewTestHome(t)` sets both `HOME` and `USERPROFILE` (Windows
-paths need both), and `internal/testutil` provides `CaptureStdout`, `WithStdin`,
-`NestedMapChain`, `ParseJSON`, `OwnedJuggernautBlock`, and `SkipIfNoKeychain`.
-Isolate keychain tests with `JUGGERNAUT_KEYCHAIN_SERVICE`; tests should skip when
-no backend is available.
+Add focused tests per behavior change; run affected package before full suite.
 
-For `cmd` command-level tests, reuse `cmd/apply_test_helpers_test.go` and the
-`cmd/coverage_batch{1,2}_test.go` files instead of inventing new fixtures:
-`setupApplyTest(t)` (fake home + mock PS runner on Windows), `setupApplyTestWithReset`,
-`captureStdout`/`captureStderr`, `mockPSRunner`/`mockPSOutputJSON`,
-`noHomeEnv`, `blockCredentialWrite`, `chdirTo`, `withBrokenEmbeddedConfig`,
-`swapActiveModelsForWrite`, `writeTempBedrockConfig`, and the `stubProvider`
-family. Quirks worth knowing:
-- `homeDir()` failure branches are tested by clearing the env with `noHomeEnv`,
-  and the error text is platform-specific (`$HOME` vs `%userprofile%`) — use
-  `assertHomeDirError` rather than matching a substring like `"HOME"`.
-- `models --write` tests must `chdirTo` a temp dir holding a `bedrock-config.json`
-  copy so the repo-root `../bedrock-config.json` fallback is never mutated.
-- Tests never call `t.Parallel()` — `os.Chdir` is a process-global side effect,
-  so chdir-based tests are safe only in sequence.
-- `cmd` has a `TestMain` subprocess harness (`cmd/launch_exitcode_test.go`):
-  with `JUGGERNAUT_TEST_WRAPPER_CHILD=1` the test binary re-execs itself as
-  the wrapped CLI so `Execute()`'s exit-status translation can be asserted
-  from a parent. Never set that env var in other tests; new top-level env-var
-  branches belong in that `TestMain` switch.
-- The shared `captureStdout` drains only after `fn()` returns — captured
-  output larger than the OS pipe buffer deadlocks. For large-output captures
-  use a concurrent-drain helper like `captureStreaming`
-  (`cmd/show_order_test.go`).
+- `internal/testhome.NewTestHome(t)` sets both `HOME` and `USERPROFILE` (Windows needs both).
+- `internal/testutil` — `CaptureStdout`, `WithStdin`, `NestedMapChain`, `ParseJSON`, `OwnedJuggernautBlock`, `SkipIfNoKeychain`. Isolate keychain tests with `JUGGERNAUT_KEYCHAIN_SERVICE`; skip when no backend.
+- `cmd` helpers: reuse `cmd/apply_test_helpers_test.go` + `coverage_batch{1,2}_test.go` — `setupApplyTest(t)` (fake home + mock PS runner), `setupApplyTestWithReset`, `captureStdout`/`captureStderr`, `mockPSRunner`/`mockPSOutputJSON`, `noHomeEnv`, `blockCredentialWrite`, `chdirTo`, `withBrokenEmbeddedConfig`, `swapActiveModelsForWrite`, `writeTempBedrockConfig`, `stubProvider` family.
+- `homeDir()` failure: clear env with `noHomeEnv`, assert via `assertHomeDirError` (message is `$HOME` vs `%userprofile%` per OS).
+- `models --write` tests must `chdirTo` a temp dir with a `bedrock-config.json` copy — never mutate repo-root fallback.
+- No `t.Parallel()` in `cmd` — `os.Chdir` is process-global.
+- `cmd/launch_exitcode_test.go:TestMain` re-execs with `JUGGERNAUT_TEST_WRAPPER_CHILD=1` to assert `Execute()` exit-code translation. Never set that var elsewhere.
+- `captureStdout` drains only after `fn()` returns — large output deadlocks at pipe-buffer size; use concurrent-drain `captureStreaming` (`cmd/show_order_test.go`).
+- Tests never call AWS. `cmd/models.go` + `cmd/model_catalog.go` expose discovery as package vars for swapping.
+- `cmd/golden_test.go` diffs Claude apply output byte-for-byte against `cmd/testdata/golden/`.
+- Cobra global flag state persists across `ExecuteArgs()` calls — use `resetFlags()` when adding/changing flags.
 
-Tests never call AWS. `cmd/models.go` and `cmd/model_catalog.go` expose their
-discovery calls as package-level function variables so tests can swap them;
-preserve that seam when adding discovery-backed commands.
+Irreducible coverage floor: new tests must cover a real error/platform branch or documented edge case — no `_ = fn()` smokes. Prefer one strong failure test over many shallow ones. `coverage_gaps_*_test.go` changes must state the exact branch in the PR description. Verify `go test <pkg> -coverprofile` before/after pruning.
 
-`cmd/golden_test.go` diffs Claude's apply output byte-for-byte against
-`cmd/testdata/golden/`, so unintended output drift fails there.
+## CI & Git
 
-Cobra global flag state persists between `ExecuteArgs()` calls. Use the existing
-`resetFlags()` mechanism when adding or changing flags.
+Before handoff: `go test ./... && go vet ./... && git diff --check` (or `make ci` when tools available). Never commit `bin/`, `coverage.out`, or build artifacts.
 
-### Irreducible coverage floor
+CI (`.github/workflows/ci.yml`): `lint` + `lint-windows` (golangci-lint v2.12.2), `test` matrix (ubuntu/macos/windows with OIDC Codecov merge — Windows coverage strips `\r`; fork PRs skip upload), `test-race`, `test-coverage` (Linux floor 65%), `npm-test` (Node 24), `shellcheck`, `gosec`, `trivy`, `goreleaser` snapshot, `codacy-analysis` on push. **Merge-blocking**: `lint`, three `test (<os>)` legs, two Socket contexts. Rest is informational. Authoritative gate is Codecov 80% project+patch (`codecov.yml`), not the 65% Linux floor. Codecov merge requires all 3 OS legs because Windows-only keychain/launcher code is uncovered on Linux.
 
-- New tests must target a real error path, platform-specific branch, previously
-  untested public behavior, or a documented edge case. Pure line-coverage
-  fillers with no new assertion or failure-mode coverage are rejected (no
-  `_ = fn()` "should not crash" smokes).
-- Prefer one strong test that exercises the real failure over multiple shallow
-  ones.
-- When adding or expanding a `coverage_gaps_*_test.go`, the PR description must
-  state the exact branch/error it closes.
-- Pruning zero-value coverage_gaps tests is fine, but never at the cost of
-  measured coverage — verify with `go test <pkg> -coverprofile` before and
-  after.
+Hooks (`.githooks/`): `commit-msg` — single-type Conventional Commit (`type(scope?): description`, `docs+test:` rejected); `pre-commit` — fails if `go fmt`/`go mod tidy` would change staged files; `pre-push` — warns if changed Go file gains a 0.0%-coverage function (bypass `git push --no-verify`, but Codecov patch gate is authority).
 
-Keep cross-platform behavior in mind. CI runs race-covered Go tests on Linux,
-macOS, and Windows, plus Windows lint, govulncheck, a separate race job, a
-Linux-only coverage-floor job, npm tests, shellcheck, gosec, Trivy, CodeQL, a
-GoReleaser snapshot build, and Socket. Merge-blocking checks are only `lint`, the
-three `test (<os>)` legs, and the two Socket contexts — the rest, including
-Codacy, are informational. The authoritative coverage gate is Codecov (80%
-project and patch, in `codecov.yml`), not the lower in-CI Linux floor. Fork PRs
-skip Codecov upload by design, so a missing Codecov status there is expected.
+`main` protected by ruleset `protect-main` (not classic branch protection — `branches/main/protection` 404s; query `gh api repos/jpvelasco/juggernaut/rulesets`). Blocks deletion/non-fast-forward, requires PR with resolved threads (0 approvals), strict status checks, no bypass actors. `protect-version-tags` guards `v*`. Settings in `.github/GITHUB_SETTINGS.md`. Never delete `legacy/v3`.
 
-Before handing off a substantive change, run at least:
-
-```bash
-go test ./...
-go vet ./...
-git diff --check
-```
-
-Run `make ci` when the required local tools are available and the change merits
-the broader check.
-
-Static-analysis suppressions (`//nolint`, `#nosec`, `// nosemgrep`) are
-documented with rationale in `docs/ci-suppressions.md`. Prefer a small code
-adjustment over a suppression; never add one without documenting it there.
-
-## Git and Scope
-
-The worktree may contain user changes. Inspect `git status` and relevant diffs
-before editing, preserve unrelated modifications, and do not rewrite history or
-discard changes without explicit authorization.
-
-Use conventional commit subjects when asked to commit. Release tags are `v*`
-and trigger GitHub release publishing plus npm OIDC publish; do not create or
-push a release tag unless explicitly requested.
-
-Installed git hooks (`scripts/setup-hooks.{sh,ps1}`, sourced from `.githooks/`)
-enforce more than conventional defaults and will fail your commit/push:
-
-- `commit-msg` — first line must be a **single-type** Conventional Commit:
-  `docs+test: ...` is rejected, `type(scope?): description` is required.
-- `pre-commit` — fails if `go fmt` / `go mod tidy` would change staged Go files.
-- `pre-push` — fails if a changed Go file gains a function at 0.0% coverage. An
-  early warning only — CI's Codecov patch gate is the authority. Documented
-  emergency bypass: `git push --no-verify`.
-
-`main` is protected by a GitHub **ruleset**, not classic branch protection, so
-`gh api repos/.../branches/main/protection` returns 404 — query
-`gh api repos/jpvelasco/juggernaut/rulesets` instead. The active `protect-main`
-ruleset blocks deletion and non-fast-forward, requires a PR with review-thread
-resolution (0 approvals), enforces strict up-to-date status checks, and has **no
-bypass actors** — the required checks apply to the owner too. A separate
-`protect-version-tags` ruleset guards `v*`. Out-of-repo GitHub settings are
-documented and re-appliable via `.github/GITHUB_SETTINGS.md`.
-
-**Protected branches:** `legacy/v3` must never be deleted — it is required for
-older releases. When cleaning up branches, skip any branch named `legacy/*`.
+Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`. Tags `v*` trigger release + npm OIDC publish — don't create/push unless requested. Feature branches off `main`; squash-merge unless history matters; inspect `git status`/`diff` before editing and preserve unrelated changes.
