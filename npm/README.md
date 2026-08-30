@@ -68,7 +68,7 @@ The interactive setup guides you through the first run. After applying, restart 
 
 ## Discover models your account can actually access
 
-Bedrock model access varies by AWS account and region. Juggernaut can query native Bedrock and Mantle, cache the result per account and region, and filter the inventory for each coding CLI.
+Bedrock model access varies by AWS account and region. Juggernaut queries the native Bedrock catalog, caches the result per account and region, and filters the inventory for each coding CLI.
 
 ```bash
 # Discover models available to the current AWS account
@@ -86,7 +86,7 @@ juggernaut models list --region=us-west-2 --cli=opencode
 
 ## Upgrading
 
-Older Juggernaut users can install v5 directly:
+Older Juggernaut users can install v6 directly. **v6 is breaking:** Mantle routing was removed — every CLI now uses `bedrock-runtime` (native Bedrock). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI you use:
 
 ```bash
 npm install -g juggernaut-bedrock@latest
@@ -117,10 +117,10 @@ Bedrock API key auth? Run `juggernaut apply --auth=bedrock-api-key`; credentials
 | Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
 
 ```bash
-# Codex supports IAM/SSO or Bedrock API key; OpenCode and Grok require a Bedrock API key
+# Codex supports IAM/SSO or Bedrock API key; OpenCode and Grok accept either auth mode
 juggernaut apply --cli=codex --auth=iam
-juggernaut apply --cli=opencode --auth=bedrock-api-key
-juggernaut apply --cli=grok --auth=bedrock-api-key
+juggernaut apply --cli=opencode --auth=iam
+juggernaut apply --cli=grok --auth=iam
 ```
 
 Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one does not remove it.
@@ -166,7 +166,7 @@ No overwriting the real CLI binary. No copying API keys into env vars. A backup 
 | `show` | Print your current Juggernaut config |
 | `doctor` | Diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts |
 | `uninstall` | Remove managed config and token; `--full` also removes shell activation |
-| `models refresh` | Discover account/region model inventory from Bedrock and Mantle |
+| `models refresh` | Discover account/region model inventory from native Bedrock |
 | `models list` | List cached model inventory, optionally filtered by CLI compatibility |
 | `models check` | Maintainer tool: verify pinned models against live AWS catalog |
 | `version` | Print installed version (`--json` for machines) |
@@ -176,7 +176,7 @@ No overwriting the real CLI binary. No copying API keys into env vars. A backup 
 With working AWS IAM or SSO credentials, discover what models your AWS account actually exposes in a given region:
 
 ```bash
-# Query native Bedrock plus Mantle /v1/models endpoint
+# Discover the native Bedrock model inventory for the region
 juggernaut models refresh --region=us-west-2
 
 # See what's compatible with a specific CLI
@@ -247,7 +247,6 @@ Auto mode on Bedrock requires `CLAUDE_CODE_ENABLE_AUTO_MODE=1` — Juggernaut se
 --opusplan                  # route /plan to Opus, execution to Sonnet
 --effort=high               # low | medium | high | xhigh | max | auto
 --mode=auto                 # auto-approve safe tool calls
---mantle                    # enable Mantle routing (Claude only)
 --scope=project             # write to project scope instead of user scope
 --force                     # overwrite colliding foreign leaves (backup kept)
 ```
