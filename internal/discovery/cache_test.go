@@ -23,20 +23,20 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 		t.Fatalf("missing cache = found %v, err %v; want false, nil", found, err)
 	}
 
-	mantleTime := time.Date(2026, 7, 20, 12, 0, 0, 0, time.FixedZone("offset", 3600))
-	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceMantle}, []DiscoveredModel{
-		{ID: "zai.glm-5", Source: SourceMantle, Status: "ACTIVE"},
-		{ID: "moonshotai.kimi-k2.5", Source: SourceMantle, Status: "ACTIVE"},
-	}, mantleTime); err != nil {
-		t.Fatalf("saving Mantle cache: %v", err)
+	foundationTime := time.Date(2026, 7, 20, 12, 0, 0, 0, time.FixedZone("offset", 3600))
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceFoundation}, []DiscoveredModel{
+		{ID: "zai.glm-5", Source: SourceFoundation, Status: "ACTIVE"},
+		{ID: "moonshotai.kimi-k2.5", Source: SourceFoundation, Status: "ACTIVE"},
+	}, foundationTime); err != nil {
+		t.Fatalf("saving Foundation cache: %v", err)
 	}
 
-	nativeTime := mantleTime.Add(time.Hour)
-	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceFoundation, SourceProfile}, []DiscoveredModel{
-		{ID: "anthropic.claude-opus", Source: SourceFoundation, Status: "ACTIVE"},
+	profileTime := foundationTime.Add(time.Hour)
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceProfile}, []DiscoveredModel{
+		{ID: "anthropic.claude-opus", Source: SourceProfile, Status: "ACTIVE"},
 		{ID: "global.anthropic.claude-opus", Source: SourceProfile, Status: "ACTIVE"},
-	}, nativeTime); err != nil {
-		t.Fatalf("saving native cache: %v", err)
+	}, profileTime); err != nil {
+		t.Fatalf("saving Profile cache: %v", err)
 	}
 
 	snapshot, found, err := LoadCachedModels(home, testScope, "us-west-2")
@@ -46,22 +46,22 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 	if snapshot.AccountID != testAccount {
 		t.Errorf("AccountID = %q, want %q", snapshot.AccountID, testAccount)
 	}
-	if !snapshot.RefreshedAt.Equal(nativeTime.UTC()) {
-		t.Errorf("RefreshedAt = %s, want %s", snapshot.RefreshedAt, nativeTime.UTC())
+	if !snapshot.RefreshedAt.Equal(profileTime.UTC()) {
+		t.Errorf("RefreshedAt = %s, want %s", snapshot.RefreshedAt, profileTime.UTC())
 	}
 	if len(snapshot.Models) != 4 {
 		t.Fatalf("merged models = %+v, want four", snapshot.Models)
 	}
-	wantIDs := []string{"anthropic.claude-opus", "moonshotai.kimi-k2.5", "zai.glm-5", "global.anthropic.claude-opus"}
+	wantIDs := []string{"moonshotai.kimi-k2.5", "zai.glm-5", "anthropic.claude-opus", "global.anthropic.claude-opus"}
 	for i, want := range wantIDs {
 		if snapshot.Models[i].ID != want {
 			t.Errorf("models[%d].ID = %q, want %q (models=%+v)", i, snapshot.Models[i].ID, want, snapshot.Models)
 		}
 	}
 
-	if err := SaveCachedModels(home, testAccount, testScope, "us-east-1", []Source{SourceMantle}, []DiscoveredModel{
-		{ID: "openai.gpt-5.5", Source: SourceMantle},
-	}, nativeTime); err != nil {
+	if err := SaveCachedModels(home, testAccount, testScope, "us-east-1", []Source{SourceFoundation}, []DiscoveredModel{
+		{ID: "openai.gpt-5.5", Source: SourceFoundation},
+	}, profileTime); err != nil {
 		t.Fatalf("saving second region: %v", err)
 	}
 	if _, found, err := LoadCachedModels(home, testScope, "us-west-2"); err != nil || !found {
@@ -86,13 +86,13 @@ func TestCatalogCache_MissingAndSourceAwareMerge(t *testing.T) {
 func TestCatalogCache_IsolatesAccountsAndRebindsCredentialScope(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	when := time.Now()
-	modelA := []DiscoveredModel{{ID: "account-a-model", Source: SourceMantle}}
-	modelB := []DiscoveredModel{{ID: "account-b-model", Source: SourceMantle}}
+	modelA := []DiscoveredModel{{ID: "account-a-model", Source: SourceFoundation}}
+	modelB := []DiscoveredModel{{ID: "account-b-model", Source: SourceFoundation}}
 
-	if err := SaveCachedModels(home, "account-a", "scope-a", "us-west-2", []Source{SourceMantle}, modelA, when); err != nil {
+	if err := SaveCachedModels(home, "account-a", "scope-a", "us-west-2", []Source{SourceFoundation}, modelA, when); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveCachedModels(home, "account-b", "scope-b", "us-west-2", []Source{SourceMantle}, modelB, when); err != nil {
+	if err := SaveCachedModels(home, "account-b", "scope-b", "us-west-2", []Source{SourceFoundation}, modelB, when); err != nil {
 		t.Fatal(err)
 	}
 	for scope, want := range map[string]string{"scope-a": "account-a-model", "scope-b": "account-b-model"} {
@@ -105,7 +105,7 @@ func TestCatalogCache_IsolatesAccountsAndRebindsCredentialScope(t *testing.T) {
 		t.Errorf("unknown scope = found %v, err %v; want false, nil", found, err)
 	}
 
-	if err := SaveCachedModels(home, "account-b", "scope-a", "us-west-2", []Source{SourceMantle}, modelB, when); err != nil {
+	if err := SaveCachedModels(home, "account-b", "scope-a", "us-west-2", []Source{SourceFoundation}, modelB, when); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, found, err := LoadCachedModels(home, "scope-a", "us-west-2")
@@ -116,7 +116,7 @@ func TestCatalogCache_IsolatesAccountsAndRebindsCredentialScope(t *testing.T) {
 
 func TestCatalogCache_RejectsInvalidInputsAndVersion(t *testing.T) {
 	home := testutil.NewTestHome(t)
-	validSources := []Source{SourceMantle}
+	validSources := []Source{SourceFoundation}
 	if err := SaveCachedModels(home, "", testScope, "us-west-2", validSources, nil, time.Now()); err == nil {
 		t.Fatal("expected empty-account error")
 	}
@@ -148,7 +148,7 @@ func TestCatalogCache_ReportsMalformedCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceMantle}, nil, time.Now()); err != nil {
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceFoundation}, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
@@ -157,7 +157,7 @@ func TestCatalogCache_ReportsMalformedCache(t *testing.T) {
 	if _, _, err := LoadCachedModels(home, testScope, "us-west-2"); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
 		t.Fatalf("malformed cache error = %v", err)
 	}
-	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceMantle}, nil, time.Now()); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
+	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2", []Source{SourceFoundation}, nil, time.Now()); err == nil || !strings.Contains(err.Error(), "parsing model-catalog.json") {
 		t.Fatalf("save with malformed cache error = %v", err)
 	}
 }

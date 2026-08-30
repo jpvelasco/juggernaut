@@ -20,11 +20,11 @@ func TestRunModelsRefresh_NativeSources(t *testing.T) {
 	when := time.Date(2026, 7, 20, 15, 0, 0, 0, time.UTC)
 
 	origFlags := modelsRefreshFlags
-	origFoundation, origProfiles, origMantle := listFoundationCatalog, listInferenceProfiles, listMantleCatalog
+	origFoundation, origProfiles := listFoundationCatalog, listInferenceProfiles
 	origAccount, origScope, origNow := catalogCallerAccount, catalogCredentialScope, catalogNow
 	t.Cleanup(func() {
 		modelsRefreshFlags = origFlags
-		listFoundationCatalog, listInferenceProfiles, listMantleCatalog = origFoundation, origProfiles, origMantle
+		listFoundationCatalog, listInferenceProfiles = origFoundation, origProfiles
 		catalogCallerAccount, catalogCredentialScope, catalogNow = origAccount, origScope, origNow
 	})
 	modelsRefreshFlags.region = "us-east-1"
@@ -37,9 +37,6 @@ func TestRunModelsRefresh_NativeSources(t *testing.T) {
 	}
 	listInferenceProfiles = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{{ID: "global.anthropic.claude-sonnet-4-6", Source: discovery.SourceProfile, Status: "ACTIVE"}}, nil
-	}
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return nil, nil
 	}
 
 	var output bytes.Buffer
@@ -66,8 +63,8 @@ func TestRunModelsList_CliFilterWithProviderError(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceMantle},
-		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"}},
+		[]discovery.Source{discovery.SourceFoundation},
+		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"}},
 		when); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +76,7 @@ func TestRunModelsList_CliFilterWithProviderError(t *testing.T) {
 		catalogCredentialScope = origScope
 	})
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "foundation"
 	modelsListFlags.cli = "grok"
 	modelsListFlags.refresh = false
 	modelsListFlags.showUnsupported = false
@@ -116,7 +113,7 @@ func TestRunModelsList_NoModelsMatchSourceFilter(t *testing.T) {
 		catalogCredentialScope = origScope
 	})
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "profile"
 	modelsListFlags.cli = ""
 	modelsListFlags.refresh = false
 	modelsListFlags.showUnsupported = false
@@ -130,7 +127,7 @@ func TestRunModelsList_NoModelsMatchSourceFilter(t *testing.T) {
 	}
 	got := output.String()
 	if strings.Contains(got, "anthropic.claude-opus") {
-		t.Fatalf("mantle filter should not show foundation model:\n%s", got)
+		t.Fatalf("profile filter should not show foundation model:\n%s", got)
 	}
 	if !strings.Contains(got, "0 models for AWS account 111122223333") {
 		t.Fatalf("expected zero models summary:\n%s", got)
@@ -164,9 +161,9 @@ func TestToProviderCatalogModel_PreservesFields(t *testing.T) {
 }
 
 func TestRefreshCatalog_AllSourcesCombined(t *testing.T) {
-	origFoundation, origProfiles, origMantle := listFoundationCatalog, listInferenceProfiles, listMantleCatalog
+	origFoundation, origProfiles := listFoundationCatalog, listInferenceProfiles
 	t.Cleanup(func() {
-		listFoundationCatalog, listInferenceProfiles, listMantleCatalog = origFoundation, origProfiles, origMantle
+		listFoundationCatalog, listInferenceProfiles = origFoundation, origProfiles
 	})
 	listFoundationCatalog = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{{ID: "native", Source: discovery.SourceFoundation}}, nil
@@ -174,22 +171,19 @@ func TestRefreshCatalog_AllSourcesCombined(t *testing.T) {
 	listInferenceProfiles = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{{ID: "profile", Source: discovery.SourceProfile}}, nil
 	}
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return []discovery.DiscoveredModel{{ID: "mantle", Source: discovery.SourceMantle}}, nil
-	}
 
 	models, err := refreshCatalog(context.Background(), "us-west-2",
-		[]discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle}, "")
+		[]discovery.Source{discovery.SourceFoundation, discovery.SourceProfile})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(models) != 3 {
-		t.Fatalf("expected 3 models from all sources, got %d", len(models))
+	if len(models) != 2 {
+		t.Fatalf("expected 2 models from all sources, got %d", len(models))
 	}
 }
 
 func TestRefreshCatalog_EmptySourceList(t *testing.T) {
-	models, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{}, "")
+	models, err := refreshCatalog(context.Background(), "us-west-2", []discovery.Source{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +208,7 @@ func TestCatalogIdentity_PropagatesAccountError(t *testing.T) {
 }
 
 func TestParseCatalogSources_CaseInsensitive(t *testing.T) {
-	for _, input := range []string{"ALL", "All", "native", "NATIVE", "Mantle", "MANTLE"} {
+	for _, input := range []string{"ALL", "All", "native", "NATIVE", "Foundation", "FOUNDATION"} {
 		_, err := parseCatalogSources(input)
 		if err != nil {
 			t.Errorf("parseCatalogSources(%q) should succeed: %v", input, err)
@@ -232,7 +226,7 @@ func TestModelsList_RefreshAccountError(t *testing.T) {
 		catalogCallerAccount, catalogCredentialScope = origAccount, origScope
 	})
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "foundation"
 	modelsListFlags.refresh = true
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 	catalogCallerAccount = func(context.Context, string) (string, error) {
@@ -252,10 +246,10 @@ func TestCatalogProviderModels_MapsAllFields(t *testing.T) {
 	models := []discovery.DiscoveredModel{
 		{ID: "native", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE", Provider: "Anthropic"},
 		{ID: "profile", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE", Provider: ""},
-		{ID: "mantle", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE", Provider: "zai"},
+		{ID: "foundation", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE", Provider: "zai"},
 	}
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle},
+		[]discovery.Source{discovery.SourceFoundation, discovery.SourceProfile},
 		models, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +262,7 @@ func TestCatalogProviderModels_MapsAllFields(t *testing.T) {
 	for _, m := range got {
 		gotIDs[m.ID] = true
 	}
-	for _, want := range []string{"native", "profile", "mantle"} {
+	for _, want := range []string{"native", "profile", "foundation"} {
 		if !gotIDs[want] {
 			t.Errorf("missing model %q in cached models: %+v", want, got)
 		}
@@ -291,40 +285,40 @@ func TestModelsList_FiltersByProvider(t *testing.T) {
 	}{
 		{
 			name:          "grok",
-			source:        "mantle",
+			source:        "foundation",
 			cli:           "grok",
-			cachedSources: []discovery.Source{discovery.SourceMantle},
+			cachedSources: []discovery.Source{discovery.SourceFoundation},
 			models: []discovery.DiscoveredModel{
-				{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-				{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 			},
 			wantPresent: []string{"xai.grok-4.3"},
 			wantAbsent:  []string{"moonshotai.kimi-k2.5"},
 		},
 		{
 			name:          "codex",
-			source:        "mantle",
+			source:        "foundation",
 			cli:           "codex",
-			cachedSources: []discovery.Source{discovery.SourceMantle},
+			cachedSources: []discovery.Source{discovery.SourceFoundation},
 			models: []discovery.DiscoveredModel{
-				{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
-				{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "openai.gpt-5.6-sol", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 			},
-			wantPresent: []string{"openai.gpt-5.5"},
+			wantPresent: []string{"openai.gpt-5.6-sol"},
 			wantAbsent:  []string{"xai.grok-4.3"},
 		},
 		{
 			name:          "claude",
 			source:        "native",
 			cli:           "claude",
-			cachedSources: []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile, discovery.SourceMantle},
+			cachedSources: []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile},
 			models: []discovery.DiscoveredModel{
 				{ID: "anthropic.claude-opus-4-8", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 				{ID: "global.anthropic.claude-sonnet-4-6", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE"},
-				{ID: "openai.gpt-5.5", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "openai.gpt-5.6-sol", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 			},
 			wantPresent: []string{"anthropic.claude-opus-4-8", "global.anthropic.claude-sonnet-4-6"},
-			wantAbsent:  []string{"openai.gpt-5.5"},
+			wantAbsent:  []string{"openai.gpt-5.6-sol"},
 		},
 	}
 
@@ -375,8 +369,8 @@ func TestModelsList_SummaryLineFormat(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	if err := discovery.SaveCachedModels(home, "999988887777", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceMantle},
-		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceMantle, Status: "ACTIVE", Availability: "AVAILABLE"}},
+		[]discovery.Source{discovery.SourceFoundation},
+		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"}},
 		when); err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +382,7 @@ func TestModelsList_SummaryLineFormat(t *testing.T) {
 		catalogCredentialScope = origScope
 	})
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "foundation"
 	modelsListFlags.cli = ""
 	modelsListFlags.refresh = false
 	modelsListFlags.showUnsupported = false
@@ -414,11 +408,11 @@ func TestModelsRefresh_OutputFormat(t *testing.T) {
 	when := time.Date(2026, 7, 20, 15, 0, 0, 0, time.UTC)
 
 	origFlags := modelsRefreshFlags
-	origFoundation, origProfiles, origMantle := listFoundationCatalog, listInferenceProfiles, listMantleCatalog
+	origFoundation, origProfiles := listFoundationCatalog, listInferenceProfiles
 	origAccount, origScope, origNow := catalogCallerAccount, catalogCredentialScope, catalogNow
 	t.Cleanup(func() {
 		modelsRefreshFlags = origFlags
-		listFoundationCatalog, listInferenceProfiles, listMantleCatalog = origFoundation, origProfiles, origMantle
+		listFoundationCatalog, listInferenceProfiles = origFoundation, origProfiles
 		catalogCallerAccount, catalogCredentialScope, catalogNow = origAccount, origScope, origNow
 	})
 	modelsRefreshFlags.region = "us-east-1"
@@ -431,9 +425,6 @@ func TestModelsRefresh_OutputFormat(t *testing.T) {
 	}
 	listInferenceProfiles = func(context.Context, string) ([]discovery.DiscoveredModel, error) {
 		return []discovery.DiscoveredModel{{ID: "profile", Source: discovery.SourceProfile}}, nil
-	}
-	listMantleCatalog = func(context.Context, string, string) ([]discovery.DiscoveredModel, error) {
-		return nil, nil
 	}
 
 	var output bytes.Buffer
@@ -460,7 +451,7 @@ func TestProviderSupportsCatalogModel_UsesProviderCheck(t *testing.T) {
 		want   bool
 	}{
 		{"claude", "anthropic.claude-opus-4-8", "foundation", true},
-		{"claude", "openai.gpt-5.5", "mantle", false},
+		{"claude", "openai.gpt-5.5", "foundation", false},
 		{"codex", "openai.gpt-5.6-sol", "foundation", true},
 		{"codex", "anthropic.claude-opus-4-8", "foundation", false},
 		{"grok", "xai.grok-4.6", "foundation", true},
@@ -512,7 +503,7 @@ func TestModelsList_HomeDirError(t *testing.T) {
 	origFlags := modelsListFlags
 	t.Cleanup(func() { modelsListFlags = origFlags })
 	modelsListFlags.region = "us-west-2"
-	modelsListFlags.source = "mantle"
+	modelsListFlags.source = "foundation"
 	modelsListFlags.refresh = false
 	modelsListFlags.cli = ""
 	modelsListFlags.showUnsupported = false
@@ -536,7 +527,7 @@ func TestModelsRefresh_HomeDirError(t *testing.T) {
 	origFlags := modelsRefreshFlags
 	t.Cleanup(func() { modelsRefreshFlags = origFlags })
 	modelsRefreshFlags.region = "us-west-2"
-	modelsRefreshFlags.source = "mantle"
+	modelsRefreshFlags.source = "foundation"
 
 	err := runModelsRefresh(&cobra.Command{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "home") {
@@ -551,13 +542,13 @@ func TestCachedProviderSources_ReturnsSources(t *testing.T) {
 	catalogCredentialScope = func(string) (string, error) { return "scope", nil }
 
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
-		[]discovery.Source{discovery.SourceMantle},
-		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceMantle}},
+		[]discovery.Source{discovery.SourceFoundation},
+		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceFoundation}},
 		time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	_, got, err := cachedProviderCatalog(home, "us-west-2")
-	if err != nil || len(got) != 1 || got[0] != "mantle" {
+	if err != nil || len(got) != 1 || got[0] != "foundation" {
 		t.Fatalf("sources = %+v, err %v", got, err)
 	}
 }

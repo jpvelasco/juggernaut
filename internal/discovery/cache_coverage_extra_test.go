@@ -17,8 +17,8 @@ func TestSaveCachedModels_RenameError(t *testing.T) {
 
 	// Save a valid cache first so the parent directory exists.
 	if err := SaveCachedModels(home, testAccount, testScope, "us-west-2",
-		[]Source{SourceMantle},
-		[]DiscoveredModel{{ID: "xai.grok-4.3", Source: SourceMantle}},
+		[]Source{SourceFoundation},
+		[]DiscoveredModel{{ID: "xai.grok-4.6", Source: SourceFoundation}},
 		when); err != nil {
 		t.Fatalf("initial save: %v", err)
 	}
@@ -34,8 +34,8 @@ func TestSaveCachedModels_RenameError(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(parent, safepath.DirPerm) })
 
 	err := SaveCachedModels(home, testAccount, testScope, "us-west-2",
-		[]Source{SourceMantle},
-		[]DiscoveredModel{{ID: "openai.gpt-5.5", Source: SourceMantle}},
+		[]Source{SourceFoundation},
+		[]DiscoveredModel{{ID: "openai.gpt-5.6-sol", Source: SourceFoundation}},
 		when)
 	if err == nil {
 		t.Skip("chmod on parent directory did not block write (Windows)")
