@@ -82,7 +82,8 @@ var opencodeModelAliases = map[string]string{
 	"kimi-k2.5":     "moonshotai.kimi-k2.5",
 	"deepseek-v3.2": "deepseek.v3.2",
 	"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-v1:0",
-	"grok-4.3":      "xai.grok-4.6",
+	"grok-4.6":      "xai.grok-4.6",
+	"grok-4.3":      "xai.grok-4.6", // deprecated: kept for backwards compat; prefer grok-4.6
 }
 
 func opencodeDefaultModel() string { return "gpt-oss-120b" }

@@ -638,9 +638,6 @@ func TestNativeKeys_AlwaysThinking(t *testing.T) {
 	}
 }
 
-// TestBuild_Mantle_StripsGovCloudPrefix covers the us-gov. regional inference
-// profile prefix, which must be stripped for Mantle routing just like us./eu./
-// apac. (previously only IsAutoModeCapableModel handled us-gov.).
 // TestBuild_Use1M_RecognizesGovCloudOpus covers the us-gov. prefix in the 1M
 // context support check: a GovCloud Opus model must still be annotated [1m].
 func TestBuild_Use1M_RecognizesGovCloudOpus(t *testing.T) {
