@@ -4,6 +4,21 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **v5 (Mantle-era) configs now auto-migrate on plain `apply`.** Upgrading
+  from v5 and running `juggernaut apply` no longer requires `--force` when the
+  existing `~/.codex/config.toml` or `~/.grok/config.toml` was written by
+  Juggernaut v5 (Mantle-era). The apply detects the stale Mantle `base_url` /
+  pre-v6 model IDs, announces the migration, backs up the old config, and
+  rewrites it to route via `bedrock-runtime`. A genuinely foreign config (one
+  Juggernaut did not write) still requires `--force`.
+  - Grok: legacy `base_url` pointing at `bedrock-mantle` triggers migration.
+  - Codex: legacy `model_provider = "amazon-bedrock"` with a pre-v6 model
+    ID (`openai.gpt-5.x`, not `openai.gpt-5.6-*`) triggers migration.
+  - After applying, re-run `juggernaut models refresh --source native
+    --region <region>` to repopulate the model catalog.
+
 ## [6.0.0] - 2026-08-30
 
 **Major release — consolidated on native Bedrock. Mantle is removed.**

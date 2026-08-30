@@ -593,3 +593,319 @@ func TestApply_Claude_ForeignConfig_MalformedJSON_ErrorsNotSilentlyIgnored(t *te
 		t.Error("a parse error must not be misreported as a collision refusal")
 	}
 }
+
+// TestApply_Grok_LegacyJuggernautConfig_PlainApplyMigrates: a plain apply
+// (no --force) over a v5 Grok config (base_url pointing at Mantle) must
+// migrate to the v6 bedrock-runtime config with a backup — not refuse.
+func TestApply_Grok_LegacyJuggernautConfig_PlainApplyMigrates(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t) // apply stores a real credential; skip if backend hangs (macOS CI)
+
+	grokDir := filepath.Join(home, ".grok")
+	if err := safepath.MkdirAll(grokDir); err != nil {
+		t.Fatalf("mkdir .grok: %v", err)
+	}
+	configPath := filepath.Join(grokDir, "config.toml")
+	legacy := `[models]
+default = "bedrock-grok"
+
+[model.bedrock-grok]
+model = "xai.grok-4.3"
+base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+name = "Amazon Bedrock (Mantle)"
+
+[auth]
+auth_provider_command = "juggernaut auth-token"
+`
+	if err := safepath.WriteFile(grokDir, configPath, []byte(legacy)); err != nil {
+		t.Fatalf("write legacy grok config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("plain apply over legacy grok config should migrate, not refuse: %v", err)
+		}
+	})
+	if !strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("apply should announce the v5→v6 migration, got:\n%s", out)
+	}
+	if !strings.Contains(out, "models refresh") {
+		t.Errorf("apply should mention models refresh, got:\n%s", out)
+	}
+
+	// Verify the written config has the v6 bedrock-runtime URL, not Mantle.
+	content, err := safepath.ReadFile(grokDir, configPath)
+	if err != nil {
+		t.Fatalf("read config after apply: %v", err)
+	}
+	written := string(content)
+	if !strings.Contains(written, "bedrock-runtime") {
+		t.Errorf("migrated config should contain bedrock-runtime base_url, got:\n%s", written)
+	}
+	if strings.Contains(written, "bedrock-mantle") {
+		t.Errorf("migrated config must NOT contain bedrock-mantle URL, got:\n%s", written)
+	}
+	if !strings.Contains(written, "xai.grok-4.6") {
+		t.Errorf("migrated config should have v6 default model xai.grok-4.6, got:\n%s", written)
+	}
+
+	// A backup of the legacy config should have been created.
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) == 0 {
+		t.Error("expected a backup of the legacy grok config to be created")
+	}
+}
+
+// TestApply_Codex_LegacyJuggernautConfig_PlainApplyMigrates: a plain apply
+// (no --force) over a v5 Codex config (amazon-bedrock provider with old
+// GPT-5.5 model ID) must migrate to the v6 model ID with a backup.
+func TestApply_Codex_LegacyJuggernautConfig_PlainApplyMigrates(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := safepath.MkdirAll(codexDir); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	configPath := filepath.Join(codexDir, "config.toml")
+	legacy := `model = "openai.gpt-5.5"
+model_provider = "amazon-bedrock"
+
+[model_providers.amazon-bedrock.aws]
+region = "us-east-1"
+`
+	if err := safepath.WriteFile(codexDir, configPath, []byte(legacy)); err != nil {
+		t.Fatalf("write legacy codex config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("plain apply over legacy codex config should migrate, not refuse: %v", err)
+		}
+	})
+	if !strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("apply should announce the v5→v6 migration for codex, got:\n%s", out)
+	}
+	if !strings.Contains(out, "models refresh") {
+		t.Errorf("apply should mention models refresh, got:\n%s", out)
+	}
+
+	content, err := safepath.ReadFile(codexDir, configPath)
+	if err != nil {
+		t.Fatalf("read config after apply: %v", err)
+	}
+	written := string(content)
+	if !strings.Contains(written, "openai.gpt-5.6-sol") {
+		t.Errorf("migrated config should have v6 default model openai.gpt-5.6-sol, got:\n%s", written)
+	}
+	if strings.Contains(written, "openai.gpt-5.5") {
+		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
+	}
+
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) == 0 {
+		t.Error("expected a backup of the legacy codex config to be created")
+	}
+}
+
+// TestApply_DryRun_LegacyJuggernautConfig_PreviewsMigration: a plain dry-run
+// over a legacy v5 Grok config must preview the migration (announce + the
+// standard "would write" output) without writing or creating a backup.
+func TestApply_DryRun_LegacyJuggernautConfig_PreviewsMigration(t *testing.T) {
+	home := setupApplyTest(t)
+
+	grokDir := filepath.Join(home, ".grok")
+	if err := safepath.MkdirAll(grokDir); err != nil {
+		t.Fatalf("mkdir .grok: %v", err)
+	}
+	configPath := filepath.Join(grokDir, "config.toml")
+	legacy := `[models]
+default = "bedrock-grok"
+
+[model.bedrock-grok]
+model = "xai.grok-4.3"
+base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+name = "Amazon Bedrock (Mantle)"
+
+[auth]
+auth_provider_command = "juggernaut auth-token"
+`
+	if err := safepath.WriteFile(grokDir, configPath, []byte(legacy)); err != nil {
+		t.Fatalf("write legacy grok config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-west-2", "--dry-run", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("dry-run should not error: %v", err)
+		}
+	})
+	if !strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("dry-run should preview the v5→v6 migration, got:\n%s", out)
+	}
+	if !strings.Contains(out, "models refresh") {
+		t.Errorf("dry-run should mention models refresh, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Would write juggernaut config") {
+		t.Errorf("dry-run should still show what would be written, got:\n%s", out)
+	}
+
+	got, err := safepath.ReadFile(grokDir, configPath)
+	if err != nil {
+		t.Fatalf("reading config.toml: %v", err)
+	}
+	if string(got) != legacy {
+		t.Error("dry-run must not modify the legacy file")
+	}
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) != 0 {
+		t.Error("dry-run must not create a backup")
+	}
+}
+
+// TestApply_ForeignConfig_NotLegacy_NoMigrationHint: a foreign config that
+// does NOT look like a Juggernaut v5 config must NOT trigger the migration
+// hint — it still requires --force.
+func TestApply_ForeignConfig_NotLegacy_NoMigrationHint(t *testing.T) {
+	home := setupApplyTest(t)
+
+	grokDir := filepath.Join(home, ".grok")
+	if err := safepath.MkdirAll(grokDir); err != nil {
+		t.Fatalf("mkdir .grok: %v", err)
+	}
+	configPath := filepath.Join(grokDir, "config.toml")
+	foreign := `[models]
+default = "their-own-model"
+`
+	if err := safepath.WriteFile(grokDir, configPath, []byte(foreign)); err != nil {
+		t.Fatalf("write foreign grok config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=us-west-2", "--dry-run", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("dry-run should not error: %v", err)
+		}
+	})
+	if strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("non-legacy foreign config must NOT trigger migration hint, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--force") {
+		t.Errorf("non-legacy foreign config must still mention --force, got:\n%s", out)
+	}
+}
+
+// TestApply_Grok_LegacyJuggernautConfig_Force_MigratesToV6: --force over a
+// legacy v5 Grok config must succeed, write the v6 bedrock-runtime base_url,
+// and drop the Mantle URL. This is the actual migration path — the user
+// doesn't have to hand-edit their config.
+func TestApply_Grok_LegacyJuggernautConfig_Force_MigratesToV6(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+
+	grokDir := filepath.Join(home, ".grok")
+	if err := safepath.MkdirAll(grokDir); err != nil {
+		t.Fatalf("mkdir .grok: %v", err)
+	}
+	configPath := filepath.Join(grokDir, "config.toml")
+	legacy := `[models]
+default = "bedrock-grok"
+
+[model.bedrock-grok]
+model = "xai.grok-4.3"
+base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+name = "Amazon Bedrock (Mantle)"
+
+[auth]
+auth_provider_command = "juggernaut auth-token"
+`
+	if err := safepath.WriteFile(grokDir, configPath, []byte(legacy)); err != nil {
+		t.Fatalf("write legacy grok config: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+		"--region=us-west-2", "--skip-preflight", "--force",
+	}); err != nil {
+		t.Fatalf("apply --force over legacy grok config should succeed: %v", err)
+	}
+
+	// Verify the written config has the v6 bedrock-runtime URL, not Mantle.
+	content, err := safepath.ReadFile(grokDir, configPath)
+	if err != nil {
+		t.Fatalf("read config after apply: %v", err)
+	}
+	written := string(content)
+	if !strings.Contains(written, "bedrock-runtime") {
+		t.Errorf("migrated config should contain bedrock-runtime base_url, got:\n%s", written)
+	}
+	if strings.Contains(written, "bedrock-mantle") {
+		t.Errorf("migrated config must NOT contain bedrock-mantle URL, got:\n%s", written)
+	}
+	if !strings.Contains(written, "xai.grok-4.6") {
+		t.Errorf("migrated config should have v6 default model xai.grok-4.6, got:\n%s", written)
+	}
+
+	// A backup of the legacy config should have been created.
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) == 0 {
+		t.Error("expected a backup of the legacy grok config to be created with --force")
+	}
+}
+
+// TestApply_Codex_LegacyJuggernautConfig_Force_MigratesToV6: --force over a
+// legacy v5 Codex config must succeed, write the v6 model ID (gpt-5.6-sol),
+// and drop the old GPT-5.5 model.
+func TestApply_Codex_LegacyJuggernautConfig_Force_MigratesToV6(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := safepath.MkdirAll(codexDir); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	configPath := filepath.Join(codexDir, "config.toml")
+	legacy := `model = "openai.gpt-5.5"
+model_provider = "amazon-bedrock"
+
+[model_providers.amazon-bedrock.aws]
+region = "us-east-1"
+`
+	if err := safepath.WriteFile(codexDir, configPath, []byte(legacy)); err != nil {
+		t.Fatalf("write legacy codex config: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=codex", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+		"--region=us-west-2", "--skip-preflight", "--force",
+	}); err != nil {
+		t.Fatalf("apply --force over legacy codex config should succeed: %v", err)
+	}
+
+	content, err := safepath.ReadFile(codexDir, configPath)
+	if err != nil {
+		t.Fatalf("read config after apply: %v", err)
+	}
+	written := string(content)
+	if !strings.Contains(written, "openai.gpt-5.6-sol") {
+		t.Errorf("migrated config should have v6 default model openai.gpt-5.6-sol, got:\n%s", written)
+	}
+	if strings.Contains(written, "openai.gpt-5.5") {
+		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
+	}
+
+	matches, _ := filepath.Glob(configPath + ".backup.*")
+	if len(matches) == 0 {
+		t.Error("expected a backup of the legacy codex config to be created with --force")
+	}
+}

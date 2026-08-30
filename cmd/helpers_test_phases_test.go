@@ -879,7 +879,7 @@ func TestPrintApplyDryRun_CollisionsNoForce(t *testing.T) {
 	if !strings.Contains(out, "Dry run — no changes written.") {
 		t.Fatalf("expected dry run header, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Would refuse to apply") {
+	if !strings.Contains(out, "refusing to modify") {
 		t.Fatalf("expected collision refusal in dry run, got:\n%s", out)
 	}
 	if !strings.Contains(out, "AWS_REGION") {
