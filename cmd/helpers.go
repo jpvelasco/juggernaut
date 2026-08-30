@@ -334,15 +334,21 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 	if err != nil {
 		return err
 	}
+
 	collisions, err := detectForeignCollisions(home, applyFlags.scope, prov, plan)
 	if err != nil {
 		return err
 	}
 	if len(collisions) > 0 && !applyFlags.force {
-		fmt.Printf("Would refuse to apply: %s isn't managed by Juggernaut and already has:\n%s\n"+
-			"Would require --force to overwrite anyway (a backup would still be made before writing)\n",
-			path, formatCollisions(collisions))
-		return nil
+		if migrateLegacyJuggernautConfig(prov, home, applyFlags.scope) {
+			announceMigration(prov)
+		} else {
+			// Dry-run never errors — it prints the same refusal the commit
+			// path would return, so the user can preview what a real apply
+			// would do.
+			fmt.Print(refuseForeignConfig(prov, home, applyFlags.scope, plan, path).Error() + "\n")
+			return nil
+		}
 	}
 
 	title := prov.DisplayName()
@@ -366,10 +372,41 @@ func detectForeignCollisions(home, scope string, prov provider.Provider, plan pr
 	if err != nil {
 		return nil, fmt.Errorf("checking existing configuration: %w", err)
 	}
-	if prov.OwnsConfig(existing) || len(existing) == 0 {
+	if len(existing) == 0 {
+		return nil, nil
+	}
+	// A legacy v5 config (Mantle-era) must be migrated even if it passes
+	// OwnsConfig — the old base_url / model IDs are wrong for v6.
+	if prov.OwnsConfig(existing) && !isJuggernautLegacy(existing) {
 		return nil, nil
 	}
 	return config.DetectCollisions(existing, plan.Keys, prov.DeepMergeKeys(), prov.OwnedSubKeys()), nil
+}
+
+// isJuggernautLegacy reports whether the existing config was written by a
+// pre-v6 Juggernaut (Mantle-era) and is stale for v6's bedrock-runtime
+// routing. Returns false for configs that don't look like Juggernaut's own
+// (foreign user configs, non-Juggernaut tooling) — those still require
+// --force. Legacy Juggernaut configs are migrated by a plain apply: the
+// write clobbers the file and the backup preserves the old content.
+func isJuggernautLegacy(existing map[string]any) bool {
+	// Grok: [model.bedrock-grok] base_url pointed at Mantle.
+	if model, ok := existing["model"].(map[string]any); ok {
+		if grokModel, ok := model["bedrock-grok"].(map[string]any); ok {
+			if bu, ok := grokModel["base_url"].(string); ok && strings.Contains(bu, "mantle") {
+				return true
+			}
+		}
+	}
+	// Codex: a Juggernaut-owned config (amazon-bedrock provider) with a
+	// pre-v6 model ID (openai.gpt-5.x, not the v6 openai.gpt-5.6-* family)
+	// is a Mantle-era config.
+	if mp, ok := existing["model_provider"]; ok && mp == "amazon-bedrock" {
+		if m, ok := existing["model"].(string); ok && strings.HasPrefix(m, "openai.gpt-5.") && !strings.HasPrefix(m, "openai.gpt-5.6") {
+			return true
+		}
+	}
+	return false
 }
 
 // formatCollisions renders one line per collision for the refusal error/dry-run
@@ -380,6 +417,43 @@ func formatCollisions(collisions []config.Collision) string {
 		lines[i] = fmt.Sprintf("  %s: %#v (foreign value)", c.Path, c.Existing)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func readExistingForLegacy(prov provider.Provider, home, scope string) map[string]any {
+	existing, err := readProviderConfig(prov, home, scope)
+	if err != nil || existing == nil {
+		return nil
+	}
+	return existing
+}
+
+// migrateLegacyJuggernautConfig reports whether the existing config is a
+// pre-v6 (Mantle-era) Juggernaut config that a plain apply migrates — rather
+// than refuses — to the v6 bedrock-runtime config. Only Juggernaut's own
+// legacy configs qualify; a genuinely foreign config is never treated as
+// legacy and still requires --force.
+func migrateLegacyJuggernautConfig(prov provider.Provider, home, scope string) bool {
+	return isJuggernautLegacy(readExistingForLegacy(prov, home, scope))
+}
+
+// announceMigration prints the v5→v6 migration notice for a legacy
+// Juggernaut config. Both the dry-run and commit paths call this before
+// writing, so the user sees the migration is happening, not a refusal.
+func announceMigration(prov provider.Provider) {
+	fmt.Printf("Migrating %s: the existing config was written by Juggernaut v5 (Mantle era).\n", prov.DisplayName())
+	fmt.Println("Mantle endpoints are removed in v6; the config will be rewritten to route via bedrock-runtime.")
+	fmt.Println("A backup of the old config is saved before writing.")
+	fmt.Println("After applying, re-run: juggernaut models refresh --source native --region <region>")
+}
+
+// refuseForeignConfig returns the refusal error for a config Juggernaut does
+// not own and is not a legacy migration target. Both the dry-run (printed) and
+// commit (returned) paths use the same wording so the two views never diverge.
+func refuseForeignConfig(prov provider.Provider, home, scope string, plan provider.ConfigPlan, path string) error {
+	collisions, _ := detectForeignCollisions(home, scope, prov, plan)
+	return fmt.Errorf("refusing to modify %s — it isn't managed by Juggernaut and already has:\n%s\n"+
+		"run with --force to overwrite anyway (a backup is still made before writing)",
+		path, formatCollisions(collisions))
 }
 
 func commitApply(home, authMode, token string, block *schema.Block, prov provider.Provider, bCfg *bedrock.Config, provOpts provider.Options) error {
@@ -403,9 +477,11 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return err
 	}
 	if len(collisions) > 0 && !applyFlags.force {
-		return fmt.Errorf("refusing to modify %s — it isn't managed by Juggernaut and already has:\n%s\n"+
-			"run with --force to overwrite anyway (a backup is still made before writing)",
-			path, formatCollisions(collisions))
+		if migrateLegacyJuggernautConfig(prov, home, applyFlags.scope) {
+			announceMigration(prov)
+		} else {
+			return refuseForeignConfig(prov, home, applyFlags.scope, plan, path)
+		}
 	}
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
