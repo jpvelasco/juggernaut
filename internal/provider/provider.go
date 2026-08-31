@@ -13,6 +13,8 @@ package provider
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 )
@@ -114,6 +116,19 @@ var registry = map[string]Provider{}
 
 func register(p Provider) { registry[p.Name()] = p }
 
+// forceRegisterForTest overwrites the registry entry for name with p,
+// regardless of whether the name is registered. Tests use it to inject
+// hand-built providers under real names (e.g. to drive error branches of
+// otherProviderNeedsToken that no real provider reaches). The name MUST
+// already be a registered provider — callers restore the original in
+// t.Cleanup.
+func ForceRegisterForTest(name string, p Provider) {
+	if _, ok := registry[name]; !ok {
+		panic("forceRegisterForTest: " + name + " is not a registered provider")
+	}
+	registry[name] = p
+}
+
 func init() {
 	register(claude{BaseProvider: BaseProvider{
 		name:         "claude",
@@ -178,22 +193,18 @@ func MustGet(name string) Provider {
 }
 
 func supportedNames() string {
+	return strings.Join(AllNames(), ", ")
+}
+
+// AllNames returns the registered provider names in sorted order. Callers that
+// inspect every provider — e.g. shared-credential ownership checks at
+// uninstall — should use this rather than hard-coding names, so new CLIs are
+// picked up automatically.
+func AllNames() []string {
 	names := make([]string, 0, len(registry))
 	for n := range registry {
 		names = append(names, n)
 	}
-	// Deterministic order for the error message.
-	for i := 1; i < len(names); i++ {
-		for j := i; j > 0 && names[j] < names[j-1]; j-- {
-			names[j], names[j-1] = names[j-1], names[j]
-		}
-	}
-	out := ""
-	for i, n := range names {
-		if i > 0 {
-			out += ", "
-		}
-		out += n
-	}
-	return out
+	sort.Strings(names)
+	return names
 }
