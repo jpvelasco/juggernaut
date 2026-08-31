@@ -2,7 +2,7 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
-## [Unreleased]
+## [6.1.0] - 2026-08-31
 
 ### Changed
 
@@ -30,6 +30,27 @@ All notable changes to Juggernaut will be documented in this file.
     ID (`openai.gpt-5.x`, not `openai.gpt-5.6-*`) triggers migration.
   - After applying, re-run `juggernaut models refresh --source native
     --region <region>` to repopulate the model catalog.
+- **Uninstall no longer deletes the shared bearer token other CLIs still
+  use.** Uninstalling one CLI (e.g. Claude) now surveys the configs of every
+  other Juggernaut-managed provider (user and project scope); if any of them
+  still require the shared keychain token, it is retained. The token is only
+  deleted when no remaining provider config needs it.
+- **Shell profile updates are now concurrency-safe.** Activations hold a
+  per-profile lock (`~/.juggernaut/runtime/profile.lock` or the per-profile
+  flock equivalent) across the read-modify-write of the user's shell profile,
+  so two concurrent `juggernaut apply` invocations can no longer drop each
+  other's activation blocks.
+- **Same-second config backups are now distinct recovery points.** Config
+  backups created within the same second now append a `-N` suffix on
+  collision (`settings.json.backup.20260831T120000Z`, `...Z-1`, `...Z-2`)
+  instead of overwriting, so every apply retains its own rollback point.
+- **Credential fallback file replacement is atomic.** The keychain fallback
+  file (`~/.juggernaut/credential-fallback.json`) is now written to a temp
+  file and renamed into place, so a crash mid-write can no longer leave a
+  partially-written credential file on disk.
+- **Config read-modify-write now holds the lock for the whole transaction.**
+  `internal/config` locks before the read, not just at the write, so
+  concurrent merges no longer interleave.
 
 ## [6.0.0] - 2026-08-30
 
@@ -1293,7 +1314,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.0.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.1.0...HEAD
+[6.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.1.0
 [6.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.0.0
 [5.6.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.2
 [5.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.6.1
