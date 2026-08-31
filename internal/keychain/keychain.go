@@ -255,7 +255,8 @@ var (
 	writeCredentialTempFn = func(path string, data []byte) error {
 		return os.WriteFile(path, data, 0o600)
 	}
-	replaceCredentialFn = os.Rename
+	replaceCredentialFn    = os.Rename
+	removeCredentialTempFn = os.Remove
 )
 
 func writeCredentialFile(base, filePath string, token string) error {
@@ -271,7 +272,7 @@ func writeCredentialFile(base, filePath string, token string) error {
 		return fmt.Errorf("writing credential fallback: %w", err)
 	}
 	if err := replaceCredentialFn(tmp, filePath); err != nil {
-		if rmErr := os.Remove(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
+		if rmErr := removeCredentialTempFn(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
 			return fmt.Errorf("committing credential fallback: %w (cleanup of temp file also failed: %v)", err, rmErr)
 		}
 		return fmt.Errorf("committing credential fallback: %w", err)
