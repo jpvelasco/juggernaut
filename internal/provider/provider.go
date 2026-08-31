@@ -13,6 +13,8 @@ package provider
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 )
@@ -178,22 +180,18 @@ func MustGet(name string) Provider {
 }
 
 func supportedNames() string {
+	return strings.Join(AllNames(), ", ")
+}
+
+// AllNames returns the registered provider names in sorted order. Callers that
+// inspect every provider — e.g. shared-credential ownership checks at
+// uninstall — should use this rather than hard-coding names, so new CLIs are
+// picked up automatically.
+func AllNames() []string {
 	names := make([]string, 0, len(registry))
 	for n := range registry {
 		names = append(names, n)
 	}
-	// Deterministic order for the error message.
-	for i := 1; i < len(names); i++ {
-		for j := i; j > 0 && names[j] < names[j-1]; j-- {
-			names[j], names[j-1] = names[j-1], names[j]
-		}
-	}
-	out := ""
-	for i, n := range names {
-		if i > 0 {
-			out += ", "
-		}
-		out += n
-	}
-	return out
+	sort.Strings(names)
+	return names
 }

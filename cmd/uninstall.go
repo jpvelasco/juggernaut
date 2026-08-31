@@ -62,7 +62,13 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 	// user-scope Claude and non-Claude providers still reference. `--full`
 	// broadens shell-block removal, NOT shared-credential removal.
 	if !uninstallFlags.dryRun && prov.Name() == "claude" && uninstallFlags.scope != "project" {
-		removeKeychainToken(home)
+		if otherNeeds := otherProviderNeedsToken(home, prov); otherNeeds != "" {
+			fmt.Printf("  ⚠ Shared Bedrock bearer token retained — %s config still present (Juggernaut owns it)\n", otherNeeds)
+			fmt.Println("    If you intend to stop using ALL Bedrock-backed CLIs, re-run this after uninstalling the others,")
+			fmt.Println("    or remove the token manually from the keychain / credential file.")
+		} else {
+			removeKeychainToken(home)
+		}
 	}
 	if uninstallFlags.full {
 		uninstallActivationFull(home, prov)
@@ -178,6 +184,38 @@ func removeKeychainToken(home string) {
 		return
 	}
 	fmt.Println("  ✓ Removed bearer token from keychain")
+}
+
+// otherProviderNeedsToken reports whether any OTHER provider (excluding the one
+// being uninstalled) still has a Juggernaut-owned config in user or project
+// scope. An empty result means no other provider depends on the shared bearer
+// token. An unreadable config is treated as "still needed" (fail-safe retain):
+// a parse error should never be the reason we delete a credential another CLI
+// may be using.
+func otherProviderNeedsToken(home string, exclude provider.Provider) string {
+	for _, name := range provider.AllNames() {
+		if name == exclude.Name() {
+			continue
+		}
+		p, err := provider.Get(name)
+		if err != nil {
+			continue
+		}
+		for _, scope := range []string{"user", "project"} {
+			mgr, err := newProviderManager(p, home, scope)
+			if err != nil {
+				continue
+			}
+			data, err := mgr.Read()
+			if err != nil {
+				return name
+			}
+			if len(data) > 0 && p.OwnsConfig(data) {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 func uninstallActivationFull(home string, prov provider.Provider) {
