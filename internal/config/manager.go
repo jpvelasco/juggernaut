@@ -484,6 +484,14 @@ func pruneBackups(base string, keep int) error {
 	return nil
 }
 
+// copyFile writes src to dst atomically via a temp file and rename. The
+// rename and remove are package vars so tests can inject failures on every
+// platform (whereas a real rename failure requires Windows-specific state).
+var (
+	copyFileRenameFn = os.Rename
+	copyFileRemoveFn = os.Remove
+)
+
 func copyFile(src, dst string) error {
 	base := filepath.Dir(filepath.Clean(src))
 	data, err := safepath.ReadFile(base, src)
@@ -494,8 +502,8 @@ func copyFile(src, dst string) error {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("writing temp backup: %w", err)
 	}
-	if err := os.Rename(tmp, dst); err != nil {
-		if rmErr := os.Remove(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
+	if err := copyFileRenameFn(tmp, dst); err != nil {
+		if rmErr := copyFileRemoveFn(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
 			return fmt.Errorf("committing backup: %w (cleanup of temp file also failed: %v)", err, rmErr)
 		}
 		return fmt.Errorf("committing backup: %w", err)

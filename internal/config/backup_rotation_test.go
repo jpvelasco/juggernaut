@@ -141,3 +141,61 @@ func TestUniqueBackupPath_RotationErrorSurfaces(t *testing.T) {
 		t.Fatal("expected rotation error from stat failure, got nil")
 	}
 }
+
+// TestCopyFile_RenameFailure_LeavesNoTemp covers the copyFile rename-failure
+// branch: when os.Rename fails (injected via copyFileRenameFn), the temp file
+// must be cleaned up and the error surfaced.
+func TestCopyFile_RenameFailure_LeavesNoTemp(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.json")
+	dst := filepath.Join(dir, "dst.json")
+	if err := os.WriteFile(src, []byte(`{"k":"v"}`), 0o600); err != nil {
+		t.Fatalf("writing src: %v", err)
+	}
+
+	origRename := copyFileRenameFn
+	copyFileRenameFn = func(_, _ string) error {
+		return fmt.Errorf("injected rename failure")
+	}
+	defer func() { copyFileRenameFn = origRename }()
+
+	if err := copyFile(src, dst); err == nil {
+		t.Fatal("expected rename error, got nil")
+	}
+	if _, err := os.Stat(dst + ".tmp"); !os.IsNotExist(err) {
+		t.Errorf("temp file should not exist after rename failure (stat err=%v)", err)
+	}
+}
+
+// TestCopyFile_RenameFailure_CleanupAlsoFails covers the nested error path in
+// copyFile where the rename fails AND the temp-file cleanup also fails with a
+// non-NotExist error. The error message must mention both failures.
+func TestCopyFile_RenameFailure_CleanupAlsoFails(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.json")
+	dst := filepath.Join(dir, "dst.json")
+	if err := os.WriteFile(src, []byte(`{"k":"v"}`), 0o600); err != nil {
+		t.Fatalf("writing src: %v", err)
+	}
+
+	origRename := copyFileRenameFn
+	origRemove := copyFileRemoveFn
+	copyFileRenameFn = func(_, _ string) error {
+		return fmt.Errorf("injected rename failure")
+	}
+	copyFileRemoveFn = func(_ string) error {
+		return fmt.Errorf("injected remove failure")
+	}
+	defer func() {
+		copyFileRenameFn = origRename
+		copyFileRemoveFn = origRemove
+	}()
+
+	err := copyFile(src, dst)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cleanup of temp file also failed") {
+		t.Errorf("error should mention cleanup failure, got: %v", err)
+	}
+}
