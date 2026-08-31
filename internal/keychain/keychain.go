@@ -180,7 +180,7 @@ func (s *Store) SetWithFallback(token, home string) error {
 // never wipe a working credential.
 func (s *Store) writeFallbackThenClearKeychain(base, filePath, token string) error {
 	if err := writeCredentialFile(base, filePath, token); err != nil {
-		return fmt.Errorf("writing credential fallback: %w", err)
+		return err
 	}
 	// File is now authoritative; clearing the keychain is best-effort. A failed
 	// delete must not fail the operation — the file already holds the token, and
@@ -236,25 +236,47 @@ func (s *Store) GetWithFallback(home string) (string, error) {
 	return string(data), nil
 }
 
-// writeCredentialFile writes the credential to the given path with owner-only
-// permissions, using a versioned envelope. If the file already exists, it is
-// removed first so that a subsequent write creates a new inode with the
-// correct mode rather than preserving a potentially lax mode on the existing
-// file.
+// writeCredentialFile atomically replaces the credential at filePath with the
+// encoded envelope for token. The parent directory (base/.claude) is created
+// if missing, then the envelope is written to a temp file in the same
+// directory with owner-only permissions and atomically renamed over the
+// destination; the previous file (if any) is left intact until the rename
+// succeeds. A failure at any step leaves the prior authoritative envelope
+// readable.
 //
 // When DPAPI is available (Windows), the token is encrypted to the current user
 // account and stored as a v2 envelope, so large keys that bypass the OS keychain
 // are still encrypted at rest. Otherwise it falls back to the v1 plaintext
 // envelope (owner-only perms; the OS keychain already covers small keys).
+//
+// The file-permission and rename steps are routed through fault-injectable
+// variables so tests can exercise the failure paths without a real I/O error.
+var (
+	writeCredentialTempFn = func(path string, data []byte) error {
+		return os.WriteFile(path, data, 0o600)
+	}
+	replaceCredentialFn = os.Rename
+)
+
 func writeCredentialFile(base, filePath string, token string) error {
+	if err := safepath.MkdirAll(filepath.Dir(filePath)); err != nil {
+		return fmt.Errorf("creating credential directory: %w", err)
+	}
 	payload, err := encodeCredential(token)
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing existing credential file: %w", err)
+	tmp := filePath + ".tmp"
+	if err := writeCredentialTempFn(tmp, payload); err != nil {
+		return fmt.Errorf("writing credential fallback: %w", err)
 	}
-	return safepath.WriteFile(base, filePath, payload)
+	if err := replaceCredentialFn(tmp, filePath); err != nil {
+		if rmErr := os.Remove(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("committing credential fallback: %w (cleanup of temp file also failed: %v)", err, rmErr)
+		}
+		return fmt.Errorf("committing credential fallback: %w", err)
+	}
+	return nil
 }
 
 // Indirection seams so tests can exercise the fail-closed path without a real
