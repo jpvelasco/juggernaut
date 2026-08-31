@@ -399,10 +399,12 @@ func isJuggernautLegacy(existing map[string]any) bool {
 		}
 	}
 	// Codex: a Juggernaut-owned config (amazon-bedrock provider) with a
-	// pre-v6 model ID (openai.gpt-5.x, not the v6 openai.gpt-5.6-* family)
-	// is a Mantle-era config.
+	// pre-v6 model ID (openai.gpt-5.x, not the v6 GPT-5.6 family) is a
+	// Mantle-era config. The v6 GPT-5.6 family may appear as either the base
+	// foundation ID (openai.gpt-5.6-*) or the inference-profile ID
+	// (global.openai.gpt-5.6-* / us.openai.gpt-5.6-*); both are current.
 	if mp, ok := existing["model_provider"]; ok && mp == "amazon-bedrock" {
-		if m, ok := existing["model"].(string); ok && strings.HasPrefix(m, "openai.gpt-5.") && !strings.HasPrefix(m, "openai.gpt-5.6") {
+		if m, ok := existing["model"].(string); ok && strings.HasPrefix(m, "openai.gpt-5.") && !strings.Contains(m, "gpt-5.6") {
 			return true
 		}
 	}

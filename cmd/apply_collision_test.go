@@ -701,8 +701,8 @@ region = "us-east-1"
 		t.Fatalf("read config after apply: %v", err)
 	}
 	written := string(content)
-	if !strings.Contains(written, "openai.gpt-5.6-sol") {
-		t.Errorf("migrated config should have v6 default model openai.gpt-5.6-sol, got:\n%s", written)
+	if !strings.Contains(written, "global.openai.gpt-5.6-sol") {
+		t.Errorf("migrated config should have v6 default model global.openai.gpt-5.6-sol, got:\n%s", written)
 	}
 	if strings.Contains(written, "openai.gpt-5.5") {
 		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
@@ -897,8 +897,8 @@ region = "us-east-1"
 		t.Fatalf("read config after apply: %v", err)
 	}
 	written := string(content)
-	if !strings.Contains(written, "openai.gpt-5.6-sol") {
-		t.Errorf("migrated config should have v6 default model openai.gpt-5.6-sol, got:\n%s", written)
+	if !strings.Contains(written, "global.openai.gpt-5.6-sol") {
+		t.Errorf("migrated config should have v6 default model global.openai.gpt-5.6-sol, got:\n%s", written)
 	}
 	if strings.Contains(written, "openai.gpt-5.5") {
 		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)

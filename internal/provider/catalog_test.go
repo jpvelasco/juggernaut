@@ -21,6 +21,8 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 		{"claude", catalogModel("global.anthropic.claude-opus-4-8", "profile"), true},
 		{"claude", catalogModel("amazon.nova-pro", "foundation"), false},
 		{"codex", catalogModel("openai.gpt-5.6-sol", "foundation"), true},
+		{"codex", catalogModel("global.openai.gpt-5.6-sol", "foundation"), true},
+		{"codex", catalogModel("us.openai.gpt-5.6-sol", "foundation"), true},
 		{"codex", catalogModel("openai.gpt-oss-120b-1:0", "foundation"), false},
 		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), true},
 		{"opencode", catalogModel("zai.glm-5", "foundation"), true},
@@ -68,9 +70,21 @@ func TestProviders_CatalogSources(t *testing.T) {
 }
 
 func TestCodexModel_AcceptsRawDiscoveredID(t *testing.T) {
-	model, ok := codexModel("openai.gpt-5.6-sol")
-	if !ok || model.ModelID != "openai.gpt-5.6-sol" {
-		t.Fatalf("codexModel(raw ID) = %+v, %v", model, ok)
+	// The GPT-5.6 family is INFERENCE_PROFILE-only; codexModel normalizes any
+	// non-global form to the global. profile ID.
+	cases := []struct {
+		key, want string
+	}{
+		{"openai.gpt-5.6-sol", "global.openai.gpt-5.6-sol"},
+		{"gpt-5.6-sol", "global.openai.gpt-5.6-sol"},
+		{"global.openai.gpt-5.6-sol", "global.openai.gpt-5.6-sol"},
+		{"sol", "global.openai.gpt-5.6-sol"},
+	}
+	for _, c := range cases {
+		model, ok := codexModel(c.key)
+		if !ok || model.ModelID != c.want {
+			t.Fatalf("codexModel(%q) = %+v, %v; want ModelID %q", c.key, model, ok, c.want)
+		}
 	}
 }
 
@@ -225,7 +239,7 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 		model string
 		id    string
 	}{
-		{"codex", "sol", "openai.gpt-5.6-sol"},
+		{"codex", "sol", "global.openai.gpt-5.6-sol"},
 		{"grok", "grok-4.6", "xai.grok-4.6"},
 	}
 	for _, tt := range tests {

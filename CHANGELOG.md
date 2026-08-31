@@ -4,6 +4,18 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Codex default models now use global inference-profile IDs.** The GPT-5.6
+  family (sol/terra/luna) is INFERENCE_PROFILE-only on native Bedrock — the
+  base foundation ID (`openai.gpt-5.6-sol`) is listed and ACTIVE but returns
+  `400 on-demand throughput isn't supported` when invoked. Juggernaut now
+  writes the callable `global.openai.gpt-5.6-*` profile ID as the default
+  (verified 2026-08-30). `--model=sol|terra|luna` and raw ID forms
+  (`openai.gpt-5.6-sol`, `gpt-5.6-sol`) all normalize to the global profile ID.
+  Existing v6 Codex configs with the base ID are still recognized as current
+  (not legacy) by the v5→v6 migration detector.
+
 ### Fixed
 
 - **v5 (Mantle-era) configs now auto-migrate on plain `apply`.** Upgrading

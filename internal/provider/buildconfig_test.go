@@ -207,8 +207,8 @@ func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	if plan.Keys["model_provider"] != "amazon-bedrock" {
 		t.Errorf("model_provider = %v, want amazon-bedrock", plan.Keys["model_provider"])
 	}
-	if plan.Keys["model"] != "openai.gpt-5.6-sol" {
-		t.Errorf("model = %v, want openai.gpt-5.6-sol", plan.Keys["model"])
+	if plan.Keys["model"] != "global.openai.gpt-5.6-sol" {
+		t.Errorf("model = %v, want global.openai.gpt-5.6-sol", plan.Keys["model"])
 	}
 	// baseOpts uses the default region us-west-2 (non-explicit). sol is available
 	// in us-west-2, so no auto-switch.
