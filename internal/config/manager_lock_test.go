@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,5 +103,106 @@ func TestWithConfig_ReadGatedOnLock(t *testing.T) {
 	}
 	if got["a"] != true {
 		t.Errorf("key a missing: %v", got)
+	}
+}
+
+// TestAcquireConfigLock_TryLockErrorSurfaces covers the lock-error branch of
+// acquireConfigLock: a non-nil error from the TryLock seam must surface as an
+// acquire error with a nil handle (callers must not unlock a broken lock).
+// The seam is injectable because a real flock error is unforceable on a
+// healthy filesystem.
+func TestAcquireConfigLock_TryLockErrorSurfaces(t *testing.T) {
+	origTry := acquireConfigLockFn
+	acquireConfigLockFn = func(*flock.Flock) (bool, error) {
+		return false, fmt.Errorf("injected lock error")
+	}
+	defer func() { acquireConfigLockFn = origTry }()
+
+	fl, locked, err := acquireConfigLock(filepath.Join(t.TempDir(), "x.lock"))
+	if err == nil {
+		t.Fatal("expected lock error, got nil")
+	}
+	if locked {
+		t.Errorf("expected locked=false on error, got true")
+	}
+	if fl != nil {
+		t.Errorf("expected nil handle on error, got %v", fl)
+	}
+	if !strings.Contains(err.Error(), "injected lock error") {
+		t.Errorf("expected wrapped acquire error, got: %v", err)
+	}
+}
+
+// TestRunLocked_AcquireErrorSurfaces covers runLocked's error branch when the
+// lock acquisition itself fails (injected via the TryLock seam): both the
+// withConfig and Write entry points must surface the wrapped acquire error
+// instead of proceeding to a read or write.
+func TestRunLocked_AcquireErrorSurfaces(t *testing.T) {
+	origTry := acquireConfigLockFn
+	acquireConfigLockFn = func(*flock.Flock) (bool, error) {
+		return false, fmt.Errorf("injected flock failure")
+	}
+	defer func() { acquireConfigLockFn = origTry }()
+
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	m := NewManager(path)
+
+	for name, fn := range map[string]func() error{
+		"withConfig": func() error {
+			return m.withConfig(func(existing map[string]any) error {
+				existing["a"] = true
+				return nil
+			})
+		},
+		"Write": func() error {
+			return m.Write(map[string]any{"a": true})
+		},
+	} {
+		err := fn()
+		if err == nil {
+			t.Fatalf("%s: expected acquire error, got nil", name)
+		}
+		if !strings.Contains(err.Error(), "acquiring settings.json lock") {
+			t.Fatalf("%s: expected wrapped acquire error, got: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("failed runs must not create the file: %v", err)
+	}
+}
+
+// TestWrite_LockContention_CoversBothPaths proves the direct Write's
+// contention branch (distinct from the withConfig one covered above): with
+// the lock held externally, Write must fail fast with the shared contention
+// message and must not touch the file.
+func TestWrite_LockContention_CoversBothPaths(t *testing.T) {
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	m := NewManager(path)
+
+	lockPath := path + ".lock"
+	fl := flock.New(lockPath)
+	if err := fl.Lock(); err != nil {
+		t.Fatalf("test lock acquire: %v", err)
+	}
+	defer func() { _ = fl.Unlock() }()
+
+	err = m.Write(map[string]any{"a": true})
+	if err == nil {
+		t.Fatal("expected lock contention error, got nil")
+	}
+	if !strings.Contains(err.Error(), "locked by another process") {
+		t.Fatalf("expected contention error, got: %v", err)
+	}
+	// The file must not have been created or modified by the failed Write.
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("failed Write must not create the file: %v", err)
 	}
 }

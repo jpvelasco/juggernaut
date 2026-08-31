@@ -58,6 +58,32 @@ func (m *Manager) Read() (map[string]any, error) {
 	return result, nil
 }
 
+// acquireConfigLock attempts a non-blocking single lock on the settings lock
+// file. On Windows the flock is process-local (two handles in the same
+// process can both hold it, and a blocking Lock against an in-process
+// holder deadlocks in LockFileEx), so the lock is never retried: a second
+// in-process caller gets the contention error instead of a hang.
+//
+// The acquisition is routed through an injectable seam so tests can force a
+// flock error (unforceable on a healthy filesystem). Default to the real
+// flock call.
+var acquireConfigLockFn = func(f *flock.Flock) (bool, error) {
+	return f.TryLock()
+}
+
+func acquireConfigLock(lockPath string) (*flock.Flock, bool, error) {
+	fl := flock.New(lockPath)
+	locked, err := acquireConfigLockFn(fl)
+	if err != nil {
+		// A flock error means the handle is unusable — release the local
+		// handle immediately so callers never end up unlocking a broken
+		// lock.
+		_ = fl.Unlock()
+		return nil, false, err
+	}
+	return fl, locked, nil
+}
+
 // withConfig reads the existing config, calls fn to mutate it, then writes it
 // back. This is the shared read-modify-write core used by MergeConfigPlanDeep
 // and RemoveManagedKeysDeep, eliminating their duplicated I/O boilerplate.
@@ -65,14 +91,12 @@ func (m *Manager) Read() (map[string]any, error) {
 // The file lock is held across the whole read-mutate-write transaction so a
 // concurrent withConfig cannot read the pre-mutation state and then clobber
 // the first writer's committed update with a stale map.
-func (m *Manager) withConfig(fn func(map[string]any) error) error {
-	if err := safepath.MkdirAll(filepath.Dir(m.path)); err != nil {
-		return fmt.Errorf("creating settings directory: %w", err)
-	}
-
+// runLocked executes fn while holding the settings.json lock for the whole
+// duration. The lock is acquired non-blocking (see acquireConfigLock) and
+// released when fn returns.
+func (m *Manager) runLocked(fn func() error) error {
 	lockPath := m.path + ".lock"
-	fl := flock.New(lockPath)
-	locked, err := fl.TryLock()
+	fl, locked, err := acquireConfigLock(lockPath)
 	if err != nil {
 		return fmt.Errorf("acquiring settings.json lock: %w", err)
 	}
@@ -81,14 +105,24 @@ func (m *Manager) withConfig(fn func(map[string]any) error) error {
 	}
 	defer func() { _ = fl.Unlock() }()
 
-	existing, err := m.Read()
-	if err != nil {
-		return err
+	return fn()
+}
+
+func (m *Manager) withConfig(fn func(map[string]any) error) error {
+	if err := safepath.MkdirAll(filepath.Dir(m.path)); err != nil {
+		return fmt.Errorf("creating settings directory: %w", err)
 	}
-	if err := fn(existing); err != nil {
-		return err
-	}
-	return m.writeLocked(existing)
+
+	return m.runLocked(func() error {
+		existing, err := m.Read()
+		if err != nil {
+			return err
+		}
+		if err := fn(existing); err != nil {
+			return err
+		}
+		return m.writeLocked(existing)
+	})
 }
 
 // Write commits data to the managed file. The file lock is held only for the
@@ -99,18 +133,9 @@ func (m *Manager) Write(data map[string]any) error {
 		return fmt.Errorf("creating settings directory: %w", err)
 	}
 
-	lockPath := m.path + ".lock"
-	fl := flock.New(lockPath)
-	locked, err := fl.TryLock()
-	if err != nil {
-		return fmt.Errorf("acquiring settings.json lock: %w", err)
-	}
-	if !locked {
-		return fmt.Errorf("settings.json is locked by another process; if this persists, remove %s and retry", lockPath)
-	}
-	defer func() { _ = fl.Unlock() }()
-
-	return m.writeLocked(data)
+	return m.runLocked(func() error {
+		return m.writeLocked(data)
+	})
 }
 
 // writeLocked commits data to disk while the caller holds the settings lock.
