@@ -419,12 +419,53 @@ func (m *Manager) HasManagedKeys(keys []string) (bool, error) {
 }
 
 func (m *Manager) rotateBackup() error {
-	stamp := time.Now().UTC().Format("20060102_150405")
-	backup := m.path + ".backup." + stamp
+	backup, err := m.uniqueBackupPath()
+	if err != nil {
+		return fmt.Errorf("creating backup: %w", err)
+	}
 	if err := copyFile(m.path, backup); err != nil {
 		return fmt.Errorf("creating backup: %w", err)
 	}
 	return pruneBackups(m.path, backupRetain)
+}
+
+// uniqueBackupPath returns the next backup path for the managed file,
+// suffixing with -N when a second write within the same second would
+// otherwise reuse the same path, so each rotation keeps a distinct
+// recovery point.
+func (m *Manager) uniqueBackupPath() (string, error) {
+	stamp := time.Now().UTC().Format("20060102_150405")
+	candidate := m.path + ".backup." + stamp
+	for i := 0; ; i++ {
+		p := candidate
+		if i > 0 {
+			// Zero-pad so pruneBackups' lexical sort matches chronological
+			// order: "-10" sorts before "-9" unpadded.
+			p = fmt.Sprintf("%s-%03d", candidate, i)
+		}
+		exists, err := pathExists(p)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return p, nil
+		}
+	}
+}
+
+// pathExists reports whether p exists, surfacing stat errors other than
+// NotExist (e.g. permission) so a backup rotation fails loudly rather than
+// guessing a free name. It is a package var so tests can inject stat errors
+// (chmod-based injection is a no-op for admin processes on Windows).
+var pathExists = func(p string) (bool, error) {
+	_, err := os.Stat(p)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func pruneBackups(base string, keep int) error {
@@ -443,14 +484,31 @@ func pruneBackups(base string, keep int) error {
 	return nil
 }
 
+// copyFile writes src to dst atomically via a temp file and rename. The
+// rename and remove are package vars so tests can inject failures on every
+// platform (whereas a real rename failure requires Windows-specific state).
+var (
+	copyFileRenameFn = os.Rename
+	copyFileRemoveFn = os.Remove
+)
+
 func copyFile(src, dst string) error {
 	base := filepath.Dir(filepath.Clean(src))
 	data, err := safepath.ReadFile(base, src)
 	if err != nil {
 		return err
 	}
-	dstBase := filepath.Dir(filepath.Clean(dst))
-	return safepath.WriteFile(dstBase, dst, data)
+	tmp := dst + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return fmt.Errorf("writing temp backup: %w", err)
+	}
+	if err := copyFileRenameFn(tmp, dst); err != nil {
+		if rmErr := copyFileRemoveFn(tmp); rmErr != nil && !os.IsNotExist(rmErr) {
+			return fmt.Errorf("committing backup: %w (cleanup of temp file also failed: %v)", err, rmErr)
+		}
+		return fmt.Errorf("committing backup: %w", err)
+	}
+	return nil
 }
 
 func stripUTF8BOM(data []byte) []byte {
