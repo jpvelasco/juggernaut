@@ -9,8 +9,8 @@ func TestTask4_Codex_SolDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	if m, _ := plan.Keys["model"].(string); m != "openai.gpt-5.6-sol" {
-		t.Errorf("default model = %q, want openai.gpt-5.6-sol", m)
+	if m, _ := plan.Keys["model"].(string); m != "global.openai.gpt-5.6-sol" {
+		t.Errorf("default model = %q, want global.openai.gpt-5.6-sol", m)
 	}
 }
 
@@ -29,10 +29,15 @@ func TestTask4_Codex_SupportsNative(t *testing.T) {
 }
 
 func TestTask4_Codex_Aliases(t *testing.T) {
+	// The GPT-5.6 family is INFERENCE_PROFILE-only; codexModel normalizes all
+	// alias and raw-ID forms to the global. profile ID.
 	cases := map[string]string{
-		"sol":   "openai.gpt-5.6-sol",
-		"terra": "openai.gpt-5.6-terra",
-		"luna":  "openai.gpt-5.6-luna",
+		"sol":                       "global.openai.gpt-5.6-sol",
+		"terra":                     "global.openai.gpt-5.6-terra",
+		"luna":                      "global.openai.gpt-5.6-luna",
+		"gpt-5.6-sol":               "global.openai.gpt-5.6-sol",
+		"openai.gpt-5.6-sol":        "global.openai.gpt-5.6-sol",
+		"global.openai.gpt-5.6-sol": "global.openai.gpt-5.6-sol",
 	}
 	for alias, wantID := range cases {
 		m, ok := codexModel(alias)

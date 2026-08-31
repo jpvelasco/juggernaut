@@ -63,8 +63,8 @@ func TestCodexModel_GPT55(t *testing.T) {
 	if !ok {
 		t.Fatal("sol not in Codex model table")
 	}
-	if m.ModelID != "openai.gpt-5.6-sol" {
-		t.Errorf("ModelID = %q, want openai.gpt-5.6-sol", m.ModelID)
+	if m.ModelID != "global.openai.gpt-5.6-sol" {
+		t.Errorf("ModelID = %q, want global.openai.gpt-5.6-sol", m.ModelID)
 	}
 	if len(m.Regions) == 0 {
 		t.Error("sol should have non-empty regions")

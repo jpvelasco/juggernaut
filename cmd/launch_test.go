@@ -70,8 +70,8 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse config.toml: %v", err)
 	}
-	if got["model"] != "openai.gpt-5.6-sol" {
-		t.Errorf("model = %v, want openai.gpt-5.6-sol", got["model"])
+	if got["model"] != "global.openai.gpt-5.6-sol" {
+		t.Errorf("model = %v, want global.openai.gpt-5.6-sol", got["model"])
 	}
 	if got["model_provider"] != "amazon-bedrock" {
 		t.Errorf("model_provider = %v, want amazon-bedrock", got["model_provider"])
@@ -108,10 +108,10 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".codex", "config.toml"))
-	if !containsStr(data, "openai.gpt-5.6-terra") {
+	if !containsStr(data, "global.openai.gpt-5.6-terra") {
 		t.Errorf("expected gpt-5.6-terra model, got:\n%s", data)
 	}
-	if containsStr(data, "openai.gpt-5.6-sol") {
+	if containsStr(data, "gpt-5.6-sol") {
 		t.Errorf("must not fall back to sol when --model=terra given:\n%s", data)
 	}
 	if !containsStr(data, `model_provider = "amazon-bedrock"`) {

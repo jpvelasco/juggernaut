@@ -297,14 +297,15 @@ func TestModelsList_FiltersByProvider(t *testing.T) {
 		},
 		{
 			name:          "codex",
-			source:        "foundation",
+			source:        "native",
 			cli:           "codex",
-			cachedSources: []discovery.Source{discovery.SourceFoundation},
+			cachedSources: []discovery.Source{discovery.SourceFoundation, discovery.SourceProfile},
 			models: []discovery.DiscoveredModel{
 				{ID: "openai.gpt-5.6-sol", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "global.openai.gpt-5.6-sol", Source: discovery.SourceProfile, Status: "ACTIVE", Availability: "AVAILABLE"},
 				{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 			},
-			wantPresent: []string{"openai.gpt-5.6-sol"},
+			wantPresent: []string{"global.openai.gpt-5.6-sol"},
 			wantAbsent:  []string{"xai.grok-4.3"},
 		},
 		{
@@ -453,6 +454,7 @@ func TestProviderSupportsCatalogModel_UsesProviderCheck(t *testing.T) {
 		{"claude", "anthropic.claude-opus-4-8", "foundation", true},
 		{"claude", "openai.gpt-5.5", "foundation", false},
 		{"codex", "openai.gpt-5.6-sol", "foundation", true},
+		{"codex", "global.openai.gpt-5.6-sol", "profile", true},
 		{"codex", "anthropic.claude-opus-4-8", "foundation", false},
 		{"grok", "xai.grok-4.6", "foundation", true},
 		{"grok", "moonshotai.kimi-k2.5", "foundation", false},
