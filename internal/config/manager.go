@@ -439,7 +439,9 @@ func (m *Manager) uniqueBackupPath() (string, error) {
 	for i := 0; ; i++ {
 		p := candidate
 		if i > 0 {
-			p = fmt.Sprintf("%s-%d", candidate, i)
+			// Zero-pad so pruneBackups' lexical sort matches chronological
+			// order: "-10" sorts before "-9" unpadded.
+			p = fmt.Sprintf("%s-%03d", candidate, i)
 		}
 		exists, err := pathExists(p)
 		if err != nil {

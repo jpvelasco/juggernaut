@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -74,6 +75,45 @@ func TestRotateBackup_RapidWrites_PreservesDistinctStates(t *testing.T) {
 	}
 	if len(seen) != expected {
 		t.Errorf("expected %d distinct pre-write states, got %d: %v", expected, len(seen), seen)
+	}
+}
+
+// TestUniqueBackupPath_SuffixZeroPadded pins the -%03d suffix: unpadded -N
+// names ("...-10" < "...-9" lexically) break pruneBackups' lexical sort,
+// so a burst of >=11 same-second rotations would prune a newer backup while
+// keeping an older one.
+func TestUniqueBackupPath_SuffixZeroPadded(t *testing.T) {
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	m := NewManager(path)
+
+	// Occupy 10 same-second backup names, forcing the 11th candidate onto
+	// the zero-padded "-010" form.
+	for i := 0; i < 10; i++ {
+		p, err := m.uniqueBackupPath()
+		if err != nil {
+			t.Fatalf("uniqueBackupPath %d: %v", i, err)
+		}
+		if err := os.WriteFile(p, []byte("{}"), 0o600); err != nil {
+			t.Fatalf("seed %s: %v", p, err)
+		}
+	}
+	p11, err := m.uniqueBackupPath()
+	if err != nil {
+		t.Fatalf("uniqueBackupPath 11: %v", err)
+	}
+	if !strings.HasSuffix(filepath.Base(p11), "-010") {
+		t.Errorf("expected zero-padded -010 suffix on the 11th candidate, got %q", filepath.Base(p11))
+	}
+
+	// Padded names must sort chronologically: -009 < -010.
+	older := m.path + ".backup.19700101_000000-009"
+	newer := m.path + ".backup.19700101_000000-010"
+	if strings.Compare(older, newer) != -1 {
+		t.Errorf("padded suffix must sort chronologically: %q !< %q", older, newer)
 	}
 }
 
