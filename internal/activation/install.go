@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/gofrs/flock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
@@ -63,6 +64,33 @@ func specOrClaude(s CLISpec) CLISpec {
 	return s
 }
 
+// withProfileLock runs fn while holding a per-profile advisory lock, so
+// concurrent Juggernaut updates to the same profile (e.g. two `apply` runs for
+// different CLIs) cannot lose each other's blocks in a read-modify-write
+// race. The lock file sits beside the profile and is released on return. The
+// flock operation is a var so tests can inject acquisition errors.
+var profileLockFn = flock.New
+
+func withProfileLock(path string, fn func() error) error {
+	lockPath := path + ".lock"
+	// The lock file sits beside the profile; create its directory first so
+	// flock can open it (profiles in ~/.config/fish or a fresh PowerShell
+	// tree may not exist yet).
+	if err := safepath.MkdirAll(filepath.Dir(lockPath)); err != nil {
+		return fmt.Errorf("creating lock directory for %s: %w", path, err)
+	}
+	fl := profileLockFn(lockPath)
+	locked, err := fl.TryLock()
+	if err != nil {
+		return fmt.Errorf("acquiring profile lock for %s: %w", path, err)
+	}
+	if !locked {
+		return fmt.Errorf("%s is locked by another process; if this persists, remove %s and retry", path, lockPath)
+	}
+	defer func() { _ = fl.Unlock() }()
+	return fn()
+}
+
 // --- Install ---
 
 // Install writes or updates Juggernaut activation blocks in shell profiles.
@@ -115,21 +143,29 @@ func InstallTargetFor(target Target, spec CLISpec) (bool, error) {
 	if err := validateCLISpec(spec); err != nil {
 		return false, err
 	}
-	data, notFound, err := readProfile(target.Path)
-	if notFound {
-		data = nil
-	} else if err != nil {
+	var changed bool
+	err := withProfileLock(target.Path, func() error {
+		data, notFound, err := readProfile(target.Path)
+		if notFound {
+			data = nil
+		} else if err != nil {
+			return err
+		}
+		block := blockFor(target.Shell, spec.Name, spec.Begin, spec.End)
+		next := upsertBlockWithMarkers(string(data), block, spec.Begin, spec.End)
+		if string(data) == next {
+			return nil
+		}
+		if err := writeProfile(target.Path, []byte(next)); err != nil {
+			return err
+		}
+		changed = true
+		return nil
+	})
+	if err != nil {
 		return false, err
 	}
-	block := blockFor(target.Shell, spec.Name, spec.Begin, spec.End)
-	next := upsertBlockWithMarkers(string(data), block, spec.Begin, spec.End)
-	if string(data) == next {
-		return false, nil
-	}
-	if err := writeProfile(target.Path, []byte(next)); err != nil {
-		return false, err
-	}
-	return true, nil
+	return changed, nil
 }
 
 // --- Uninstall ---
@@ -222,59 +258,70 @@ func RemoveTarget(path string) (bool, error) {
 // profile, leaving other CLIs' blocks untouched (uses the matched-span remover
 // so an orphaned marker never deletes trailing content).
 func RemoveTargetForMarkers(path, begin, end string) (bool, error) {
-	data, notFound, err := readProfile(path)
-	if notFound || err != nil {
+	var removed bool
+	err := withProfileLock(path, func() error {
+		data, notFound, err := readProfile(path)
+		if notFound || err != nil {
+			return err
+		}
+		next, found := removeBlockWithMarkers(normalizeNewlines(string(data)), begin, end)
+		if !found {
+			return nil
+		}
+		if err := writeProfile(path, []byte(next)); err != nil {
+			return err
+		}
+		removed = true
+		return nil
+	})
+	if err != nil {
 		return false, err
 	}
-	next, found := removeBlockWithMarkers(normalizeNewlines(string(data)), begin, end)
-	if !found {
-		return false, nil
-	}
-	if err := writeProfile(path, []byte(next)); err != nil {
-		return false, err
-	}
-	return true, nil
+	return removed, nil
 }
 
 // RemoveTargetWithLegacy removes the activation block AND any legacy launcher
 // or Bedrock blocks from a profile. This is used by full uninstall to ensure
 // no Juggernaut-related blocks remain.
 func RemoveTargetWithLegacy(path string) (bool, error) {
-	data, notFound, err := readProfile(path)
-	if notFound || err != nil {
+	var changed bool
+	err := withProfileLock(path, func() error {
+		data, notFound, err := readProfile(path)
+		if notFound || err != nil {
+			return err
+		}
+		content := string(data)
+
+		// Remove current activation block.
+		next, found := removeBlock(content)
+		if found {
+			content = next
+			changed = true
+		}
+
+		// Remove legacy launcher block.
+		next, found = removeLegacyLauncherBlock(content)
+		if found {
+			content = next
+			changed = true
+		}
+
+		// Remove legacy Bedrock block.
+		next, found = removeLegacyBedrockBlock(content)
+		if found {
+			content = next
+			changed = true
+		}
+
+		if !changed {
+			return nil
+		}
+		return writeProfile(path, []byte(content))
+	})
+	if err != nil {
 		return false, err
 	}
-	content := string(data)
-	changed := false
-
-	// Remove current activation block.
-	next, found := removeBlock(content)
-	if found {
-		content = next
-		changed = true
-	}
-
-	// Remove legacy launcher block.
-	next, found = removeLegacyLauncherBlock(content)
-	if found {
-		content = next
-		changed = true
-	}
-
-	// Remove legacy Bedrock block.
-	next, found = removeLegacyBedrockBlock(content)
-	if found {
-		content = next
-		changed = true
-	}
-
-	if !changed {
-		return false, nil
-	}
-	if err := writeProfile(path, []byte(content)); err != nil {
-		return false, err
-	}
-	return true, nil
+	return changed, nil
 }
 
 // --- Installed detection ---
@@ -394,7 +441,7 @@ func installPowerShellActivationForSpec(home string, psResult *ProfileResolverRe
 			changed = true
 		}
 		if changed {
-			if err := writeProfile(p, []byte(content)); err != nil {
+			if err := withProfileLock(p, func() error { return writeProfile(p, []byte(content)) }); err != nil {
 				return installed, fmt.Errorf("migrating legacy block in %s: %w", p, err)
 			}
 		}
