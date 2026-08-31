@@ -92,8 +92,12 @@ func TestInstallTargetFor_WriteError(t *testing.T) {
 		t.Fatal("expected error when parent path component is a file")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "reading") && !strings.Contains(msg, "writing") {
-		t.Fatalf("expected reading or writing error, got %v", err)
+	// The RMW now runs under a per-profile lock, so the failure surfaces at
+	// lock acquisition (cannot create the .lock dir over a file) before the
+	// read. Any of these is a valid hard failure — the contract is we do not
+	// silently succeed.
+	if !strings.Contains(msg, "lock") && !strings.Contains(msg, "reading") && !strings.Contains(msg, "writing") {
+		t.Fatalf("expected a hard error, got %v", err)
 	}
 }
 
