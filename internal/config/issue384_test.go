@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -73,5 +74,30 @@ func TestRotateBackup_RapidWrites_PreservesDistinctStates(t *testing.T) {
 	}
 	if len(seen) != expected {
 		t.Errorf("expected %d distinct pre-write states, got %d: %v", expected, len(seen), seen)
+	}
+}
+
+// TestUniqueBackupPath_RotationErrorSurfaces covers the uniqueBackupPath
+// rotation branch: if a same-second backup path resolves to an error (not
+// NotExist), rotation must fail loudly instead of guessing a free name. The
+// stat is injected through a pathExists override so the branch is exercised
+// on every platform (chmod-based injection is a no-op for admin processes on
+// Windows).
+func TestUniqueBackupPath_RotationErrorSurfaces(t *testing.T) {
+	dir := t.TempDir()
+	path, err := safepath.JoinUnder(dir, "settings.json")
+	if err != nil {
+		t.Fatalf("JoinUnder: %v", err)
+	}
+	m := NewManager(path)
+
+	orig := pathExists
+	pathExists = func(string) (bool, error) {
+		return false, fmt.Errorf("injected stat error")
+	}
+	defer func() { pathExists = orig }()
+
+	if _, err := m.uniqueBackupPath(); err == nil {
+		t.Fatal("expected rotation error from stat failure, got nil")
 	}
 }

@@ -453,8 +453,9 @@ func (m *Manager) uniqueBackupPath() (string, error) {
 
 // pathExists reports whether p exists, surfacing stat errors other than
 // NotExist (e.g. permission) so a backup rotation fails loudly rather than
-// guessing a free name.
-func pathExists(p string) (bool, error) {
+// guessing a free name. It is a package var so tests can inject stat errors
+// (chmod-based injection is a no-op for admin processes on Windows).
+var pathExists = func(p string) (bool, error) {
 	_, err := os.Stat(p)
 	if os.IsNotExist(err) {
 		return false, nil
