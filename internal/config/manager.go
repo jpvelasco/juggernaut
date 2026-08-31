@@ -61,7 +61,26 @@ func (m *Manager) Read() (map[string]any, error) {
 // withConfig reads the existing config, calls fn to mutate it, then writes it
 // back. This is the shared read-modify-write core used by MergeConfigPlanDeep
 // and RemoveManagedKeysDeep, eliminating their duplicated I/O boilerplate.
+//
+// The file lock is held across the whole read-mutate-write transaction so a
+// concurrent withConfig cannot read the pre-mutation state and then clobber
+// the first writer's committed update with a stale map.
 func (m *Manager) withConfig(fn func(map[string]any) error) error {
+	if err := safepath.MkdirAll(filepath.Dir(m.path)); err != nil {
+		return fmt.Errorf("creating settings directory: %w", err)
+	}
+
+	lockPath := m.path + ".lock"
+	fl := flock.New(lockPath)
+	locked, err := fl.TryLock()
+	if err != nil {
+		return fmt.Errorf("acquiring settings.json lock: %w", err)
+	}
+	if !locked {
+		return fmt.Errorf("settings.json is locked by another process; if this persists, remove %s and retry", lockPath)
+	}
+	defer func() { _ = fl.Unlock() }()
+
 	existing, err := m.Read()
 	if err != nil {
 		return err
@@ -69,9 +88,12 @@ func (m *Manager) withConfig(fn func(map[string]any) error) error {
 	if err := fn(existing); err != nil {
 		return err
 	}
-	return m.Write(existing)
+	return m.writeLocked(existing)
 }
 
+// Write commits data to the managed file. The file lock is held only for the
+// write itself; callers that read before writing (read-modify-write flows)
+// must use withConfig, which holds the lock across the full transaction.
 func (m *Manager) Write(data map[string]any) error {
 	if err := safepath.MkdirAll(filepath.Dir(m.path)); err != nil {
 		return fmt.Errorf("creating settings directory: %w", err)
@@ -88,6 +110,11 @@ func (m *Manager) Write(data map[string]any) error {
 	}
 	defer func() { _ = fl.Unlock() }()
 
+	return m.writeLocked(data)
+}
+
+// writeLocked commits data to disk while the caller holds the settings lock.
+func (m *Manager) writeLocked(data map[string]any) error {
 	if _, err := os.Stat(m.path); err == nil {
 		if err := m.rotateBackup(); err != nil {
 			return err
