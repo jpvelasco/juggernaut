@@ -116,6 +116,19 @@ var registry = map[string]Provider{}
 
 func register(p Provider) { registry[p.Name()] = p }
 
+// forceRegisterForTest overwrites the registry entry for name with p,
+// regardless of whether the name is registered. Tests use it to inject
+// hand-built providers under real names (e.g. to drive error branches of
+// otherProviderNeedsToken that no real provider reaches). The name MUST
+// already be a registered provider — callers restore the original in
+// t.Cleanup.
+func ForceRegisterForTest(name string, p Provider) {
+	if _, ok := registry[name]; !ok {
+		panic("forceRegisterForTest: " + name + " is not a registered provider")
+	}
+	registry[name] = p
+}
+
 func init() {
 	register(claude{BaseProvider: BaseProvider{
 		name:         "claude",
