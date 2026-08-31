@@ -76,7 +76,7 @@ func withProfileLock(path string, fn func() error) error {
 	// The lock file sits beside the profile; create its directory first so
 	// flock can open it (profiles in ~/.config/fish or a fresh PowerShell
 	// tree may not exist yet).
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+	if err := safepath.MkdirAll(filepath.Dir(lockPath)); err != nil {
 		return fmt.Errorf("creating lock directory for %s: %w", path, err)
 	}
 	fl := profileLockFn(lockPath)
