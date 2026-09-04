@@ -90,8 +90,9 @@ juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6
 # Preview without writing
 juggernaut apply --auth=iam --dry-run
 
-# Show current config
+# Show current config (default --cli=claude)
 juggernaut show
+juggernaut show --cli=codex --json
 ```
 
 ## Troubleshooting

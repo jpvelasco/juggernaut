@@ -6,6 +6,13 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
+- **`show --cli` now displays Codex, OpenCode, and Grok configs.** `juggernaut show`
+  was hardcoded to Claude's `settings.json`. It accepts
+  `--cli=claude|codex|opencode|grok` (default claude), including `--json`, and
+  prints that provider's Juggernaut-managed keys (Claude includes `env` /
+  `model` / the `juggernaut` metadata block). Bearer tokens and similarly named
+  secret fields are redacted. Providers whose user and project paths coincide
+  (Grok) are printed once.
 - **OpenCode and Grok IAM/SSO launches no longer demand a Bedrock API key.**
   Apply succeeded with `--auth=iam` (CapNativeAuth), but launch still treated
   OpenCode/Grok as token-gated (`NeedsToken=true`) and Grok always wrote
