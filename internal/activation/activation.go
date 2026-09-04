@@ -88,6 +88,7 @@ type LaunchTarget struct {
 	StaticEnv        map[string]string
 	NeedsToken       bool
 	ConfigPath       string
+	ConfigPaths      []string // project then user; ConfigPath is used if this is empty
 	RuntimeStateName string
 }
 

@@ -745,6 +745,15 @@ func TestLaunchNamedCLI_TokenReadError(t *testing.T) {
 	t.Setenv("JUGGERNAUT_KEYCHAIN_SERVICE", "jug-batch1-launch")
 	blockCredentialWrite(t, home)
 
+	grokDir := filepath.Join(home, ".grok")
+	if err := os.MkdirAll(grokDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[juggernaut]\n  [juggernaut.auth]\n    mode = \"" + authmode.BedrockAPIKey + "\"\n  [juggernaut.meta]\n    managedBy = \"juggernaut\"\n"
+	if err := os.WriteFile(filepath.Join(grokDir, "config.toml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	err := launchNamedCLI("grok", nil)
 	if err == nil {
 		t.Fatal("expected keychain read error from launch")

@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
@@ -19,6 +20,30 @@ func ToMap(v any) (map[string]any, error) {
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
+	}
+	return m, nil
+}
+
+// juggernautAuthBlock is the shared [juggernaut] table non-Claude providers
+// persist so launch can read auth mode (IAM vs API key) from the same file
+// apply wrote.
+func juggernautAuthBlock(opts Options, region string) (map[string]any, error) {
+	block := &schema.Block{
+		Auth: schema.Auth{
+			Mode:   opts.AuthMode,
+			Region: region,
+		},
+		Meta: schema.Meta{
+			SchemaVersion: schema.SchemaVersion,
+			Version:       opts.Version,
+			ManagedBy:     "juggernaut",
+			Scope:         opts.Scope,
+			AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
+		},
+	}
+	m, err := ToMap(block)
+	if err != nil {
+		return nil, fmt.Errorf("serialize juggernaut block: %w", err)
 	}
 	return m, nil
 }

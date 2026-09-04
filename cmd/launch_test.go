@@ -49,6 +49,60 @@ func TestApply_NativeCLIs_AcceptIAM(t *testing.T) {
 	}
 }
 
+func TestApply_OpenCode_IAM_WritesJuggernautAuth(t *testing.T) {
+	home := setupApplyTest(t)
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=opencode", "--auth=iam",
+		"--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	data := readFileForTest(t, filepath.Join(home, ".config", "opencode", "opencode.json"))
+	if !containsStr(data, `"mode": "iam"`) && !containsStr(data, `"mode":"iam"`) {
+		t.Errorf("expected juggernaut.auth.mode=iam, got:\n%s", data)
+	}
+}
+
+func TestApply_Grok_IAM_OmitsAuthProviderCommand(t *testing.T) {
+	home := setupApplyTest(t)
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=iam",
+		"--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	data := readFileForTest(t, filepath.Join(home, ".grok", "config.toml"))
+	if containsStr(data, "auth_provider_command") {
+		t.Errorf("IAM apply must not write auth_provider_command, got:\n%s", data)
+	}
+	if !containsStr(data, "mode") || !containsStr(data, "iam") {
+		t.Errorf("expected juggernaut.auth.mode=iam, got:\n%s", data)
+	}
+}
+
+func TestApply_OpenCode_ProjectScope_WritesAuthMode(t *testing.T) {
+	_ = setupApplyTest(t)
+	configBytes, err := os.ReadFile(findBedrockConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := embeddedConfigBytes
+	SetEmbeddedConfig(configBytes)
+	t.Cleanup(func() { SetEmbeddedConfig(orig) })
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=opencode", "--auth=iam",
+		"--scope=project", "--region=us-east-1", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	data := readFileForTest(t, filepath.Join(dir, "opencode.json"))
+	if !containsStr(data, `"mode": "iam"`) && !containsStr(data, `"mode":"iam"`) {
+		t.Errorf("project apply must write juggernaut.auth.mode, got:\n%s", data)
+	}
+}
+
 // TestApply_Codex_WritesTOMLConfig drives a full codex apply and structurally
 // verifies the TOML config lands at ~/.codex/config.toml with the correct
 // amazon-bedrock provider shape.
@@ -503,6 +557,52 @@ func TestLaunchTargetFor_Codex(t *testing.T) {
 	// block to decide at runtime.
 	if tgt.NeedsToken {
 		t.Error("codex NeedsToken must be false — auth mode is resolved from config at launch time")
+	}
+}
+
+// TestLaunchTargetFor_OpenCodeAndGrok_NeedsNoStaticToken: IAM/SSO apply must
+// launch without a Bedrock API key. Token need is read from juggernaut.auth.
+func TestLaunchTargetFor_OpenCodeAndGrok_NeedsNoStaticToken(t *testing.T) {
+	for _, name := range []string{"opencode", "grok"} {
+		p, _ := provider.Get(name)
+		tgt := launchTargetFor(p, "")
+		if tgt.NeedsToken {
+			t.Errorf("%s LaunchTarget.NeedsToken must be false — auth mode is resolved from config at launch", name)
+		}
+	}
+}
+
+func TestResolveLaunchConfigPaths_ProjectThenUser(t *testing.T) {
+	home := setupApplyTest(t)
+
+	codex, _ := provider.Get("codex")
+	paths := resolveLaunchConfigPaths(codex, home)
+	if len(paths) != 2 {
+		t.Fatalf("codex paths = %v, want project then user", paths)
+	}
+	if filepath.ToSlash(paths[0]) != ".codex/config.toml" && filepath.ToSlash(paths[0]) != "./.codex/config.toml" {
+		t.Errorf("codex project path = %q, want ./.codex/config.toml", paths[0])
+	}
+	if !strings.Contains(filepath.ToSlash(paths[1]), ".codex/config.toml") {
+		t.Errorf("codex user path = %q, want ~/.codex/config.toml", paths[1])
+	}
+
+	opencode, _ := provider.Get("opencode")
+	oPaths := resolveLaunchConfigPaths(opencode, home)
+	if len(oPaths) != 2 {
+		t.Fatalf("opencode paths = %v, want project then user", oPaths)
+	}
+	if filepath.Base(oPaths[0]) != "opencode.json" {
+		t.Errorf("opencode project path = %q, want ./opencode.json", oPaths[0])
+	}
+
+	grok, _ := provider.Get("grok")
+	gPaths := resolveLaunchConfigPaths(grok, home)
+	if len(gPaths) != 1 {
+		t.Fatalf("grok is user-only, got %v", gPaths)
+	}
+	if !strings.Contains(filepath.ToSlash(gPaths[0]), ".grok/config.toml") {
+		t.Errorf("grok path = %q, want ~/.grok/config.toml", gPaths[0])
 	}
 }
 

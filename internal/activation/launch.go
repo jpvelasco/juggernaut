@@ -69,20 +69,20 @@ func LaunchWithOptions(opts LaunchOptions) error {
 
 	// Determine whether this launch is Juggernaut-managed and whether it needs a
 	// bearer token. Claude declares its auth mode in ~/.claude/settings.json
-	// (scanned by authModes). Non-Claude CLIs (Codex) store the auth mode in their
-	// own config file's juggernaut block — read it from ConfigPath if set.
-	// The bearer token is SHARED, so injecting it for a token-needing target
-	// is correct regardless of authModes.
+	// (scanned by authModes). Non-Claude CLIs store the auth mode in their own
+	// config file's juggernaut block — project scope first, then user, matching
+	// the file apply wrote. The bearer token is SHARED, so injecting it for a
+	// token-needing target is correct regardless of authModes.
 	managed := len(modes) > 0 || target.NeedsToken
 	wantToken := needsBearerToken(modes) || target.NeedsToken
 	var fallbackEnv map[string]string
 
-	// If the target has a config path (non-Claude provider), read the auth mode
-	// from its juggernaut block to decide token injection.
-	if target.ConfigPath != "" {
-		if mode := readAuthModeFromConfig(target.ConfigPath); mode != "" {
+	// First non-empty juggernaut.auth.mode wins (project then user).
+	for _, path := range targetConfigPaths(target) {
+		if mode := readAuthModeFromConfig(path); mode != "" {
 			managed = true
 			wantToken = authmode.IsBedrockAPIKey(mode)
+			break
 		}
 	}
 
@@ -229,6 +229,28 @@ func isExecutable(path string) bool {
 }
 
 // --- Auth mode detection ---
+
+// targetConfigPaths returns config files to probe for juggernaut.auth.mode:
+// ConfigPaths in order (project then user), then ConfigPath if not already listed.
+func targetConfigPaths(target LaunchTarget) []string {
+	seen := make(map[string]struct{}, len(target.ConfigPaths)+1)
+	out := make([]string, 0, len(target.ConfigPaths)+1)
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	for _, p := range target.ConfigPaths {
+		add(p)
+	}
+	add(target.ConfigPath)
+	return out
+}
 
 func needsBearerToken(modes []string) bool {
 	for _, mode := range modes {

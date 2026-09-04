@@ -163,6 +163,28 @@ func TestAllCLIs_SupportNativeAuth(t *testing.T) {
 	}
 }
 
+func TestJuggernautAuthBlock_PersistsModeAndRegion(t *testing.T) {
+	opts := baseOpts()
+	opts.AuthMode = "iam"
+	opts.Scope = "project"
+	got, err := juggernautAuthBlock(opts, "us-east-1")
+	if err != nil {
+		t.Fatalf("juggernautAuthBlock: %v", err)
+	}
+	mode, ok := testutil.NestedMapChain(got, "auth", "mode")
+	if !ok || mode != "iam" {
+		t.Errorf("auth.mode = %v, want iam", mode)
+	}
+	region, ok := testutil.NestedMapChain(got, "auth", "region")
+	if !ok || region != "us-east-1" {
+		t.Errorf("auth.region = %v, want us-east-1", region)
+	}
+	scope, ok := testutil.NestedMapChain(got, "meta", "scope")
+	if !ok || scope != "project" {
+		t.Errorf("meta.scope = %v, want project", scope)
+	}
+}
+
 // TestCodex_LaunchSpec: no static enable flag (routes via config), NeedsToken is
 // false — auth mode (IAM or API key) is stored in the config.toml juggernaut block
 // and resolved at launch time.

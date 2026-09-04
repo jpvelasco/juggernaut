@@ -125,6 +125,26 @@ func resolvedScopes(filter string) []string {
 	return []string{"user", "project"}
 }
 
+// resolveLaunchConfigPaths returns this provider's config files in launch
+// precedence order: project scope first, then user. Duplicate paths (Grok maps
+// both scopes to the same file) are omitted so launch reads each file once.
+func resolveLaunchConfigPaths(prov provider.Provider, home string) []string {
+	var paths []string
+	seen := make(map[string]struct{}, 2)
+	for _, scope := range []string{"project", "user"} {
+		p, err := prov.ConfigPath(home, scope)
+		if err != nil || p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		paths = append(paths, p)
+	}
+	return paths
+}
+
 // ---- Apply phase helpers (extracted from apply.go for size reduction) ----
 
 // toProviderOptions maps the cmd-built schema.Options onto the CLI-neutral

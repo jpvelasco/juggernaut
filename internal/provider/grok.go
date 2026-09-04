@@ -12,9 +12,10 @@ import (
 // grok is the OFFICIAL xAI Grok CLI provider (grok / grok.exe, config TOML at
 // ~/.grok/config.toml). Juggernaut routes to Grok 4.6 on native Bedrock
 // (bedrock-runtime /openai/v1) by writing a [model.bedrock-grok] block
-// (base_url → bedrock-runtime) selected via [models].default, PLUS an [auth]
-// block whose auth_provider_command runs `juggernaut auth-token` to supply the
-// keychain bearer token.
+// (base_url → bedrock-runtime) selected via [models].default. API-key apply
+// also writes an [auth] block whose auth_provider_command runs
+// `juggernaut auth-token`; IAM apply omits that command so Grok does not
+// demand a keychain bearer token.
 //
 // Why the [auth] block (not env_key): Grok's per-model credential order is
 // api_key → env_key → XAI_API_KEY, but a custom [model.*] block does NOT satisfy
@@ -50,7 +51,7 @@ func (g grok) ConfigPath(home, _ string) (string, error) {
 // NativeManagedKeys are the top-level config.toml keys Juggernaut owns: the
 // [model] and [models] tables (nested), plus the [auth] table.
 func (g grok) NativeManagedKeys() []string {
-	return []string{"model", "models", "auth"}
+	return []string{"model", "models", "auth", "juggernaut"}
 }
 
 // DeepMergeKeys: [model.<name>], [models], and [auth] are nested tables that may
@@ -84,18 +85,18 @@ func (g grok) OwnsConfig(data map[string]any) bool {
 }
 
 func (g grok) LaunchSpec() LaunchSpec {
-	// Grok gets its token from the [auth] auth_provider_command (which reads the
-	// keychain directly), so the launch wrapper does not strictly need to inject
-	// the token. NeedsToken stays true: the shared token is still injected as an
-	// env var (harmless) and the launch wrapper can use it for bearer mode.
+	// Token injection is decided at launch from the stored auth mode:
+	// API key → inject AWS_BEARER_TOKEN_BEDROCK (and write auth_provider_command);
+	// IAM → AWS credential chain, no keychain token.
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
-		NeedsToken:  true,
+		NeedsToken:  false, // auth mode in juggernaut block decides at launch
 	}
 }
 
 // BuildConfig writes a [model.bedrock-grok] block routing to Grok 4.6 on native
-// Bedrock (bedrock-runtime /openai/v1), [models].default, and an [auth] block
+// Bedrock (bedrock-runtime /openai/v1), [models].default, a juggernaut.auth
+// block for launch, and — only for Bedrock API key auth — an [auth] block
 // whose auth_provider_command supplies the keychain bearer token so Grok skips
 // its interactive sign-in.
 //
@@ -137,10 +138,24 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 			"models": map[string]any{
 				"default": grokModelName,
 			},
-			"auth": map[string]any{
+		}
+		blockMap, err := juggernautAuthBlock(opts, region)
+		if err != nil {
+			return ConfigPlan{}, err
+		}
+		keys["juggernaut"] = blockMap
+		if authmode.IsBedrockAPIKey(opts.AuthMode) {
+			keys["auth"] = map[string]any{
 				"auth_provider_command": grokAuthCommand,
 				"auth_provider_label":   "Bedrock",
-			},
+			}
+		} else {
+			// Empty strings delete owned [auth] leaves on re-apply so IAM
+			// does not leave auth_provider_command pointing at auth-token.
+			keys["auth"] = map[string]any{
+				"auth_provider_command": "",
+				"auth_provider_label":   "",
+			}
 		}
 
 		return ConfigPlan{

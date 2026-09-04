@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -79,8 +80,8 @@ func TestOpenCode_LaunchSpec(t *testing.T) {
 	if ls.TokenEnvVar != "AWS_BEARER_TOKEN_BEDROCK" {
 		t.Errorf("TokenEnvVar = %q", ls.TokenEnvVar)
 	}
-	if !ls.NeedsToken {
-		t.Error("OpenCode via native still needs token env for bearer mode")
+	if ls.NeedsToken {
+		t.Error("OpenCode NeedsToken must be false — auth mode resolved from config at launch")
 	}
 }
 
@@ -159,6 +160,10 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("plan should validate: %v", err)
+	}
+	mode, ok := testutil.NestedMapChain(plan.Keys, "juggernaut", "auth", "mode")
+	if !ok || mode != authmode.IAM {
+		t.Errorf("juggernaut.auth.mode = %v, want iam", mode)
 	}
 }
 
