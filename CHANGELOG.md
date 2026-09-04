@@ -6,6 +6,16 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
+- **OpenCode and Grok IAM/SSO launches no longer demand a Bedrock API key.**
+  Apply succeeded with `--auth=iam` (CapNativeAuth), but launch still treated
+  OpenCode/Grok as token-gated (`NeedsToken=true`) and Grok always wrote
+  `auth_provider_command = "juggernaut auth-token"`. Both now persist
+  `juggernaut.auth.mode` like Codex; the wrapper injects a bearer token only
+  for `--auth=bedrock-api-key`. Grok's auth-token command is API-key-only.
+- **Non-Claude launch reads project-scope auth mode.** The wrapper only probed
+  the user-scope config, so a Codex/OpenCode `--scope=project` API-key apply
+  was invisible at wrap time. Launch now checks project then user, matching
+  the file apply wrote (Claude already did this for settings.json).
 - **`apply --auth` now wins on re-apply.** Re-applying used to pass the still-empty named return into auth resolution, so `--auth=iam` / `--auth=bedrock-api-key` was ignored and the previous mode was kept while reporting success.
 - **Bare `apply` prompts on a TTY.** First-run with no `--auth` launches the guided prompt when stdin is a terminal. Non-interactive runs (scripts, CI) still use `defaults.auth_mode`. Explicit `--auth` always wins.
 - **Activation install failures now fail `apply`.** A failed shell-block install returns a non-zero exit and does not print "Configuration written successfully." Dry-run is unchanged.

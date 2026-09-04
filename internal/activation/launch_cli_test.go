@@ -364,6 +364,187 @@ func TestLaunchWithOptions_Codex_BadConfigFile(t *testing.T) {
 	}
 }
 
+func TestTargetConfigPaths_DedupAndFallback(t *testing.T) {
+	if got := targetConfigPaths(LaunchTarget{}); len(got) != 0 {
+		t.Errorf("empty target: got %v", got)
+	}
+	if got := targetConfigPaths(LaunchTarget{ConfigPath: "user.toml"}); len(got) != 1 || got[0] != "user.toml" {
+		t.Errorf("ConfigPath fallback: got %v", got)
+	}
+	got := targetConfigPaths(LaunchTarget{
+		ConfigPaths: []string{"project.toml", "user.toml"},
+		ConfigPath:  "user.toml",
+	})
+	if len(got) != 2 || got[0] != "project.toml" || got[1] != "user.toml" {
+		t.Errorf("project then user with dedup: got %v", got)
+	}
+}
+
+func writeAuthConfig(t *testing.T, path, mode string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	if strings.HasSuffix(path, ".json") {
+		content = `{"juggernaut":{"auth":{"mode":"` + mode + `"},"meta":{"managedBy":"juggernaut"}}}`
+	} else {
+		content = "[juggernaut]\n  [juggernaut.auth]\n    mode = \"" + mode + "\"\n  [juggernaut.meta]\n    managedBy = \"juggernaut\"\n"
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func fakeLaunchBinary(t *testing.T, name string) (binDir, binName string) {
+	t.Helper()
+	binDir = t.TempDir()
+	binName = name
+	if runtime.GOOS == "windows" {
+		binName = name + ".exe"
+	}
+	writeExecutableFile(t, binDir, filepath.Join(binDir, binName), "real "+name)
+	return binDir, binName
+}
+
+// TestLaunchWithOptions_OpenCode_IAM_NoToken: OpenCode IAM apply writes a
+// juggernaut.auth.mode=iam block; launch must not demand a keychain token.
+func TestLaunchWithOptions_OpenCode_IAM_NoToken(t *testing.T) {
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
+	home := testutil.NewTestHome(t)
+	realDir, binName := fakeLaunchBinary(t, "opencode")
+	cfgPath := filepath.Join(t.TempDir(), "opencode.json")
+	writeAuthConfig(t, cfgPath, "iam")
+
+	tokenCalled := false
+	var gotEnv []string
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Args:        []string{"--version"},
+		Path:        realDir,
+		TokenGetter: func() (string, error) { tokenCalled = true; return "", nil },
+		Runner: func(_ string, _ []string, env []string) error {
+			gotEnv = env
+			return nil
+		},
+		Target: LaunchTarget{
+			BinaryNames: []string{binName},
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
+			NeedsToken:  false,
+			ConfigPath:  cfgPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	if tokenCalled {
+		t.Error("OpenCode IAM must NOT call TokenGetter")
+	}
+	if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "" {
+		t.Errorf("OpenCode IAM must NOT inject bearer token, env=%v", gotEnv)
+	}
+}
+
+// TestLaunchWithOptions_Grok_IAM_NoToken: Grok IAM must launch without a
+// keychain bearer token (NeedsToken is no longer statically true).
+func TestLaunchWithOptions_Grok_IAM_NoToken(t *testing.T) {
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
+	home := testutil.NewTestHome(t)
+	realDir, binName := fakeLaunchBinary(t, "grok")
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	writeAuthConfig(t, cfgPath, "iam")
+
+	tokenCalled := false
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Args:        []string{"--version"},
+		Path:        realDir,
+		TokenGetter: func() (string, error) { tokenCalled = true; return "", nil },
+		Runner:      func(string, []string, []string) error { return nil },
+		Target: LaunchTarget{
+			BinaryNames: []string{binName},
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
+			NeedsToken:  false,
+			ConfigPath:  cfgPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	if tokenCalled {
+		t.Error("Grok IAM must NOT call TokenGetter")
+	}
+}
+
+// TestLaunchWithOptions_ProjectScopeAuthMode_APIKey: project-only API-key apply
+// must be visible to launch (wrapper used to read user-scope config only).
+func TestLaunchWithOptions_ProjectScopeAuthMode_APIKey(t *testing.T) {
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
+	home := testutil.NewTestHome(t)
+	realDir, binName := fakeLaunchBinary(t, "codex")
+	projectPath := filepath.Join(t.TempDir(), "project", "config.toml")
+	writeAuthConfig(t, projectPath, "bedrock-api-key")
+	userPath := filepath.Join(t.TempDir(), "user", "config.toml")
+	writeAuthConfig(t, userPath, "iam")
+
+	var gotEnv []string
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Args:        []string{"--version"},
+		Path:        realDir,
+		TokenGetter: func() (string, error) { return "proj-tok", nil },
+		Runner: func(_ string, _ []string, env []string) error {
+			gotEnv = env
+			return nil
+		},
+		Target: LaunchTarget{
+			BinaryNames: []string{binName},
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
+			NeedsToken:  false,
+			ConfigPaths: []string{projectPath, userPath},
+		},
+	})
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	if envValue(gotEnv, "AWS_BEARER_TOKEN_BEDROCK") != "proj-tok" {
+		t.Errorf("project API-key mode must inject token, env=%v", gotEnv)
+	}
+}
+
+// TestLaunchWithOptions_ProjectScopeAuthMode_IAMWins: project IAM must win over
+// user-scope API key (same precedence as Claude: project then user).
+func TestLaunchWithOptions_ProjectScopeAuthMode_IAMWins(t *testing.T) {
+	t.Setenv("AWS_BEARER_TOKEN_BEDROCK", "")
+	home := testutil.NewTestHome(t)
+	realDir, binName := fakeLaunchBinary(t, "codex")
+	projectPath := filepath.Join(t.TempDir(), "project", "config.toml")
+	writeAuthConfig(t, projectPath, "iam")
+	userPath := filepath.Join(t.TempDir(), "user", "config.toml")
+	writeAuthConfig(t, userPath, "bedrock-api-key")
+
+	tokenCalled := false
+	err := LaunchWithOptions(LaunchOptions{
+		Home:        home,
+		Args:        []string{"--version"},
+		Path:        realDir,
+		TokenGetter: func() (string, error) { tokenCalled = true; return "should-not", nil },
+		Runner:      func(string, []string, []string) error { return nil },
+		Target: LaunchTarget{
+			BinaryNames: []string{binName},
+			TokenEnvVar: "AWS_BEARER_TOKEN_BEDROCK", // #nosec G101 -- env var name, not a credential
+			NeedsToken:  false,
+			ConfigPaths: []string{projectPath, userPath},
+		},
+	})
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	if tokenCalled {
+		t.Error("project IAM must win over user API key — TokenGetter must not run")
+	}
+}
+
 // TestLaunchWithOptions_ClaudeDefault: an empty Target defaults to Claude
 // behavior (claude binary + CLAUDE_CODE_USE_BEDROCK=1) — back-compat.
 func TestLaunchWithOptions_ClaudeDefault(t *testing.T) {

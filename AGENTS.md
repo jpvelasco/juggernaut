@@ -43,7 +43,7 @@ Hooks: `scripts/setup-hooks.ps1` (Windows) or `bash scripts/setup-hooks.sh` (Lin
 - `internal/safepath/` — containment + owner-only FS ops. Use for anything under user-controlled bases.
 - `npm/` — launcher + platform packages.
 
-Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json` (project) — the only CLI with both scopes; Codex `~/.codex/config.toml` / `./.codex/config.toml` via `amazon-bedrock` provider; OpenCode `~/.config/opencode/opencode.json` / `./opencode.json` via `provider.amazon-bedrock` (region + discovered `models` + `whitelist`); Grok `~/.grok/config.toml` user-only (`base_url=https://bedrock-runtime.{region}.amazonaws.com/openai/v1` + `auth_provider_command="juggernaut auth-token"`).
+Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json` (project) — the only CLI with both scopes; Codex `~/.codex/config.toml` / `./.codex/config.toml` via `amazon-bedrock` provider; OpenCode `~/.config/opencode/opencode.json` / `./opencode.json` via `provider.amazon-bedrock` (region + discovered `models` + `whitelist`); Grok `~/.grok/config.toml` user-only (`base_url=https://bedrock-runtime.{region}.amazonaws.com/openai/v1`; `auth_provider_command="juggernaut auth-token"` only for `--auth=bedrock-api-key`). Launch reads `juggernaut.auth.mode` from project then user for non-Claude CLIs (token-gated only for API-key mode).
 
 ## Constraints
 

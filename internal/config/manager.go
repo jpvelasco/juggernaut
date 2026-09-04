@@ -300,6 +300,10 @@ func mergeNestedPrefix(existing map[string]any, k string, v any, path string, pr
 		}
 	}
 	for sk, sv := range incoming {
+		if s, ok := sv.(string); ok && s == "" {
+			delete(dst, sk)
+			continue
+		}
 		// If both existing and incoming have a map at this sub-key, recurse.
 		if dstRaw, hasDst := dst[sk]; hasDst {
 			if _, isDstMap := dstRaw.(map[string]any); isDstMap {

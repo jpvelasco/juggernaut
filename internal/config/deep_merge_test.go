@@ -57,6 +57,45 @@ func TestMergeConfigPlan_DeepMergeKeys_PreservesSiblings(t *testing.T) {
 	}
 }
 
+// TestMergeConfigPlanDeep_EmptyStringDeletesOwnedLeaf: IAM re-apply writes
+// empty strings for Grok's auth_provider_command so the previous API-key
+// command is stripped without wiping sibling user auth keys.
+func TestMergeConfigPlanDeep_EmptyStringDeletesOwnedLeaf(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"auth": map[string]any{
+			"auth_provider_command": "juggernaut auth-token",
+			"auth_provider_label":   "Bedrock",
+			"extra_user_setting":    "keep-me",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.MergeConfigPlanDeep(map[string]any{
+		"auth": map[string]any{
+			"auth_provider_command": "",
+			"auth_provider_label":   "",
+		},
+	}, []string{"auth"}); err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+	got, _ := m.Read()
+	authTbl, _ := got["auth"].(map[string]any)
+	if authTbl == nil {
+		t.Fatal("auth table lost — user siblings must survive")
+	}
+	if _, ok := authTbl["auth_provider_command"]; ok {
+		t.Error("empty-string merge must delete auth_provider_command")
+	}
+	if _, ok := authTbl["auth_provider_label"]; ok {
+		t.Error("empty-string merge must delete auth_provider_label")
+	}
+	if authTbl["extra_user_setting"] != "keep-me" {
+		t.Errorf("user sibling lost: %v", authTbl["extra_user_setting"])
+	}
+}
+
 // TestMergeConfigPlanDeepThen_RunsAfterMergeUnderOneWrite: the then callback
 // mutates the in-memory map after the merge and is committed in the same lock.
 func TestMergeConfigPlanDeepThen_RunsAfterMergeUnderOneWrite(t *testing.T) {

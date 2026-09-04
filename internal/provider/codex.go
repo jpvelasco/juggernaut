@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
-	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 // codex is the OpenAI Codex CLI provider (config at ~/.codex/config.toml, TOML).
@@ -170,22 +168,9 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 
 		// Persist the juggernaut block so the launch wrapper can read the auth mode
 		// at runtime (IAM → no token needed; API key → inject bearer token).
-		juggernautBlock := &schema.Block{
-			Auth: schema.Auth{
-				Mode:   opts.AuthMode,
-				Region: region,
-			},
-			Meta: schema.Meta{
-				SchemaVersion: 2,
-				Version:       opts.Version,
-				ManagedBy:     "juggernaut",
-				Scope:         opts.Scope,
-				AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
-			},
-		}
-		blockMap, err := ToMap(juggernautBlock)
+		blockMap, err := juggernautAuthBlock(opts, region)
 		if err != nil {
-			return ConfigPlan{}, fmt.Errorf("serialize juggernaut block: %w", err)
+			return ConfigPlan{}, err
 		}
 		keys["juggernaut"] = blockMap
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -76,8 +77,8 @@ func TestGrok_LaunchSpec(t *testing.T) {
 	if ls.TokenEnvVar != "AWS_BEARER_TOKEN_BEDROCK" {
 		t.Errorf("TokenEnvVar = %q", ls.TokenEnvVar)
 	}
-	if !ls.NeedsToken {
-		t.Error("Grok via Mantle needs a token")
+	if ls.NeedsToken {
+		t.Error("Grok NeedsToken must be false — auth mode resolved from config at launch")
 	}
 }
 
@@ -184,7 +185,9 @@ func TestGrok_BuildConfig(t *testing.T) {
 // its sign-in and use our keychain bearer token.
 func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 	p, _ := Get("grok")
-	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	opts := baseOpts()
+	opts.AuthMode = authmode.BedrockAPIKey
+	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
@@ -211,6 +214,32 @@ func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 	}
 	if !found {
 		t.Error("auth must be in ManagedKeys")
+	}
+}
+
+// TestGrok_BuildConfig_IAM_OmitsAuthProviderCommand: IAM apply must not write
+// auth_provider_command (that command demands a keychain token) and must persist
+// juggernaut.auth.mode so launch can skip token injection.
+func TestGrok_BuildConfig_IAM_OmitsAuthProviderCommand(t *testing.T) {
+	p, _ := Get("grok")
+	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	auth, ok := testutil.NestedMapChain(plan.Keys, "auth")
+	if !ok {
+		t.Fatal("[auth] block missing (needed so re-apply can strip API-key leaves)")
+	}
+	authMap, ok := auth.(map[string]any)
+	if !ok {
+		t.Fatalf("[auth] not a map: %T", auth)
+	}
+	if cmd, _ := authMap["auth_provider_command"].(string); cmd != "" {
+		t.Errorf("IAM must not set auth_provider_command, got %q", cmd)
+	}
+	jb, ok := testutil.NestedMapChain(plan.Keys, "juggernaut", "auth", "mode")
+	if !ok || jb != authmode.IAM {
+		t.Errorf("juggernaut.auth.mode = %v, want iam", jb)
 	}
 }
 

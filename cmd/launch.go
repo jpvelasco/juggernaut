@@ -79,11 +79,15 @@ func launchNamedCLI(cli string, args []string) error {
 
 	selfPaths := resolveSelfPaths()
 
-	// Resolve the provider's user-scoped config path for auth mode lookup at
-	// launch time. Fall back to user scope — if the user applied project scope,
-	// the launch wrapper still needs to find the auth mode, and user scope is
-	// the default. If user scope doesn't have the block, check project scope too.
-	cfgPath, _ := prov.ConfigPath(home, "user")
+	// Probe project then user so launch sees the same juggernaut.auth.mode apply
+	// wrote (project-only API-key apply used to be invisible to the wrapper).
+	cfgPaths := resolveLaunchConfigPaths(prov, home)
+	cfgPath := ""
+	if len(cfgPaths) > 0 {
+		cfgPath = cfgPaths[0]
+	}
+	target := launchTargetFor(prov, cfgPath)
+	target.ConfigPaths = cfgPaths
 
 	return activation.LaunchWithOptions(activation.LaunchOptions{
 		Home:        home,
@@ -91,7 +95,7 @@ func launchNamedCLI(cli string, args []string) error {
 		Path:        os.Getenv("PATH"),
 		TokenGetter: func() (string, error) { return keychain.Default().GetWithFallback(home) },
 		Runner:      activation.RunBinary,
-		Target:      launchTargetFor(prov, cfgPath),
+		Target:      target,
 		SelfPaths:   selfPaths,
 	})
 }

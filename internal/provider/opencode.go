@@ -36,7 +36,7 @@ func (o opencode) ConfigPath(home, scope string) (string, error) {
 
 // NativeManagedKeys are the top-level opencode.json keys Juggernaut owns.
 func (o opencode) NativeManagedKeys() []string {
-	return []string{"model", "provider"}
+	return []string{"model", "provider", "juggernaut"}
 }
 
 // DeepMergeKeys: "provider" is a nested map where a user may have their own
@@ -64,10 +64,10 @@ func (o opencode) OwnsConfig(data map[string]any) bool {
 func (o opencode) LaunchSpec() LaunchSpec {
 	// OpenCode routes via config; the built-in amazon-bedrock provider uses
 	// the AWS credential chain (SigV4 or AWS_BEARER_TOKEN_BEDROCK), so no static
-	// enable flag. Token is still injected for bearer mode, but IAM also works.
+	// enable flag. Token injection is decided at launch from juggernaut.auth.
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
-		NeedsToken:  true,
+		NeedsToken:  false, // auth mode in juggernaut block decides at launch
 	}
 }
 
@@ -135,6 +135,12 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 			},
 		},
 	}
+
+	blockMap, err := juggernautAuthBlock(opts, opts.Region)
+	if err != nil {
+		return ConfigPlan{}, err
+	}
+	keys["juggernaut"] = blockMap
 
 	return ConfigPlan{
 		Keys:        keys,
