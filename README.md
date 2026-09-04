@@ -140,7 +140,7 @@ claude          # after apply --cli=claude (default)
 | Command | Description |
 |---------|-------------|
 | `apply` | Write Juggernaut config for the target `--cli` and install shell activation. |
-| `show` | Print the current Juggernaut-managed config from user and project scopes. |
+| `show` | Print the current Juggernaut-managed config from user and project scopes. Supports `--cli=claude\|codex\|opencode\|grok` (default claude) and `--json`. |
 | `doctor` | Read-only diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts. Supports `--cli=claude\|codex\|opencode\|grok`. |
 | `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
 | `models refresh` | Discover the models available to the current AWS account and region from native Bedrock (`foundation` + `profile` sources), then cache locally. |

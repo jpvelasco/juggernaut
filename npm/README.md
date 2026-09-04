@@ -163,7 +163,7 @@ No overwriting the real CLI binary. No copying API keys into env vars. A backup 
 | Command | What it does |
 |---------|--------------|
 | `apply` | Configure Bedrock for the target `--cli` and install shell activation |
-| `show` | Print your current Juggernaut config |
+| `show` | Print your current Juggernaut config (`--cli=claude\|codex\|opencode\|grok`, `--json`) |
 | `doctor` | Diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts |
 | `uninstall` | Remove managed config and token; `--full` also removes shell activation |
 | `models refresh` | Discover account/region model inventory from native Bedrock |
