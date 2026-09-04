@@ -80,9 +80,13 @@ func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
 // probe sends a minimal InvokeModel request and interprets the response
 // according to the auth mode. It is the shared implementation of
 // CheckAPIKeyConnectivity and CheckIAMConnectivity.
+//
+// The model ID is invoked as stored. Inference-profile prefixes (global., us.,
+// and the rest of RegionalInferencePrefixes) must stay on the pin — stripping
+// them recovers a foundation ID that Bedrock often rejects with HTTP 400
+// (on-demand throughput is not supported).
 func probe(opts probeOpts, region, modelID string) *ConnectivityResult {
 	start := time.Now()
-	modelID = stripRegionPrefix(modelID)
 
 	body, err := json.Marshal(map[string]any{
 		"messages":          []map[string]string{{"role": "user", "content": "hi"}},
@@ -171,11 +175,6 @@ func (r *ConnectivityResult) IsFailure() bool {
 // authorization error (401/403).
 func (r *ConnectivityResult) IsAuthFailure() bool {
 	return r.StatusCode == 401 || r.StatusCode == 403
-}
-
-// stripRegionPrefix delegates to the exported StripRegionPrefix.
-func stripRegionPrefix(modelID string) string {
-	return StripRegionPrefix(modelID)
 }
 
 func formatResponseError(status int, body []byte) string {

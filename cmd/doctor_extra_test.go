@@ -12,9 +12,13 @@ import (
 // TestCheckBedrockConnectivity_APIKeyNoToken covers the early return when API
 // key auth is configured but no bearer token is present — no network call.
 func TestCheckBedrockConnectivity_APIKeyNoToken(t *testing.T) {
-	result := checkBedrockConnectivity(authmode.BedrockAPIKey, "us-west-2", "model-id", "")
+	const pin = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+	result := checkBedrockConnectivity(authmode.BedrockAPIKey, "us-west-2", pin, "")
 	if result == nil {
 		t.Fatal("expected a non-nil connectivity result")
+	}
+	if result.ModelID != pin {
+		t.Errorf("ModelID = %q, want stored pin %q", result.ModelID, pin)
 	}
 	if !result.IsFailure() {
 		t.Error("missing API key token should be a failure")
