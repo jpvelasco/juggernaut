@@ -654,7 +654,8 @@ func TestReportLegacyRecovery_ErrorWarns(t *testing.T) {
 }
 
 // TestResolveApplyInputs_PromptsWithoutAuthMode reaches the interactive prompt
-// fallback of resolveApplyInputs. Without a TTY the form fails, which exercises
+// fallback of resolveApplyInputs when stdin is treated as a TTY and --auth is
+// omitted. Without a real console the form fails, which exercises
 // promptApplyInputs' construction and Run-error branches.
 func TestResolveApplyInputs_PromptsWithoutAuthMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -662,9 +663,10 @@ func TestResolveApplyInputs_PromptsWithoutAuthMode(t *testing.T) {
 	}
 	defer resetFlags()
 	resetFlags()
+	withInteractiveStdin(t, true)
 
 	home := testutil.NewTestHome(t)
-	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2"}}
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: authmode.IAM}}
 	_, _, _, err := resolveApplyInputs(home, bCfg, provider.MustGet("claude"))
 	if err == nil {
 		t.Log("TUI prompt unexpectedly succeeded (CI may have a pty)")

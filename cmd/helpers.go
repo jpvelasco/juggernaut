@@ -169,12 +169,40 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 	}
 
 	if isReapply {
-		return resolveReApplyInputs(bCfg, prov, authMode, region, opusplan, existing)
+		// Pass applyFlags.auth, not the still-empty named return, so an
+		// explicit --auth on re-apply wins over the existing block.
+		return resolveReApplyInputs(bCfg, prov, applyFlags.auth, region, opusplan, existing)
 	}
+	return resolveFirstApplyInputs(bCfg, prov, region, opusplan)
+}
 
-	authMode = resolveAuthMode(applyFlags.auth, prov, bCfg, nil)
-	if authMode != "" {
-		return authMode, region, opusplan, nil
+// isInteractiveStdin reports whether stdin is a terminal. Tests replace it.
+var isInteractiveStdin = defaultIsInteractiveStdin
+
+func defaultIsInteractiveStdin() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return isCharDeviceMode(fi.Mode())
+}
+
+func isCharDeviceMode(mode os.FileMode) bool {
+	return mode&os.ModeCharDevice != 0
+}
+
+// resolveFirstApplyInputs picks auth for a first-time apply. Explicit --auth
+// always wins. A TTY with no --auth runs the guided first-run prompt even
+// when defaults.auth_mode is set. Non-interactive runs use resolveAuthMode
+// defaults so scripts keep working without a prompt.
+func resolveFirstApplyInputs(bCfg *bedrock.Config, prov provider.Provider, region string, opusplan bool) (string, string, bool, error) {
+	if applyFlags.auth != "" {
+		return applyFlags.auth, region, opusplan, nil
+	}
+	if !isInteractiveStdin() {
+		if authMode := resolveAuthMode("", prov, bCfg, nil); authMode != "" {
+			return authMode, region, opusplan, nil
+		}
 	}
 	return promptApplyInputs(bCfg, region, opusplan)
 }
@@ -610,7 +638,9 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	}
 
 	persistRuntimeState(home, prov, authMode, plan)
-	installActivation(home, prov)
+	if err := installActivation(home, prov); err != nil {
+		return err
+	}
 	reportLegacyRecovery(home)
 	fmt.Println("Configuration written successfully.")
 	for _, w := range plan.Warnings {
@@ -648,47 +678,48 @@ func persistRuntimeState(home string, prov provider.Provider, authMode string, p
 	}
 }
 
-// warnAutoModeModel handles the two --mode=auto outcomes. If at least one
-// configured model can use auto mode (AutoModeAvailable), Juggernaut has enabled
-// it — print how to actually reach it, since auto only appears in the Shift+Tab
-// cycle when the ACTIVE session model is capable (Sonnet 5 / Opus 4.7 or later),
-// not when the Sonnet-tier default is active. If NO configured model is capable,
-// warn that auto can't be enabled at all. Only relevant when --mode=auto was
-// requested.
+// warnAutoModeModel handles --mode=auto outcomes. AutoModeUsable means the
+// default session model (Sonnet-tier pin) is capable — do not tell the user
+// they must switch models. AutoModeAvailable without usable still needs the
+// Shift+Tab / `claude --model opus` hint. If no configured model is capable,
+// warn that auto can't be enabled. Only relevant when --mode=auto was requested.
 func warnAutoModeModel(block *schema.Block) {
 	if block.Meta.PermissionMode != "auto" {
 		return
 	}
 	fmt.Println()
-	if block.AutoModeAvailable() {
-		fmt.Println("ℹ Auto mode is enabled (CLAUDE_CODE_ENABLE_AUTO_MODE=1).")
-		fmt.Println("  On Bedrock it appears in the Shift+Tab cycle only while your active session")
-		fmt.Println("  model is Sonnet 5, or Opus 4.7 or later — not the Sonnet-tier default. Run")
-		fmt.Println("  `claude --model opus` (or `/model opus` in a session) to use it. Requires")
-		fmt.Println("  Claude Code v2.1.158+.")
+	if !block.AutoModeAvailable() {
+		fmt.Println("⚠ Auto mode cannot be enabled: none of the configured models support it.")
+		fmt.Println("  On Bedrock auto mode requires Sonnet 5, or Opus 4.7 or later (Claude Code")
+		fmt.Println("  v2.1.158+). Configure one of those (e.g. keep the default Opus alias) and")
+		fmt.Println("  re-run with --mode=auto.")
 		return
 	}
-	fmt.Println("⚠ Auto mode cannot be enabled: none of the configured models support it.")
-	fmt.Println("  On Bedrock auto mode requires Sonnet 5, or Opus 4.7 or later (Claude Code")
-	fmt.Println("  v2.1.158+). Configure one of those (e.g. keep the default Opus alias) and")
-	fmt.Println("  re-run with --mode=auto.")
+	fmt.Println("ℹ Auto mode is enabled (CLAUDE_CODE_ENABLE_AUTO_MODE=1).")
+	if block.AutoModeUsable() {
+		return
+	}
+	fmt.Println("  On Bedrock it appears in the Shift+Tab cycle only while your active session")
+	fmt.Println("  model is Sonnet 5, or Opus 4.7 or later — not the current Sonnet-tier default.")
+	fmt.Println("  Run `claude --model opus` (or `/model opus` in a session) to use it. Requires")
+	fmt.Println("  Claude Code v2.1.158+.")
 }
 
-func installActivation(home string, prov provider.Provider) {
+func installActivation(home string, prov provider.Provider) error {
 	begin, end := prov.ActivationMarkers()
 	paths, err := activation.InstallWith(home, activation.InstallOptions{
 		Spec: activation.CLISpec{Name: prov.Name(), Begin: begin, End: end},
 	})
 	if err != nil {
-		warnf("could not install shell activation: %v", err)
-		return
+		return fmt.Errorf("could not install shell activation: %w", err)
 	}
 	title := prov.DisplayName()
 	if len(paths) == 0 {
 		fmt.Printf("  ✓ %s shell activation already up to date\n", title)
-		return
+		return nil
 	}
 	fmt.Printf("  ✓ Updated %s activation in %d shell profile(s)\n", title, len(paths))
+	return nil
 }
 
 func reportLegacyRecovery(home string) {
