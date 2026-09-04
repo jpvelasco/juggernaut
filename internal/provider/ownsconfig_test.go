@@ -39,11 +39,11 @@ func TestCodex_OwnsConfig(t *testing.T) {
 }
 
 // TestCodex_OwnsConfig_OldBedrockMantle: the legacy custom bedrock-mantle
-// provider (pre-amazon-bedrock) must NOT be claimed as owned. This ensures a
-// user upgrading from the old config shape gets a fresh auth prompt on
-// re-apply rather than silently reusing the old auth mode. The old
-// bedrock-mantle entry under model_providers is a different key from
-// amazon-bedrock, so deep merge naturally preserves it alongside the new entry.
+// provider (pre-amazon-bedrock) must NOT be claimed as currently owned.
+// Plain apply still migrates it via isJuggernautLegacy (cmd/) — OwnsConfig
+// stays false so a leftover Mantle table is not treated as a current v6
+// re-apply. The leftover model_providers.bedrock-mantle sibling is stripped
+// on migrate; deep merge alone would preserve it.
 func TestCodex_OwnsConfig_OldBedrockMantle(t *testing.T) {
 	p, _ := Get("codex")
 	if p.OwnsConfig(map[string]any{

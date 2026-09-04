@@ -57,6 +57,49 @@ func TestMergeConfigPlan_DeepMergeKeys_PreservesSiblings(t *testing.T) {
 	}
 }
 
+// TestMergeConfigPlanDeepThen_RunsAfterMergeUnderOneWrite: the then callback
+// mutates the in-memory map after the merge and is committed in the same lock.
+func TestMergeConfigPlanDeepThen_RunsAfterMergeUnderOneWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManagerWithFormat(path, tomlFormat{})
+	if err := m.Write(map[string]any{
+		"model_providers": map[string]any{
+			"bedrock-mantle": map[string]any{"base_url": "https://bedrock-mantle.example/openai/v1"},
+			"openai":         map[string]any{"name": "openai"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := m.MergeConfigPlanDeepThen(map[string]any{
+		"model_provider": "amazon-bedrock",
+		"model_providers": map[string]any{
+			"amazon-bedrock": map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+		},
+	}, []string{"model_providers"}, func(existing map[string]any) {
+		tbl, _ := existing["model_providers"].(map[string]any)
+		delete(tbl, "bedrock-mantle")
+	})
+	if err != nil {
+		t.Fatalf("MergeConfigPlanDeepThen: %v", err)
+	}
+
+	got, _ := m.Read()
+	tbl, _ := got["model_providers"].(map[string]any)
+	if _, ok := tbl["bedrock-mantle"]; ok {
+		t.Error("then callback should have stripped bedrock-mantle")
+	}
+	if _, ok := tbl["amazon-bedrock"]; !ok {
+		t.Error("amazon-bedrock from the plan must be present")
+	}
+	if _, ok := tbl["openai"]; !ok {
+		t.Error("unrelated sibling openai must survive")
+	}
+	if got["model_provider"] != "amazon-bedrock" {
+		t.Errorf("model_provider = %v, want amazon-bedrock", got["model_provider"])
+	}
+}
+
 // TestRemoveManagedKeysDeep_PreservesSiblings is the uninstall-side data-loss
 // regression: removing our bedrock-grok block must NOT delete the user's other
 // model profiles or the whole table.

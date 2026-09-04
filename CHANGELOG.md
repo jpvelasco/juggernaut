@@ -2,6 +2,21 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Leftover Codex/OpenCode Mantle providers now migrate on plain `apply`.**
+  v6.1.0 only treated Codex `model_provider = "amazon-bedrock"` plus a
+  pre-5.6 model ID as legacy. Real v5 configs used
+  `model_provider = "bedrock-mantle"` (and OpenCode
+  `provider.bedrock-mantle`); those looked foreign, so plain apply refused
+  without `--force` and Codex kept POSTing to `bedrock-mantle.*.api.aws`
+  (404 on `gpt-5.6-sol` / `gpt-5.5`). Apply now detects Mantle `base_url` /
+  `bedrock-mantle` tables — including hybrid v6 model IDs still aimed at
+  Mantle — announces the rewrite, writes `amazon-bedrock`, and strips the
+  leftover Mantle provider block.
+
 ## [6.1.0] - 2026-08-31
 
 ### Changed

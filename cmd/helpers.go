@@ -339,16 +339,16 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 	if err != nil {
 		return err
 	}
-	if len(collisions) > 0 && !applyFlags.force {
-		if migrateLegacyJuggernautConfig(prov, home, applyFlags.scope) {
-			announceMigration(prov)
-		} else {
-			// Dry-run never errors — it prints the same refusal the commit
-			// path would return, so the user can preview what a real apply
-			// would do.
-			fmt.Print(refuseForeignConfig(prov, home, applyFlags.scope, plan, path).Error() + "\n")
-			return nil
-		}
+	migrating, refuse := applyWriteGate(home, prov, plan, path, collisions)
+	if refuse != nil {
+		// Dry-run never errors — it prints the same refusal the commit
+		// path would return, so the user can preview what a real apply
+		// would do.
+		fmt.Print(refuse.Error() + "\n")
+		return nil
+	}
+	if migrating {
+		announceMigration(prov)
 	}
 
 	title := prov.DisplayName()
@@ -383,32 +383,135 @@ func detectForeignCollisions(home, scope string, prov provider.Provider, plan pr
 	return config.DetectCollisions(existing, plan.Keys, prov.DeepMergeKeys(), prov.OwnedSubKeys()), nil
 }
 
+const mantleProviderID = "bedrock-mantle"
+
+// applyWriteGate decides whether apply should migrate a legacy Juggernaut
+// config, refuse a foreign config, or proceed. migrating is true when the
+// existing file is a pre-v6 (Mantle-era) Juggernaut config.
+func applyWriteGate(home string, prov provider.Provider, plan provider.ConfigPlan, path string, collisions []config.Collision) (migrating bool, refuse error) {
+	migrating = migrateLegacyJuggernautConfig(prov, home, applyFlags.scope)
+	if migrating || applyFlags.force || len(collisions) == 0 {
+		return migrating, nil
+	}
+	return false, refuseForeignConfig(prov, home, applyFlags.scope, plan, path)
+}
+
 // isJuggernautLegacy reports whether the existing config was written by a
 // pre-v6 Juggernaut (Mantle-era) and is stale for v6's bedrock-runtime
 // routing. Returns false for configs that don't look like Juggernaut's own
 // (foreign user configs, non-Juggernaut tooling) — those still require
 // --force. Legacy Juggernaut configs are migrated by a plain apply: the
 // write clobbers the file and the backup preserves the old content.
+//
+// Detection covers:
+//   - Grok [model.bedrock-grok] base_url pointing at Mantle
+//   - Codex model_provider == "bedrock-mantle" (the real v5 provider id)
+//   - leftover [model_providers.bedrock-mantle] / provider.bedrock-mantle
+//     tables, including hybrid v6 model IDs still aimed at a Mantle URL
+//   - Codex amazon-bedrock + pre-v6 GPT-5 model IDs (openai.gpt-5.x, not 5.6)
 func isJuggernautLegacy(existing map[string]any) bool {
-	// Grok: [model.bedrock-grok] base_url pointed at Mantle.
-	if model, ok := existing["model"].(map[string]any); ok {
-		if grokModel, ok := model["bedrock-grok"].(map[string]any); ok {
-			if bu, ok := grokModel["base_url"].(string); ok && strings.Contains(bu, "mantle") {
-				return true
-			}
-		}
+	if existing == nil {
+		return false
 	}
-	// Codex: a Juggernaut-owned config (amazon-bedrock provider) with a
-	// pre-v6 model ID (openai.gpt-5.x, not the v6 GPT-5.6 family) is a
-	// Mantle-era config. The v6 GPT-5.6 family may appear as either the base
-	// foundation ID (openai.gpt-5.6-*) or the inference-profile ID
-	// (global.openai.gpt-5.6-* / us.openai.gpt-5.6-*); both are current.
-	if mp, ok := existing["model_provider"]; ok && mp == "amazon-bedrock" {
-		if m, ok := existing["model"].(string); ok && strings.HasPrefix(m, "openai.gpt-5.") && !strings.Contains(m, "gpt-5.6") {
+	if grokMantleBaseURL(existing) {
+		return true
+	}
+	if mp, ok := existing["model_provider"].(string); ok && isMantleProviderID(mp) {
+		return true
+	}
+	if hasMantleTable(existing["model_providers"]) || hasMantleTable(existing["provider"]) {
+		return true
+	}
+	return isCodexPreV6AmazonBedrock(existing)
+}
+
+func grokMantleBaseURL(existing map[string]any) bool {
+	model, ok := existing["model"].(map[string]any)
+	if !ok {
+		return false
+	}
+	grokModel, ok := model["bedrock-grok"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return containsMantleURL(grokModel)
+}
+
+func isCodexPreV6AmazonBedrock(existing map[string]any) bool {
+	if existing["model_provider"] != "amazon-bedrock" {
+		return false
+	}
+	m, ok := existing["model"].(string)
+	if !ok {
+		return false
+	}
+	// v6 GPT-5.6 may appear as openai.gpt-5.6-* or global./us. profile IDs;
+	// those are current. openai.gpt-5.4 / gpt-5.5 are Mantle-era pins.
+	return strings.HasPrefix(m, "openai.gpt-5.") && !strings.Contains(m, "gpt-5.6")
+}
+
+func isMantleProviderID(id string) bool {
+	return id == mantleProviderID
+}
+
+func hasMantleTable(v any) bool {
+	tbl, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	for id, entry := range tbl {
+		if isMantleLeftover(id, entry) {
 			return true
 		}
 	}
 	return false
+}
+
+func isMantleLeftover(id string, entry any) bool {
+	return isMantleProviderID(id) || containsMantleURL(entry)
+}
+
+func containsMantleURL(v any) bool {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	if stringHasMantle(m["base_url"]) {
+		return true
+	}
+	opt, ok := m["options"].(map[string]any)
+	return ok && stringHasMantle(opt["base_url"])
+}
+
+func stringHasMantle(v any) bool {
+	s, ok := v.(string)
+	return ok && strings.Contains(strings.ToLower(s), "mantle")
+}
+
+// stripMantleLeftovers deletes leftover Mantle provider tables that deep-merge
+// would otherwise preserve as siblings of amazon-bedrock. The native
+// amazon-bedrock entry is never removed.
+func stripMantleLeftovers(existing map[string]any) {
+	stripMantleTable(existing, "model_providers")
+	stripMantleTable(existing, "provider")
+}
+
+func stripMantleTable(root map[string]any, key string) {
+	tbl, ok := root[key].(map[string]any)
+	if !ok {
+		return
+	}
+	for id, entry := range tbl {
+		if id == "amazon-bedrock" {
+			continue
+		}
+		if isMantleLeftover(id, entry) {
+			delete(tbl, id)
+		}
+	}
+	if len(tbl) == 0 {
+		delete(root, key)
+	}
 }
 
 // formatCollisions renders one line per collision for the refusal error/dry-run
@@ -478,12 +581,12 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if err != nil {
 		return err
 	}
-	if len(collisions) > 0 && !applyFlags.force {
-		if migrateLegacyJuggernautConfig(prov, home, applyFlags.scope) {
-			announceMigration(prov)
-		} else {
-			return refuseForeignConfig(prov, home, applyFlags.scope, plan, path)
-		}
+	migrating, refuse := applyWriteGate(home, prov, plan, path, collisions)
+	if refuse != nil {
+		return refuse
+	}
+	if migrating {
+		announceMigration(prov)
 	}
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
@@ -496,7 +599,11 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if err != nil {
 		return err
 	}
-	if err := mgr.MergeConfigPlanDeep(plan.Keys, prov.DeepMergeKeys()); err != nil {
+	if err := mgr.MergeConfigPlanDeepThen(plan.Keys, prov.DeepMergeKeys(), func(existing map[string]any) {
+		if migrating {
+			stripMantleLeftovers(existing)
+		}
+	}); err != nil {
 		return err
 	}
 
