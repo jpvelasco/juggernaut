@@ -6,6 +6,12 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
+- **Doctor connectivity probe keeps inference-profile prefixes.** `probe()`
+  no longer strips `global.` / `us.` (and other regional prefixes) before
+  InvokeModel. The default Haiku pin is a `global.` inference-profile ID;
+  stripping it recovered a foundation ID that Bedrock rejects with HTTP 400
+  (on-demand throughput isn't supported), so `doctor` false-failed healthy
+  Claude installs. Foundation IDs without a prefix are still invoked as stored.
 - **Leftover Codex/OpenCode Mantle providers now migrate on plain `apply`.**
   v6.1.0 only treated Codex `model_provider = "amazon-bedrock"` plus a
   pre-5.6 model ID as legacy. Real v5 configs used

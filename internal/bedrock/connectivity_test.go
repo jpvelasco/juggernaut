@@ -7,10 +7,12 @@ import (
 )
 
 // -----------------------------------------------------------------------
-// stripRegionPrefix
+// StripRegionPrefix — comparison helper for schema/models, not InvokeModel.
+// Doctor connectivity probes must invoke the stored pin (see
+// connectivity_http_test.go). This helper still recovers the bare ID.
 // -----------------------------------------------------------------------
 
-func TestStripRegionPrefix_PreservesGlobal(t *testing.T) {
+func TestStripRegionPrefix(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -69,47 +71,9 @@ func TestStripRegionPrefix_PreservesGlobal(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stripRegionPrefix(tt.input)
+			got := StripRegionPrefix(tt.input)
 			if got != tt.expected {
-				t.Errorf("stripRegionPrefix(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestStripRegionPrefix_BedrockConfigModelIDs verifies that stripRegionPrefix
-// correctly strips regional inference prefixes from model IDs. Model IDs with
-// regional prefixes (global., us., us-gov., eu., apac.) are stripped to their
-// bare provider model ID. Plain model IDs without prefixes are unchanged.
-func TestStripRegionPrefix_BedrockConfigModelIDs(t *testing.T) {
-	repoRoot := filepath.Join("..", "..")
-	cfg, err := Load(filepath.Join(repoRoot, "bedrock-config.json"))
-	if err != nil {
-		t.Skipf("cannot load bedrock-config.json: %v", err)
-	}
-
-	for name, id := range map[string]string{
-		"default": cfg.Models.Default,
-		"fast":    cfg.Models.Fast,
-		"opus":    cfg.Models.Opus,
-		"sonnet":  cfg.Models.Sonnet,
-		"haiku":   cfg.Models.Haiku,
-	} {
-		t.Run(name, func(t *testing.T) {
-			got := stripRegionPrefix(id)
-			// Model IDs with regional prefixes should be stripped to bare form
-			for _, prefix := range []string{"global.", "us.", "us-gov.", "eu.", "apac."} {
-				if strings.HasPrefix(id, prefix) {
-					want := strings.TrimPrefix(id, prefix)
-					if got != want {
-						t.Errorf("stripRegionPrefix(%q) = %q, want %q (strip %q)", id, got, want, prefix)
-					}
-					return
-				}
-			}
-			// Model IDs without regional prefixes should be unchanged
-			if got != id {
-				t.Errorf("stripRegionPrefix(%q) = %q, want %q", id, got, id)
+				t.Errorf("StripRegionPrefix(%q) = %q, want %q", tt.input, got, tt.expected)
 			}
 		})
 	}
@@ -298,35 +262,5 @@ func TestFindBedrockConfigFile(t *testing.T) {
 	// Ensure the model ID starts with global.
 	if !strings.HasPrefix(cfg.Models.Haiku, "global.") {
 		t.Errorf("expected Haiku model ID to start with global., got %q", cfg.Models.Haiku)
-	}
-}
-
-// -----------------------------------------------------------------------
-// Regression: ensure all regional prefixes are stripped correctly
-// -----------------------------------------------------------------------
-
-func TestStripRegionPrefix_OldBehaviorRegression(t *testing.T) {
-	// All regional inference prefixes (including global. and us-gov.) are
-	// stripped to recover the bare provider model ID. The old code had a
-	// stale prefix list that missed global. and us-gov. — this test ensures
-	// the fixed list is used.
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"global-prefix", "global.anthropic.claude-haiku-4-5-20251001-v1:0", "anthropic.claude-haiku-4-5-20251001-v1:0"},
-		{"us-prefix", "us.anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
-		{"us-gov-prefix", "us-gov.anthropic.claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514"},
-		{"eu-prefix", "eu.anthropic.claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514"},
-		{"no-prefix", "anthropic.claude-opus-4-8", "anthropic.claude-opus-4-8"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := stripRegionPrefix(tt.in)
-			if got != tt.want {
-				t.Errorf("stripRegionPrefix(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
 	}
 }
