@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
@@ -91,19 +92,38 @@ func TestUniqueBackupPath_SuffixZeroPadded(t *testing.T) {
 	m := NewManager(path)
 
 	// Occupy 10 same-second backup names, forcing the 11th candidate onto
-	// the zero-padded "-010" form.
-	for i := 0; i < 10; i++ {
+	// the zero-padded "-010" form. Retry if the UTC second rolls mid-burst
+	// (slow Windows CI has been seen to span 172237 vs the previous second).
+	var p11 string
+	for attempt := 0; attempt < 5 && p11 == ""; attempt++ {
+		stamp := time.Now().UTC().Format("20060102_150405")
+		rolled := false
+		for i := 0; i < 10; i++ {
+			p, err := m.uniqueBackupPath()
+			if err != nil {
+				t.Fatalf("uniqueBackupPath %d: %v", i, err)
+			}
+			if !strings.Contains(filepath.Base(p), stamp) {
+				rolled = true
+				break
+			}
+			if err := os.WriteFile(p, []byte("{}"), 0o600); err != nil {
+				t.Fatalf("seed %s: %v", p, err)
+			}
+		}
+		if rolled {
+			continue
+		}
 		p, err := m.uniqueBackupPath()
 		if err != nil {
-			t.Fatalf("uniqueBackupPath %d: %v", i, err)
+			t.Fatalf("uniqueBackupPath 11: %v", err)
 		}
-		if err := os.WriteFile(p, []byte("{}"), 0o600); err != nil {
-			t.Fatalf("seed %s: %v", p, err)
+		if strings.Contains(filepath.Base(p), stamp) {
+			p11 = p
 		}
 	}
-	p11, err := m.uniqueBackupPath()
-	if err != nil {
-		t.Fatalf("uniqueBackupPath 11: %v", err)
+	if p11 == "" {
+		t.Fatal("could not occupy 11 backup names in the same UTC second")
 	}
 	if !strings.HasSuffix(filepath.Base(p11), "-010") {
 		t.Errorf("expected zero-padded -010 suffix on the 11th candidate, got %q", filepath.Base(p11))
