@@ -485,7 +485,9 @@ func containsMantleURL(v any) bool {
 
 func stringHasMantle(v any) bool {
 	s, ok := v.(string)
-	return ok && strings.Contains(strings.ToLower(s), "mantle")
+	// Match the v5 Mantle host (bedrock-mantle.<region>.api.aws), not any
+	// URL that happens to contain the substring "mantle".
+	return ok && strings.Contains(strings.ToLower(s), "bedrock-mantle.")
 }
 
 // stripMantleLeftovers deletes leftover Mantle provider tables that deep-merge

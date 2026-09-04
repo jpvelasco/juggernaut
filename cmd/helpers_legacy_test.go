@@ -1,6 +1,11 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
+)
 
 func TestIsJuggernautLegacy(t *testing.T) {
 	cases := []struct {
@@ -104,6 +109,19 @@ func TestIsJuggernautLegacy(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "opencode nested options.base_url mantle host",
+			in: map[string]any{
+				"provider": map[string]any{
+					"custom": map[string]any{
+						"options": map[string]any{
+							"base_url": "https://bedrock-mantle.us-west-2.api.aws/openai/v1",
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
 			name: "opencode amazon-bedrock is current",
 			in: map[string]any{
 				"model": "amazon-bedrock/openai.gpt-oss-120b-1:0",
@@ -120,6 +138,19 @@ func TestIsJuggernautLegacy(t *testing.T) {
 			in: map[string]any{
 				"model":          "gpt-5",
 				"model_provider": "openai",
+			},
+			want: false,
+		},
+		{
+			name: "foreign provider whose URL merely contains mantle",
+			in: map[string]any{
+				"model":          "their-model",
+				"model_provider": "my-proxy",
+				"model_providers": map[string]any{
+					"my-proxy": map[string]any{
+						"base_url": "https://mantle.internal.corp/v1",
+					},
+				},
 			},
 			want: false,
 		},
@@ -181,5 +212,48 @@ func TestStripMantleLeftovers_CustomIDWithMantleURL(t *testing.T) {
 	stripMantleLeftovers(existing)
 	if _, ok := existing["model_providers"]; ok {
 		t.Fatal("empty model_providers table should be dropped")
+	}
+}
+
+func TestStripMantleLeftovers_PreservesForeignMantleSubstringURL(t *testing.T) {
+	existing := map[string]any{
+		"model_providers": map[string]any{
+			"my-proxy": map[string]any{
+				"base_url": "https://mantle.internal.corp/v1",
+			},
+		},
+	}
+	stripMantleLeftovers(existing)
+	tbl, _ := existing["model_providers"].(map[string]any)
+	if _, ok := tbl["my-proxy"]; !ok {
+		t.Fatal("foreign provider whose URL merely contains 'mantle' must be kept")
+	}
+}
+
+func TestApplyWriteGate_ForceAndRefuse(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	prov, err := provider.Get("codex")
+	if err != nil {
+		t.Fatalf("codex provider: %v", err)
+	}
+	plan := provider.ConfigPlan{Keys: map[string]any{"model": "global.openai.gpt-5.6-sol"}}
+	collisions := []config.Collision{{Path: "model", Existing: "their-model"}}
+
+	applyFlags.force = true
+	migrating, refuse := applyWriteGate(home, prov, plan, "config.toml", collisions)
+	if refuse != nil {
+		t.Fatalf("force should not refuse: %v", refuse)
+	}
+	if migrating {
+		t.Fatal("empty home is not a legacy migrate")
+	}
+
+	applyFlags.force = false
+	migrating, refuse = applyWriteGate(home, prov, plan, "config.toml", collisions)
+	if refuse == nil {
+		t.Fatal("collisions without force or legacy should refuse")
+	}
+	if migrating {
+		t.Fatal("refuse path must not report migrating")
 	}
 }
