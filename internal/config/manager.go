@@ -232,8 +232,20 @@ func (m *Manager) MergeConfigPlan(keys map[string]any) error {
 // a user's sibling entries survive. All other keys keep whole-value
 // set-or-delete semantics.
 func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) error {
+	return m.mergeConfigPlanDeep(keys, deepKeys, nil)
+}
+
+// MergeConfigPlanDeepThen is MergeConfigPlanDeep plus an optional post-merge
+// mutation of the in-memory map, still under the same file lock. Used to
+// strip leftover sibling tables (e.g. Mantle provider blocks) without a
+// second backup rotation.
+func (m *Manager) MergeConfigPlanDeepThen(keys map[string]any, deepKeys []string, then func(map[string]any)) error {
+	return m.mergeConfigPlanDeep(keys, deepKeys, then)
+}
+
+func (m *Manager) mergeConfigPlanDeep(keys map[string]any, deepKeys []string, then func(map[string]any)) error {
 	return m.withConfig(func(existing map[string]any) error {
-		return walkManagedKeys(keys, deepKeys, func(key string, value any, action managedKeyAction) error {
+		err := walkManagedKeys(keys, deepKeys, func(key string, value any, action managedKeyAction) error {
 			switch action {
 			case actionJuggernaut:
 				existing[key] = value
@@ -244,6 +256,13 @@ func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) er
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		if then != nil {
+			then(existing)
+		}
+		return nil
 	})
 }
 

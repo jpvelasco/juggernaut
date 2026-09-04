@@ -909,3 +909,159 @@ region = "us-east-1"
 		t.Error("expected a backup of the legacy codex config to be created with --force")
 	}
 }
+
+const legacyCodexMantleProvider = `model = "openai.gpt-5.5"
+model_provider = "bedrock-mantle"
+
+[model_providers.bedrock-mantle]
+name = "Amazon Bedrock (Mantle)"
+base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+wire_api = "responses"
+`
+
+const legacyCodexHybridMantle = `model = "global.openai.gpt-5.6-sol"
+model_provider = "amazon-bedrock"
+
+[model_providers.amazon-bedrock.aws]
+region = "us-west-2"
+
+[model_providers.bedrock-mantle]
+base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+`
+
+const legacyOpenCodeMantle = `{
+  "model": "bedrock-mantle/openai.gpt-oss-120b-1:0",
+  "provider": {
+    "bedrock-mantle": {
+      "options": {"region": "us-west-2"}
+    }
+  }
+}
+`
+
+func writeHomeFile(t *testing.T, home, relDir, filename, contents string) string {
+	t.Helper()
+	dir := filepath.Join(home, filepath.FromSlash(relDir))
+	if err := safepath.MkdirAll(dir); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	path := filepath.Join(dir, filename)
+	if err := safepath.WriteFile(dir, path, []byte(contents)); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	return path
+}
+
+func applyCLI(t *testing.T, cli string, extra ...string) string {
+	t.Helper()
+	args := append([]string{
+		"apply", "--cli=" + cli, "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+		"--region=us-west-2", "--skip-preflight",
+	}, extra...)
+	var applyErr error
+	out := captureStdout(t, func() {
+		applyErr = ExecuteArgs(args)
+	})
+	if applyErr != nil {
+		t.Fatalf("apply --cli=%s: %v", cli, applyErr)
+	}
+	return out
+}
+
+func readHomeFile(t *testing.T, dir, path string) string {
+	t.Helper()
+	content, err := safepath.ReadFile(dir, path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(content)
+}
+
+func assertMigrated(t *testing.T, out, written string, wantContains, wantAbsent []string) {
+	t.Helper()
+	if !strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("apply should announce the v5→v6 migration, got:\n%s", out)
+	}
+	for _, s := range wantContains {
+		if !strings.Contains(written, s) {
+			t.Errorf("migrated config should contain %q, got:\n%s", s, written)
+		}
+	}
+	for _, s := range wantAbsent {
+		if strings.Contains(written, s) {
+			t.Errorf("migrated config must NOT contain %q, got:\n%s", s, written)
+		}
+	}
+}
+
+// TestApply_Codex_MantleProvider_PlainApplyMigrates: a real v5 Codex config
+// (model_provider = "bedrock-mantle") must migrate on plain apply — OwnsConfig
+// is false for that id, so this used to refuse without --force (#435).
+func TestApply_Codex_MantleProvider_PlainApplyMigrates(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	path := writeHomeFile(t, home, ".codex", "config.toml", legacyCodexMantleProvider)
+
+	out := applyCLI(t, "codex")
+	written := readHomeFile(t, filepath.Dir(path), path)
+	assertMigrated(t, out, written,
+		[]string{"global.openai.gpt-5.6-sol", "amazon-bedrock"},
+		[]string{"bedrock-mantle", "openai.gpt-5.5"},
+	)
+	if matches, _ := filepath.Glob(path + ".backup.*"); len(matches) == 0 {
+		t.Error("expected a backup of the leftover Mantle Codex config")
+	}
+}
+
+// TestApply_Codex_HybridMantleLeftover_PlainApplyMigrates: v6 model pin still
+// paired with a leftover [model_providers.bedrock-mantle] table must migrate
+// and drop the Mantle block (deep-merge would otherwise keep the sibling).
+func TestApply_Codex_HybridMantleLeftover_PlainApplyMigrates(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	path := writeHomeFile(t, home, ".codex", "config.toml", legacyCodexHybridMantle)
+
+	out := applyCLI(t, "codex")
+	written := readHomeFile(t, filepath.Dir(path), path)
+	assertMigrated(t, out, written,
+		[]string{"global.openai.gpt-5.6-sol", "amazon-bedrock"},
+		[]string{"bedrock-mantle"},
+	)
+}
+
+// TestApply_OpenCode_MantleProvider_PlainApplyMigrates: leftover
+// provider.bedrock-mantle must migrate to amazon-bedrock on plain apply.
+func TestApply_OpenCode_MantleProvider_PlainApplyMigrates(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	path := writeHomeFile(t, home, ".config/opencode", "opencode.json", legacyOpenCodeMantle)
+
+	out := applyCLI(t, "opencode")
+	written := readHomeFile(t, filepath.Dir(path), path)
+	assertMigrated(t, out, written,
+		[]string{"amazon-bedrock"},
+		[]string{"bedrock-mantle"},
+	)
+}
+
+// TestApply_Codex_MantleProvider_DryRunPreviewsMigration: dry-run over a
+// leftover Mantle Codex config must announce the rewrite without writing.
+func TestApply_Codex_MantleProvider_DryRunPreviewsMigration(t *testing.T) {
+	home := setupApplyTest(t)
+	path := writeHomeFile(t, home, ".codex", "config.toml", legacyCodexMantleProvider)
+
+	out := applyCLI(t, "codex", "--dry-run")
+	if !strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("dry-run should preview the v5→v6 migration, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Would write juggernaut config") {
+		t.Errorf("dry-run should still show what would be written, got:\n%s", out)
+	}
+	got := readHomeFile(t, filepath.Dir(path), path)
+	if got != legacyCodexMantleProvider {
+		t.Error("dry-run must not modify the leftover Mantle file")
+	}
+	if matches, _ := filepath.Glob(path + ".backup.*"); len(matches) != 0 {
+		t.Error("dry-run must not create a backup")
+	}
+}
