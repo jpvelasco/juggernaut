@@ -6,6 +6,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
+- **`apply --auth` now wins on re-apply.** Re-applying used to pass the still-empty named return into auth resolution, so `--auth=iam` / `--auth=bedrock-api-key` was ignored and the previous mode was kept while reporting success.
+- **Bare `apply` prompts on a TTY.** First-run with no `--auth` launches the guided prompt when stdin is a terminal. Non-interactive runs (scripts, CI) still use `defaults.auth_mode`. Explicit `--auth` always wins.
+- **Activation install failures now fail `apply`.** A failed shell-block install returns a non-zero exit and does not print "Configuration written successfully." Dry-run is unchanged.
+- **`--mode=auto` no longer claims the Sonnet-tier default cannot show auto.** Default Sonnet 5 is auto-capable (`schema.IsAutoModeCapableModel`); the switch-model hint is only printed when the resolved default is not.
 - **Doctor connectivity probe keeps inference-profile prefixes.** `probe()`
   no longer strips `global.` / `us.` (and other regional prefixes) before
   InvokeModel. The default Haiku pin is a `global.` inference-profile ID;

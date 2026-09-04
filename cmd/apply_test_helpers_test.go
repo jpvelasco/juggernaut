@@ -219,6 +219,14 @@ func setupApplyTestWithReset(t *testing.T) string {
 	return setupApplyTest(t)
 }
 
+// withInteractiveStdin stubs isInteractiveStdin for the rest of the test.
+func withInteractiveStdin(t *testing.T, interactive bool) {
+	t.Helper()
+	orig := isInteractiveStdin
+	isInteractiveStdin = func() bool { return interactive }
+	t.Cleanup(func() { isInteractiveStdin = orig })
+}
+
 // ---------------------------------------------------------------------------
 // mockPSRunner (unified) — replaces mockApplyCommandRunner and mockDoctorCommandRunner
 // ---------------------------------------------------------------------------

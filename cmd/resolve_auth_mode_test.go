@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
@@ -141,6 +144,96 @@ func TestResolveAuthMode_Table(t *testing.T) {
 					tc.flagVal, tc.prov.Name(), tc.bCfg != nil, tc.existing != nil, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestIsCharDeviceMode(t *testing.T) {
+	if !isCharDeviceMode(os.ModeCharDevice) {
+		t.Error("ModeCharDevice should be a TTY")
+	}
+	if isCharDeviceMode(0) {
+		t.Error("regular file mode should not be a TTY")
+	}
+}
+
+func TestDefaultIsInteractiveStdin_PipeIsNotTTY(t *testing.T) {
+	testutil.WithStdin(t, "", func() {
+		if defaultIsInteractiveStdin() {
+			t.Error("piped stdin should not be treated as a TTY")
+		}
+	})
+}
+
+func TestDefaultIsInteractiveStdin_ClosedFile(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "closed-stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(name); err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() { os.Stdin = orig })
+	if defaultIsInteractiveStdin() {
+		t.Error("closed stdin should not be treated as a TTY")
+	}
+}
+
+func TestResolveFirstApplyInputs_NonInteractiveUsesDefaultAuth(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	withInteractiveStdin(t, false)
+
+	home := testutil.NewTestHome(t)
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: authmode.IAM}}
+	got, _, _, err := resolveApplyInputs(home, bCfg, mustProvider(t, "claude"))
+	if err != nil {
+		t.Fatalf("non-interactive first-run should use defaults: %v", err)
+	}
+	if got != authmode.IAM {
+		t.Errorf("authMode = %q, want iam from defaults.auth_mode", got)
+	}
+}
+
+func TestResolveFirstApplyInputs_ExplicitAuthSkipsPromptOnTTY(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.auth = authmode.BedrockAPIKey
+	withInteractiveStdin(t, true)
+
+	home := testutil.NewTestHome(t)
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: authmode.IAM}}
+	got, _, _, err := resolveApplyInputs(home, bCfg, mustProvider(t, "claude"))
+	if err != nil {
+		t.Fatalf("explicit --auth should skip prompt: %v", err)
+	}
+	if got != authmode.BedrockAPIKey {
+		t.Errorf("authMode = %q, want flag value", got)
+	}
+}
+
+func TestResolveFirstApplyInputs_InteractiveNoAuthPrompts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TUI form blocks on Windows without a real console")
+	}
+	defer resetFlags()
+	resetFlags()
+	withInteractiveStdin(t, true)
+
+	home := testutil.NewTestHome(t)
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: authmode.IAM}}
+	_, _, _, err := resolveApplyInputs(home, bCfg, mustProvider(t, "claude"))
+	if err == nil {
+		t.Fatal("expected guided prompt to run (and fail without a real TTY)")
+	}
+	if !strings.Contains(err.Error(), "terminal") && !strings.Contains(err.Error(), "tty") &&
+		!strings.Contains(err.Error(), "interactive") && !strings.Contains(err.Error(), "could not open") {
+		t.Logf("prompt failed as expected: %v", err)
 	}
 }
 

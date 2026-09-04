@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
@@ -393,7 +394,8 @@ func TestWarnAutoModeModel_NotAuto(t *testing.T) {
 }
 
 func TestWarnAutoModeModel_Available(t *testing.T) {
-	// Opus 4.8 configured — auto mode IS available.
+	// Opus 4.8 configured, Sonnet 4.6 default — auto is available but the
+	// Sonnet-tier pin is not usable, so the switch-model hint still applies.
 	block := &schema.Block{
 		Meta: schema.Meta{PermissionMode: "auto"},
 		Models: schema.ModelOverrides{
@@ -412,6 +414,30 @@ func TestWarnAutoModeModel_Available(t *testing.T) {
 	}
 	if strings.Contains(out, "cannot be enabled") {
 		t.Error("must not warn 'cannot be enabled' when Opus 4.8 is configured")
+	}
+}
+
+func TestWarnAutoModeModel_UsableDefaultSonnet(t *testing.T) {
+	// Default Sonnet 5 is auto-capable — do not claim the Sonnet-tier default
+	// cannot show auto (#442).
+	block := &schema.Block{
+		Meta: schema.Meta{PermissionMode: "auto"},
+		Models: schema.ModelOverrides{
+			Opus:   "global.anthropic.claude-opus-4-8",
+			Sonnet: "global.anthropic.claude-sonnet-5",
+		},
+	}
+	out := captureStdout(t, func() {
+		warnAutoModeModel(block)
+	})
+	if !strings.Contains(out, "Auto mode is enabled") {
+		t.Errorf("expected enabled confirmation, got:\n%s", out)
+	}
+	if strings.Contains(out, "not the") || strings.Contains(out, "claude --model opus") {
+		t.Errorf("must not warn to switch models when the default is auto-capable:\n%s", out)
+	}
+	if strings.Contains(out, "cannot be enabled") {
+		t.Errorf("must not warn cannot-be-enabled when Sonnet 5 is the default:\n%s", out)
 	}
 }
 
@@ -1066,9 +1092,13 @@ func TestInstallActivation_AlreadyUpToDate(t *testing.T) {
 	if err != nil {
 		t.Skip("claude provider not registered")
 	}
+	var actErr error
 	out := captureStdout(t, func() {
-		installActivation(home, prov)
+		actErr = installActivation(home, prov)
 	})
+	if actErr != nil {
+		t.Fatalf("installActivation: %v", actErr)
+	}
 	// With mock, the result is either "up to date" or "updated" depending on
 	// whether the profile already has the activation block.
 	if !strings.Contains(out, "activation") {
@@ -1115,6 +1145,46 @@ func TestResolveApplyInputs_OwnedConfigPreservesAuthMode(t *testing.T) {
 	}
 	if authMode != "iam" {
 		t.Errorf("authMode = %q, want 'iam' (preserved from existing config)", authMode)
+	}
+}
+
+func TestResolveApplyInputs_ReapplyHonorsAuthFlag(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	applyFlags.scope = "user"
+	applyFlags.auth = authmode.BedrockAPIKey
+
+	home := setupApplyTest(t)
+
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
+		t.Fatalf("mkdir: %v", err)
+	}
+	ownedConfig := `{
+		"juggernaut": {
+			"auth": {"mode": "iam", "region": "us-west-2"},
+			"meta": {"managedBy": "juggernaut"}
+		}
+	}`
+	if err := os.WriteFile(settingsPath, []byte(ownedConfig), 0o600); err != nil {
+		t.Fatalf("write owned config: %v", err)
+	}
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("get claude provider: %v", err)
+	}
+
+	authMode, _, _, err := resolveApplyInputs(home, bCfg, prov)
+	if err != nil {
+		t.Fatalf("resolveApplyInputs: %v", err)
+	}
+	if authMode != authmode.BedrockAPIKey {
+		t.Errorf("authMode = %q, want %q (--auth must win on re-apply)", authMode, authmode.BedrockAPIKey)
 	}
 }
 
@@ -1269,9 +1339,13 @@ func TestInstallActivation_UpdatedProfiles(t *testing.T) {
 		t.Fatalf("write .bashrc: %v", err)
 	}
 
+	var actErr error
 	out := captureStdout(t, func() {
-		installActivation(home, prov)
+		actErr = installActivation(home, prov)
 	})
+	if actErr != nil {
+		t.Fatalf("installActivation: %v", actErr)
+	}
 	// The output should contain either "updated" or "up to date" — both are
 	// valid depending on whether the profile already had the block.
 	if !strings.Contains(out, "activation") {
@@ -1310,15 +1384,16 @@ func TestReportLegacyRecovery_ErrorPath(t *testing.T) {
 // commitApply — warnings output path
 // ---------------------------------------------------------------------------
 
-func TestCommitApply_WarningsOutput(t *testing.T) {
-	home := setupApplyTestWithReset(t)
-
+func claudeIAMCommitArgs(t *testing.T) (*bedrock.Config, provider.Provider, *schema.Block, provider.Options) {
+	t.Helper()
 	bCfg, err := loadBedrockConfig()
 	if err != nil {
 		t.Skipf("no bedrock config: %v", err)
 	}
-	prov, _ := provider.Get("claude")
-
+	prov, err := provider.Get("claude")
+	if err != nil {
+		t.Fatalf("provider.Get(claude): %v", err)
+	}
 	opts := schema.Options{
 		AuthMode:      "iam",
 		Region:        "us-west-2",
@@ -1331,27 +1406,26 @@ func TestCommitApply_WarningsOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schema.Build: %v", err)
 	}
-
-	provOpts := provider.Options{
-		SchemaOpts: schema.Options{
-			AuthMode:      "iam",
-			Region:        "us-west-2",
-			Scope:         "user",
-			Version:       "5.4.0",
-			Effort:        "high",
-			AuthValidated: true,
-		},
-		AuthMode: "iam",
-		Region:   "us-west-2",
-		Scope:    "user",
-		Version:  "5.4.0",
+	return bCfg, prov, block, provider.Options{
+		SchemaOpts: opts,
+		AuthMode:   "iam",
+		Region:     "us-west-2",
+		Scope:      "user",
+		Version:    "5.4.0",
 	}
+}
 
+func TestCommitApply_WarningsOutput(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+
+	bCfg, prov, block, provOpts := claudeIAMCommitArgs(t)
+
+	var commitErr error
 	out := captureStdout(t, func() {
-		err = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
+		commitErr = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
 	})
-	if err != nil {
-		t.Fatalf("commitApply: %v", err)
+	if commitErr != nil {
+		t.Fatalf("commitApply: %v", commitErr)
 	}
 	if !strings.Contains(out, "Configuration written successfully.") {
 		t.Fatalf("expected success message, got:\n%s", out)
@@ -1821,45 +1895,14 @@ func TestCommitApply_SuccessPath_ActivationInstalled(t *testing.T) {
 		t.Fatalf("write .bashrc: %v", err)
 	}
 
-	bCfg, err := loadBedrockConfig()
-	if err != nil {
-		t.Skipf("no bedrock config: %v", err)
-	}
-	prov, _ := provider.Get("claude")
+	bCfg, prov, block, provOpts := claudeIAMCommitArgs(t)
 
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
-	}
-	block, err := schema.Build(bCfg, opts)
-	if err != nil {
-		t.Fatalf("schema.Build: %v", err)
-	}
-
-	provOpts := provider.Options{
-		SchemaOpts: schema.Options{
-			AuthMode:      "iam",
-			Region:        "us-west-2",
-			Scope:         "user",
-			Version:       "5.4.0",
-			Effort:        "high",
-			AuthValidated: true,
-		},
-		AuthMode: "iam",
-		Region:   "us-west-2",
-		Scope:    "user",
-		Version:  "5.4.0",
-	}
-
+	var commitErr error
 	out := captureStdout(t, func() {
-		err = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
+		commitErr = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
 	})
-	if err != nil {
-		t.Fatalf("commitApply: %v", err)
+	if commitErr != nil {
+		t.Fatalf("commitApply: %v", commitErr)
 	}
 
 	// Verify success message.
@@ -1876,6 +1919,31 @@ func TestCommitApply_SuccessPath_ActivationInstalled(t *testing.T) {
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
 		t.Error("settings.json should have been written")
+	}
+}
+
+func TestCommitApply_ActivationInstallFailure(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+
+	// .bashrc as a directory makes InstallTargetFor fail (#443).
+	bashrcPath := filepath.Join(home, ".bashrc")
+	if err := os.MkdirAll(bashrcPath, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	bCfg, prov, block, provOpts := claudeIAMCommitArgs(t)
+	var commitErr error
+	out := captureStdout(t, func() {
+		commitErr = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
+	})
+	if commitErr == nil {
+		t.Fatal("commitApply should fail when activation install fails")
+	}
+	if !strings.Contains(commitErr.Error(), "could not install shell activation") {
+		t.Errorf("error = %v, want activation failure", commitErr)
+	}
+	if strings.Contains(out, "Configuration written successfully") {
+		t.Errorf("must not print success when activation install fails, got:\n%s", out)
 	}
 }
 
@@ -1900,45 +1968,14 @@ func TestCommitApply_ForceBypassesCollision(t *testing.T) {
 		t.Fatalf("write foreign config: %v", err)
 	}
 
-	bCfg, err := loadBedrockConfig()
-	if err != nil {
-		t.Skipf("no bedrock config: %v", err)
-	}
-	prov, _ := provider.Get("claude")
+	bCfg, prov, block, provOpts := claudeIAMCommitArgs(t)
 
-	opts := schema.Options{
-		AuthMode:      "iam",
-		Region:        "us-west-2",
-		Scope:         "user",
-		Version:       "5.4.0",
-		Effort:        "high",
-		AuthValidated: true,
-	}
-	block, err := schema.Build(bCfg, opts)
-	if err != nil {
-		t.Fatalf("schema.Build: %v", err)
-	}
-
-	provOpts := provider.Options{
-		SchemaOpts: schema.Options{
-			AuthMode:      "iam",
-			Region:        "us-west-2",
-			Scope:         "user",
-			Version:       "5.4.0",
-			Effort:        "high",
-			AuthValidated: true,
-		},
-		AuthMode: "iam",
-		Region:   "us-west-2",
-		Scope:    "user",
-		Version:  "5.4.0",
-	}
-
+	var commitErr error
 	out := captureStdout(t, func() {
-		err = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
+		commitErr = commitApply(home, "iam", "", block, prov, bCfg, provOpts)
 	})
-	if err != nil {
-		t.Fatalf("commitApply with --force should not error: %v", err)
+	if commitErr != nil {
+		t.Fatalf("commitApply with --force should not error: %v", commitErr)
 	}
 	if !strings.Contains(out, "Configuration written successfully.") {
 		t.Fatalf("expected success message with --force, got:\n%s", out)
@@ -2006,14 +2043,19 @@ func TestInstallActivation_ErrorPath(t *testing.T) {
 		t.Skip("claude provider not registered")
 	}
 
+	var actErr error
 	out := captureStdout(t, func() {
-		installActivation(home, prov)
+		actErr = installActivation(home, prov)
 	})
-
-	// On error, installActivation prints a warning to stderr and returns.
-	// Stdout should contain the warning message (or be empty if only stderr).
-	// The key thing is the function does not panic.
-	_ = out
+	if actErr == nil {
+		t.Fatal("expected installActivation error when .bashrc is a directory")
+	}
+	if !strings.Contains(actErr.Error(), "could not install shell activation") {
+		t.Errorf("error = %v, want wrapped activation failure", actErr)
+	}
+	if strings.Contains(out, "Configuration written successfully") {
+		t.Errorf("activation failure must not print success, got: %q", out)
+	}
 }
 
 // ---------------------------------------------------------------------------

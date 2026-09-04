@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -76,6 +77,29 @@ func TestApply_ReapplyPreservesExternallySetMode(t *testing.T) {
 	}
 	if got := readNativeEnvValue(t, home, "CLAUDE_CODE_ENABLE_AUTO_MODE"); got != "1" {
 		t.Errorf("re-apply did not restore CLAUDE_CODE_ENABLE_AUTO_MODE for adopted auto mode (got %q)", got)
+	}
+}
+
+// TestApply_ModeAuto_NoFalseSonnetWarning is the regression for #442: default
+// Sonnet 5 is auto-capable, so --mode=auto must not claim the Sonnet-tier
+// default cannot show auto.
+func TestApply_ModeAuto_NoFalseSonnetWarning(t *testing.T) {
+	_ = setupApplyTest(t)
+
+	var applyErr error
+	out := captureStdout(t, func() {
+		applyErr = ExecuteArgs([]string{
+			"apply", "--auth=iam", "--region=us-west-2", "--mode=auto", "--skip-preflight",
+		})
+	})
+	if applyErr != nil {
+		t.Fatalf("apply --mode=auto error: %v", applyErr)
+	}
+	if strings.Contains(out, "not the Sonnet-tier default") || strings.Contains(out, "not the current Sonnet-tier default") {
+		t.Errorf("stale Sonnet-tier warning on auto-capable default:\n%s", out)
+	}
+	if strings.Contains(out, "cannot be enabled") {
+		t.Errorf("false cannot-be-enabled warning:\n%s", out)
 	}
 }
 

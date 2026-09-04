@@ -173,3 +173,34 @@ func TestApply_ReapplyWithoutAuth_PreservesExistingMode(t *testing.T) {
 		t.Errorf("re-apply without --auth changed auth mode to %q, want %q (preserved)", got, authmode.IAM)
 	}
 }
+
+// TestApply_ReapplyWithAuth_HonorsFlag is the regression for #438: re-apply
+// with --auth must switch modes instead of keeping the empty named-return
+// authMode and silently preserving the previous install.
+func TestApply_ReapplyWithAuth_HonorsFlag(t *testing.T) {
+	home := setupApplyTest(t)
+	store := setupIsolatedKeychain(t)
+	t.Cleanup(func() { _ = store.DeleteWithFallback(home) })
+
+	if err := ExecuteArgs([]string{
+		"apply", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+	if got := readJuggernautAuthMode(t, home); got != authmode.IAM {
+		t.Fatalf("after first apply, auth mode = %q, want %q", got, authmode.IAM)
+	}
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=reapply-switch-key",
+		"--region=us-west-2",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("re-apply --auth error: %v", err)
+	}
+	if got := readJuggernautAuthMode(t, home); got != authmode.BedrockAPIKey {
+		t.Errorf("re-apply --auth did not switch mode: got %q, want %q", got, authmode.BedrockAPIKey)
+	}
+}
