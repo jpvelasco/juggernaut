@@ -279,10 +279,10 @@ func TestShowPayload_NotOwned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider.Get: %v", err)
 	}
-	if payload := showPayload(prov, map[string]any{"model": "user-owned"}); payload != nil {
+	if payload := showPayload(prov, map[string]any{"model": "user-owned"}, true); payload != nil {
 		t.Errorf("foreign config should be not-configured, got %#v", payload)
 	}
-	if payload := showPayload(prov, nil); payload != nil {
+	if payload := showPayload(prov, nil, true); payload != nil {
 		t.Errorf("nil config should be not-configured, got %#v", payload)
 	}
 }

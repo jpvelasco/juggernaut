@@ -65,6 +65,7 @@ The interactive setup guides you through the first run. After applying, restart 
 | **Safe activation** | Never overwrite an unknown CLI binary; fall through to the real CLI if Juggernaut is unavailable |
 | **Cross-platform launcher** | Use the same workflow on macOS, Linux, Windows, and WSL |
 | **`doctor` diagnostics** | Check credentials, configuration, activation, PATH, binaries, and legacy artifacts |
+| **Redacted log export** | `juggernaut logs export` writes a support zip; `--raw` is opt-in for local/self use |
 
 ## Discover models your account can actually access
 

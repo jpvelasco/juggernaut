@@ -56,6 +56,8 @@ Activation blocks for different CLIs coexist in one shell profile. Juggernaut in
 
 ```bash
 juggernaut doctor
+juggernaut logs export                 # redacted zip for support
+# juggernaut logs export --raw         # local/self only; includes secrets
 ```
 
 ## What Gets Configured

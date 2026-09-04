@@ -32,7 +32,7 @@ Hooks: `scripts/setup-hooks.ps1` (Windows) or `bash scripts/setup-hooks.sh` (Lin
 ## Architecture
 
 - `main.go` embeds Bedrock config → `cmd.Execute()` (Cobra).
-- `cmd/` — commands, hidden `launch`/`launch-cli`/`auth-token`, shared helpers (`helpers.go`). `models.go` (`models check` release gate) and `model_catalog.go` (`models refresh`/`list`, cache `~/.juggernaut/model-catalog.json` per account+region).
+- `cmd/` — commands, hidden `launch`/`launch-cli`/`auth-token`, shared helpers (`helpers.go`). `models.go` (`models check` release gate) and `model_catalog.go` (`models refresh`/`list`, cache `~/.juggernaut/model-catalog.json` per account+region). `logs.go` (`logs export` writes a redacted diagnostic zip; `--raw` is opt-in).
 - `internal/provider/` — `Provider` interface + 4 implementations (`claude`, `codex`, `opencode`, `grok`). `base.go:BaseProvider` supplies `Name`, `BinaryNames`, `ConfigFormatName`, `ActivationMarkers`, `Supports`; providers override `ConfigPath`, `OwnsConfig`, `NativeManagedKeys`, `DeepMergeKeys`, `OwnedSubKeys`, `BuildConfig`, `LaunchSpec`. New CLI = one file + `register()` in `provider.go`; new knobs = `Capability`, not `if cli=="..."` in `cmd/`.
 - `internal/config/` — atomic JSON/TOML merge, removal, locking, backups. Respects `DeepMergeKeys`/`OwnedSubKeys` for nested tables.
 - `internal/activation/` — marked shell blocks (one per CLI, coexist in same profile) + owner-only runtime fallback `~/.juggernaut/runtime/` + launch wrapper that resolves real CLI binary and avoids recursion.
@@ -41,6 +41,7 @@ Hooks: `scripts/setup-hooks.ps1` (Windows) or `bash scripts/setup-hooks.sh` (Lin
 - `internal/keychain/` — shared bearer token; `*WithFallback` methods are the real path (handles 2560-byte Windows Credential Manager limit via versioned owner-only file). Bare `Set`/`Get`/`Delete` are keychain-only.
 - `internal/discovery/` — only package importing `aws-sdk-go-v2`.
 - `internal/safepath/` — containment + owner-only FS ops. Use for anything under user-controlled bases.
+- `internal/redact/` — diagnostic-bundle privacy: tokens, account IDs, home paths, emails, hostnames, LAN IPs → stable placeholders.
 - `npm/` — launcher + platform packages.
 
 Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json` (project) — the only CLI with both scopes; Codex `~/.codex/config.toml` / `./.codex/config.toml` via `amazon-bedrock` provider; OpenCode `~/.config/opencode/opencode.json` / `./opencode.json` via `provider.amazon-bedrock` (region + discovered `models` + `whitelist`); Grok `~/.grok/config.toml` user-only (`base_url=https://bedrock-runtime.{region}.amazonaws.com/openai/v1`; `auth_provider_command="juggernaut auth-token"` only for `--auth=bedrock-api-key`). Launch reads `juggernaut.auth.mode` from project then user for non-Claude CLIs (token-gated only for API-key mode).
