@@ -37,11 +37,19 @@ func runShow(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	scopes := resolvedScopes(showFlags.scope)
+	// show always redacts secret-bearing fields; the bundle path passes false.
+	out, err := formatShow(collectShowResults(prov, home, showFlags.scope, true), showFlags.scope, showFlags.jsonOut)
+	if err != nil {
+		return err
+	}
+	fmt.Print(out)
+	return nil
+}
 
+func collectShowResults(prov provider.Provider, home, scopeFilter string, redact bool) map[string]any {
 	results := map[string]any{}
 	seenPath := map[string]bool{}
-	for _, scope := range scopes {
+	for _, scope := range resolvedScopes(scopeFilter) {
 		path, perr := prov.ConfigPath(home, scope)
 		if perr != nil {
 			warnf("could not determine %s scope path: %v", scope, perr)
@@ -56,46 +64,56 @@ func runShow(_ *cobra.Command, _ []string) error {
 			warnf("could not read %s settings: %v", scope, err)
 			continue
 		}
-		results[scope] = showPayload(prov, data)
+		results[scope] = showPayload(prov, data, redact)
 	}
+	return results
+}
 
-	if showFlags.jsonOut {
+func formatShow(results map[string]any, scopeFilter string, jsonOut bool) (string, error) {
+	if jsonOut {
 		out, err := json.MarshalIndent(results, "", "  ")
 		if err != nil {
-			return fmt.Errorf("serializing configuration: %w", err)
+			return "", fmt.Errorf("serializing configuration: %w", err)
 		}
-		fmt.Println(string(out))
-		return nil
+		return string(out) + "\n", nil
 	}
 
 	// Iterate the canonical scopes order, not the map — Go randomizes map
 	// iteration and scripts diff this output.
-	for _, scope := range scopes {
+	var b strings.Builder
+	for _, scope := range resolvedScopes(scopeFilter) {
 		block, found := results[scope]
 		if !found {
 			continue
 		}
-		fmt.Printf("=== %s scope ===\n", scope)
+		fmt.Fprintf(&b, "=== %s scope ===\n", scope)
 		if block == nil {
-			fmt.Println("  (not configured)")
+			b.WriteString("  (not configured)\n")
 			continue
 		}
 		out, err := json.MarshalIndent(block, "", "  ")
 		if err != nil {
-			return fmt.Errorf("serializing %s configuration: %w", scope, err)
+			return "", fmt.Errorf("serializing %s configuration: %w", scope, err)
 		}
-		fmt.Println(string(out))
+		b.WriteString(string(out))
+		b.WriteByte('\n')
 	}
-	return nil
+	return b.String(), nil
 }
 
 // showPayload returns the Juggernaut-managed slice of a provider config, or
-// nil when Juggernaut does not own the file. Secret-bearing fields are redacted.
-func showPayload(prov provider.Provider, data map[string]any) any {
+// nil when Juggernaut does not own the file. When redact is true, secret-bearing
+// fields are masked; the logs export path passes false so its --raw bundles and
+// its redact.String pass are the sole secret control.
+func showPayload(prov provider.Provider, data map[string]any, redact bool) any {
 	if data == nil || !prov.OwnsConfig(data) {
 		return nil
 	}
-	return redactSecrets(managedShowConfig(prov, data))
+	cfg := managedShowConfig(prov, data)
+	if !redact {
+		return cfg
+	}
+	return redactSecrets(cfg)
 }
 
 // managedShowConfig copies the juggernaut block (when present) plus the

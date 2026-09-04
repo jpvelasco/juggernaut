@@ -142,6 +142,7 @@ claude          # after apply --cli=claude (default)
 | `apply` | Write Juggernaut config for the target `--cli` and install shell activation. |
 | `show` | Print the current Juggernaut-managed config from user and project scopes. Supports `--cli=claude\|codex\|opencode\|grok` (default claude) and `--json`. |
 | `doctor` | Read-only diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts. Supports `--cli=claude\|codex\|opencode\|grok`. |
+| `logs export` | Write a local diagnostic zip for support. Redacted by default; `--raw` / `--include-secrets` includes secrets for private/self use only. |
 | `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
 | `models refresh` | Discover the models available to the current AWS account and region from native Bedrock (`foundation` + `profile` sources), then cache locally. |
 | `models list` | List the cached inventory, optionally filtered to models compatible with a specific CLI (`--cli=codex\|opencode\|grok`). |
@@ -373,6 +374,8 @@ Close and reopen PowerShell after `doctor` is green. This avoids the old `C:\Use
 **Claude stopped using Bedrock after an update** — Run `juggernaut doctor`. If it reports that the managed config is missing and the runtime fallback is available, Claude can continue launching through Bedrock, but re-run `juggernaut apply --cli=claude` to restore the full `settings.json`.
 
 **`juggernaut doctor`** — always the first diagnostic step.
+
+**Shareable diagnostics** — `juggernaut logs export` writes a redacted zip (tokens, account IDs, and home paths stripped). Use `--raw` only on your own machine.
 
 ## Notes
 

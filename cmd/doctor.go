@@ -42,9 +42,29 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	prov, err := provider.Get(doctorFlags.cli)
+	r, err := collectDoctorReport(home, doctorFlags.cli, doctorFlags.scope)
 	if err != nil {
 		return err
+	}
+	if doctorFlags.jsonOut {
+		out, err := r.JSON()
+		if err != nil {
+			return fmt.Errorf("formatting doctor report as JSON: %w", err)
+		}
+		fmt.Println(string(out))
+	} else {
+		fmt.Print(r.String())
+	}
+	if r.HasFailures() {
+		return fmt.Errorf("doctor found failures — see above")
+	}
+	return nil
+}
+
+func collectDoctorReport(home, cli, scopeFilter string) (*doctor.Report, error) {
+	prov, err := provider.Get(cli)
+	if err != nil {
+		return nil, err
 	}
 	cliName := prov.Name()
 	isClaude := cliName == "claude"
@@ -57,16 +77,16 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 		r.Check("bedrock-config.json", doctor.OK, "loaded (v"+bCfg.Version+")")
 	}
 
-	scopes := resolvedScopes(doctorFlags.scope)
+	scopes := resolvedScopes(scopeFilter)
 	// Grok is always user-scoped (ConfigPath ignores scope).
 	if cliName == "grok" {
-		if doctorFlags.scope == "project" {
-			return fmt.Errorf("grok has no project-scope config — omit --scope or use --scope=user")
+		if scopeFilter == "project" {
+			return nil, fmt.Errorf("grok has no project-scope config — omit --scope or use --scope=user")
 		}
 		scopes = []string{"user"}
 	}
 	for _, scope := range scopes {
-		required := scope != "project" || doctorFlags.scope == "project"
+		required := scope != "project" || scopeFilter == "project"
 		label := providerConfigLabel(prov, scope)
 		if status, detail := checkProviderConfigScope(prov, home, scope, required); status != "" {
 			r.Check(label, status, detail)
@@ -80,7 +100,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 			checkFableDataRetention(r, scope, scopeData)
 		}
 	}
-	if doctorFlags.scope != "project" {
+	if scopeFilter != "project" {
 		checkRuntimeFallback(r, prov, home)
 	}
 
@@ -155,20 +175,7 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 	if isClaude {
 		legacyArtifactStatus(home, r)
 	}
-	if doctorFlags.jsonOut {
-		out, err := r.JSON()
-		if err != nil {
-			return fmt.Errorf("formatting doctor report as JSON: %w", err)
-		}
-		fmt.Println(string(out))
-	} else {
-		fmt.Print(r.String())
-	}
-
-	if r.HasFailures() {
-		return fmt.Errorf("doctor found failures — see above")
-	}
-	return nil
+	return r, nil
 }
 
 func claudeCommandStatus() (doctor.Status, string) {

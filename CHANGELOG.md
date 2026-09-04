@@ -4,6 +4,16 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`juggernaut logs export` diagnostic bundle.** Writes a local zip of
+  version, OS/arch, configured CLI names, relevant env var names, and the
+  same `doctor` / `show` data those commands already print. Privacy is on by
+  default (tokens, account IDs, home-path usernames, emails, hostnames, and
+  LAN IPs become stable placeholders). Pass `--raw` / `--include-secrets`
+  only for private/self debugging; that path prints a one-line warning and
+  does not also write a redacted sibling file.
+
 ### Fixed
 
 - **`show --cli` now displays Codex, OpenCode, and Grok configs.** `juggernaut show`

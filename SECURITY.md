@@ -64,7 +64,7 @@ Juggernaut is a local CLI that writes coding-agent configuration and optional sh
 - **Prefer IAM/SSO** (`--auth=iam`) so no long-lived Bedrock API key is stored (supported for every CLI on native `bedrock-runtime`).
 - **Bedrock API key** (`--auth=bedrock-api-key`) is stored in the OS keychain only and injected as `AWS_BEARER_TOKEN_BEDROCK` at launch (or via per-CLI `auth_provider_command`).
 - Uninstalling one non-Claude CLI does **not** remove the shared bearer token; only the last dependent CLI's uninstall clears it (and never on `--scope=project` when user-scope configs remain).
-- Do not commit `.backup.*` files, `.env`, or real keys. Redact `doctor` output before sharing.
+- Do not commit `.backup.*` files, `.env`, or real keys. Redact `doctor` output before sharing, or use `juggernaut logs export` (redacted by default; `--raw` is local/self only).
 
 ## Recommendations for operators
 
