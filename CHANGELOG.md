@@ -4,6 +4,8 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [6.3.1] - 2026-09-05
+
 ### Fixed
 
 - **`doctor` now explains a symlinked config and the runtime-fallback gap
@@ -1491,7 +1493,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.3.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.3.1...HEAD
+[6.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.1
 [6.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.0
 [6.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.2.0
 [6.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.1.0
