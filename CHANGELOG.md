@@ -2,6 +2,52 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.3.0] - 2026-09-05
+
+**Feature release.** Codex now routes through Codex's built-in
+`amazon-bedrock-runtime` provider instead of a Juggernaut-managed custom
+provider table.
+
+### Added
+
+- **Codex routes via the built-in `amazon-bedrock-runtime` provider.**
+  `apply --cli=codex` now writes `model_provider = "amazon-bedrock-runtime"`
+  with a `model_providers.amazon-bedrock-runtime.aws` region table and no
+  custom `base_url` — SigV4 auth rides Codex's native AWS credential chain,
+  and the default model is the CRIS inference-profile ID
+  `global.openai.gpt-5.6-sol` (verified in us-east-1, us-east-2, and
+  us-west-2).
+- **Codex version gate.** Codex CLI 0.153.4 introduced the built-in
+  `amazon-bedrock-runtime` provider. `apply` and `doctor` now warn loudly
+  when the detected Codex CLI is older than 0.153.4 instead of writing a
+  config that would 404 at runtime.
+
+### Changed
+
+- **Legacy `amazon-bedrock` Codex configs auto-migrate on plain `apply`.**
+  Any top-level `model_provider = "amazon-bedrock"` (Mantle-era v5) is now
+  treated as legacy: a plain `apply` backs up the config, rewrites it to
+  `amazon-bedrock-runtime`, and strips the stale
+  `model_providers.amazon-bedrock` table. This is Codex-only — OpenCode's
+  `provider.amazon-bedrock` table is a different, still-current table and is
+  never touched.
+
+### Fixed
+
+- **Grok model IDs normalize to the global CRIS profile.** Bare
+  `xai.grok-*` and `grok-*` inputs (including the default) now resolve to
+  `global.xai.*` profile IDs — `global.xai.grok-4.6` is the pinned default —
+  while an explicit `us.` regional pin is left verbatim. `SupportsModel` and
+  the Grok 4.6-only gates (`context_window`, serving regions) now strip the
+  CRIS regional prefix, so `global.` / `us.` profile IDs surface in
+  `models list --cli=grok` (fixes #457).
+
+### Documentation
+
+- README, QUICKSTART, and AGENTS.md now document the minimum Codex CLI
+  (0.153.4) for `amazon-bedrock-runtime` routing and the legacy-config
+  auto-migration.
+
 ## [6.2.0] - 2026-09-04
 
 ### Added
@@ -1366,7 +1412,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.2.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.3.0...HEAD
+[6.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.0
 [6.2.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.2.0
 [6.1.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.1.0
 [6.0.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.0.0
