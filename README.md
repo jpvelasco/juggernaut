@@ -107,7 +107,7 @@ Activation blocks for different CLIs coexist in one shell profile. The Bedrock b
 Juggernaut treats existing configuration and real CLI binaries as untouchable. Four mechanisms make routing predictable:
 
 - **The Juggernaut law: refuse, don't clobber** — if a target config already has foreign values on keys Juggernaut would write, `apply` refuses unless you pass `--force` (a backup is still created). The check is per-leaf: your own sibling entries in the same config never trigger it, only the exact keys Juggernaut owns.
-- **Runtime fallback** — a user-scope apply writes non-secret launch state to `~/.juggernaut/runtime/` (never the bearer token). If Claude Code later replaces `settings.json`, the fallback keeps Bedrock routing active instead of silently falling back to vendor APIs; `doctor` reports when to re-run `apply` to restore the full config.
+- **Runtime fallback** — a user-scope apply writes non-secret launch state to `~/.juggernaut/runtime/` (never the bearer token). If Claude Code later replaces `settings.json`, the fallback keeps Bedrock routing active instead of silently falling back to vendor APIs; `doctor` reports when to re-run `apply` to restore the full config. Note the fallback is a **wrapper-only** safety net: only `juggernaut launch` / the shell activation block reads it. A directly-launched `claude` is routed through Bedrock only while the managed `env` block is present in `settings.json`, and `doctor` warns about that gap when the block is missing but the fallback exists.
 - **Keychain-only secrets** — Bedrock API keys never go into shell profiles or plaintext config.
 - **No binary overwrite** — Juggernaut never installs over an unknown file matching a managed CLI name.
 

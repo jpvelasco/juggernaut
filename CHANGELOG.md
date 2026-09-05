@@ -6,6 +6,14 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
+- **`doctor` now explains a symlinked config and the runtime-fallback gap
+  (fixes #454).** When a provider's config path is a symlink (dotfiles
+  repos, synced homes), `doctor` warns that writes pass through the link and
+  the durable target may not carry — or may strip — the managed block. And
+  when the managed block is absent but a runtime fallback exists, the
+  fallback check now says directly-launched CLIs have no Bedrock env and to
+  use `juggernaut launch` or re-apply. README/QUICKSTART note that the
+  fallback is a wrapper-only safety net.
 - **Default Fable pin advances to Fable 5.1 (fixes #459).** `bedrock-config.json`
   now pins `global.anthropic.claude-fable-5-1` (AWS reports it Active since
   2026-09-01) instead of `global.anthropic.claude-fable-5`. The Fable

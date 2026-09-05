@@ -71,7 +71,7 @@ juggernaut logs export                 # redacted zip for support
 - Optimized token limits (32768 output, 65536 thinking)
 - Native `bedrock-runtime` routing for every CLI (no proxy/Mantle); Codex uses the built-in `amazon-bedrock-runtime` provider (Codex CLI ≥ 0.153.4 — apply/doctor warn on older binaries), OpenCode uses `provider.amazon-bedrock` (region + live models + `whitelist`, omitted when none are discovered — OpenCode's strict schema rejects `null`), Grok uses `https://bedrock-runtime.{region}.amazonaws.com/openai/v1`
 - Configuration in `~/.claude/settings.json` (Claude), `~/.codex/config.toml` (Codex), `~/.config/opencode/opencode.json` (OpenCode), `~/.grok/config.toml` (Grok)
-- A non-secret runtime fallback in `~/.juggernaut/runtime/claude.json` so Claude updates cannot silently disable Bedrock routing
+- A non-secret runtime fallback in `~/.juggernaut/runtime/claude.json` so Claude updates cannot silently disable Bedrock routing (wrapper-only: `juggernaut launch` reads it; a directly-launched `claude` relies on the `env` block in `settings.json`)
 - A marked shell activation block that delegates `claude` to `juggernaut launch`
 
 ## Common Options
@@ -105,6 +105,6 @@ juggernaut show --cli=codex --json
 
 **Keychain unavailable on headless Linux** — IAM auth works without a keychain. Bedrock API key auth requires a Secret Service daemon on Linux.
 
-**Claude stopped using Bedrock after an update** — Run `juggernaut doctor`; if it reports missing managed config, re-run `juggernaut apply --cli=claude`. The runtime fallback keeps launches routed while you repair.
+**Claude stopped using Bedrock after an update** — Run `juggernaut doctor`; if it reports missing managed config, re-run `juggernaut apply --cli=claude`. The runtime fallback keeps `juggernaut launch` routed while you repair — a directly-launched `claude` only sees Bedrock env while the managed `env` block is in `settings.json`. If doctor flags a symlinked config path, prefer a real file: writes pass through the link and the durable target may strip the managed block.
 
 See [README.md](README.md) for full documentation.
