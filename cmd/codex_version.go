@@ -37,9 +37,11 @@ var codexVersionProbe = func(path string) (string, bool) {
 
 // parseCodexVersion extracts the semantic version from `codex --version`
 // output of the form "codex-cli 0.153.4\n" (the version is the last field).
+// A bare version ("0.160.0") is accepted too; callers reject anything that
+// doesn't parse into a numeric triple.
 func parseCodexVersion(out string) (string, bool) {
 	fields := strings.Fields(strings.TrimSpace(out))
-	if len(fields) < 2 {
+	if len(fields) == 0 {
 		return "", false
 	}
 	return fields[len(fields)-1], true
@@ -105,9 +107,12 @@ func versionTriple(v string) []int {
 
 // warnCodexVersion prints an apply-time warning when the resolved codex binary
 // is older than the minimum that ships the built-in amazon-bedrock-runtime
-// provider. No-op when the binary is absent or its version can't be
-// determined.
-func warnCodexVersion() {
+// provider. Self-gates on the codex provider and is a no-op when the binary is
+// absent or its version can't be determined.
+func warnCodexVersion(prov provider.Provider) {
+	if prov.Name() != "codex" {
+		return
+	}
 	v, ok := codexBinaryVersion()
 	if !ok || codexVersionAtLeast(v, codexMinVersion) {
 		return

@@ -50,9 +50,9 @@ func TestParseCodexVersion(t *testing.T) {
 	}{
 		{out: "codex-cli 0.153.4\n", want: "0.153.4", ok: true},
 		{out: "codex-cli 0.148.0-alpha.9", want: "0.148.0-alpha.9", ok: true},
-		{out: "0.153.4\n", ok: false}, // no preceding product name
-		{out: "\n", ok: false},        // nothing
-		{out: "codex-cli\n", ok: false},
+		{out: "0.153.4\n", want: "0.153.4", ok: true},     // bare version accepted
+		{out: "codex-cli\n", want: "codex-cli", ok: true}, // single field: triple check rejects downstream
+		{out: "\n", ok: false},                            // nothing
 	}
 	for _, c := range cases {
 		got, ok := parseCodexVersion(c.out)
@@ -88,12 +88,13 @@ func TestCodexVersionAtLeast(t *testing.T) {
 // warning (stderr) telling the user to update.
 func TestCodexVersionGate_WarnsOnOldBinary(t *testing.T) {
 	_ = setupApplyTest(t)
+	prov := provider.MustGet("codex")
 	// Stub PATH + probe (not just the probe): CI runners have no codex binary
 	// on PATH, so resolving the real binary would make the gate depend on the
 	// host.
 	stubCodexProbe(t, "0.148.0-alpha.9")
 
-	stderr := captureStderr(t, func() { warnCodexVersion() })
+	stderr := captureStderr(t, func() { warnCodexVersion(prov) })
 	for _, want := range []string{"0.148.0-alpha.9", codexMinVersion, provider.CodexBedrockRuntimeProviderID} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("warning should name %q, got:\n%s", want, stderr)
@@ -105,27 +106,39 @@ func TestCodexVersionGate_WarnsOnOldBinary(t *testing.T) {
 // absent/unparseable binary must NOT warn (absence is the binary-status
 // check's job, not the version gate's).
 func TestCodexVersionGate_NoWarnOnModernOrMissingBinary(t *testing.T) {
+	prov := provider.MustGet("codex")
 	t.Run("modern", func(t *testing.T) {
 		_ = setupApplyTest(t)
 		stubCodexProbe(t, "0.153.4")
-		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
+		if got := captureStderr(t, func() { warnCodexVersion(prov) }); got != "" {
 			t.Errorf("no warning expected, got:\n%s", got)
 		}
 	})
 	t.Run("absent", func(t *testing.T) {
 		_ = setupApplyTest(t)
 		stubCodexAbsent(t)
-		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
+		if got := captureStderr(t, func() { warnCodexVersion(prov) }); got != "" {
 			t.Errorf("no warning expected, got:\n%s", got)
 		}
 	})
 	t.Run("unparseable", func(t *testing.T) {
 		_ = setupApplyTest(t)
 		stubCodexProbe(t, "unknown")
-		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
+		if got := captureStderr(t, func() { warnCodexVersion(prov) }); got != "" {
 			t.Errorf("no warning expected, got:\n%s", got)
 		}
 	})
+}
+
+// TestCodexVersionGate_NonCodex: the gate is codex-scoped — other CLIs
+// produce no warning even with an old codex on PATH.
+func TestCodexVersionGate_NonCodex(t *testing.T) {
+	_ = setupApplyTest(t)
+	prov := provider.MustGet("grok")
+	stubCodexProbe(t, "0.148.0-alpha.9")
+	if got := captureStderr(t, func() { warnCodexVersion(prov) }); got != "" {
+		t.Errorf("no warning expected, got:\n%s", got)
+	}
 }
 
 func TestDoctorCodexVersion(t *testing.T) {

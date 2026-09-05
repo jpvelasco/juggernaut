@@ -24,7 +24,7 @@ import (
 // Routing note: Juggernaut v6 dropped Mantle. v5 wrote the CUSTOM
 // "amazon-bedrock" provider (model_providers.amazon-bedrock) whose base_url
 // pointed at bedrock-mantle; those configs are migrated on apply (see
-// StripLegacyProviderTables). v6+ writes the built-in amazon-bedrock-runtime.
+// StripLegacyConfig / CleanLegacy). v6+ writes the built-in amazon-bedrock-runtime.
 type codex struct {
 	BaseProvider
 }
