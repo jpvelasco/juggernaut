@@ -14,6 +14,24 @@ All notable changes to Juggernaut will be documented in this file.
   fallback check now says directly-launched CLIs have no Bedrock env and to
   use `juggernaut launch` or re-apply. README/QUICKSTART note that the
   fallback is a wrapper-only safety net.
+- **Default Fable pin advances to Fable 5.1 (fixes #459).** `bedrock-config.json`
+  now pins `global.anthropic.claude-fable-5-1` (AWS reports it Active since
+  2026-09-01) instead of `global.anthropic.claude-fable-5`. The Fable
+  convenience alias and its `modelOverrides` entries gain `-5-1` variants so
+  either ID resolves to the configured Fable model, and the data-retention
+  warning names Fable 5.1. `IsFable5Model` still matches the `-5-1` suffix, so
+  the 1M-context detection and warning behavior are unchanged.
+- **CLI help lists every supported CLI (fixes #451).** The `--cli` flag help for
+  `apply`, `uninstall`, and `doctor` now derives the list from
+  `provider.SupportedNames()` instead of hardcoding it, so they no longer claim
+  only `claude` (or `claude, codex`) and can't drift when a CLI is added.
+- **npm launcher stops implying Windows on ARM is supported (fixes #453).**
+  `package.json` advertises `cpu: ["x64", "arm64"]` but no `win32-arm64`
+  platform package is built (`.goreleaser.yml` ignores `windows/arm64`), so a
+  Windows-on-ARM install exited with a generic "file an issue" error. The
+  launcher now emits a targeted "Windows on ARM is not supported; use an x64
+  install" message for that platform (treated as a documented gap, not a bug)
+  and the npm README documents the gap.
 - **OpenCode's `grok-4.6` alias now routes to a servable model (fixes #458).**
   The convenience aliases `grok-4.6` and `grok-4.3` resolved to the bare
   `xai.grok-4.6` foundation ID, which the `bedrock-runtime` endpoint rejects —
