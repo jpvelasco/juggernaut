@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -351,6 +352,88 @@ func TestMigrateSidecarLegacy(t *testing.T) {
 			t.Error("codex in-file block must be untouched")
 		}
 	})
+}
+
+// errPathSidecar is a SidecarAuthSource whose SidecarPath always fails. It
+// pins that every helper propagates the path error instead of panicking or
+// silently proceeding (SidecarExists/ReadSidecarAuthMode degrade to "absent").
+// Embedding the Provider interface (unused here) lets it satisfy the Provider
+// parameter types without a full implementation.
+type errPathSidecar struct{ Provider }
+
+func (errPathSidecar) SidecarPath(string, string) (string, error) {
+	return "", fmt.Errorf("cannot resolve sidecar path")
+}
+
+func (errPathSidecar) SidecarPaths(string) []string { return nil }
+
+func TestSidecar_ErrPathSidecar(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	p := errPathSidecar{}
+	if !HasSidecar(p) {
+		t.Fatal("fixture must implement SidecarAuthSource")
+	}
+	if err := WriteSidecar(p, home, baseOpts()); err == nil {
+		t.Error("WriteSidecar must propagate the SidecarPath error")
+	}
+	if SidecarExists(p, home, "user") {
+		t.Error("SidecarExists must be false when the path cannot be resolved")
+	}
+	if mode, ok := ReadSidecarAuthMode(p, home); ok || mode != "" {
+		t.Errorf("ReadSidecarAuthMode = %q, %v; want empty/false on path error", mode, ok)
+	}
+	if err := RemoveSidecar(p, home, []string{"user"}); err == nil {
+		t.Error("RemoveSidecar must propagate the SidecarPath error")
+	}
+}
+
+// TestBlockAuthMode_Malformed pins defensive parsing: a block missing auth,
+// with a non-string mode, or with a nil auth map all yield "" (no panic).
+func TestBlockAuthMode_Malformed(t *testing.T) {
+	if got := BlockAuthMode(nil); got != "" {
+		t.Errorf("BlockAuthMode(nil) = %q, want \"\"", got)
+	}
+	if got := BlockAuthMode(map[string]any{"auth": "not-a-map"}); got != "" {
+		t.Errorf("BlockAuthMode(non-map auth) = %q, want \"\"", got)
+	}
+	if got := BlockAuthMode(map[string]any{"auth": map[string]any{"mode": 42}}); got != "" {
+		t.Errorf("BlockAuthMode(non-string mode) = %q, want \"\"", got)
+	}
+	if got := BlockAuthMode(map[string]any{}); got != "" {
+		t.Errorf("BlockAuthMode(no auth key) = %q, want \"\"", got)
+	}
+}
+
+// TestSidecar_ExistsTracksFile covers the SidecarExists happy path: false
+// before the sidecar exists, true after a write, false again after removal.
+func TestSidecar_ExistsTracksFile(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	p := mustGetProvider(t, "opencode")
+
+	if SidecarExists(p, home, "user") {
+		t.Fatal("SidecarExists = true before any write")
+	}
+	if err := WriteSidecar(p, home, baseOpts()); err != nil {
+		t.Fatalf("WriteSidecar: %v", err)
+	}
+	if !SidecarExists(p, home, "user") {
+		t.Error("SidecarExists = false after WriteSidecar, want true")
+	}
+	if err := RemoveSidecar(p, home, []string{"user"}); err != nil {
+		t.Fatalf("RemoveSidecar: %v", err)
+	}
+	if SidecarExists(p, home, "user") {
+		t.Error("SidecarExists = true after RemoveSidecar, want false")
+	}
+}
+
+// TestMigrateSidecarLegacy_NilConfig pins the nil guard: a provider with no
+// existing config reports nothing to migrate (not an error, not a panic).
+func TestMigrateSidecarLegacy_NilConfig(t *testing.T) {
+	p := mustGetProvider(t, "opencode")
+	if notice := MigrateSidecarLegacy(p, nil); notice != "" {
+		t.Errorf("MigrateSidecarLegacy(nil) = %q, want \"\"", notice)
+	}
 }
 
 // TestOpenCode_SidecarBlockJSONShape asserts the on-disk sidecar shape end to

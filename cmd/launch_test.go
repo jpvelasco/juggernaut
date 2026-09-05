@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -459,6 +460,52 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 	}
 	if _, ok := provAfter["anthropic"]; !ok {
 		t.Error("user's own provider entry lost on uninstall — data loss!")
+	}
+}
+
+// failSidecarProvider is a sidecar provider whose SidecarPath always fails. It
+// pins the secondary-write degrade paths in cmd: a sidecar write failure only
+// warns (the config write must not fail), and sidecar removal failure is
+// likewise non-fatal. The Provider interface is embedded and never called —
+// only the sidecar methods and DisplayName reach the code under test.
+type failSidecarProvider struct {
+	provider.Provider
+}
+
+func (f failSidecarProvider) SidecarPath(string, string) (string, error) {
+	return "", fmt.Errorf("cannot resolve sidecar path")
+}
+
+func (f failSidecarProvider) SidecarPaths(string) []string { return nil }
+
+func (f failSidecarProvider) Name() string        { return "opencode" }
+func (f failSidecarProvider) DisplayName() string { return "Opencode" }
+
+// TestPersistSidecarState_WarnsOnWriteFailure: when the sidecar cannot be
+// written (path resolution fails), persistSidecarState warns but returns —
+// the config write it accompanies is not rolled back.
+func TestPersistSidecarState_WarnsOnWriteFailure(t *testing.T) {
+	home := setupApplyTest(t)
+	err := captureStderr(t, func() {
+		persistSidecarState(home, failSidecarProvider{}, provider.Options{
+			AuthMode: authmode.BedrockAPIKey,
+			Region:   "us-west-2",
+			Scope:    "user",
+		})
+	})
+	if !strings.Contains(err, "auth metadata sidecar") {
+		t.Errorf("expected a sidecar warning, got %q", err)
+	}
+}
+
+// TestSidecarPath_NonSidecarProvider: sidecarPath errors for providers that do
+// not implement SidecarAuthSource (the cmd helpers gate on HasSidecar, but the
+// direct path must still be safe).
+func TestSidecarPath_NonSidecarProvider(t *testing.T) {
+	home := setupApplyTest(t)
+	codex, _ := provider.Get("codex")
+	if _, err := sidecarPath(codex, home, "user"); err == nil {
+		t.Fatal("sidecarPath(codex) must error — codex has no sidecar")
 	}
 }
 
