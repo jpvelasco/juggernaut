@@ -24,6 +24,18 @@ All notable changes to Juggernaut will be documented in this file.
   launcher now emits a targeted "Windows on ARM is not supported; use an x64
   install" message for that platform (treated as a documented gap, not a bug)
   and the npm README documents the gap.
+- **Scoped uninstalls no longer delete the shared Bedrock bearer token
+  (fixes #455).** `uninstall --scope=user` behaved like `--scope=project`:
+  a partial removal that must keep the credential the surviving scopes (and
+  other CLIs) still reference. Any non-empty `--scope` now leaves the token
+  in place.
+- **The last remaining CLI's uninstall clears the shared token (fixes
+  #456).** The retention survey previously only ran when uninstalling
+  Claude, so uninstalling the final configured CLI (Codex, OpenCode, or
+  Grok) left the bearer token behind with nothing using it. A full
+  (unscoped) uninstall now surveys every provider and removes the token
+  only when no Juggernaut-owned config remains anywhere; otherwise it
+  prints the existing "token retained" warning naming the surviving CLI.
 
 - **OpenCode config validates against OpenCode's strict schema again (fixes #463).**
   `apply --cli=opencode` was writing an `opencode.json` that OpenCode rejects at
