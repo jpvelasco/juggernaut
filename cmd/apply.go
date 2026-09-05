@@ -47,7 +47,7 @@ var applyFlags struct {
 
 func init() {
 	f := applyCmd.Flags()
-	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: claude")
+	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: "+provider.SupportedNames())
 	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")

@@ -223,7 +223,7 @@ func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable stri
 	env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = haiku
 	if fable != "" {
 		env["ANTHROPIC_DEFAULT_FABLE_MODEL"] = claudeCodeContextModelID(fable, opts.Use1M)
-		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME", "Fable 5")
+		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME", "Fable 5.1")
 		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION", "Configured Claude Code Fable alias with adaptive thinking metadata and Opus fallback support")
 		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES", "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking")
 	}
@@ -300,7 +300,7 @@ func IsFable5Model(modelID string) bool {
 }
 
 // FableDataRetentionWarning is shown whenever Fable is configured. AWS's
-// Bedrock model card and abuse-detection docs state that using Claude Fable 5
+// Bedrock model card and abuse-detection docs state that using Claude Fable 5.1
 // requires opting in to provider_data_share (inputs/outputs retained up to 30
 // days and shared with Anthropic for abuse detection/human review) — a
 // requirement Anthropic imposes, not AWS. There is no AWS API to read an
@@ -308,7 +308,7 @@ func IsFable5Model(modelID string) bool {
 // opt-in status; this warns instead of silently shipping calls that may be
 // denied at runtime. No claim is made about what is or isn't collected beyond
 // what AWS documents — Juggernaut doesn't know and won't guess.
-const FableDataRetentionWarning = "Fable 5 requires opting in to provider_data_share data retention " +
+const FableDataRetentionWarning = "Fable 5.1 requires opting in to provider_data_share data retention " +
 	"(Anthropic's requirement, not AWS's) — see " +
 	"https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html. Without it, Fable calls " +
 	"may be denied at runtime. Juggernaut cannot check your account's current opt-in status — no AWS " +
@@ -417,7 +417,9 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 	if models.Fable != "" {
 		overrides["fable"] = models.Fable
 		overrides["claude-fable-5"] = models.Fable
+		overrides["claude-fable-5-1"] = models.Fable
 		overrides["anthropic.claude-fable-5"] = models.Fable
+		overrides["anthropic.claude-fable-5-1"] = models.Fable
 	}
 	if use1M {
 		overrides["opus[1m]"] = models.Opus
@@ -429,7 +431,9 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 		if models.Fable != "" {
 			overrides["fable[1m]"] = models.Fable
 			overrides["claude-fable-5[1m]"] = models.Fable
+			overrides["claude-fable-5-1[1m]"] = models.Fable
 			overrides["anthropic.claude-fable-5[1m]"] = models.Fable
+			overrides["anthropic.claude-fable-5-1[1m]"] = models.Fable
 		}
 	}
 	return overrides

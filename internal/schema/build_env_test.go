@@ -148,7 +148,7 @@ func TestBuildEnv_FableModel(t *testing.T) {
 	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5[1m]" {
 		t.Errorf("expected fable model with [1m], got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL"])
 	}
-	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"] != "Fable 5" {
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"] != "Fable 5.1" {
 		t.Errorf("expected Fable display name, got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"])
 	}
 	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION"] == "" {

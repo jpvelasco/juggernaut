@@ -27,7 +27,7 @@ Or try it without installing globally:
 npx juggernaut-bedrock version
 ```
 
-Works on **macOS** and **Linux** (`x64` and `arm64`), plus **Windows x64** and **WSL**.
+Works on **macOS** and **Linux** (`x64` and `arm64`), plus **Windows x64** and **WSL**. Windows on ARM (`win32/arm64`) is not shipped (see [`.goreleaser.yml`](../.goreleaser.yml)) — the launcher exits with a clear message on that platform.
 
 Requires **Node.js 20+**, a supported coding CLI, and access to the desired Amazon Bedrock models. AWS IAM/SSO mode uses your existing AWS credentials; Bedrock API-key mode stores the key in your OS keychain.
 
