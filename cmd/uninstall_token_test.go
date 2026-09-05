@@ -79,7 +79,7 @@ func TestUninstall_FullClaude_WithCodexConfigured_KeepsSharedToken(t *testing.T)
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		t.Fatalf("creating codex dir: %v", err)
 	}
-	codexConfig := "model = \"gpt-5.6-sol\"\nmodel_provider = \"amazon-bedrock\"\n[aws]\nregion = \"us-east-1\"\n"
+	codexConfig := "model = \"global.openai.gpt-5.6-sol\"\nmodel_provider = \"amazon-bedrock-runtime\"\n[model_providers.amazon-bedrock-runtime.aws]\nregion = \"us-east-1\"\n"
 	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(codexConfig), 0o644); err != nil {
 		t.Fatalf("seeding codex config: %v", err)
 	}

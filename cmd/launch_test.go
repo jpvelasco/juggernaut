@@ -104,8 +104,9 @@ func TestApply_OpenCode_ProjectScope_WritesAuthMode(t *testing.T) {
 }
 
 // TestApply_Codex_WritesTOMLConfig drives a full codex apply and structurally
-// verifies the TOML config lands at ~/.codex/config.toml with the correct
-// amazon-bedrock provider shape.
+// verifies the TOML config lands at ~/.codex/config.toml with the built-in
+// amazon-bedrock-runtime provider shape (v6 routes Codex via bedrock-runtime,
+// not the custom v5 amazon-bedrock table).
 func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // stores a real token; skip if keychain backend hangs (macOS CI)
@@ -127,20 +128,23 @@ func TestApply_Codex_WritesTOMLConfig(t *testing.T) {
 	if got["model"] != "global.openai.gpt-5.6-sol" {
 		t.Errorf("model = %v, want global.openai.gpt-5.6-sol", got["model"])
 	}
-	if got["model_provider"] != "amazon-bedrock" {
-		t.Errorf("model_provider = %v, want amazon-bedrock", got["model_provider"])
+	if got["model_provider"] != "amazon-bedrock-runtime" {
+		t.Errorf("model_provider = %v, want amazon-bedrock-runtime", got["model_provider"])
 	}
 	mp, ok := got["model_providers"].(map[string]any)
 	if !ok {
 		t.Fatalf("model_providers not a table: %T", got["model_providers"])
 	}
-	ab, ok := mp["amazon-bedrock"].(map[string]any)
-	if !ok {
-		t.Fatalf("amazon-bedrock not a table: %T", mp["amazon-bedrock"])
+	if _, ok := mp["amazon-bedrock"]; ok {
+		t.Errorf("legacy [model_providers.amazon-bedrock] table must not be written, got: %v", mp["amazon-bedrock"])
 	}
-	aws, ok := ab["aws"].(map[string]any)
+	rt, ok := mp["amazon-bedrock-runtime"].(map[string]any)
 	if !ok {
-		t.Fatalf("aws not a table: %T", ab["aws"])
+		t.Fatalf("amazon-bedrock-runtime not a table: %T", mp["amazon-bedrock-runtime"])
+	}
+	aws, ok := rt["aws"].(map[string]any)
+	if !ok {
+		t.Fatalf("aws not a table: %T", rt["aws"])
 	}
 	if aws["region"] != "us-east-1" {
 		t.Errorf("aws.region = %v, want us-east-1", aws["region"])
@@ -168,8 +172,8 @@ func TestApply_Codex_ModelFlag_Respected(t *testing.T) {
 	if containsStr(data, "gpt-5.6-sol") {
 		t.Errorf("must not fall back to sol when --model=terra given:\n%s", data)
 	}
-	if !containsStr(data, `model_provider = "amazon-bedrock"`) {
-		t.Errorf("terra should use amazon-bedrock provider, got:\n%s", data)
+	if !containsStr(data, `model_provider = "amazon-bedrock-runtime"`) {
+		t.Errorf("terra should use the amazon-bedrock-runtime provider, got:\n%s", data)
 	}
 }
 
@@ -276,8 +280,8 @@ func TestUninstall_Codex_ActuallyRemoves(t *testing.T) {
 // TestUninstall_Codex_PreservesUserSiblingKeys: uninstall removes ONLY the
 // leaves Juggernaut owns. A user's own top-level keys, their own
 // model_providers entries, and sibling settings inside the
-// model_providers.amazon-bedrock.aws table must survive — uninstall is a
-// leaf-prune, not a data wipe.
+// model_providers.amazon-bedrock-runtime.aws table must survive — uninstall
+// is a leaf-prune, not a data wipe.
 func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
 	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // apply stores a real credential; skip if keychain backend hangs (macOS CI)
@@ -300,7 +304,7 @@ func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
 	got["telemetry"] = false
 	mp := got["model_providers"].(map[string]any)
 	mp["my-own"] = map[string]any{"base_url": "http://192.168.0.1/v1", "env_key": "MY_OWN_KEY"}
-	aws := mp["amazon-bedrock"].(map[string]any)["aws"].(map[string]any)
+	aws := mp["amazon-bedrock-runtime"].(map[string]any)["aws"].(map[string]any)
 	aws["profile"] = "bedrock-ops"
 	if err := mgr.Write(got); err != nil {
 		t.Fatalf("writing config.toml: %v", err)
@@ -331,7 +335,7 @@ func TestUninstall_Codex_PreservesUserSiblingKeys(t *testing.T) {
 	if _, ok := mpAfter["my-own"]; !ok {
 		t.Error("user's own provider entry lost on uninstall — data loss!")
 	}
-	awsAfter := mpAfter["amazon-bedrock"].(map[string]any)["aws"].(map[string]any)
+	awsAfter := mpAfter["amazon-bedrock-runtime"].(map[string]any)["aws"].(map[string]any)
 	if _, ok := awsAfter["region"]; ok {
 		t.Error("Juggernaut's region leaf should be removed")
 	}

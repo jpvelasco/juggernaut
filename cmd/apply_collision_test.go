@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 )
 
@@ -707,6 +710,7 @@ region = "us-east-1"
 	if strings.Contains(written, "openai.gpt-5.5") {
 		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
 	}
+	assertCodexRuntimeMigration(t, configPath, "us-west-2")
 
 	matches, _ := filepath.Glob(configPath + ".backup.*")
 	if len(matches) == 0 {
@@ -876,10 +880,12 @@ func TestApply_Codex_LegacyJuggernautConfig_Force_MigratesToV6(t *testing.T) {
 	}
 	configPath := filepath.Join(codexDir, "config.toml")
 	legacy := `model = "openai.gpt-5.5"
-model_provider = "amazon-bedrock"
+model_provider = "bedrock-mantle"
 
-[model_providers.amazon-bedrock.aws]
-region = "us-east-1"
+[model_providers.bedrock-mantle]
+name = "Amazon Bedrock (Mantle)"
+base_url = "https://bedrock-mantle.us-west-2.api.aws/openai/v1"
+wire_api = "responses"
 `
 	if err := safepath.WriteFile(codexDir, configPath, []byte(legacy)); err != nil {
 		t.Fatalf("write legacy codex config: %v", err)
@@ -903,6 +909,7 @@ region = "us-east-1"
 	if strings.Contains(written, "openai.gpt-5.5") {
 		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
 	}
+	assertCodexRuntimeMigration(t, configPath, "us-west-2")
 
 	matches, _ := filepath.Glob(configPath + ".backup.*")
 	if len(matches) == 0 {
@@ -938,6 +945,36 @@ const legacyOpenCodeMantle = `{
   }
 }
 `
+
+// assertCodexRuntimeMigration structurally verifies a migrated Codex config:
+// the top-level model_provider is the built-in runtime id, the legacy v5
+// [model_providers.amazon-bedrock] table is GONE, and the runtime table holds
+// the region. A plain substring check is a trap here — "amazon-bedrock" is a
+// prefix of "amazon-bedrock-runtime" and would pass either way.
+func assertCodexRuntimeMigration(t *testing.T, cfgPath, wantRegion string) {
+	t.Helper()
+	tomlFmt, _ := config.FormatByName("toml")
+	mgr := config.NewManagerWithFormat(cfgPath, tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse migrated config.toml: %v", err)
+	}
+	if mp := got["model_provider"]; mp != provider.CodexBedrockRuntimeProviderID {
+		t.Errorf("model_provider = %v, want %s", mp, provider.CodexBedrockRuntimeProviderID)
+	}
+	tbl, _ := got["model_providers"].(map[string]any)
+	if _, ok := tbl[provider.CodexLegacyProviderID]; ok {
+		t.Errorf("legacy [model_providers.%s] table must be stripped on migrate, got: %v", provider.CodexLegacyProviderID, tbl[provider.CodexLegacyProviderID])
+	}
+	rt, ok := tbl[provider.CodexBedrockRuntimeProviderID].(map[string]any)
+	if !ok {
+		t.Fatalf("[model_providers.%s] table missing after migrate: %v", provider.CodexBedrockRuntimeProviderID, got["model_providers"])
+	}
+	aws, ok := rt["aws"].(map[string]any)
+	if !ok || aws["region"] != wantRegion {
+		t.Errorf("migrated config must set model_providers.%s.aws.region = %q, got: %v", provider.CodexBedrockRuntimeProviderID, wantRegion, rt["aws"])
+	}
+}
 
 func writeHomeFile(t *testing.T, home, relDir, filename, contents string) string {
 	t.Helper()
@@ -1027,6 +1064,11 @@ func TestApply_Codex_HybridMantleLeftover_PlainApplyMigrates(t *testing.T) {
 		[]string{"global.openai.gpt-5.6-sol", "amazon-bedrock"},
 		[]string{"bedrock-mantle"},
 	)
+	// The hybrid fixture is the definitive legacy-table case: v6 model ID
+	// still paired with the v5 custom amazon-bedrock table. After the migrate
+	// the legacy table must be stripped (substring checks can't tell
+	// "amazon-bedrock" apart from "amazon-bedrock-runtime").
+	assertCodexRuntimeMigration(t, path, "us-west-2")
 }
 
 // TestApply_OpenCode_MantleProvider_PlainApplyMigrates: leftover
@@ -1063,5 +1105,66 @@ func TestApply_Codex_MantleProvider_DryRunPreviewsMigration(t *testing.T) {
 	}
 	if matches, _ := filepath.Glob(path + ".backup.*"); len(matches) != 0 {
 		t.Error("dry-run must not create a backup")
+	}
+}
+
+// TestApply_Codex_AlreadyMigrated_ReapplyDoesNotReannounce: a config that was
+// already migrated to the built-in amazon-bedrock-runtime provider is NOT
+// legacy — re-applying over it must be a plain re-apply, with no v5→v6
+// migration announcement.
+func TestApply_Codex_AlreadyMigrated_ReapplyDoesNotReannounce(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	path := writeHomeFile(t, home, ".codex", "config.toml",
+		`model = "global.openai.gpt-5.6-sol"
+model_provider = "amazon-bedrock-runtime"
+
+[model_providers.amazon-bedrock-runtime.aws]
+region = "us-west-2"
+`)
+
+	out := applyCLI(t, "codex")
+	if strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("re-apply over an already-migrated config must NOT re-announce the v5→v6 migration, got:\n%s", out)
+	}
+	assertCodexRuntimeMigration(t, path, "us-west-2")
+	// The backup (taken before the write) captured the already-migrated
+	// runtime config — proof the re-apply saw a current config, not a legacy
+	// one.
+	matches, _ := filepath.Glob(path + ".backup.*")
+	if len(matches) == 0 {
+		t.Fatal("expected a pre-write backup of the config")
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if !strings.Contains(string(data), "model_provider = \"amazon-bedrock-runtime\"") {
+		t.Errorf("backup should preserve the already-migrated config, got:\n%s", data)
+	}
+}
+
+// TestApply_Grok_AlreadyMigrated_ReapplyDoesNotReannounce: same contract for
+// Grok — a config already on the v6 bedrock-runtime URL is not legacy.
+func TestApply_Grok_AlreadyMigrated_ReapplyDoesNotReannounce(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	path := writeHomeFile(t, home, ".grok", "config.toml",
+		`[models]
+default = "bedrock-grok"
+
+[model.bedrock-grok]
+model = "global.xai.grok-4.6"
+base_url = "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1"
+name = "Amazon Bedrock (Runtime)"
+`)
+
+	out := applyCLI(t, "grok")
+	if strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("re-apply over an already-migrated config must NOT re-announce the v5→v6 migration, got:\n%s", out)
+	}
+	got := readHomeFile(t, filepath.Dir(path), path)
+	if !strings.Contains(got, "bedrock-runtime") {
+		t.Errorf("re-applied grok config must still route via bedrock-runtime, got:\n%s", got)
 	}
 }

@@ -90,7 +90,7 @@ func TestDeepMergeContract(t *testing.T) {
 		owned map[string][]string
 	}{
 		"claude":   {nil, nil},
-		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {"amazon-bedrock.aws.region"}}},
+		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {CodexBedrockRuntimeProviderID + ".aws.region", CodexLegacyProviderID + ".aws.region"}}},
 		"opencode": {[]string{"provider"}, map[string][]string{"provider": {"amazon-bedrock"}}},
 		"grok":     {[]string{"model", "models", "auth"}, map[string][]string{"model": {"bedrock-grok"}, "models": {"default"}, "auth": {"auth_provider_command", "auth_provider_label"}}},
 	}
@@ -102,11 +102,26 @@ func TestDeepMergeContract(t *testing.T) {
 		}
 		os := p.OwnedSubKeys()
 		for k, subs := range want.owned {
-			if len(os[k]) != len(subs) || (len(subs) > 0 && os[k][0] != subs[0]) {
+			if len(os[k]) != len(subs) || !containsAll(os[k], subs) {
 				t.Errorf("%s OwnedSubKeys[%s] = %v, want %v", name, k, os[k], subs)
 			}
 		}
 	}
+}
+
+// containsAll is an order-independent set-membership check for owned sub-key
+// lists (map-slice order is nondeterministic).
+func containsAll(got, want []string) bool {
+	set := make(map[string]bool, len(got))
+	for _, g := range got {
+		set[g] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestGrok_Supports_None(t *testing.T) {
@@ -159,8 +174,10 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("[model.%s] not a map: %T", grokModelName, bg)
 	}
-	if bgMap["model"] != "xai.grok-4.6" {
-		t.Errorf("model = %v, want xai.grok-4.6", bgMap["model"])
+	// The bare default is normalized to the global. CRIS profile ID that the
+	// bedrock-runtime endpoint actually serves.
+	if bgMap["model"] != "global.xai.grok-4.6" {
+		t.Errorf("model = %v, want global.xai.grok-4.6", bgMap["model"])
 	}
 	if base, _ := bgMap["base_url"].(string); base != "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1" {
 		t.Errorf("base_url = %q, want .../openai/v1", base)
@@ -258,7 +275,7 @@ func TestGrok_BuildConfig_UnknownModel(t *testing.T) {
 }
 
 // TestGrok_BuildConfig_GrokPrefixNormalizes: a model key starting with "grok-"
-// is normalized to "xai.grok-" and accepted.
+// is normalized to a global.xai.grok-* CRIS profile ID and accepted.
 func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
 	p, _ := Get("grok")
 	opts := baseOpts()
@@ -272,12 +289,91 @@ func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
 		t.Fatalf("[model.%s] missing", grokModelName)
 	}
 	bgMap := bg.(map[string]any)
-	if bgMap["model"] != "xai.grok-4.4" {
-		t.Errorf("model = %v, want xai.grok-4.4", bgMap["model"])
+	if bgMap["model"] != "global.xai.grok-4.4" {
+		t.Errorf("model = %v, want global.xai.grok-4.4", bgMap["model"])
 	}
 	// Non-4.6 models don't get context_window
 	if _, hasContext := bgMap["context_window"]; hasContext {
 		t.Error("non-4.6 model must not have context_window")
+	}
+}
+
+// TestGrok_SupportsModel_CRISProfileIDs: the catalog carries CRIS profile IDs
+// (global.xai.grok-4.6, us.xai.grok-4.6) — the SupportsModel gate must accept
+// them, not just the bare xai.grok-* foundation form. Regression: the old
+// HasPrefix("xai.grok-") check hid every live profile ID from
+// `models list --cli=grok`.
+func TestGrok_SupportsModel_CRISProfileIDs(t *testing.T) {
+	p, _ := Get("grok")
+	cases := []struct {
+		id   string
+		want bool
+	}{
+		{id: "global.xai.grok-4.6", want: true},
+		{id: "us.xai.grok-4.6", want: true},
+		{id: "xai.grok-4.6", want: true},
+		{id: "global.xai.grok-4.3", want: true},
+		{id: "openai.gpt-5.6-sol", want: false},
+		{id: "xai.grok-4.6-eu", want: true}, // still the xai.grok- family after prefix strip
+	}
+	for _, c := range cases {
+		s := SupportsCatalogModel(p, CatalogModel{ID: c.id, Source: "foundation", Status: "ACTIVE", Availability: "AVAILABLE"})
+		if s.Supported != c.want {
+			t.Errorf("SupportsModel(%q) = %v, want %v (%s)", c.id, s.Supported, c.want, s.Reason)
+		}
+	}
+}
+
+// TestGrok_BuildConfig_CRISForms: bare and regional forms normalize to the
+// global. CRIS ID the runtime serves; an explicit regional profile ID is kept
+// verbatim (a us. pin stays us.); every 4.6 form gets the 1M context window.
+func TestGrok_BuildConfig_CRISForms(t *testing.T) {
+	p, _ := Get("grok")
+	cases := []struct {
+		in, want string
+		context  bool
+	}{
+		{in: "", want: "global.xai.grok-4.6", context: true},
+		{in: "xai.grok-4.6", want: "global.xai.grok-4.6", context: true},
+		{in: "grok-4.6", want: "global.xai.grok-4.6", context: true},
+		{in: "us.xai.grok-4.6", want: "us.xai.grok-4.6", context: true},
+		{in: "global.xai.grok-4.6", want: "global.xai.grok-4.6", context: true},
+		{in: "us.xai.grok-4.4", want: "us.xai.grok-4.4", context: false},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			opts := baseOpts()
+			opts.Model = c.in
+			plan, err := p.BuildConfig(testConfig(), opts)
+			if err != nil {
+				t.Fatalf("BuildConfig(%q): %v", c.in, err)
+			}
+			bg, ok := testutil.NestedMapChain(plan.Keys, "model", grokModelName)
+			if !ok {
+				t.Fatalf("[model.%s] missing", grokModelName)
+			}
+			bgMap := bg.(map[string]any)
+			if bgMap["model"] != c.want {
+				t.Errorf("model = %v, want %v", bgMap["model"], c.want)
+			}
+			_, hasContext := bgMap["context_window"]
+			if hasContext != c.context {
+				t.Errorf("context_window present = %v, want %v (model %v)", hasContext, c.context, c.want)
+			}
+		})
+	}
+}
+
+// TestGrok_BuildConfig_UnknownCRISFamily: a regional prefix on a non-Grok
+// family must be rejected, not blindly accepted.
+func TestGrok_BuildConfig_UnknownCRISFamily(t *testing.T) {
+	p, _ := Get("grok")
+	for _, in := range []string{"global.openai.gpt-5.6-sol", "us.anthropic.claude-sonnet-4-6"} {
+		opts := baseOpts()
+		opts.Model = in
+		if _, err := p.BuildConfig(testConfig(), opts); err == nil {
+			t.Errorf("BuildConfig(%q) should error", in)
+		}
 	}
 }
 

@@ -44,7 +44,7 @@ Hooks: `scripts/setup-hooks.ps1` (Windows) or `bash scripts/setup-hooks.sh` (Lin
 - `internal/redact/` — diagnostic-bundle privacy: tokens, account IDs, home paths, emails, hostnames, LAN IPs → stable placeholders.
 - `npm/` — launcher + platform packages.
 
-Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json` (project) — the only CLI with both scopes; Codex `~/.codex/config.toml` / `./.codex/config.toml` via `amazon-bedrock` provider; OpenCode `~/.config/opencode/opencode.json` / `./opencode.json` via `provider.amazon-bedrock` (region + discovered `models` + `whitelist`); Grok `~/.grok/config.toml` user-only (`base_url=https://bedrock-runtime.{region}.amazonaws.com/openai/v1`; `auth_provider_command="juggernaut auth-token"` only for `--auth=bedrock-api-key`). Launch reads `juggernaut.auth.mode` from project then user for non-Claude CLIs (token-gated only for API-key mode).
+Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json` (project) — the only CLI with both scopes; Codex `~/.codex/config.toml` / `./.codex/config.toml` via the built-in `amazon-bedrock-runtime` provider (`[model_providers.amazon-bedrock-runtime.aws]` region table; requires Codex ≥ 0.153.4 — apply/doctor warn on older binaries); OpenCode `~/.config/opencode/opencode.json` / `./opencode.json` via `provider.amazon-bedrock` (region + discovered `models` + `whitelist`); Grok `~/.grok/config.toml` user-only (`base_url=https://bedrock-runtime.{region}.amazonaws.com/openai/v1`, model `global.xai.grok-4.6`; `auth_provider_command="juggernaut auth-token"` only for `--auth=bedrock-api-key`). Launch reads `juggernaut.auth.mode` from project then user for non-Claude CLIs (token-gated only for API-key mode).
 
 ## Constraints
 
@@ -61,6 +61,7 @@ Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json
 - `--fallback-model`, `--service-tier`, `--always-thinking`, `--effort`, `skipWebFetchPreflight` are managed; `max`/`auto` effort are env-only, fixed levels also persist as native `effortLevel`.
 - Preserve compat for `launch`/`launch-cli`, hidden `auth-token`, deprecated flags, and exit-code passthrough (`Execute()` exits with wrapped CLI's status; launch commands silence cobra error/usage).
 - Mantle removed in v6 — all CLIs route via `bedrock-runtime`; after upgrade `juggernaut models refresh --source native --region <region>`.
+- v5 Codex configs still on the custom `amazon-bedrock` provider id are legacy for v6 (that table points at the dead Mantle host): a plain `apply` migrates them to the built-in `amazon-bedrock-runtime` and strips `model_providers.amazon-bedrock` (Codex-only — OpenCode's `provider.amazon-bedrock` is a different, current table and never gets touched). The version gate requires Codex ≥ 0.153.4 (warns on apply/doctor).
 - Suppressions (`//nolint`, `#nosec`, `// nosemgrep`) require rationale in `docs/ci-suppressions.md`; prefer code fix over suppression.
 
 ## Testing

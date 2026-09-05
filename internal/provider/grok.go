@@ -41,6 +41,43 @@ const grokAuthCommand = "juggernaut auth-token"
 // not fail—outside this set.
 var grokRegions = []string{"us-east-1", "us-east-2", "us-west-2"}
 
+// grokDefaultModelID is the Grok model Juggernaut pins by default: the global.
+// inference-profile ID (the bare foundation ID xai.grok-4.6 400s on the
+// bedrock-runtime endpoint, which only serves CRIS profile IDs).
+const grokDefaultModelID = "global.xai.grok-4.6"
+
+// normalizeGrokModelID resolves the model the user passed into a CRIS
+// inference-profile ID the bedrock-runtime endpoint actually accepts. The
+// runtime 400s on bare foundation IDs, so every bare form is normalized to a
+// global. profile ID; an explicit regional profile (global.*/us.*) is kept
+// verbatim so a user's us. pin stays us.
+func normalizeGrokModelID(modelID string) (string, bool) {
+	if modelID == "" {
+		return grokDefaultModelID, true
+	}
+	if bare := bedrock.StripRegionPrefix(modelID); bare != modelID {
+		// Already a regional profile ID — keep it (global./us./…).
+		if strings.HasPrefix(bare, "xai.grok-") {
+			return modelID, true
+		}
+		return "", false
+	}
+	switch {
+	case strings.HasPrefix(modelID, "xai.grok-"):
+		return "global." + modelID, true
+	case strings.HasPrefix(modelID, "grok-"):
+		return "global.xai." + modelID, true
+	}
+	return "", false
+}
+
+// grokModelIs46 reports whether modelID is the Grok 4.6 model under any form
+// (bare, global.xai.grok-4.6, us.xai.grok-4.6) — the only model with a verified
+// 1M context window and a verified serving-region set.
+func grokModelIs46(modelID string) bool {
+	return bedrock.StripRegionPrefix(modelID) == "xai.grok-4.6"
+}
+
 // ConfigPath is ALWAYS ~/.grok/config.toml. Grok's project-scoped
 // .grok/config.toml only accepts mcp_servers/plugins/permission — model config
 // is user-scoped — so both scopes resolve to the user config.
@@ -104,21 +141,16 @@ func (g grok) LaunchSpec() LaunchSpec {
 // still falls through to interactive login. The [auth] block is the documented
 // way to replace login entirely.
 func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
-	modelID := opts.Model
-	if modelID == "" {
-		modelID = "xai.grok-4.6"
-	} else if strings.HasPrefix(modelID, "grok-") {
-		modelID = "xai." + modelID
-	}
-	if !strings.HasPrefix(modelID, "xai.grok-") {
+	modelID, ok := normalizeGrokModelID(opts.Model)
+	if !ok {
 		return ConfigPlan{}, fmt.Errorf("unknown Grok model %q (expected a discovered xai.grok-* model)", opts.Model)
 	}
 
 	// Route to a region that actually serves grok-4.6 rather than writing a
 	// config that can't reach it.
-	modelRegions := grokRegions
-	if modelID != "xai.grok-4.6" {
-		modelRegions = nil
+	var modelRegions []string
+	if grokModelIs46(modelID) {
+		modelRegions = grokRegions
 	}
 
 	return buildWithRegionWarnings(opts, modelID, modelRegions, " ", g, func(region string) (ConfigPlan, error) {
@@ -128,7 +160,7 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 			"base_url": baseURL,
 			"name":     modelID + " (Amazon Bedrock)",
 		}
-		if modelID == "xai.grok-4.6" {
+		if grokModelIs46(modelID) {
 			modelBlock["context_window"] = 1000000
 		}
 		keys := map[string]any{
@@ -170,7 +202,10 @@ func (g grok) SupportsModel(model CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
 			return ModelSupport{Reason: "Grok no longer uses Mantle (native only)"}
 		}
-		if !strings.HasPrefix(m.ID, "xai.grok-") {
+		// Catalog entries carry CRIS profile IDs (global.xai.grok-4.6,
+		// us.xai.grok-4.6); strip the regional prefix so the bare xai.grok-
+		// family check matches them, not just the bare foundation form.
+		if !strings.HasPrefix(bedrock.StripRegionPrefix(m.ID), "xai.grok-") {
 			return ModelSupport{Reason: "the Grok client supports xAI Grok models"}
 		}
 		return ModelSupport{Supported: true, Reason: "xAI native model"}

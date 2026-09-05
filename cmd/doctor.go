@@ -172,6 +172,9 @@ func collectDoctorReport(home, cli, scopeFilter string) (*doctor.Report, error) 
 	if status, detail := cliBinaryStatus(prov); status != "" {
 		r.Check(cliName+" binary", status, detail)
 	}
+	if status, detail := doctorCodexVersion(prov); status != "" {
+		r.Check("codex CLI version", status, detail)
+	}
 	if isClaude {
 		legacyArtifactStatus(home, r)
 	}

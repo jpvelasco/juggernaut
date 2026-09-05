@@ -10,8 +10,8 @@ func TestTask3_Grok_NativeEndpoint(t *testing.T) {
 		t.Fatalf("BuildConfig: %v", err)
 	}
 	m, _ := plan.Keys["model"].(map[string]any)["bedrock-grok"].(map[string]any)
-	if m["model"] != "xai.grok-4.6" {
-		t.Errorf("model = %v, want xai.grok-4.6", m["model"])
+	if m["model"] != "global.xai.grok-4.6" {
+		t.Errorf("model = %v, want global.xai.grok-4.6", m["model"])
 	}
 	if base, _ := m["base_url"].(string); base != "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1" {
 		t.Errorf("base_url = %q, want bedrock-runtime", base)

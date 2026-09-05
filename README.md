@@ -98,6 +98,8 @@ juggernaut apply --cli=grok --auth=iam
 juggernaut models refresh --source native --region us-west-2
 ```
 
+**Codex:** requires Codex CLI ≥ 0.153.4 (the first release with the built-in `amazon-bedrock-runtime` provider). Juggernaut pins `model_provider = "amazon-bedrock-runtime"` plus a region under `[model_providers.amazon-bedrock-runtime.aws]` — no custom `base_url`. If your `codex` binary is older, `apply` and `doctor` warn; update with `npm i -g @openai/codex@latest`.
+
 Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it (only the last dependent CLI clears it).
 
 ### Safety model
@@ -311,7 +313,9 @@ juggernaut uninstall --full
 
 ## Migrating from v3/v4 and upgrading to v6
 
-Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Mantle routing is removed — every CLI now uses `bedrock-runtime`. After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone, Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6`, OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
+Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Mantle routing is removed — every CLI now uses `bedrock-runtime`. After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone, Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6` (written as the `global.xai.grok-4.6` CRIS profile ID), OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
+
+Re-applying over a Mantle-era config migrates it automatically (a backup is saved first): the old Codex `model_provider = "amazon-bedrock"` is rewritten to the built-in `amazon-bedrock-runtime` and the stale `model_providers.amazon-bedrock` table is removed. Requires Codex CLI ≥ 0.153.4 for Codex — `apply` and `doctor` warn on older binaries.
 
 ```bash
 npm install -g juggernaut-bedrock@latest

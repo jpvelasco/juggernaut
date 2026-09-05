@@ -456,7 +456,9 @@ func applyWriteGate(home string, prov provider.Provider, plan provider.ConfigPla
 //   - Codex model_provider == "bedrock-mantle" (the real v5 provider id)
 //   - leftover [model_providers.bedrock-mantle] / provider.bedrock-mantle
 //     tables, including hybrid v6 model IDs still aimed at a Mantle URL
-//   - Codex amazon-bedrock + pre-v6 GPT-5 model IDs (openai.gpt-5.x, not 5.6)
+//   - Codex model_provider == "amazon-bedrock" (the v5 custom provider) — ANY
+//     model, since v6 routes Codex through the built-in amazon-bedrock-runtime
+//     and the custom amazon-bedrock table still points at the dead Mantle host
 func isJuggernautLegacy(existing map[string]any) bool {
 	if existing == nil {
 		return false
@@ -464,13 +466,13 @@ func isJuggernautLegacy(existing map[string]any) bool {
 	if grokMantleBaseURL(existing) {
 		return true
 	}
-	if mp, ok := existing["model_provider"].(string); ok && isMantleProviderID(mp) {
+	switch mp, ok := existing["model_provider"].(string); {
+	case ok && isMantleProviderID(mp):
+		return true
+	case ok && mp == provider.CodexLegacyProviderID:
 		return true
 	}
-	if hasMantleTable(existing["model_providers"]) || hasMantleTable(existing["provider"]) {
-		return true
-	}
-	return isCodexPreV6AmazonBedrock(existing)
+	return hasMantleTable(existing["model_providers"]) || hasMantleTable(existing["provider"])
 }
 
 func grokMantleBaseURL(existing map[string]any) bool {
@@ -483,19 +485,6 @@ func grokMantleBaseURL(existing map[string]any) bool {
 		return false
 	}
 	return containsMantleURL(grokModel)
-}
-
-func isCodexPreV6AmazonBedrock(existing map[string]any) bool {
-	if existing["model_provider"] != "amazon-bedrock" {
-		return false
-	}
-	m, ok := existing["model"].(string)
-	if !ok {
-		return false
-	}
-	// v6 GPT-5.6 may appear as openai.gpt-5.6-* or global./us. profile IDs;
-	// those are current. openai.gpt-5.4 / gpt-5.5 are Mantle-era pins.
-	return strings.HasPrefix(m, "openai.gpt-5.") && !strings.Contains(m, "gpt-5.6")
 }
 
 func isMantleProviderID(id string) bool {
@@ -652,6 +641,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if err := mgr.MergeConfigPlanDeepThen(plan.Keys, prov.DeepMergeKeys(), func(existing map[string]any) {
 		if migrating {
 			stripMantleLeftovers(existing)
+			provider.StripLegacyConfig(prov, existing)
 		}
 	}); err != nil {
 		return err

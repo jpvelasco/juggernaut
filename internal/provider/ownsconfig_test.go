@@ -38,6 +38,54 @@ func TestCodex_OwnsConfig(t *testing.T) {
 	}
 }
 
+// TestCodex_OwnsConfig_RuntimeProvider: the v6 built-in amazon-bedrock-runtime
+// provider (and the v5 custom amazon-bedrock) are both recognized as ours —
+// a re-apply over a migrated config must be a plain re-apply, not a fresh
+// first-time auth prompt.
+func TestCodex_OwnsConfig_RuntimeProvider(t *testing.T) {
+	p, _ := Get("codex")
+	if !p.OwnsConfig(map[string]any{
+		"model":          "global.openai.gpt-5.6-sol",
+		"model_provider": CodexBedrockRuntimeProviderID,
+	}) {
+		t.Error("codex should own a config routed to the built-in amazon-bedrock-runtime")
+	}
+}
+
+// TestCodex_CleanLegacy: a migrate must delete the v5 custom
+// model_providers.amazon-bedrock table (deep-merge would otherwise preserve
+// it as a sibling, and it points at the dead Mantle endpoint), while keeping
+// user-defined providers and dropping an emptied model_providers table.
+func TestCodex_CleanLegacy(t *testing.T) {
+	p, _ := Get("codex")
+	// Legacy table alone → stripped, model_providers dropped.
+	existing := map[string]any{
+		"model_provider": CodexLegacyProviderID,
+		"model_providers": map[string]any{
+			CodexLegacyProviderID: map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+		},
+	}
+	p.(LegacyCleaner).CleanLegacy(existing)
+	if _, ok := existing["model_providers"]; ok {
+		t.Errorf("empty model_providers table should be dropped, got %v", existing["model_providers"])
+	}
+	// User's own provider must survive; only the legacy table goes.
+	withUser := map[string]any{
+		"model_providers": map[string]any{
+			CodexLegacyProviderID: map[string]any{"aws": map[string]any{"region": "us-west-2"}},
+			"my-own":              map[string]any{"base_url": "http://localhost:1/v1"},
+		},
+	}
+	p.(LegacyCleaner).CleanLegacy(withUser)
+	mp := withUser["model_providers"].(map[string]any)
+	if _, ok := mp[CodexLegacyProviderID]; ok {
+		t.Errorf("legacy table must be deleted")
+	}
+	if _, ok := mp["my-own"]; !ok {
+		t.Error("user's own provider must survive")
+	}
+}
+
 // TestCodex_OwnsConfig_OldBedrockMantle: the legacy custom bedrock-mantle
 // provider (pre-amazon-bedrock) must NOT be claimed as currently owned.
 // Plain apply still migrates it via isJuggernautLegacy (cmd/) — OwnsConfig
