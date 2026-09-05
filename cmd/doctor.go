@@ -88,6 +88,9 @@ func collectDoctorReport(home, cli, scopeFilter string) (*doctor.Report, error) 
 	for _, scope := range scopes {
 		required := scope != "project" || scopeFilter == "project"
 		label := providerConfigLabel(prov, scope)
+		if symlinkDetail, warn := checkConfigPathSymlink(prov, home, scope); warn {
+			r.Check(label+" symlink", doctor.Warn, symlinkDetail)
+		}
 		if status, detail := checkProviderConfigScope(prov, home, scope, required); status != "" {
 			r.Check(label, status, detail)
 		}
@@ -455,6 +458,25 @@ func checkProviderConfigScope(prov provider.Provider, home, scope string, requir
 	return doctor.OK, "not configured"
 }
 
+// checkConfigPathSymlink Lstats the provider's config path for the scope and
+// warns when it is a symlink: every Juggernaut write passes through the link,
+// and a process that rewrites the durable target (dotfiles sync, Claude Code
+// itself, a VCS checkout) can strip the managed block again — a state doctor
+// would otherwise report as merely "config not found" (#454). Symlinks are
+// platform-gated: Windows symlink creation requires Developer Mode or an
+// admin token, so this path is untestable there (CI runs it on Linux/macOS).
+func checkConfigPathSymlink(prov provider.Provider, home, scope string) (string, bool) {
+	path, err := prov.ConfigPath(home, scope)
+	if err != nil {
+		return "", false
+	}
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return "", false
+	}
+	return "config path is a symlink — writes pass through the link and the durable target may not carry (or may strip) the managed block; use a real file or keep the block in the target", true
+}
+
 func checkRuntimeFallback(r *doctor.Report, prov provider.Provider, home string) {
 	if !prov.LaunchSpec().PersistRuntimeState {
 		return
@@ -474,8 +496,12 @@ func checkRuntimeFallback(r *doctor.Report, prov provider.Provider, home string)
 	case configErr != nil:
 		r.Check(label, doctor.Warn, "saved for "+state.AuthMode+" auth, but user config could not be read: "+configErr.Error())
 	case !prov.OwnsConfig(data):
+		// The block is gone from the config: a directly-launched CLI never
+		// reads the fallback, so only `juggernaut launch` is still routed
+		// through Bedrock (#454).
 		r.Check(label, doctor.Warn, "available for "+state.AuthMode+
-			" auth because the managed user config is missing; re-run `juggernaut apply --cli="+prov.Name()+"` to restore it")
+			" auth, but the managed user config is missing — a directly-launched "+prov.Name()+
+			" has no Bedrock env; use `juggernaut launch` or re-run `juggernaut apply --cli="+prov.Name()+"` to restore it")
 	default:
 		r.Check(label, doctor.OK, "saved for "+state.AuthMode+" auth")
 	}

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -505,6 +506,120 @@ func TestCheckRuntimeFallback_ReportsConfigDrift(t *testing.T) {
 	out := r.String()
 	if !strings.Contains(out, "[WARN]") || !strings.Contains(out, "managed user config is missing") {
 		t.Fatalf("expected runtime fallback drift warning, got:\n%s", out)
+	}
+	// The gap is a launch problem: the warning must name the wrapper path.
+	if !strings.Contains(out, "juggernaut launch") {
+		t.Fatalf("drift warning must mention `juggernaut launch`, got:\n%s", out)
+	}
+}
+
+// TestCheckConfigPathSymlink_WarnsWhenLinked: a settings path that is a
+// symlink must surface a dedicated warning (writes pass through the link and
+// the durable target may not carry the managed block, #454). POSIX-only:
+// Windows symlink creation needs Developer Mode / admin, so the CI legs that
+// run this are Linux and macOS.
+func TestCheckConfigPathSymlink_WarnsWhenLinked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation is not available in this environment")
+	}
+	home := testutil.NewTestHome(t)
+	prov := provider.MustGet("claude")
+
+	linkDir := filepath.Join(home, "dotfiles")
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realPath := filepath.Join(linkDir, "settings.json")
+	if err := os.WriteFile(realPath, []byte(`{"theme":"dark"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realPath, linkPath); err != nil {
+		t.Skipf("symlink unavailable in this environment: %v", err)
+	}
+
+	detail, warn := checkConfigPathSymlink(prov, home, "user")
+	if !warn {
+		t.Fatalf("expected a symlink warning for a linked config path")
+	}
+	if !strings.Contains(detail, "symlink") {
+		t.Fatalf("warning should say the path is a symlink, got %q", detail)
+	}
+
+	// A regular file must not warn (negative control of the Lstat gate).
+	if _, warn := checkConfigPathSymlink(prov, home, "project"); warn {
+		t.Fatal("non-symlink path must not warn")
+	}
+}
+
+// TestCheckConfigPathSymlink_ConfigPathError: a provider whose ConfigPath
+// fails must be skipped silently rather than surfaced as a symlink warning.
+func TestCheckConfigPathSymlink_ConfigPathError(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	_, warn := checkConfigPathSymlink(stubProvider{formatName: "json", pathErr: fmt.Errorf("bad path")}, home, "user")
+	if warn {
+		t.Fatal("ConfigPath error must not produce a symlink warning")
+	}
+}
+
+// TestCheckRuntimeFallback_ConfigReadError: a fallback that exists but whose
+// user config cannot be read (the path is a directory) must warn about the
+// unreadable config — not the happy path.
+func TestCheckRuntimeFallback_ConfigReadError(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	if err := os.MkdirAll(filepath.Join(home, ".claude", "settings.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{
+		AuthMode: authmode.IAM,
+		Env:      map[string]string{"AWS_REGION": "us-west-2"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := doctor.NewReport()
+	checkRuntimeFallback(r, provider.MustGet("claude"), home)
+	out := r.String()
+	if !strings.Contains(out, "[WARN]") || !strings.Contains(out, "could not be read") {
+		t.Fatalf("expected unreadable-config warning, got:\n%s", out)
+	}
+}
+
+// TestDoctor_ReportsSymlinkedConfig: a symlinked user-scope settings path must
+// surface the symlink warning through the full collectDoctorReport path (the
+// direct checkConfigPathSymlink test never reaches the report emission).
+// POSIX-only: Windows symlink creation needs Developer Mode / admin, so the
+// CI legs that cover this are Linux and macOS.
+func TestDoctor_ReportsSymlinkedConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation is not available in this environment")
+	}
+	home := testutil.NewTestHome(t)
+	linkDir := filepath.Join(home, "dotfiles")
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realPath := filepath.Join(linkDir, "settings.json")
+	if err := os.WriteFile(realPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realPath, linkPath); err != nil {
+		t.Skipf("symlink unavailable in this environment: %v", err)
+	}
+
+	rep, err := collectDoctorReport(home, "claude", "")
+	if err != nil {
+		t.Fatalf("collectDoctorReport: %v", err)
+	}
+	if !strings.Contains(rep.String(), "symlink") {
+		t.Fatalf("expected a symlink warning in the doctor report:\n%s", rep.String())
 	}
 }
 
