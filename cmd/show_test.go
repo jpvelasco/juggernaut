@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 func TestShow_Text_AfterApply(t *testing.T) {
@@ -275,15 +277,52 @@ func TestRedactSecrets_NestedAndNonSecrets(t *testing.T) {
 }
 
 func TestShowPayload_NotOwned(t *testing.T) {
+	home := testutil.NewTestHome(t)
 	prov, err := provider.Get("codex")
 	if err != nil {
 		t.Fatalf("provider.Get: %v", err)
 	}
-	if payload := showPayload(prov, map[string]any{"model": "user-owned"}, true); payload != nil {
+	if payload := showPayload(prov, home, "user", map[string]any{"model": "user-owned"}, true); payload != nil {
 		t.Errorf("foreign config should be not-configured, got %#v", payload)
 	}
-	if payload := showPayload(prov, nil, true); payload != nil {
+	if payload := showPayload(prov, home, "user", nil, true); payload != nil {
 		t.Errorf("nil config should be not-configured, got %#v", payload)
+	}
+}
+
+// TestShowPayload_OpenCodeSidecarBlock: OpenCode no longer carries the
+// juggernaut block in opencode.json (strict schema), so show must surface it
+// from the scope's sidecar file instead.
+func TestShowPayload_OpenCodeSidecarBlock(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	prov := mustProvider(t, "opencode")
+
+	data := map[string]any{
+		"model":    "amazon-bedrock/openai.gpt-oss-120b-1:0",
+		"provider": map[string]any{"amazon-bedrock": map[string]any{"options": map[string]any{"region": "us-west-2"}}},
+	}
+	// No sidecar yet: the payload has the managed keys but no juggernaut block.
+	payload := showPayload(prov, home, "user", data, false)
+	blk, _ := payload.(map[string]any)
+	if _, ok := blk["juggernaut"]; ok {
+		t.Errorf("no sidecar: payload must not include a juggernaut block, got %#v", blk["juggernaut"])
+	}
+
+	// Write the user-scope sidecar; show must now include its block.
+	if err := provider.WriteSidecar(prov, home, provider.Options{
+		AuthMode: authmode.BedrockAPIKey, Region: "eu-west-1", Scope: "user",
+	}); err != nil {
+		t.Fatalf("WriteSidecar: %v", err)
+	}
+	payload = showPayload(prov, home, "user", data, false)
+	blk, _ = payload.(map[string]any)
+	jb, ok := blk["juggernaut"].(map[string]any)
+	if !ok {
+		t.Fatalf("sidecar block missing from show payload")
+	}
+	auth, _ := jb["auth"].(map[string]any)
+	if mode, _ := auth["mode"].(string); mode != authmode.BedrockAPIKey {
+		t.Errorf("sidecar auth.mode = %q, want %s", mode, authmode.BedrockAPIKey)
 	}
 }
 

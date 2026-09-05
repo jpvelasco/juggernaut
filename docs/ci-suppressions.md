@@ -29,6 +29,7 @@ adding or removing suppressions.
 | `internal/activation/launch.go:297` | `nosemgrep dangerous-exec-command` | exec with a variable command | Executes the real CLI binary resolved by `resolveBinaryFrom`, which skips the Juggernaut binary itself and known v4.2.6 artifacts; a fixed name would break the launch contract. |
 | `internal/activation/powershell_discovery.go:52` | `nosemgrep dangerous-exec-command` | exec with a variable command | `exe` comes from a fixed candidate list (`pwsh.exe`/`powershell.exe`) with fixed script args; the selection loop requires a variable. |
 | `internal/keychain/crypter_windows.go:53,67,77` | `#nosec G115,G103` + `nosemgrep use-of-unsafe-block` | integer conversion / unsafe | DPAPI `DATA_BLOB` marshalling requires `unsafe`; sizes are bounded by the keychain limit well under 4GB. |
+| `internal/provider/sidecar.go` (`readSidecarBlock`) | `#nosec G304` | file-read of a variable path | Paths are provider-derived sidecar locations (`.juggernaut.json` next to the provider config), never user input; read-only and every error path is the documented "absent" outcome. |
 
 ### npm launcher (`npm/index.js`, `npm/index.test.js`)
 

@@ -54,6 +54,7 @@ func TestResolveAuthMode_Table(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		flagVal  string
+		home     string // non-empty: the opencode sidecar cases (project then user)
 		prov     provider.Provider
 		bCfg     *bedrock.Config
 		existing map[string]any
@@ -138,12 +139,61 @@ func TestResolveAuthMode_Table(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := resolveAuthMode(tc.flagVal, tc.prov, tc.bCfg, tc.existing)
+			got := resolveAuthMode(tc.flagVal, tc.home, tc.prov, tc.bCfg, tc.existing)
 			if got != tc.want {
 				t.Errorf("resolveAuthMode(%q, %s, bCfg=%v, existing=%v) = %q, want %q",
 					tc.flagVal, tc.prov.Name(), tc.bCfg != nil, tc.existing != nil, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestResolveAuthMode_OpenCodeSidecar pins the RC1 resolution chain for
+// OpenCode: the auth-mode sidecar (project then user) is consulted before the
+// legacy in-file block and the bedrock-config default. The legacy in-file
+// block still wins over the default so pre-sidecar configs resolve
+// unchanged.
+func TestResolveAuthMode_OpenCodeSidecar(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	prov := mustProvider(t, "opencode")
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{AuthMode: authmode.IAM, Region: "us-west-2"}}
+
+	legacyAPI := map[string]any{
+		"juggernaut": map[string]any{
+			"auth": map[string]any{"mode": authmode.BedrockAPIKey},
+			"meta": map[string]any{"managedBy": "juggernaut"},
+		},
+	}
+
+	// No sidecar yet: legacy in-file block beats the bCfg default (iam).
+	if got := resolveAuthMode("", home, prov, bCfg, legacyAPI); got != authmode.BedrockAPIKey {
+		t.Errorf("legacy in-file block: got %q, want %s", got, authmode.BedrockAPIKey)
+	}
+	// No sidecar, no in-file block: falls through to the bCfg default.
+	if got := resolveAuthMode("", home, prov, bCfg, nil); got != authmode.IAM {
+		t.Errorf("no sidecar: got %q, want %s", got, authmode.IAM)
+	}
+
+	// User-scope sidecar (iam) overrides the in-file default.
+	if err := provider.WriteSidecar(prov, home, provider.Options{
+		AuthMode: authmode.IAM, Region: "us-west-2", Scope: "user",
+	}); err != nil {
+		t.Fatalf("WriteSidecar(user): %v", err)
+	}
+	if got := resolveAuthMode("", home, prov, bCfg, nil); got != authmode.IAM {
+		t.Errorf("user sidecar: got %q, want %s", got, authmode.IAM)
+	}
+
+	// A project-scope sidecar beats the user-scope one (project-then-user).
+	workDir := t.TempDir()
+	t.Chdir(workDir)
+	if err := provider.WriteSidecar(prov, home, provider.Options{
+		AuthMode: authmode.BedrockAPIKey, Region: "us-west-2", Scope: "project",
+	}); err != nil {
+		t.Fatalf("WriteSidecar(project): %v", err)
+	}
+	if got := resolveAuthMode("", home, prov, bCfg, nil); got != authmode.BedrockAPIKey {
+		t.Errorf("project sidecar must beat user: got %q, want %s", got, authmode.BedrockAPIKey)
 	}
 }
 

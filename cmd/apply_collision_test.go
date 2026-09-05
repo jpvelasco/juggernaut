@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1084,6 +1085,67 @@ func TestApply_OpenCode_MantleProvider_PlainApplyMigrates(t *testing.T) {
 		[]string{"amazon-bedrock"},
 		[]string{"bedrock-mantle"},
 	)
+}
+
+// legacyOpenCodeSidecarEra is an opencode.json written by v6.2.0–v6.3.0: the
+// auth-mode block is inside the vendor file (OpenCode's schema rejects it) and
+// the pre-RC2 nil whitelist marshaled to null.
+const legacyOpenCodeSidecarEra = `{
+  "model": "amazon-bedrock/openai.gpt-oss-120b-1:0",
+  "juggernaut": {
+    "auth": {"mode": "iam", "region": "us-west-2"},
+    "meta": {"managedBy": "juggernaut", "schemaVersion": 2}
+  },
+  "provider": {
+    "amazon-bedrock": {
+      "options": {"region": "us-west-2"},
+      "models": {},
+      "whitelist": null
+    }
+  }
+}
+`
+
+// TestApply_OpenCode_LegacyAuthBlock_PlainApplyStrips: a plain apply over a
+// v6.2.0–v6.3.0 opencode.json must strip the in-file juggernaut block (OpenCode
+// schema: additionalProperties=false) and the stale null whitelist, and persist
+// the auth mode to the sidecar file instead (RC1+RC2).
+func TestApply_OpenCode_LegacyAuthBlock_PlainApplyStrips(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	dir := filepath.Join(home, ".config", "opencode")
+	cfgPath := writeHomeFile(t, home, ".config/opencode", "opencode.json", legacyOpenCodeSidecarEra)
+
+	out := applyCLI(t, "opencode")
+	if !strings.Contains(out, "Migrating OpenCode") {
+		t.Errorf("plain apply should announce the legacy sidecar migration, got:\n%s", out)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(readHomeFile(t, dir, cfgPath)), &cfg); err != nil {
+		t.Fatalf("opencode.json is not valid JSON: %v", err)
+	}
+	if _, ok := cfg["juggernaut"]; ok {
+		t.Errorf("legacy in-file juggernaut block must be stripped by plain apply, got:\n%s", readHomeFile(t, dir, cfgPath))
+	}
+	prov, _ := cfg["provider"].(map[string]any)
+	ab, _ := prov["amazon-bedrock"].(map[string]any)
+	if wl, present := ab["whitelist"]; present {
+		if arr, ok := wl.([]any); !ok || len(arr) == 0 {
+			t.Errorf("whitelist must be a non-empty array or absent after migration, got %#v", wl)
+		}
+	}
+	if region, _ := ab["options"].(map[string]any)["region"].(string); region != "us-west-2" {
+		t.Errorf("region = %v, want us-west-2", region)
+	}
+	// Auth mode moved to the user-scope sidecar, readable by launch.
+	block := provider.ReadSidecarFile(filepath.Join(dir, ".juggernaut.json"))
+	if block == nil {
+		t.Fatalf("sidecar .juggernaut.json missing or unparseable after migration")
+	}
+	mode, _ := block["auth"].(map[string]any)["mode"].(string)
+	if mode != authmode.BedrockAPIKey {
+		t.Errorf("sidecar auth.mode = %q, want %s (the --auth flag apply used)", mode, authmode.BedrockAPIKey)
+	}
 }
 
 // TestApply_Codex_MantleProvider_DryRunPreviewsMigration: dry-run over a

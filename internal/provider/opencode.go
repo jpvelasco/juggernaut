@@ -35,8 +35,36 @@ func (o opencode) ConfigPath(home, scope string) (string, error) {
 }
 
 // NativeManagedKeys are the top-level opencode.json keys Juggernaut owns.
+// The juggernaut auth-mode block is NOT one of them: OpenCode validates
+// opencode.json against a strict schema (Config.additionalProperties: false)
+// and rejects unknown top-level keys, so Juggernaut keeps the block in a
+// sidecar file next to the config (SidecarAuthSource).
 func (o opencode) NativeManagedKeys() []string {
-	return []string{"model", "provider", "juggernaut"}
+	return []string{"model", "provider"}
+}
+
+// SidecarPath is the .juggernaut.json file next to the opencode config for
+// the given scope.
+func (o opencode) SidecarPath(home, scope string) (string, error) {
+	cfg, err := o.ConfigPath(home, scope)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(cfg), SidecarFilename), nil
+}
+
+// SidecarPaths lists the sidecar paths in launch precedence order: project
+// then user, matching ConfigPath precedence.
+func (o opencode) SidecarPaths(home string) []string {
+	var paths []string
+	for _, scope := range []string{"project", "user"} {
+		p, err := o.SidecarPath(home, scope)
+		if err != nil {
+			continue
+		}
+		paths = append(paths, p)
+	}
+	return paths
 }
 
 // DeepMergeKeys: "provider" is a nested map where a user may have their own
@@ -64,7 +92,8 @@ func (o opencode) OwnsConfig(data map[string]any) bool {
 func (o opencode) LaunchSpec() LaunchSpec {
 	// OpenCode routes via config; the built-in amazon-bedrock provider uses
 	// the AWS credential chain (SigV4 or AWS_BEARER_TOKEN_BEDROCK), so no static
-	// enable flag. Token injection is decided at launch from juggernaut.auth.
+	// enable flag. Token injection is decided at launch from juggernaut.auth,
+	// read from the .juggernaut.json sidecar (legacy: the in-file block).
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  false, // auth mode in juggernaut block decides at launch
@@ -89,11 +118,14 @@ var opencodeModelAliases = map[string]string{
 func opencodeDefaultModel() string { return "gpt-oss-120b" }
 
 // BuildConfig writes OpenCode's config: the built-in amazon-bedrock provider
-// (options.region + live-discovered models + whitelist) plus a top-level
-// default model "provider_id/model_id". A convenience alias resolves to a
-// native Bedrock model ID; any other value is passed through verbatim. Every
-// compatible discovered model is added to the provider block so OpenCode's
-// model picker can use the account's actual inventory.
+// (options.region + live-discovered models + whitelist, omitted when empty)
+// plus a top-level default model "provider_id/model_id". A convenience alias
+// resolves to a native Bedrock model ID; any other value is passed through
+// verbatim. Every compatible discovered model is added to the provider block
+// so OpenCode's model picker can use the account's actual inventory. The
+// auth-mode metadata is NOT part of this plan — OpenCode's strict schema
+// rejects unknown top-level keys, so Juggernaut writes it to the sidecar
+// file (see SidecarAuthSource).
 func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
 	if key == "" {
@@ -123,27 +155,24 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 		warnings = append(warnings, w)
 	}
 
-	keys := map[string]any{
-		"model": bedrockProviderID + "/" + modelID,
-		"provider": map[string]any{
-			bedrockProviderID: map[string]any{
-				"options": map[string]any{
-					"region": opts.Region,
-				},
-				"models":    models,
-				"whitelist": whitelist,
-			},
+	providerTable := map[string]any{
+		"options": map[string]any{
+			"region": opts.Region,
 		},
+		"models": models,
 	}
-
-	blockMap, err := juggernautAuthBlock(opts, opts.Region)
-	if err != nil {
-		return ConfigPlan{}, err
+	// OpenCode's schema requires whitelist to be an array; a nil slice
+	// marshals to null and an empty array would hide every model from the
+	// picker. Omit the key entirely when discovery found no supported models.
+	if len(whitelist) > 0 {
+		providerTable["whitelist"] = whitelist
 	}
-	keys["juggernaut"] = blockMap
 
 	return ConfigPlan{
-		Keys:        keys,
+		Keys: map[string]any{
+			"model":    bedrockProviderID + "/" + modelID,
+			"provider": map[string]any{bedrockProviderID: providerTable},
+		},
 		ManagedKeys: o.NativeManagedKeys(),
 		Warnings:    warnings,
 	}, nil
