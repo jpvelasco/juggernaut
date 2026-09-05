@@ -11,6 +11,33 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
+// Given a Bedrock bearer token is present and no other provider keeps a
+// config,
+// When the user runs a full Claude uninstall with --dry-run,
+// Then the survey runs but nothing is removed: the token survives and no
+// removal is reported.
+func TestUninstall_DryRun_LastProvider_KeepsToken(t *testing.T) {
+	home := setupApplyTest(t)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("probe-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--cli=claude", "--force", "--dry-run"}); err != nil {
+			t.Fatalf("uninstall dry-run error: %v", err)
+		}
+	})
+
+	got, _ := store.GetWithFallback(home)
+	if got != "probe-token" {
+		t.Errorf("dry-run must not remove the bearer token, got %q", got)
+	}
+	if strings.Contains(out, "Removed bearer token") {
+		t.Errorf("dry-run must not report token removal:\n%s", out)
+	}
+}
+
 // Given a Bedrock bearer token shared by every configured provider,
 // When the user removes ONLY Claude's project-scope block,
 // Then the shared token must survive: user-scope Claude and any non-Claude
@@ -105,6 +132,36 @@ func TestUninstall_FullClaude_WithCodexConfigured_KeepsSharedToken(t *testing.T)
 	}
 }
 
+// claudeOwnedSettingsJSON is a minimal Claude settings.json carrying a
+// Juggernaut block (juggernaut.meta.managedBy == "juggernaut"), which is what
+// (claude).OwnsConfig recognizes.
+const claudeOwnedSettingsJSON = `{"juggernaut":{"auth":{"mode":"iam","region":"us-west-2"},"meta":{"managedBy":"juggernaut"}}}`
+
+// grokOwnedTOML is a minimal Grok config.toml whose [model.bedrock-grok]
+// profile is what (grok).OwnsConfig recognizes.
+const grokOwnedTOML = "[model.bedrock-grok]\nbase_url = \"https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1\"\n"
+
+// seedJuggernautConfig writes a Juggernaut-owned config file for the given
+// provider name (claude or grok) under home.
+func seedJuggernautConfig(t *testing.T, home, provName string) {
+	t.Helper()
+	var dir, file, body string
+	switch provName {
+	case "claude":
+		dir, file, body = filepath.Join(home, ".claude"), "settings.json", claudeOwnedSettingsJSON
+	case "grok":
+		dir, file, body = filepath.Join(home, ".grok"), "config.toml", grokOwnedTOML
+	default:
+		t.Fatalf("unknown provider for fixture: %s", provName)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644); err != nil {
+		t.Fatalf("seed %s config: %v", provName, err)
+	}
+}
+
 // tokenSurveyProvider is a hand-built provider for exercising
 // otherProviderNeedsToken's defensive branches that no real registered
 // provider can reach: config construction failures, unreadable config, and
@@ -193,5 +250,180 @@ func TestOtherProviderNeedsToken_DefensiveBranches(t *testing.T) {
 	provider.ForceRegisterForTest("codex", tokenSurveyProvider{base: orig, owns: true})
 	if res := otherProviderNeedsToken(home, exclude); res != "codex" {
 		t.Errorf("owned config: expected retain, got %q", res)
+	}
+
+	// F) a nil exclude surveys EVERY provider — the provider "excluded"
+	// from the caller's perspective (claude) must still be surveyed when it
+	// owns a config.
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(claudeOwnedSettingsJSON), 0o644); err != nil {
+		t.Fatalf("seed claude config: %v", err)
+	}
+	provider.ForceRegisterForTest("codex", orig)
+	if res := otherProviderNeedsToken(home, nil); res != "claude" {
+		t.Errorf("nil exclude: expected claude retained, got %q", res)
+	}
+	if err := os.RemoveAll(filepath.Join(home, ".claude")); err != nil {
+		t.Fatalf("remove .claude: %v", err)
+	}
+
+	// G) same-provider user-scope retain: the survey must consider scopes the
+	// uninstall is NOT removing. An opencode uninstall with claude configured
+	// in user scope keeps the token.
+	provider.ForceRegisterForTest("claude", tokenSurveyProvider{base: provider.MustGet("claude")})
+	if res := otherProviderNeedsToken(home, provider.MustGet("opencode")); res != "claude" {
+		t.Errorf("claude user-scope config present: expected claude retained, got %q", res)
+	}
+}
+
+// Given the user uninstalls Claude with --scope=user (a partial removal),
+// When the uninstall completes,
+// Then the shared token must survive: the project scope and any other CLI
+// still reference it.
+func TestUninstall_UserScope_KeepsSharedToken(t *testing.T) {
+	home := setupApplyTest(t)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("shared-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--cli=claude", "--scope=user", "--force"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("reading token after user-scope uninstall: %v", err)
+	}
+	if got != "shared-token" {
+		t.Errorf("user-scope uninstall deleted the shared bearer token (got %q)\noutput:\n%s", got, out)
+	}
+}
+
+// Given the LAST CLI (Grok) is uninstalled outright and no other
+// Juggernaut-owned config remains anywhere,
+// When the uninstall completes,
+// Then the shared bearer token is removed — the old Claude-only gate never
+// ran the survey for a non-Claude last uninstall.
+func TestUninstall_LastNonClaude_RemovesSharedToken(t *testing.T) {
+	home := setupApplyTest(t)
+	chdirTo(t, home) // project-scope probe must find nothing under the cwd
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("last-cli-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--cli=grok", "--force"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("reading token after last-CLI uninstall: %v", err)
+	}
+	if got != "" {
+		t.Errorf("last-CLI uninstall should remove the shared bearer token, got %q\noutput:\n%s", got, out)
+	}
+	if !strings.Contains(out, "Removed bearer token from keychain") {
+		t.Errorf("expected a token-removal line in output, got:\n%s", out)
+	}
+}
+
+// Given a Grok config is configured and the user uninstalls Claude in full,
+// When the uninstall completes,
+// Then the shared token must survive — the retention survey must consider
+// Grok (and every provider), not just the providers historically known.
+func TestUninstall_FullClaude_WithGrokConfigured_KeepsSharedToken(t *testing.T) {
+	home := setupApplyTest(t)
+	chdirTo(t, home)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("shared-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+	seedJuggernautConfig(t, home, "grok")
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--cli=claude", "--force"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("reading token after uninstall: %v", err)
+	}
+	if got != "shared-token" {
+		t.Errorf("shared bearer token was removed while a Grok config still references it (got %q)\noutput:\n%s", got, out)
+	}
+	if !strings.Contains(out, "Shared Bedrock bearer token retained") {
+		t.Errorf("expected a retain warning in output, got:\n%s", out)
+	}
+	if !strings.Contains(strings.ToLower(out), "grok") {
+		t.Errorf("retain warning should name the surviving provider (grok), got:\n%s", out)
+	}
+}
+
+// Given a Grok config is configured and the user dries a full Claude
+// uninstall,
+// When the dry run completes,
+// Then nothing is removed — the token survives and no removal is announced.
+func TestUninstall_DryRunClaude_WithGrokConfigured_KeepsSharedToken(t *testing.T) {
+	home := setupApplyTest(t)
+	chdirTo(t, home)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("shared-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+	seedJuggernautConfig(t, home, "grok")
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--cli=claude", "--dry-run"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("reading token after dry run: %v", err)
+	}
+	if got != "shared-token" {
+		t.Errorf("dry run removed the shared bearer token (got %q)\noutput:\n%s", got, out)
+	}
+	if strings.Contains(out, "Removed bearer token") {
+		t.Errorf("dry run must not announce a token removal, got:\n%s", out)
+	}
+}
+
+// Given no Juggernaut-owned config exists for any provider and the user
+// uninstalls Grok outright,
+// When the uninstall completes,
+// Then the shared token is still removed — the survey runs for every last-CLI
+// uninstall, not just Claude's.
+func TestUninstall_LastGrok_NoConfigs_RemovesSharedToken(t *testing.T) {
+	home := setupApplyTest(t)
+	chdirTo(t, home)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("orphan-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"uninstall", "--cli=grok", "--force"}); err != nil {
+			t.Fatalf("uninstall error: %v", err)
+		}
+	})
+
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("reading token after uninstall: %v", err)
+	}
+	if got != "" {
+		t.Errorf("orphan token should be removed on last-CLI uninstall, got %q\noutput:\n%s", got, out)
 	}
 }
