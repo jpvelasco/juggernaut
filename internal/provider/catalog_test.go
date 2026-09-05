@@ -269,3 +269,21 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 		})
 	}
 }
+
+// TestCatalogUnavailableWarning_NoMantleMention: the user-facing warning names
+// the region, not the internal endpoint — Mantle was removed in v6 (#452).
+func TestCatalogUnavailableWarning_NoMantleMention(t *testing.T) {
+	p, _ := Get("opencode")
+	w := catalogUnavailableWarning(
+		[]CatalogModel{catalogModel("unrelated.model", "foundation")},
+		"some.model", "us-west-2", "it remains configured for explicit use", p.(CatalogProvider), nil)
+	if w == "" {
+		t.Fatal("expected a warning for an unavailable selected model")
+	}
+	if strings.Contains(w, "Mantle") {
+		t.Errorf("warning must not mention Mantle, got: %q", w)
+	}
+	if !strings.Contains(w, "us-west-2") {
+		t.Errorf("warning should name the region, got: %q", w)
+	}
+}

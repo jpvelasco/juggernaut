@@ -226,7 +226,8 @@ func TestOpenCode_BuildConfig_Aliases(t *testing.T) {
 		"kimi-k2.5":     "moonshotai.kimi-k2.5",
 		"deepseek-v3.2": "deepseek.v3.2",
 		"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-v1:0",
-		"grok-4.3":      "xai.grok-4.6",
+		"grok-4.3":      "global.xai.grok-4.6",
+		"grok-4.6":      "global.xai.grok-4.6",
 	}
 	p, _ := Get("opencode")
 	for key, wantID := range cases {

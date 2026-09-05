@@ -78,8 +78,8 @@ func TestTask2_OpenCode_SupportsNativeRejectsMantle(t *testing.T) {
 func TestTask2_OpenCode_AliasesNative(t *testing.T) {
 	cases := map[string]string{
 		"qwen3-coder":  "qwen.qwen3-coder-480b-a35b-v1:0",
-		"grok-4.6":     "xai.grok-4.6",
-		"grok-4.3":     "xai.grok-4.6",
+		"grok-4.6":     "global.xai.grok-4.6",
+		"grok-4.3":     "global.xai.grok-4.6",
 		"gpt-oss-120b": "openai.gpt-oss-120b-1:0",
 		"gpt-oss-20b":  "openai.gpt-oss-20b-1:0",
 	}

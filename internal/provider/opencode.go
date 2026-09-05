@@ -101,8 +101,11 @@ func (o opencode) LaunchSpec() LaunchSpec {
 }
 
 // opencodeModelAliases are convenience spellings, not an availability roster.
-// The live account/region catalog remains authoritative. IDs are native
-// Bedrock foundation IDs verified via `models list --source native` (2026-08-29).
+// The live account/region catalog remains authoritative. IDs are native Bedrock
+// foundation IDs (2026-08-29) — except the grok-4.6/4.3 entries, which use the
+// global. cross-Region inference profile: the bedrock-runtime endpoint 400s on
+// the bare xai.grok-4.6 foundation ID (verified against the Grok 4.6 model
+// card; the Grok provider applies the same normalization).
 var opencodeModelAliases = map[string]string{
 	"gpt-oss-120b":  "openai.gpt-oss-120b-1:0",
 	"gpt-oss-20b":   "openai.gpt-oss-20b-1:0",
@@ -111,8 +114,8 @@ var opencodeModelAliases = map[string]string{
 	"kimi-k2.5":     "moonshotai.kimi-k2.5",
 	"deepseek-v3.2": "deepseek.v3.2",
 	"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-v1:0",
-	"grok-4.6":      "xai.grok-4.6",
-	"grok-4.3":      "xai.grok-4.6", // deprecated: kept for backwards compat; prefer grok-4.6
+	"grok-4.6":      "global.xai.grok-4.6",
+	"grok-4.3":      "global.xai.grok-4.6", // deprecated: kept for backwards compat; prefer grok-4.6
 }
 
 func opencodeDefaultModel() string { return "gpt-oss-120b" }
