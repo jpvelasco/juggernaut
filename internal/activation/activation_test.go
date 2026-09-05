@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
@@ -521,6 +522,98 @@ func TestLaunch_IAM_UnsetsBearerTokenIfPreSet(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("LaunchWithOptions(): %v", err)
+	}
+}
+
+// TestLaunch_OpenCodeSidecar_APIKeyWinsOverClaudeIAM pins the per-target auth
+// precedence for multi-CLI boxes (issue #463 RC3): a box where Claude is
+// Juggernaut-managed in IAM mode still gets AWS_BEARER_TOKEN_BEDROCK injected
+// when launching OpenCode whose own auth mode (from the sidecar, project then
+// user) is bedrock-api-key. The reverse case — OpenCode in iam — must NOT
+// inject the token.
+func TestLaunch_OpenCodeSidecar_APIKeyWinsOverClaudeIAM(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	writeSettings(t, home, "iam") // Claude managed: iam
+	writeSidecar(t, home, authmode.BedrockAPIKey)
+
+	runLaunchForOpenCode(t, home, func(env []string) {
+		if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "token-value" {
+			t.Errorf("OpenCode bedrock-api-key on a Claude-IAM box: AWS_BEARER_TOKEN_BEDROCK = %q, want injected token", got)
+		}
+	})
+
+	// OpenCode in iam: the token must be absent even though Claude settings
+	// exist in the same home (the per-target mode, not Claude's, decides).
+	writeSidecar(t, home, authmode.IAM)
+	runLaunchForOpenCode(t, home, func(env []string) {
+		if got := envValue(env, "AWS_BEARER_TOKEN_BEDROCK"); got != "" {
+			t.Errorf("OpenCode iam must not inject the bearer token, got %q", got)
+		}
+	})
+}
+
+// writeSidecar writes the OpenCode user-scope .juggernaut.json sidecar (the
+// file `apply --cli=opencode` writes; activation must read the same source).
+func writeSidecar(t *testing.T, home, mode string) {
+	t.Helper()
+	p, err := provider.Get("opencode")
+	if err != nil {
+		t.Fatalf("provider.Get(opencode): %v", err)
+	}
+	if err := provider.WriteSidecar(p, home, provider.Options{
+		AuthMode: mode, Region: "us-west-2", Scope: "user",
+	}); err != nil {
+		t.Fatalf("WriteSidecar: %v", err)
+	}
+}
+
+// runLaunchForOpenCode drives the launch wrapper for an OpenCode target whose
+// ConfigPaths mirror what cmd/launch.go resolves (project then user sidecars,
+// then project then user configs) and runs a fake opencode binary.
+func runLaunchForOpenCode(t *testing.T, home string, checkEnv func([]string)) {
+	t.Helper()
+	realDir := t.TempDir()
+	name := "opencode"
+	if runtime.GOOS == "windows" {
+		name = "opencode.exe"
+	}
+	writeExecutableFile(t, realDir, filepath.Join(realDir, name), "real opencode")
+
+	p, err := provider.Get("opencode")
+	if err != nil {
+		t.Fatalf("provider.Get(opencode): %v", err)
+	}
+	src, ok := p.(provider.SidecarAuthSource)
+	if !ok {
+		t.Fatal("opencode must implement provider.SidecarAuthSource")
+	}
+	var userSidecar string
+	if userSidecar, err = src.SidecarPath(home, "user"); err != nil {
+		t.Fatalf("SidecarPath(user): %v", err)
+	}
+	userConfig, _ := p.ConfigPath(home, "user")
+
+	ran := false
+	err = LaunchWithOptions(LaunchOptions{
+		Home: home,
+		Path: realDir,
+		Target: LaunchTarget{
+			BinaryNames: []string{name},
+			TokenEnvVar: authmode.BedrockAuthEnvName,
+			ConfigPaths: []string{userSidecar, userConfig},
+		},
+		TokenGetter: func() (string, error) { return "token-value", nil },
+		Runner: func(_ string, _ []string, env []string) error {
+			ran = true
+			checkEnv(env)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("LaunchWithOptions(opencode): %v", err)
+	}
+	if !ran {
+		t.Fatal("runner was not called")
 	}
 }
 

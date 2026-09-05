@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -49,6 +50,10 @@ func TestApply_NativeCLIs_AcceptIAM(t *testing.T) {
 	}
 }
 
+// TestApply_OpenCode_IAM_WritesJuggernautAuth: the auth-mode metadata lives in
+// the user-scope sidecar (~/.config/opencode/.juggernaut.json), NOT in
+// opencode.json — OpenCode's strict schema rejects unknown top-level keys.
+// opencode.json must contain no juggernaut key and no "whitelist": null (RC1+RC2).
 func TestApply_OpenCode_IAM_WritesJuggernautAuth(t *testing.T) {
 	home := setupApplyTest(t)
 	if err := ExecuteArgs([]string{
@@ -57,10 +62,10 @@ func TestApply_OpenCode_IAM_WritesJuggernautAuth(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	data := readFileForTest(t, filepath.Join(home, ".config", "opencode", "opencode.json"))
-	if !containsStr(data, `"mode": "iam"`) && !containsStr(data, `"mode":"iam"`) {
-		t.Errorf("expected juggernaut.auth.mode=iam, got:\n%s", data)
-	}
+	cfg := parseJSONForTest(t, filepath.Join(home, ".config", "opencode", "opencode.json"))
+	assertOpenCodeConfigShape(t, cfg, "opencode.json")
+	sidecar := parseJSONForTest(t, filepath.Join(home, ".config", "opencode", ".juggernaut.json"))
+	assertSidecarAuthMode(t, sidecar, authmode.IAM, "us-east-1")
 }
 
 func TestApply_Grok_IAM_OmitsAuthProviderCommand(t *testing.T) {
@@ -81,7 +86,7 @@ func TestApply_Grok_IAM_OmitsAuthProviderCommand(t *testing.T) {
 }
 
 func TestApply_OpenCode_ProjectScope_WritesAuthMode(t *testing.T) {
-	_ = setupApplyTest(t)
+	home := setupApplyTest(t)
 	configBytes, err := os.ReadFile(findBedrockConfigFile())
 	if err != nil {
 		t.Fatal(err)
@@ -97,9 +102,65 @@ func TestApply_OpenCode_ProjectScope_WritesAuthMode(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	data := readFileForTest(t, filepath.Join(dir, "opencode.json"))
-	if !containsStr(data, `"mode": "iam"`) && !containsStr(data, `"mode":"iam"`) {
-		t.Errorf("project apply must write juggernaut.auth.mode, got:\n%s", data)
+	// Project-scope apply writes ./opencode.json (no juggernaut key, no
+	// whitelist:null) plus the project sidecar ./.juggernaut.json — and must
+	// NOT create a user-scope fallback sidecar.
+	cfg := parseJSONForTest(t, filepath.Join(dir, "opencode.json"))
+	assertOpenCodeConfigShape(t, cfg, "./opencode.json")
+	assertSidecarAuthMode(t, parseJSONForTest(t, filepath.Join(dir, ".juggernaut.json")), authmode.IAM, "us-east-1")
+	userSidecar := filepath.Join(home, ".config", "opencode", ".juggernaut.json")
+	if _, err := os.Stat(userSidecar); !os.IsNotExist(err) {
+		t.Errorf("project-scope apply must not create a user-scope sidecar %s (stat err=%v)", userSidecar, err)
+	}
+}
+
+// parseJSONForTest reads and unmarshals a JSON file (test helper).
+func parseJSONForTest(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("%s must be valid JSON: %v", path, err)
+	}
+	return doc
+}
+
+// assertOpenCodeConfigShape pins the DoD JSON shape: no top-level juggernaut
+// key, and the whitelisted leaf is either a non-empty array or absent — never
+// null and never an empty array (RC1+RC2). No schema library needed.
+func assertOpenCodeConfigShape(t *testing.T, cfg map[string]any, label string) {
+	t.Helper()
+	if _, ok := cfg["juggernaut"]; ok {
+		t.Errorf("%s must NOT contain a top-level juggernaut key (OpenCode schema: additionalProperties=false)", label)
+	}
+	prov, _ := cfg["provider"].(map[string]any)
+	ab, _ := prov["amazon-bedrock"].(map[string]any)
+	wl, present := ab["whitelist"]
+	if !present {
+		return
+	}
+	arr, ok := wl.([]any)
+	if !ok || len(arr) == 0 {
+		t.Errorf("%s: whitelist must be a non-empty array or absent, got %#v", label, wl)
+	}
+}
+
+// assertSidecarAuthMode checks the sidecar document's juggernaut.auth block.
+func assertSidecarAuthMode(t *testing.T, sidecar map[string]any, wantMode, wantRegion string) {
+	t.Helper()
+	jb, _ := sidecar["juggernaut"].(map[string]any)
+	if jb == nil {
+		t.Fatalf("sidecar has no juggernaut block: %#v", sidecar)
+	}
+	auth, _ := jb["auth"].(map[string]any)
+	if mode, _ := auth["mode"].(string); mode != wantMode {
+		t.Errorf("sidecar auth.mode = %q, want %q", mode, wantMode)
+	}
+	if region, _ := auth["region"].(string); region != wantRegion {
+		t.Errorf("sidecar auth.region = %q, want %q", region, wantRegion)
 	}
 }
 
@@ -406,6 +467,60 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 // models.default pointer, and the two auth keys — across three deep-merge
 // tables. A user's own model profiles, models settings, and auth settings
 // must all survive.
+// TestUninstall_OpenCode_RemovesSidecarAndLegacyBlock: a user-scope uninstall
+// of OpenCode must remove both the auth-metadata sidecar (.juggernaut.json)
+// and a legacy in-file juggernaut block left by v6.2.0–v6.3.0, while preserving
+// the rest of the config. Codex/Grok in-file blocks are untouched (they have no
+// sidecar).
+func TestUninstall_OpenCode_RemovesSidecarAndLegacyBlock(t *testing.T) {
+	home := setupApplyTest(t)
+	setupIsolatedKeychain(t)
+	applyCLI(t, "opencode")
+
+	configDir := filepath.Join(home, ".config", "opencode")
+	// Re-seed a legacy in-file juggernaut block (v6.2.0–v6.3.0 shape) alongside
+	// the current sidecar to prove uninstall cleans up the old location too.
+	mgr := config.NewManager(filepath.Join(configDir, "opencode.json"))
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse opencode.json: %v", err)
+	}
+	got["juggernaut"] = map[string]any{
+		"auth": map[string]any{"mode": authmode.IAM},
+		"meta": map[string]any{"managedBy": "juggernaut"},
+	}
+	if err := mgr.Write(got); err != nil {
+		t.Fatalf("injecting legacy block: %v", err)
+	}
+
+	// Dry-run previews the removal but changes nothing.
+	if err := ExecuteArgs([]string{"uninstall", "--cli=opencode", "--dry-run", "--force"}); err != nil {
+		t.Fatalf("uninstall --dry-run: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, ".juggernaut.json")); err != nil {
+		t.Errorf("dry-run must not remove the sidecar: %v", err)
+	}
+
+	if err := ExecuteArgs([]string{"uninstall", "--cli=opencode", "--force"}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	// Sidecar gone.
+	if _, err := os.Stat(filepath.Join(configDir, ".juggernaut.json")); !os.IsNotExist(err) {
+		t.Errorf("sidecar must be removed, stat err = %v", err)
+	}
+	// Legacy in-file block gone, managed keys gone.
+	after, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse opencode.json after uninstall: %v", err)
+	}
+	if _, ok := after["juggernaut"]; ok {
+		t.Errorf("legacy in-file juggernaut block must be removed, got: %v", after["juggernaut"])
+	}
+	if _, ok := after["model"]; ok {
+		t.Errorf("managed 'model' key should be removed")
+	}
+}
+
 func TestUninstall_Grok_PreservesUserSiblingKeys(t *testing.T) {
 	home := setupApplyTest(t)
 	setupIsolatedKeychain(t) // apply stores a real credential; skip if keychain backend hangs (macOS CI)
@@ -593,11 +708,16 @@ func TestResolveLaunchConfigPaths_ProjectThenUser(t *testing.T) {
 
 	opencode, _ := provider.Get("opencode")
 	oPaths := resolveLaunchConfigPaths(opencode, home)
-	if len(oPaths) != 2 {
-		t.Fatalf("opencode paths = %v, want project then user", oPaths)
+	// OpenCode keeps the auth block in a sidecar (.juggernaut.json), so the
+	// launch candidates are project+user sidecars, then project+user configs.
+	if len(oPaths) != 4 {
+		t.Fatalf("opencode paths = %v, want 4 (project/user sidecars then project/user configs)", oPaths)
 	}
-	if filepath.Base(oPaths[0]) != "opencode.json" {
-		t.Errorf("opencode project path = %q, want ./opencode.json", oPaths[0])
+	if filepath.Base(oPaths[0]) != ".juggernaut.json" {
+		t.Errorf("opencode project sidecar path = %q, want ./.juggernaut.json", oPaths[0])
+	}
+	if filepath.Base(oPaths[2]) != "opencode.json" {
+		t.Errorf("opencode project config path = %q, want ./opencode.json", oPaths[2])
 	}
 
 	grok, _ := provider.Get("grok")

@@ -64,7 +64,7 @@ func collectShowResults(prov provider.Provider, home, scopeFilter string, redact
 			warnf("could not read %s settings: %v", scope, err)
 			continue
 		}
-		results[scope] = showPayload(prov, data, redact)
+		results[scope] = showPayload(prov, home, scope, data, redact)
 	}
 	return results
 }
@@ -105,11 +105,11 @@ func formatShow(results map[string]any, scopeFilter string, jsonOut bool) (strin
 // nil when Juggernaut does not own the file. When redact is true, secret-bearing
 // fields are masked; the logs export path passes false so its --raw bundles and
 // its redact.String pass are the sole secret control.
-func showPayload(prov provider.Provider, data map[string]any, redact bool) any {
+func showPayload(prov provider.Provider, home, scope string, data map[string]any, redact bool) any {
 	if data == nil || !prov.OwnsConfig(data) {
 		return nil
 	}
-	cfg := managedShowConfig(prov, data)
+	cfg := managedShowConfig(prov, home, scope, data)
 	if !redact {
 		return cfg
 	}
@@ -117,11 +117,15 @@ func showPayload(prov provider.Provider, data map[string]any, redact bool) any {
 }
 
 // managedShowConfig copies the juggernaut block (when present) plus the
-// provider's native managed keys so show is CLI-agnostic.
-func managedShowConfig(prov provider.Provider, data map[string]any) map[string]any {
+// provider's native managed keys so show is CLI-agnostic. Sidecar providers
+// (OpenCode) keep the block in the sidecar file, so include it from there when
+// it is not present in the vendor config.
+func managedShowConfig(prov provider.Provider, home, scope string, data map[string]any) map[string]any {
 	out := map[string]any{}
 	if v, ok := data["juggernaut"]; ok {
 		out["juggernaut"] = v
+	} else if block := sidecarBlock(prov, home, scope); block != nil {
+		out["juggernaut"] = block
 	}
 	for _, k := range prov.NativeManagedKeys() {
 		if k == "juggernaut" {
@@ -132,6 +136,20 @@ func managedShowConfig(prov provider.Provider, data map[string]any) map[string]a
 		}
 	}
 	return out
+}
+
+// sidecarBlock reads the scope's sidecar auth-metadata file and returns its
+// juggernaut block, or nil when the provider has no sidecar or the file is
+// missing/unparseable.
+func sidecarBlock(prov provider.Provider, home, scope string) map[string]any {
+	if !provider.HasSidecar(prov) {
+		return nil
+	}
+	path, err := sidecarPath(prov, home, scope)
+	if err != nil {
+		return nil
+	}
+	return provider.ReadSidecarFile(path)
 }
 
 func redactSecrets(v any) any {

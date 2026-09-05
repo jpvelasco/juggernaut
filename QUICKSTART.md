@@ -69,7 +69,7 @@ juggernaut logs export                 # redacted zip for support
 - Claude Code 1M context accounting for Opus and Sonnet by default
 - All three model tiers visible in `/model` selector
 - Optimized token limits (32768 output, 65536 thinking)
-- Native `bedrock-runtime` routing for every CLI (no proxy/Mantle); Codex uses the built-in `amazon-bedrock-runtime` provider (Codex CLI ≥ 0.153.4 — apply/doctor warn on older binaries), OpenCode uses `provider.amazon-bedrock` (region + live models + whitelist), Grok uses `https://bedrock-runtime.{region}.amazonaws.com/openai/v1`
+- Native `bedrock-runtime` routing for every CLI (no proxy/Mantle); Codex uses the built-in `amazon-bedrock-runtime` provider (Codex CLI ≥ 0.153.4 — apply/doctor warn on older binaries), OpenCode uses `provider.amazon-bedrock` (region + live models + `whitelist`, omitted when none are discovered — OpenCode's strict schema rejects `null`), Grok uses `https://bedrock-runtime.{region}.amazonaws.com/openai/v1`
 - Configuration in `~/.claude/settings.json` (Claude), `~/.codex/config.toml` (Codex), `~/.config/opencode/opencode.json` (OpenCode), `~/.grok/config.toml` (Grok)
 - A non-secret runtime fallback in `~/.juggernaut/runtime/claude.json` so Claude updates cannot silently disable Bedrock routing
 - A marked shell activation block that delegates `claude` to `juggernaut launch`

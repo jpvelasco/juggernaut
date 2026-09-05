@@ -164,18 +164,52 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 		warnf("could not check %s scope: %v", scope, err)
 		return
 	}
-	if !has {
+	// Sidecar providers (OpenCode) also own the auth-metadata sidecar file.
+	// HasManagedKeys short-circuits true on a legacy in-file "juggernaut" key,
+	// so a legacy-only opencode.json still reaches the removal path here.
+	owns := has || provider.SidecarExists(prov, home, scope)
+	if !owns {
 		return
 	}
 	if uninstallFlags.dryRun {
-		fmt.Printf("Would remove juggernaut block from %s %s config\n", scope, prov.Name())
+		if has {
+			fmt.Printf("Would remove juggernaut block from %s %s config\n", scope, prov.Name())
+		}
+		printSidecarRemoval(prov, home, scope)
 		return
 	}
-	if err := mgr.RemoveManagedKeysDeep(prov.NativeManagedKeys(), prov.OwnedSubKeys()); err != nil {
-		warnf("could not remove %s block: %v", scope, err)
+	if has {
+		if err := mgr.RemoveManagedKeysDeep(prov.NativeManagedKeys(), prov.OwnedSubKeys()); err != nil {
+			warnf("could not remove %s block: %v", scope, err)
+			return
+		}
+		fmt.Printf("  ✓ Removed juggernaut block from %s %s config\n", scope, prov.Name())
+	}
+	removeSidecarFile(prov, home, scope)
+}
+
+// printSidecarRemoval previews the sidecar removal during a dry-run (only when
+// the sidecar exists).
+func printSidecarRemoval(prov provider.Provider, home, scope string) {
+	if !provider.SidecarExists(prov, home, scope) {
 		return
 	}
-	fmt.Printf("  ✓ Removed juggernaut block from %s %s config\n", scope, prov.Name())
+	if path, err := sidecarPath(prov, home, scope); err == nil {
+		fmt.Printf("Would remove %s\n", path)
+	}
+}
+
+// removeSidecarFile deletes the provider's auth-metadata sidecar for the scope
+// (no-op when absent or for non-sidecar providers).
+func removeSidecarFile(prov provider.Provider, home, scope string) {
+	if !provider.SidecarExists(prov, home, scope) {
+		return
+	}
+	if err := provider.RemoveSidecar(prov, home, []string{scope}); err != nil {
+		warnf("could not remove %s auth metadata sidecar: %v", prov.Name(), err)
+		return
+	}
+	fmt.Printf("  ✓ Removed auth metadata sidecar for %s %s\n", scope, prov.Name())
 }
 
 func removeKeychainToken(home string) {

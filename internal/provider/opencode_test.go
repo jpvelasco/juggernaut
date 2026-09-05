@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -113,11 +112,21 @@ func TestOpenCode_OwnsConfig(t *testing.T) {
 }
 
 // TestOpenCode_BuildConfig_DefaultAlias: default (gpt-oss) writes the built-in
-// amazon-bedrock provider block (region + live models + whitelist), plus top-level model.
+// amazon-bedrock provider block (region + live models + whitelist) plus
+// top-level model. The plan carries NO juggernaut key — OpenCode's strict
+// schema rejects unknown top-level keys, so the auth-mode block lives in the
+// sidecar file (see TestOpenCode_Sidecar).
 func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	p, _ := Get("opencode")
 	opts := baseOpts()
 	opts.Region = "us-west-2"
+	// All native sources are supported; a mantle source would be excluded.
+	opts.ModelCatalog = []CatalogModel{
+		{ID: "openai.gpt-oss-120b-1:0", Status: "ACTIVE", Source: "foundation"},
+		{ID: "moonshotai.kimi-k2.5", Status: "ACTIVE", Source: "profile"},
+		{ID: "zai.glm-4.7", Status: "ACTIVE", Source: "foundation"},
+		{ID: "openai.gpt-5.6-sol", Status: "ACTIVE", Source: "mantle"}, // excluded: native-only
+	}
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
@@ -147,23 +156,64 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 	if _, hasAPIKey := optsNested["apiKey"]; hasAPIKey {
 		t.Errorf("must not have apiKey for built-in provider")
 	}
-	// models and whitelist must be present
+	// models must be present; whitelist must equal the discovered non-mantle IDs
 	if _, ok := bmMap["models"]; !ok {
 		t.Error("models should be present")
 	}
-	if _, ok := bmMap["whitelist"]; !ok {
-		t.Error("whitelist should be present")
+	wl, ok := bmMap["whitelist"].([]string)
+	if !ok {
+		t.Fatalf("whitelist should be a non-empty []string with a catalog, got %T", bmMap["whitelist"])
+	}
+	want := map[string]bool{"openai.gpt-oss-120b-1:0": true, "moonshotai.kimi-k2.5": true, "zai.glm-4.7": true}
+	if len(wl) != len(want) {
+		t.Fatalf("whitelist = %v, want the 3 discovered native models (mantle excluded)", wl)
+	}
+	for _, id := range wl {
+		if !want[id] {
+			t.Errorf("whitelist contains unexpected model %q", id)
+		}
 	}
 	// top-level model must be provider_id/model_id with native ID
 	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/openai.gpt-oss-120b-1:0" {
 		t.Errorf("model = %q, want amazon-bedrock/openai.gpt-oss-120b-1:0", m)
 	}
+	// RC1: no juggernaut key in the vendor-validated config
+	if _, ok := plan.Keys["juggernaut"]; ok {
+		t.Error("opencode.json plan must NOT contain a top-level juggernaut key (OpenCode schema: additionalProperties=false)")
+	}
 	if err := plan.Validate(); err != nil {
 		t.Errorf("plan should validate: %v", err)
 	}
-	mode, ok := testutil.NestedMapChain(plan.Keys, "juggernaut", "auth", "mode")
-	if !ok || mode != authmode.IAM {
-		t.Errorf("juggernaut.auth.mode = %v, want iam", mode)
+}
+
+// TestOpenCode_BuildConfig_NoCatalogOmitsWhitelist: with no discovered models
+// (no cached catalog — the normal fresh-install case), the whitelist key must
+// be ABSENT entirely. A nil slice marshals to null and an empty array would
+// hide every model in OpenCode's picker; OpenCode's schema requires array or
+// absent (RC2).
+func TestOpenCode_BuildConfig_NoCatalogOmitsWhitelist(t *testing.T) {
+	p, _ := Get("opencode")
+	opts := baseOpts()
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	bm, ok := testutil.NestedMapChain(plan.Keys, "provider", "amazon-bedrock")
+	if !ok {
+		t.Fatalf("provider.amazon-bedrock missing")
+	}
+	bmMap, ok := bm.(map[string]any)
+	if !ok {
+		t.Fatalf("provider.amazon-bedrock not a map: %T", bm)
+	}
+	if wl, present := bmMap["whitelist"]; present {
+		t.Errorf("whitelist must be omitted when discovery finds no supported models, got %#v", wl)
+	}
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/openai.gpt-oss-120b-1:0" {
+		t.Errorf("model = %q, want amazon-bedrock/openai.gpt-oss-120b-1:0", m)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Errorf("plan should validate: %v", err)
 	}
 }
 

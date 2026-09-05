@@ -125,22 +125,36 @@ func resolvedScopes(filter string) []string {
 	return []string{"user", "project"}
 }
 
-// resolveLaunchConfigPaths returns this provider's config files in launch
-// precedence order: project scope first, then user. Duplicate paths (Grok maps
-// both scopes to the same file) are omitted so launch reads each file once.
+// resolveLaunchConfigPaths returns this provider's juggernaut.auth.mode sources
+// in launch precedence order: sidecar files first (project then user, for
+// providers that keep the block out of the vendor-validated config), then the
+// config files (project then user, legacy in-file block). Duplicate paths
+// (Grok maps both scopes to the same file) are omitted so launch reads each
+// file once.
 func resolveLaunchConfigPaths(prov provider.Provider, home string) []string {
+	seen := make(map[string]struct{}, 4)
 	var paths []string
-	seen := make(map[string]struct{}, 2)
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		paths = append(paths, p)
+	}
+	if src, ok := prov.(provider.SidecarAuthSource); ok {
+		for _, p := range src.SidecarPaths(home) {
+			add(p)
+		}
+	}
 	for _, scope := range []string{"project", "user"} {
 		p, err := prov.ConfigPath(home, scope)
 		if err != nil || p == "" {
 			continue
 		}
-		if _, ok := seen[p]; ok {
-			continue
-		}
-		seen[p] = struct{}{}
-		paths = append(paths, p)
+		add(p)
 	}
 	return paths
 }
@@ -191,9 +205,9 @@ func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provide
 	if isReapply {
 		// Pass applyFlags.auth, not the still-empty named return, so an
 		// explicit --auth on re-apply wins over the existing block.
-		return resolveReApplyInputs(bCfg, prov, applyFlags.auth, region, opusplan, existing)
+		return resolveReApplyInputs(home, bCfg, prov, applyFlags.auth, region, opusplan, existing)
 	}
-	return resolveFirstApplyInputs(bCfg, prov, region, opusplan)
+	return resolveFirstApplyInputs(home, bCfg, prov, region, opusplan)
 }
 
 // isInteractiveStdin reports whether stdin is a terminal. Tests replace it.
@@ -215,12 +229,12 @@ func isCharDeviceMode(mode os.FileMode) bool {
 // always wins. A TTY with no --auth runs the guided first-run prompt even
 // when defaults.auth_mode is set. Non-interactive runs use resolveAuthMode
 // defaults so scripts keep working without a prompt.
-func resolveFirstApplyInputs(bCfg *bedrock.Config, prov provider.Provider, region string, opusplan bool) (string, string, bool, error) {
+func resolveFirstApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider, region string, opusplan bool) (string, string, bool, error) {
 	if applyFlags.auth != "" {
 		return applyFlags.auth, region, opusplan, nil
 	}
 	if !isInteractiveStdin() {
-		if authMode := resolveAuthMode("", prov, bCfg, nil); authMode != "" {
+		if authMode := resolveAuthMode("", home, prov, bCfg, nil); authMode != "" {
 			return authMode, region, opusplan, nil
 		}
 	}
@@ -241,22 +255,33 @@ func detectReapplyConfig(prov provider.Provider, home, scope string) (existing m
 	return existing, prov.OwnsConfig(existing), nil
 }
 
+// existingAuthMode extracts the auth mode from a parsed provider config's
+// in-file juggernaut block ("" when absent).
+func existingAuthMode(existing map[string]any) string {
+	jBlock, ok := existing["juggernaut"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return provider.BlockAuthMode(jBlock)
+}
+
 // resolveAuthMode determines the authentication mode through the resolution
 // chain: flag value → provider default (BedrockAPIKey for Mantle-only CLIs) →
-// existing juggernaut block → bedrock config default.
-func resolveAuthMode(flagValue string, prov provider.Provider, bCfg *bedrock.Config, existing map[string]any) string {
+// sidecar block (project then user, when the provider keeps the block outside
+// the vendor-validated config) → in-file juggernaut block (legacy) → bedrock
+// config default.
+func resolveAuthMode(flagValue, home string, prov provider.Provider, bCfg *bedrock.Config, existing map[string]any) string {
 	if flagValue != "" {
 		return flagValue
 	}
 	if !prov.Supports(provider.CapNativeAuth) {
 		return authmode.BedrockAPIKey
 	}
-	if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
-		if auth, ok := jBlock["auth"].(map[string]any); ok {
-			if mode, ok := auth["mode"].(string); ok && mode != "" {
-				return mode
-			}
-		}
+	if mode, ok := provider.ReadSidecarAuthMode(prov, home); ok {
+		return mode
+	}
+	if mode := existingAuthMode(existing); mode != "" {
+		return mode
 	}
 	if bCfg != nil {
 		return bCfg.Defaults.AuthMode
@@ -268,8 +293,8 @@ func resolveAuthMode(flagValue string, prov provider.Provider, bCfg *bedrock.Con
 // config when re-applying. Reads auth mode and permission mode from the
 // juggernaut block and native permissions block, falling back to the global
 // default for auth mode when not supplied as a flag.
-func resolveReApplyInputs(bCfg *bedrock.Config, prov provider.Provider, authMode, region string, opusplan bool, existing map[string]any) (string, string, bool, error) {
-	authMode = resolveAuthMode(authMode, prov, bCfg, existing)
+func resolveReApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider, authMode, region string, opusplan bool, existing map[string]any) (string, string, bool, error) {
+	authMode = resolveAuthMode(authMode, home, prov, bCfg, existing)
 	if jBlock, ok := existing["juggernaut"].(map[string]any); ok {
 		if applyFlags.mode == "" {
 			if meta, ok := jBlock["meta"].(map[string]any); ok {
@@ -401,6 +426,11 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 
 	title := prov.DisplayName()
 	fmt.Printf("Would write juggernaut config to %s\n", path)
+	if provider.HasSidecar(prov) {
+		if scPath, err := sidecarPath(prov, home, applyFlags.scope); err == nil {
+			fmt.Printf("Would write juggernaut auth metadata to %s\n", scPath)
+		}
+	}
 	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
 	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
 	if prov.Name() == "claude" {
@@ -643,10 +673,17 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 			stripMantleLeftovers(existing)
 			provider.StripLegacyConfig(prov, existing)
 		}
+		// Sidecar providers (OpenCode) always strip the v6.2.0–v6.3.0
+		// in-file juggernaut block — a plain apply is the migration, even
+		// when no Mantle migration is in flight.
+		if notice := provider.MigrateSidecarLegacy(prov, existing); notice != "" {
+			fmt.Printf("Migrating %s: %s\n", prov.DisplayName(), notice)
+		}
 	}); err != nil {
 		return err
 	}
 
+	persistSidecarState(home, prov, provOpts)
 	persistRuntimeState(home, prov, authMode, plan)
 	if err := installActivation(home, prov); err != nil {
 		return err
@@ -660,6 +697,20 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		warnAutoModeModel(block)
 	}
 	return nil
+}
+
+// persistSidecarState writes the provider's sidecar auth-mode file (non-secret
+// metadata only — the bearer token stays in the keychain). Providers without
+// the sidecar extension keep the block inside their config, so this is a
+// no-op for them. A sidecar write failure warns but never fails the config
+// write (same secondary-write pattern as persistRuntimeState).
+func persistSidecarState(home string, prov provider.Provider, provOpts provider.Options) {
+	if !provider.HasSidecar(prov) {
+		return
+	}
+	if err := provider.WriteSidecar(prov, home, provOpts); err != nil {
+		warnf("could not write %s auth metadata sidecar: %v", prov.Name(), err)
+	}
 }
 
 // persistRuntimeState retains only provider-generated, non-secret user-scope
@@ -686,6 +737,16 @@ func persistRuntimeState(home string, prov provider.Provider, authMode string, p
 		_ = activation.RemoveRuntimeState(home, prov.Name())
 		warnf("could not save runtime fallback: %v", err)
 	}
+}
+
+// sidecarPath resolves the provider's sidecar auth-metadata path for a scope.
+// Non-sidecar providers never call this (gate on provider.HasSidecar first).
+func sidecarPath(p provider.Provider, home, scope string) (string, error) {
+	src, ok := p.(provider.SidecarAuthSource)
+	if !ok {
+		return "", fmt.Errorf("provider %q has no auth-metadata sidecar", p.Name())
+	}
+	return src.SidecarPath(home, scope)
 }
 
 // warnAutoModeModel handles --mode=auto outcomes. AutoModeUsable means the

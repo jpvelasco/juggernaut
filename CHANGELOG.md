@@ -2,6 +2,35 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **OpenCode config validates against OpenCode's strict schema again (fixes #463).**
+  `apply --cli=opencode` was writing an `opencode.json` that OpenCode rejects at
+  startup (its config schema is `additionalProperties: false`), so a fresh
+  install could not launch `opencode` at all. Two independent violations:
+  - **Unknown top-level `juggernaut` key.** The auth-mode metadata block
+    (`juggernaut.auth.mode` / `region`) no longer lives inside
+    `opencode.json`. Juggernaut now writes it to an owner-only sidecar file next
+    to the config — `./.juggernaut.json` (project) or
+    `~/.config/opencode/.juggernaut.json` (user). Codex and Grok keep their
+    blocks inside their (not schema-validated) TOML configs, unchanged. The
+    launch wrapper reads the sidecar the same way it read the in-file block
+    before (project then user), and a plain `apply` over a
+    v6.2.0–v6.3.0 `opencode.json` strips the now-legacy in-file block and a
+    stale null/empty `whitelist` and moves the auth mode to the sidecar.
+    `uninstall --cli=opencode` removes the sidecar (and any leftover in-file
+    block).
+  - **`whitelist: null`.** When live discovery finds no supported models
+    (the normal fresh-install case), `opencode.json` now omits `whitelist`
+    entirely instead of writing `null` (a nil slice) or `[]` (an empty array
+    would hide every model from OpenCode's picker).
+- **No behavior change for a multi-CLI box's shared token.** Per-target auth
+  precedence is preserved: a Claude-IAM-managed box still injects
+  `AWS_BEARER_TOKEN_BEDROCK` when launching an OpenCode target configured with
+  `--auth=bedrock-api-key` (the target's own mode wins over Claude's).
+
 ## [6.3.0] - 2026-09-05
 
 **Feature release.** Codex now routes through Codex's built-in
