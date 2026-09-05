@@ -1,12 +1,43 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 )
+
+// stubCodexVersion points the version source at a temp PATH dir holding a file
+// named like the codex binary and stubs the probe to report the given version.
+// The real PATH resolution (activation.ResolveBinary) still runs; only the
+// probe exec is faked (a stub file isn't a real executable on every OS). CI
+// runners have no codex on PATH, so tests must not depend on the host binary.
+func stubCodexVersion(t *testing.T, version string) {
+	t.Helper()
+	dir := t.TempDir()
+	name := provider.MustGet("codex").BinaryNames()[0]
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	codexVersionPath = dir
+	restoreProbe := codexVersionProbe
+	codexVersionProbe = func(string) (string, bool) { return version, true }
+	t.Cleanup(func() {
+		codexVersionPath = ""
+		codexVersionProbe = restoreProbe
+	})
+}
+
+// stubCodexAbsent points the version source at an empty PATH dir so the real
+// resolution legitimately fails with exec.ErrNotFound.
+func stubCodexAbsent(t *testing.T) {
+	t.Helper()
+	codexVersionPath = t.TempDir()
+	t.Cleanup(func() { codexVersionPath = "" })
+}
 
 func TestParseCodexVersion(t *testing.T) {
 	cases := []struct {
@@ -54,9 +85,10 @@ func TestCodexVersionAtLeast(t *testing.T) {
 // warning (stderr) telling the user to update.
 func TestCodexVersionGate_WarnsOnOldBinary(t *testing.T) {
 	_ = setupApplyTest(t)
-	restore := codexVersionProbe
-	codexVersionProbe = func(string) (string, bool) { return "0.148.0-alpha.9", true }
-	defer func() { codexVersionProbe = restore }()
+	// Stub PATH + probe (not just the probe): CI runners have no codex binary
+	// on PATH, so resolving the real binary would make the gate depend on the
+	// host.
+	stubCodexVersion(t, "0.148.0-alpha.9")
 
 	stderr := captureStderr(t, func() { warnCodexVersion() })
 	for _, want := range []string{"0.148.0-alpha.9", codexMinVersion, provider.CodexBedrockRuntimeProviderID} {
@@ -70,20 +102,20 @@ func TestCodexVersionGate_WarnsOnOldBinary(t *testing.T) {
 // absent/unparseable binary must NOT warn (absence is the binary-status
 // check's job, not the version gate's).
 func TestCodexVersionGate_NoWarnOnModernOrMissingBinary(t *testing.T) {
-	_ = setupApplyTest(t)
-	cases := map[string]func(string) (string, bool){
-		"modern": func(string) (string, bool) { return "0.153.4", true },
-		"absent": func(string) (string, bool) { return "", false },
-		"badout": func(string) (string, bool) { return "", false },
-	}
-	for name, probe := range cases {
-		restore := codexVersionProbe
-		codexVersionProbe = probe
-		defer func() { codexVersionProbe = restore }()
+	t.Run("modern", func(t *testing.T) {
+		_ = setupApplyTest(t)
+		stubCodexVersion(t, "0.153.4")
 		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
-			t.Errorf("%s: no warning expected, got:\n%s", name, got)
+			t.Errorf("no warning expected, got:\n%s", got)
 		}
-	}
+	})
+	t.Run("absent", func(t *testing.T) {
+		_ = setupApplyTest(t)
+		stubCodexAbsent(t)
+		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
+			t.Errorf("no warning expected, got:\n%s", got)
+		}
+	})
 }
 
 func TestDoctorCodexVersion(t *testing.T) {
@@ -92,21 +124,22 @@ func TestDoctorCodexVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	stub := func(version string) func(t *testing.T) {
+		return func(t *testing.T) { stubCodexVersion(t, version) }
+	}
 	cases := []struct {
 		name    string
-		probe   func(string) (string, bool)
+		setup   func(t *testing.T)
 		want    doctor.Status
 		wantSub string
 	}{
-		{name: "modern", probe: func(string) (string, bool) { return "0.153.4", true }, want: doctor.OK, wantSub: "0.153.4"},
-		{name: "old", probe: func(string) (string, bool) { return "0.148.0-alpha.9", true }, want: doctor.Warn, wantSub: "update"},
-		{name: "absent", probe: func(string) (string, bool) { return "", false }, want: ""},
+		{name: "modern", setup: stub("0.153.4"), want: doctor.OK, wantSub: "0.153.4"},
+		{name: "old", setup: stub("0.148.0-alpha.9"), want: doctor.Warn, wantSub: "update"},
+		{name: "absent", setup: func(t *testing.T) { stubCodexAbsent(t) }, want: ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			restore := codexVersionProbe
-			codexVersionProbe = c.probe
-			defer func() { codexVersionProbe = restore }()
+			c.setup(t)
 
 			status, detail := doctorCodexVersion(codexProv)
 			if status != c.want {

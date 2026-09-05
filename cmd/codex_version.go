@@ -45,13 +45,19 @@ func parseCodexVersion(out string) (string, bool) {
 	return fields[len(fields)-1], true
 }
 
+// codexVersionPath is the PATH the codex binary is resolved from. A package
+// var (defaulted to the real PATH) so tests point it at a temp dir — PATH is
+// process-global and CI runners have no codex, so resolving the real binary
+// would make the version gate depend on the host.
+var codexVersionPath = os.Getenv("PATH")
+
 // codexBinaryVersion resolves the codex binary on PATH and returns its
 // version. Returns ok=false when the binary is absent or the probe fails —
 // callers treat that as "cannot determine" and do NOT warn (a missing binary
 // is reported separately by the binary-status checks).
-func codexBinaryVersion() (version string, ok bool) {
+func codexBinaryVersion() (string, bool) {
 	names := provider.MustGet("codex").BinaryNames()
-	found, err := activation.ResolveBinary(os.Getenv("PATH"), names)
+	found, err := activation.ResolveBinary(codexVersionPath, names)
 	if err != nil {
 		return "", false
 	}
