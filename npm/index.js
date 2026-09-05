@@ -203,13 +203,29 @@ function describeSpawnOutcome(result) {
   return {exitCode: result.status !== null && result.status !== undefined ? result.status : 1, message: ""};
 }
 
+/**
+ * Builds the stderr message for a platform the launcher cannot serve. Windows
+ * on ARM (win32/arm64) is intentionally not built (see .goreleaser.yml), so it
+ * gets a "known gap, not a bug" message instead of the generic "file an issue"
+ * prompt. Every other unsupported platform is treated as a real bug to report.
+ * @param {string} platform
+ * @param {string} arch
+ * @returns {string}
+ */
+function unsupportedPlatformMessage(platform, arch) {
+  var message = "juggernaut-bedrock: unsupported platform " + platform + "/" + arch + "\n";
+  if (platform === "win32" && arch === "arm64") {
+    message += "Windows on ARM (arm64) is not supported; use an x64 Windows install.\n";
+  } else {
+    message += "Please file an issue: https://github.com/jpvelasco/juggernaut/issues\n";
+  }
+  return message;
+}
+
 if (require.main === module) {
   var pkg = getPlatformPackage(process.platform, process.arch);
   if (!pkg) {
-    process.stderr.write(
-      "juggernaut-bedrock: unsupported platform " + process.platform + "/" + process.arch + "\n" +
-      "Please file an issue: https://github.com/jpvelasco/juggernaut/issues\n"
-    );
+    process.stderr.write(unsupportedPlatformMessage(process.platform, process.arch));
     process.exit(1);
   }
 
@@ -291,5 +307,6 @@ module.exports = {
   stageLaunchBinary: stageLaunchBinary,
   versionsMatch: versionsMatch,
   safeResolveBin: safeResolveBin,
-  describeSpawnOutcome: describeSpawnOutcome
+  describeSpawnOutcome: describeSpawnOutcome,
+  unsupportedPlatformMessage: unsupportedPlatformMessage
 };

@@ -28,7 +28,7 @@ var uninstallFlags struct {
 
 func init() {
 	f := uninstallCmd.Flags()
-	f.StringVar(&uninstallFlags.cli, "cli", "claude", "CLI to remove: claude, codex")
+	f.StringVar(&uninstallFlags.cli, "cli", "claude", "CLI to remove: "+provider.SupportedNames())
 	f.StringVar(&uninstallFlags.scope, "scope", "", "remove only user or project scope")
 	f.BoolVar(&uninstallFlags.full, "full", false, "also remove shell activation blocks")
 	f.BoolVarP(&uninstallFlags.force, "force", "f", false, "skip confirmation prompt")

@@ -232,7 +232,7 @@ func TestBuild_FableDefaultsAndNativeAliases(t *testing.T) {
 	if block.Models.Fable != "global.anthropic.claude-fable-5" {
 		t.Errorf("expected Fable model from config, got %q", block.Models.Fable)
 	}
-	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"] != "Fable 5" {
+	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"] != "Fable 5.1" {
 		t.Errorf("expected Fable display name, got %q", block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_NAME"])
 	}
 	if block.Env["ANTHROPIC_DEFAULT_FABLE_MODEL_DESCRIPTION"] == "" {
@@ -243,7 +243,7 @@ func TestBuild_FableDefaultsAndNativeAliases(t *testing.T) {
 	}
 
 	overrides := block.NativeKeys().ModelOverrides
-	for _, key := range []string{"fable", "claude-fable-5", "anthropic.claude-fable-5"} {
+	for _, key := range []string{"fable", "claude-fable-5", "claude-fable-5-1", "anthropic.claude-fable-5", "anthropic.claude-fable-5-1"} {
 		if overrides[key] != "global.anthropic.claude-fable-5" {
 			t.Errorf("expected %s to map to global Fable profile, got %q", key, overrides[key])
 		}
@@ -258,6 +258,8 @@ func TestIsFable5Model(t *testing.T) {
 		{"global.anthropic.claude-fable-5", true},
 		{"us.anthropic.claude-fable-5", true},
 		{"anthropic.claude-fable-5", true},
+		{"global.anthropic.claude-fable-5-1", true},
+		{"global.anthropic.claude-fable-5-1[1m]", true},
 		{"global.anthropic.claude-fable-5[1m]", true},
 		{"", false},
 		{"global.anthropic.claude-sonnet-5", false},
@@ -583,7 +585,7 @@ func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
 			t.Errorf("expected %s to map to global Opus profile, got %q", key, overrides[key])
 		}
 	}
-	for _, key := range []string{"fable", "claude-fable-5", "anthropic.claude-fable-5"} {
+	for _, key := range []string{"fable", "claude-fable-5", "claude-fable-5-1", "anthropic.claude-fable-5", "anthropic.claude-fable-5-1"} {
 		if overrides[key] != "global.anthropic.claude-fable-5" {
 			t.Errorf("expected %s to map to global Fable profile, got %q", key, overrides[key])
 		}

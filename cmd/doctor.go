@@ -32,7 +32,7 @@ var doctorFlags struct {
 
 func init() {
 	doctorCmd.Flags().StringVar(&doctorFlags.scope, "scope", "", "check only user or project scope")
-	doctorCmd.Flags().StringVar(&doctorFlags.cli, "cli", "claude", "coding CLI to diagnose (claude, codex, opencode, grok)")
+	doctorCmd.Flags().StringVar(&doctorFlags.cli, "cli", "claude", "coding CLI to diagnose: "+provider.SupportedNames())
 	doctorCmd.Flags().BoolVar(&doctorFlags.jsonOut, "json", false, "output as JSON")
 	rootCmd.AddCommand(doctorCmd)
 }

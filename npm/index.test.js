@@ -320,3 +320,32 @@ describe("describeSpawnOutcome", function() {
   });
   return void 0;
 });
+
+describe("unsupportedPlatformMessage", function() {
+  var unsupportedPlatformMessage = index.unsupportedPlatformMessage;
+
+  // Given Windows on ARM (intentionally not built, see .goreleaser.yml),
+  // When the launcher cannot serve it,
+  // Then the message names the known gap and points to x64, without a
+  // "file an issue" prompt (it is expected, not a bug).
+  it("documents win32/arm64 as a known gap, not a bug", function() {
+    var msg = unsupportedPlatformMessage("win32", "arm64");
+    assert.ok(msg.indexOf("win32/arm64") !== -1);
+    assert.ok(msg.indexOf("Windows on ARM") !== -1);
+    assert.ok(msg.indexOf("x64") !== -1);
+    assert.strictEqual(msg.indexOf("file an issue"), -1);
+    return void 0;
+  });
+
+  // Given a genuinely unexpected platform,
+  // When the launcher cannot serve it,
+  // Then it prompts the user to file an issue (treated as a real bug).
+  it("prompts to file an issue for unexpected platforms", function() {
+    var msg = unsupportedPlatformMessage("freebsd", "x64");
+    assert.ok(msg.indexOf("freebsd/x64") !== -1);
+    assert.ok(msg.indexOf("file an issue") !== -1);
+    assert.strictEqual(msg.indexOf("Windows on ARM"), -1);
+    return void 0;
+  });
+  return void 0;
+});
