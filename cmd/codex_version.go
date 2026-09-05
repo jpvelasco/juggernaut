@@ -52,16 +52,21 @@ func parseCodexVersion(out string) (string, bool) {
 var codexVersionPath = os.Getenv("PATH")
 
 // codexBinaryVersion resolves the codex binary on PATH and returns its
-// version. Returns ok=false when the binary is absent or the probe fails —
-// callers treat that as "cannot determine" and do NOT warn (a missing binary
-// is reported separately by the binary-status checks).
+// version. Returns ok=false when the binary is absent, the probe fails, or the
+// version can't be parsed into a numeric triple — callers treat that as
+// "cannot determine" and do NOT warn (a missing binary is reported separately
+// by the binary-status checks).
 func codexBinaryVersion() (string, bool) {
 	names := provider.MustGet("codex").BinaryNames()
 	found, err := activation.ResolveBinary(codexVersionPath, names)
 	if err != nil {
 		return "", false
 	}
-	return codexVersionProbe(found)
+	v, ok := codexVersionProbe(found)
+	if !ok || len(versionTriple(v)) == 0 {
+		return "", false
+	}
+	return v, true
 }
 
 // codexVersionAtLeast reports whether v is >= min by numeric triple.

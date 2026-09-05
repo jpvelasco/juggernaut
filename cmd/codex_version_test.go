@@ -10,23 +10,25 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 )
 
-// stubCodexVersion points the version source at a temp PATH dir holding a file
-// named like the codex binary and stubs the probe to report the given version.
+// stubCodexProbe points the version source at a temp PATH dir holding a file
+// named like the codex binary, and stubs the probe to report the given version.
 // The real PATH resolution (activation.ResolveBinary) still runs; only the
 // probe exec is faked (a stub file isn't a real executable on every OS). CI
 // runners have no codex on PATH, so tests must not depend on the host binary.
-func stubCodexVersion(t *testing.T, version string) {
+// version "unknown" exercises the unparseable ("cannot determine") path.
+func stubCodexProbe(t *testing.T, version string) {
 	t.Helper()
 	dir := t.TempDir()
 	name := provider.MustGet("codex").BinaryNames()[0]
 	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	restorePath := codexVersionPath
 	codexVersionPath = dir
 	restoreProbe := codexVersionProbe
 	codexVersionProbe = func(string) (string, bool) { return version, true }
 	t.Cleanup(func() {
-		codexVersionPath = ""
+		codexVersionPath = restorePath
 		codexVersionProbe = restoreProbe
 	})
 }
@@ -35,8 +37,9 @@ func stubCodexVersion(t *testing.T, version string) {
 // resolution legitimately fails with exec.ErrNotFound.
 func stubCodexAbsent(t *testing.T) {
 	t.Helper()
+	restorePath := codexVersionPath
 	codexVersionPath = t.TempDir()
-	t.Cleanup(func() { codexVersionPath = "" })
+	t.Cleanup(func() { codexVersionPath = restorePath })
 }
 
 func TestParseCodexVersion(t *testing.T) {
@@ -88,7 +91,7 @@ func TestCodexVersionGate_WarnsOnOldBinary(t *testing.T) {
 	// Stub PATH + probe (not just the probe): CI runners have no codex binary
 	// on PATH, so resolving the real binary would make the gate depend on the
 	// host.
-	stubCodexVersion(t, "0.148.0-alpha.9")
+	stubCodexProbe(t, "0.148.0-alpha.9")
 
 	stderr := captureStderr(t, func() { warnCodexVersion() })
 	for _, want := range []string{"0.148.0-alpha.9", codexMinVersion, provider.CodexBedrockRuntimeProviderID} {
@@ -104,7 +107,7 @@ func TestCodexVersionGate_WarnsOnOldBinary(t *testing.T) {
 func TestCodexVersionGate_NoWarnOnModernOrMissingBinary(t *testing.T) {
 	t.Run("modern", func(t *testing.T) {
 		_ = setupApplyTest(t)
-		stubCodexVersion(t, "0.153.4")
+		stubCodexProbe(t, "0.153.4")
 		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
 			t.Errorf("no warning expected, got:\n%s", got)
 		}
@@ -112,6 +115,13 @@ func TestCodexVersionGate_NoWarnOnModernOrMissingBinary(t *testing.T) {
 	t.Run("absent", func(t *testing.T) {
 		_ = setupApplyTest(t)
 		stubCodexAbsent(t)
+		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
+			t.Errorf("no warning expected, got:\n%s", got)
+		}
+	})
+	t.Run("unparseable", func(t *testing.T) {
+		_ = setupApplyTest(t)
+		stubCodexProbe(t, "unknown")
 		if got := captureStderr(t, func() { warnCodexVersion() }); got != "" {
 			t.Errorf("no warning expected, got:\n%s", got)
 		}
@@ -124,18 +134,16 @@ func TestDoctorCodexVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stub := func(version string) func(t *testing.T) {
-		return func(t *testing.T) { stubCodexVersion(t, version) }
-	}
 	cases := []struct {
 		name    string
 		setup   func(t *testing.T)
 		want    doctor.Status
 		wantSub string
 	}{
-		{name: "modern", setup: stub("0.153.4"), want: doctor.OK, wantSub: "0.153.4"},
-		{name: "old", setup: stub("0.148.0-alpha.9"), want: doctor.Warn, wantSub: "update"},
-		{name: "absent", setup: func(t *testing.T) { stubCodexAbsent(t) }, want: ""},
+		{name: "modern", setup: func(t *testing.T) { stubCodexProbe(t, "0.153.4") }, want: doctor.OK, wantSub: "0.153.4"},
+		{name: "old", setup: func(t *testing.T) { stubCodexProbe(t, "0.148.0-alpha.9") }, want: doctor.Warn, wantSub: "update"},
+		{name: "absent", setup: stubCodexAbsent, want: ""},
+		{name: "unparseable", setup: func(t *testing.T) { stubCodexProbe(t, "unknown") }, want: ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
