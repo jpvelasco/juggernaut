@@ -162,7 +162,7 @@ func catalogUnavailableWarning(models []CatalogModel, selectedID, region, suffix
 		return ""
 	}
 	return fmt.Sprintf(
-		"model %q was not returned as ACTIVE and available by Mantle in %s; %s",
+		"model %q was not returned as ACTIVE and available in %s; %s",
 		selectedID, region, suffix)
 }
 

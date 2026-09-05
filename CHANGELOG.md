@@ -6,6 +6,18 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Fixed
 
+- **OpenCode's `grok-4.6` alias now routes to a servable model (fixes #458).**
+  The convenience aliases `grok-4.6` and `grok-4.3` resolved to the bare
+  `xai.grok-4.6` foundation ID, which the `bedrock-runtime` endpoint rejects —
+  it only serves cross-Region inference profile IDs. Both now resolve to
+  `global.xai.grok-4.6`, matching the Grok provider's own normalization.
+  Audit note: the other aliases (`glm-4.7`, `glm-5`, `kimi-k2.5`,
+  `deepseek-v3.2`, `qwen3-coder`) remain bare foundation IDs — GLM 5 is
+  In-Region-only per its model card, and the others are Chat-API-compatible
+  foundation IDs that serve in-region.
+- **Catalog warning no longer names Mantle (fixes #452).** The
+  "was not returned as ACTIVE and available" apply warning referred to the
+  removed Mantle endpoint; it now just names the region.
 - **Scoped uninstalls no longer delete the shared Bedrock bearer token
   (fixes #455).** `uninstall --scope=user` behaved like `--scope=project`:
   a partial removal that must keep the credential the surviving scopes (and
@@ -18,7 +30,6 @@ All notable changes to Juggernaut will be documented in this file.
   (unscoped) uninstall now surveys every provider and removes the token
   only when no Juggernaut-owned config remains anywhere; otherwise it
   prints the existing "token retained" warning naming the surviving CLI.
-
 - **OpenCode config validates against OpenCode's strict schema again (fixes #463).**
   `apply --cli=opencode` was writing an `opencode.json` that OpenCode rejects at
   startup (its config schema is `additionalProperties: false`), so a fresh
