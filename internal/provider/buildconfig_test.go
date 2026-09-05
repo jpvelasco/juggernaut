@@ -217,26 +217,26 @@ func TestCodex_Supports(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_AmazonBedrockProvider verifies the Codex plan writes
-// the built-in amazon-bedrock provider shape: model, model_provider, and a
-// nested [model_providers.amazon-bedrock.aws] table with region.
+// TestCodex_BuildConfig_AmazonBedrockRuntime verifies the Codex plan writes
+// the built-in amazon-bedrock-runtime provider shape: model, model_provider,
+// and a nested [model_providers.amazon-bedrock-runtime.aws] table with region.
 func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	p, _ := Get("codex")
 	plan, err := p.BuildConfig(testConfig(), baseOpts())
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	if plan.Keys["model_provider"] != "amazon-bedrock" {
-		t.Errorf("model_provider = %v, want amazon-bedrock", plan.Keys["model_provider"])
+	if plan.Keys["model_provider"] != "amazon-bedrock-runtime" {
+		t.Errorf("model_provider = %v, want amazon-bedrock-runtime", plan.Keys["model_provider"])
 	}
 	if plan.Keys["model"] != "global.openai.gpt-5.6-sol" {
 		t.Errorf("model = %v, want global.openai.gpt-5.6-sol", plan.Keys["model"])
 	}
 	// baseOpts uses the default region us-west-2 (non-explicit). sol is available
 	// in us-west-2, so no auto-switch.
-	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock-runtime", "aws", "region")
 	if !ok {
-		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
+		t.Fatal("model_providers.amazon-bedrock-runtime.aws.region missing")
 	}
 	if got := region.(string); got != "us-west-2" {
 		t.Errorf("region = %q, want us-west-2", got)
@@ -272,9 +272,9 @@ func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
-	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock-runtime", "aws", "region")
 	if !ok {
-		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
+		t.Fatal("model_providers.amazon-bedrock-runtime.aws.region missing")
 	}
 	if got := region.(string); got != "us-east-1" {
 		t.Errorf("region = %q, want us-east-1 (overridden from eu-west-1)", got)
@@ -302,9 +302,9 @@ func TestCodex_BuildConfig_Region(t *testing.T) {
 	opts := baseOpts()
 	opts.Region = "us-east-1"
 	plan, _ := p.BuildConfig(testConfig(), opts)
-	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock-runtime", "aws", "region")
 	if !ok {
-		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
+		t.Fatal("model_providers.amazon-bedrock-runtime.aws.region missing")
 	}
 	if got := region.(string); got != "us-east-1" {
 		t.Errorf("region = %q, want us-east-1", got)
@@ -321,9 +321,9 @@ func TestCodex_BuildConfig_ExplicitServingRegion(t *testing.T) {
 	opts.RegionExplicit = true
 	opts.Model = "sol"
 	plan, _ := p.BuildConfig(testConfig(), opts)
-	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock", "aws", "region")
+	region, ok := testutil.NestedMapChain(plan.Keys, "model_providers", "amazon-bedrock-runtime", "aws", "region")
 	if !ok {
-		t.Fatal("model_providers.amazon-bedrock.aws.region missing")
+		t.Fatal("model_providers.amazon-bedrock-runtime.aws.region missing")
 	}
 	if got := region.(string); got != "us-east-1" {
 		t.Errorf("region = %q, want us-east-1 (explicit serving region)", got)

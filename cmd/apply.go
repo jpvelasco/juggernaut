@@ -183,6 +183,9 @@ func buildApplyPlan(home, region string, bCfg *bedrock.Config, authMode string, 
 
 // executeApply performs the final step: dry-run display or commit.
 func executeApply(home string, prov provider.Provider, bCfg *bedrock.Config, authMode string, token string, plan *applyPlan) error {
+	if prov.Name() == "codex" {
+		warnCodexVersion()
+	}
 	if applyFlags.dryRun {
 		return printApplyDryRun(home, plan.block, prov, bCfg, plan.provOpts)
 	}

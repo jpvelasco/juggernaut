@@ -46,20 +46,23 @@ func TestIsJuggernautLegacy(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "codex amazon-bedrock plus gpt-5.6 is current",
+			// Any top-level model_provider == "amazon-bedrock" is legacy,
+			// regardless of model: the custom table still points at the dead
+			// Mantle host, so even a v6 model ID is stale and must migrate.
+			name: "codex amazon-bedrock plus gpt-5.6 is legacy",
 			in: map[string]any{
 				"model":          "openai.gpt-5.6-sol",
 				"model_provider": "amazon-bedrock",
 			},
-			want: false,
+			want: true,
 		},
 		{
-			name: "codex amazon-bedrock plus global gpt-5.6 is current",
+			name: "codex amazon-bedrock plus global gpt-5.6 is legacy",
 			in: map[string]any{
 				"model":          "global.openai.gpt-5.6-sol",
 				"model_provider": "amazon-bedrock",
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "codex model_provider bedrock-mantle",

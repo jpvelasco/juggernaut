@@ -118,8 +118,9 @@ func TestCodex_DefaultModel(t *testing.T) {
 }
 
 // TestCodex_OwnedSubKeys_LeafRegion: OwnedSubKeys must target the region leaf
-// (amazon-bedrock.aws.region), not the entire aws sub-table. Users may configure
-// their own profile/credentials under aws — uninstall must preserve them.
+// under both the current amazon-bedrock-runtime.aws and the legacy v5
+// amazon-bedrock.aws, not the entire aws sub-table. Users may configure their
+// own profile/credentials under aws — uninstall must preserve them.
 func TestCodex_OwnedSubKeys_LeafRegion(t *testing.T) {
 	p, _ := Get("codex")
 	subs := p.OwnedSubKeys()
@@ -127,10 +128,19 @@ func TestCodex_OwnedSubKeys_LeafRegion(t *testing.T) {
 	if !ok {
 		t.Fatal("model_providers not in OwnedSubKeys")
 	}
-	if len(keys) != 1 {
-		t.Fatalf("expected 1 owned sub-key, got %d: %v", len(keys), keys)
+	want := map[string]bool{
+		"amazon-bedrock-runtime.aws.region": false,
+		"amazon-bedrock.aws.region":         false,
 	}
-	if keys[0] != "amazon-bedrock.aws.region" {
-		t.Errorf("owned sub-key = %q, want amazon-bedrock.aws.region (leaf-level to preserve user aws subkeys)", keys[0])
+	for _, k := range keys {
+		if _, ok := want[k]; !ok {
+			t.Errorf("unexpected owned sub-key %q (want only the two region leaves): %v", k, keys)
+		}
+		want[k] = true
+	}
+	for k, seen := range want {
+		if !seen {
+			t.Errorf("owned sub-key %q missing (leaf-level, to preserve user aws subkeys): got %v", k, keys)
+		}
 	}
 }

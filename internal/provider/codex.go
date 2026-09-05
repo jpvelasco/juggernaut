@@ -12,15 +12,32 @@ import (
 
 // codex is the OpenAI Codex CLI provider (config at ~/.codex/config.toml, TOML).
 //
-// Codex uses the built-in amazon-bedrock provider which ships a model catalog
-// (eliminates "Model metadata not found" warnings and /model 404s). The config
-// is minimal: model, model_provider, and an [aws] sub-table for region. Auth
-// uses the standard AWS credential chain — Juggernaut's launch wrapper injects
-// AWS_BEARER_TOKEN_BEDROCK. Unlike Claude Code it has NO "use bedrock" env var
-// — routing lives entirely in the config file.
+// Codex routes through its built-in amazon-bedrock-runtime provider, which
+// speaks the bedrock-runtime Responses endpoint with SigV4 (no bearer token in
+// IAM mode) and ships a native inference-profile model catalog (no "Model
+// metadata not found" warnings or /model 404s). The config is minimal: model,
+// model_provider, and an [aws] sub-table for region. Juggernaut's launch
+// wrapper injects AWS_REGION (and AWS_BEARER_TOKEN_BEDROCK for API-key auth).
+// Unlike Claude Code it has NO "use bedrock" env var — routing lives entirely
+// in the config file.
+//
+// Routing note: Juggernaut v6 dropped Mantle. v5 wrote the CUSTOM
+// "amazon-bedrock" provider (model_providers.amazon-bedrock) whose base_url
+// pointed at bedrock-mantle; those configs are migrated on apply (see
+// StripLegacyProviderTables). v6+ writes the built-in amazon-bedrock-runtime.
 type codex struct {
 	BaseProvider
 }
+
+// CodexBedrockRuntimeProviderID is the built-in Codex provider that routes to
+// the bedrock-runtime Responses endpoint (SigV4 / API key). Codex >= 0.153.4
+// ships it; Juggernaut requires that minimum (see cmd's codex version gate).
+const CodexBedrockRuntimeProviderID = "amazon-bedrock-runtime"
+
+// CodexLegacyProviderID is the custom provider id Juggernaut v5 (Mantle era)
+// wrote. It still resolves to bedrock-mantle, which is dead in v6 — configs
+// still pinned to it are migrated to CodexBedrockRuntimeProviderID on apply.
+const CodexLegacyProviderID = "amazon-bedrock"
 
 // ConfigPath is ~/.codex/config.toml (user) or ./.codex/config.toml (project).
 func (c codex) ConfigPath(home, scope string) (string, error) {
@@ -32,12 +49,16 @@ func (c codex) ConfigPath(home, scope string) (string, error) {
 
 // NativeManagedKeys are the top-level config.toml keys Juggernaut owns for Codex.
 // OwnsConfig recognizes a Codex config Juggernaut wrote by its Bedrock provider
-// selection (model_provider == "amazon-bedrock"). A plain user config that merely
-// has a top-level `model` is NOT ours — critical so a first-time
-// `apply --cli=codex` over an existing Codex config still prompts for auth
-// instead of defaulting to iam (Mantle requires a bearer token).
+// selection (model_provider == "amazon-bedrock-runtime" or the legacy v5
+// "amazon-bedrock"). A plain user config that merely has a top-level `model`
+// is NOT ours — critical so a first-time `apply --cli=codex` over an existing
+// Codex config still prompts for auth instead of defaulting to iam.
 func (c codex) OwnsConfig(data map[string]any) bool {
-	return data["model_provider"] == "amazon-bedrock"
+	switch data["model_provider"] {
+	case CodexBedrockRuntimeProviderID, CodexLegacyProviderID:
+		return true
+	}
+	return false
 }
 
 func (c codex) NativeManagedKeys() []string {
@@ -53,12 +74,16 @@ func (c codex) NativeManagedKeys() []string {
 // user may have their own providers; merge only our amazon-bedrock entry.
 func (c codex) DeepMergeKeys() []string { return []string{"model_providers"} }
 
-// OwnedSubKeys: uninstall removes only the region leaf we wrote under
-// model_providers.amazon-bedrock.aws. Users may configure their own profile or
-// other settings in that sub-table — dot-notation targets the leaf so siblings
-// survive.
+// OwnedSubKeys: uninstall removes only the region leaf we wrote — under the
+// current amazon-bedrock-runtime.aws, plus the legacy amazon-bedrock.aws we
+// wrote in v5 so uninstall also cleans a half-migrated file. Users may
+// configure their own profile or other settings in those sub-tables —
+// dot-notation targets the leaf so siblings survive.
 func (c codex) OwnedSubKeys() map[string][]string {
-	return map[string][]string{"model_providers": {"amazon-bedrock.aws.region"}}
+	return map[string][]string{"model_providers": {
+		"amazon-bedrock-runtime.aws.region",
+		"amazon-bedrock.aws.region",
+	}}
 }
 
 // codexBedrockModel describes one OpenAI-family model reachable through native
@@ -123,10 +148,12 @@ func codexModel(key string) (codexBedrockModel, bool) {
 // codexDefaultModel is sol — the flagship for GPT-5.6.
 func codexDefaultModel() string { return "sol" }
 
-// BuildConfig writes Codex's config.toml using the built-in amazon-bedrock
-// provider. This provider ships a model catalog with native Bedrock inference
-// profile IDs (global.openai.gpt-5.6-sol etc.), eliminating the "Model
-// metadata not found" warning.
+// BuildConfig writes Codex's config.toml using the built-in
+// amazon-bedrock-runtime provider. This provider routes to the bedrock-runtime
+// Responses endpoint and ships a model catalog with native Bedrock inference
+// profile IDs (global.openai.gpt-5.6-sol etc.), eliminating the "Model metadata
+// not found" warning. It handles SigV4 itself, so no base_url or env_key is
+// written — only the [aws] region sub-table is needed.
 //
 // The GPT-5.6 family is INFERENCE_PROFILE-only on native Bedrock: the base
 // foundation ID (openai.gpt-5.6-sol) returns 400 "on-demand throughput isn't
@@ -140,8 +167,8 @@ func codexDefaultModel() string { return "sol" }
 // Config shape:
 //
 //	model = "global.openai.gpt-5.6-sol"
-//	model_provider = "amazon-bedrock"
-//	[model_providers.amazon-bedrock.aws]
+//	model_provider = "amazon-bedrock-runtime"
+//	[model_providers.amazon-bedrock-runtime.aws]
 //	  region = "us-west-2"
 func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
 	key := opts.Model
@@ -156,9 +183,9 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", c, func(region string) (ConfigPlan, error) {
 		keys := map[string]any{
 			"model":          m.ModelID,
-			"model_provider": "amazon-bedrock",
+			"model_provider": CodexBedrockRuntimeProviderID,
 			"model_providers": map[string]any{
-				"amazon-bedrock": map[string]any{
+				CodexBedrockRuntimeProviderID: map[string]any{
 					"aws": map[string]any{
 						"region": region,
 					},
@@ -195,6 +222,24 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 		}
 		return ModelSupport{Supported: true, Reason: "Codex Responses model"}
 	})
+}
+
+// CleanLegacy deletes the v5 [model_providers.amazon-bedrock] table when
+// migrating an existing Codex config to the built-in amazon-bedrock-runtime
+// provider. Deep-merge preserves sibling tables, so without this strip the
+// stale Mantle-era table would persist forever and codex would 404 on it (it
+// still points at the removed Mantle endpoint). This is Codex-scoped: the
+// "provider.amazon-bedrock" table OpenCode uses is a different, still-current
+// native provider and is never touched.
+func (c codex) CleanLegacy(existing map[string]any) {
+	tbl, ok := existing["model_providers"].(map[string]any)
+	if !ok {
+		return
+	}
+	delete(tbl, CodexLegacyProviderID)
+	if len(tbl) == 0 {
+		delete(existing, "model_providers")
+	}
 }
 
 func (c codex) LaunchSpec() LaunchSpec {

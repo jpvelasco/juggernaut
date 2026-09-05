@@ -240,7 +240,9 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 		id    string
 	}{
 		{"codex", "sol", "global.openai.gpt-5.6-sol"},
-		{"grok", "grok-4.6", "xai.grok-4.6"},
+		// Grok's native catalog carries CRIS profile IDs (global.xai.grok-4.6);
+		// BuildConfig normalizes the bare "grok-4.6" key to the same global. ID.
+		{"grok", "grok-4.6", "global.xai.grok-4.6"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.cli, func(t *testing.T) {

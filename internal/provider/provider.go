@@ -102,6 +102,27 @@ func SupportsCatalogModel(p Provider, model CatalogModel) ModelSupport {
 	return catalogProvider.SupportsModel(model)
 }
 
+// LegacyCleaner is an optional extension implemented by providers whose old
+// configs leave a provider table that a deep-merge would preserve as a sibling
+// of the new one. On a legacy migration, cmd/ calls CleanLegacy to delete the
+// stale table so it does not survive the rewrite and point at a dead endpoint.
+type LegacyCleaner interface {
+	// CleanLegacy mutates the parsed existing config in place, deleting any
+	// provider table Juggernaut no longer routes through.
+	CleanLegacy(existing map[string]any)
+}
+
+// StripLegacyConfig deletes a provider's stale legacy tables from the existing
+// config in place. It is a no-op for providers that don't implement
+// LegacyCleaner (all current CLIs except Codex have no such leftover).
+func StripLegacyConfig(p Provider, existing map[string]any) {
+	cleaner, ok := p.(LegacyCleaner)
+	if !ok {
+		return
+	}
+	cleaner.CleanLegacy(existing)
+}
+
 // CatalogSourcesFor returns the discovery sources relevant to a provider.
 func CatalogSourcesFor(p Provider) []string {
 	catalogProvider, ok := p.(CatalogProvider)

@@ -954,7 +954,7 @@ func TestApply_CodexDryRun_ReapplySkipsPromptWhenCodexConfigExists(t *testing.T)
 		t.Fatalf("mkdir .codex: %v", err)
 	}
 	configPath := filepath.Join(codexDir, "config.toml")
-	content := []byte("model = \"openai.gpt-5.5\"\nmodel_provider = \"amazon-bedrock\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"us-west-2\"\n")
+	content := []byte("model = \"global.openai.gpt-5.6-sol\"\nmodel_provider = \"amazon-bedrock-runtime\"\n\n[model_providers.amazon-bedrock-runtime.aws]\nregion = \"us-west-2\"\n")
 	if err := safepath.WriteFile(codexDir, configPath, content); err != nil {
 		t.Fatalf("write codex config: %v", err)
 	}

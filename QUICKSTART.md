@@ -17,7 +17,7 @@ curl -fsSL https://claude.ai/install.sh | bash
 
 Run `juggernaut apply` without flags for an interactive first-run prompt. Apply will not enable Bedrock routing unless a valid credential source is confirmed; if the target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force`.
 
-Upgrading from an older Juggernaut? Install v6 directly with npm (`npm install -g juggernaut-bedrock@latest`); there is no required v3 → v4 → v5 chain. **v6 is breaking:** Mantle is removed — every CLI now uses `bedrock-runtime`. After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI (`juggernaut apply --cli=<cli> --region <region>`). Windows v3 API-key users who need to keep an old DPAPI-stored key should still use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
+Upgrading from an older Juggernaut? Install v6 directly with npm (`npm install -g juggernaut-bedrock@latest`); there is no required v3 → v4 → v5 chain. **v6 is breaking:** Mantle is removed — every CLI now uses `bedrock-runtime`. After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI (`juggernaut apply --cli=<cli> --region <region>`); a re-apply over a Mantle-era config migrates it in place (backup saved first). Codex now routes through its built-in `amazon-bedrock-runtime` provider and needs Codex CLI ≥ 0.153.4 (`npm i -g @openai/codex@latest` if `apply`/`doctor` warn). Windows v3 API-key users who need to keep an old DPAPI-stored key should still use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
 
 ## Prerequisites (if using IAM/SSO)
 
@@ -69,7 +69,7 @@ juggernaut logs export                 # redacted zip for support
 - Claude Code 1M context accounting for Opus and Sonnet by default
 - All three model tiers visible in `/model` selector
 - Optimized token limits (32768 output, 65536 thinking)
-- Native `bedrock-runtime` routing for every CLI (no proxy/Mantle); Codex uses the built-in `amazon-bedrock` provider, OpenCode uses `provider.amazon-bedrock` (region + live models + whitelist), Grok uses `https://bedrock-runtime.{region}.amazonaws.com/openai/v1`
+- Native `bedrock-runtime` routing for every CLI (no proxy/Mantle); Codex uses the built-in `amazon-bedrock-runtime` provider (Codex CLI ≥ 0.153.4 — apply/doctor warn on older binaries), OpenCode uses `provider.amazon-bedrock` (region + live models + whitelist), Grok uses `https://bedrock-runtime.{region}.amazonaws.com/openai/v1`
 - Configuration in `~/.claude/settings.json` (Claude), `~/.codex/config.toml` (Codex), `~/.config/opencode/opencode.json` (OpenCode), `~/.grok/config.toml` (Grok)
 - A non-secret runtime fallback in `~/.juggernaut/runtime/claude.json` so Claude updates cannot silently disable Bedrock routing
 - A marked shell activation block that delegates `claude` to `juggernaut launch`
