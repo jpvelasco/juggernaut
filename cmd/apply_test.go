@@ -912,10 +912,17 @@ func TestApply_DefaultConfig_AlsoWarnsAboutFableDataRetention(t *testing.T) {
 }
 
 func TestUninstall_Codex_PreservesSharedToken(t *testing.T) {
-	_ = setupApplyTest(t)
+	home := setupApplyTest(t)
+	chdirTo(t, home)
+	store := setupIsolatedKeychain(t)
+	if err := store.SetWithFallback("shared-token", home); err != nil {
+		t.Fatalf("seeding keychain: %v", err)
+	}
+	// Claude is still configured, so a codex uninstall must keep the shared
+	// bearer token — even with --full (that would break a still-configured
+	// Claude).
+	seedJuggernautConfig(t, home, "claude")
 
-	// Uninstalling a non-Claude CLI must NOT remove the shared bearer token,
-	// even with --full (that would break a still-configured Claude).
 	out := captureStdout(t, func() {
 		if err := ExecuteArgs([]string{
 			"uninstall", "--cli=codex", "--full", "--force",
@@ -924,7 +931,17 @@ func TestUninstall_Codex_PreservesSharedToken(t *testing.T) {
 		}
 	})
 	if strings.Contains(out, "Removed bearer token from keychain") {
-		t.Errorf("uninstall --cli=codex must NOT remove the shared keychain token, got:\n%s", out)
+		t.Errorf("uninstall --cli=codex must NOT remove the shared keychain token while Claude is configured, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Shared Bedrock bearer token retained") {
+		t.Errorf("expected a retain warning naming claude, got:\n%s", out)
+	}
+	got, err := store.GetWithFallback(home)
+	if err != nil {
+		t.Fatalf("reading token after codex uninstall: %v", err)
+	}
+	if got != "shared-token" {
+		t.Errorf("codex uninstall removed the shared token while Claude is configured (got %q)", got)
 	}
 }
 
