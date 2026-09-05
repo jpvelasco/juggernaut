@@ -56,17 +56,26 @@ func runUninstall(_ *cobra.Command, _ []string) error {
 	uninstallSettingsBlocks(home, prov)
 	removeRuntimeState(home, prov)
 	// The Bedrock bearer token is SHARED across all CLIs, so removing it on a
-	// per-CLI uninstall would break any other CLI still configured. Only remove
-	// it when uninstalling Claude (the primary) — and never on a scoped
-	// partial removal: --scope=project must leave the credential that
-	// user-scope Claude and non-Claude providers still reference. `--full`
-	// broadens shell-block removal, NOT shared-credential removal.
-	if !uninstallFlags.dryRun && prov.Name() == "claude" && uninstallFlags.scope != "project" {
-		if otherNeeds := otherProviderNeedsToken(home, prov); otherNeeds != "" {
+	// per-CLI uninstall would break any other CLI still configured. A scoped
+	// uninstall is a partial removal and never touches the credential — the
+	// scopes it leaves (or other CLIs) still reference it. A full removal
+	// surveys every provider: the token goes only when no Juggernaut-owned
+	// config remains anywhere. `--full` broadens shell-block removal, NOT
+	// shared-credential removal.
+	if uninstallFlags.scope == "" {
+		// Dry run: prov's blocks are still on disk, so exclude prov and the
+		// survey reports what a real run would do. Real run: probe every
+		// provider — prov's blocks were just removed, so a surviving probe is
+		// a fail-safe retain (removal failed or the user re-applied mid-run).
+		exclude := prov
+		if !uninstallFlags.dryRun {
+			exclude = nil
+		}
+		if otherNeeds := otherProviderNeedsToken(home, exclude); otherNeeds != "" {
 			fmt.Printf("  ⚠ Shared Bedrock bearer token retained — %s config still present (Juggernaut owns it)\n", otherNeeds)
 			fmt.Println("    If you intend to stop using ALL Bedrock-backed CLIs, re-run this after uninstalling the others,")
 			fmt.Println("    or remove the token manually from the keychain / credential file.")
-		} else {
+		} else if !uninstallFlags.dryRun {
 			removeKeychainToken(home)
 		}
 	}
@@ -220,15 +229,15 @@ func removeKeychainToken(home string) {
 	fmt.Println("  ✓ Removed bearer token from keychain")
 }
 
-// otherProviderNeedsToken reports whether any OTHER provider (excluding the one
-// being uninstalled) still has a Juggernaut-owned config in user or project
-// scope. An empty result means no other provider depends on the shared bearer
-// token. An unreadable config is treated as "still needed" (fail-safe retain):
-// a parse error should never be the reason we delete a credential another CLI
-// may be using.
+// otherProviderNeedsToken reports whether any provider still has a
+// Juggernaut-owned config in user or project scope, optionally excluding one.
+// Pass nil to survey every provider. An empty result means no provider
+// depends on the shared bearer token. An unreadable config is treated as
+// "still needed" (fail-safe retain): a parse error should never be the reason
+// we delete a credential another CLI may be using.
 func otherProviderNeedsToken(home string, exclude provider.Provider) string {
 	for _, name := range provider.AllNames() {
-		if name == exclude.Name() {
+		if exclude != nil && name == exclude.Name() {
 			continue
 		}
 		p, err := provider.Get(name)
