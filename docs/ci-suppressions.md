@@ -13,7 +13,9 @@ lines tightened to the repo policy (`0o755` dirs → `0o700`, `0o644` files →
 executable-stub suppression in `cmd/codex_version_test.go` (the stub must be
 executable for `ResolveBinary`'s `isExecutable` gate on POSIX; it is never
 actually run — the probe is swapped), and 7 findings on 6 missing suppressions
-added (`codex_version.go` is double-flagged by both exec rules). The
+added (`codex_version.go` is double-flagged by both exec rules).
+`TestCodexBinaryVersion_RealProbe` (POSIX-only) exercises the real probe so the
+`codex_version.go` exec line stays covered (Codecov patch gate). The
 `isLegacyClaudeShim` deletion also removes a stale `nolint:unused`. Keep these
 current when adding or removing suppressions.
 
@@ -76,5 +78,5 @@ fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
   `cmd/apply_collision_test.go` (pre-write backup glob match), and
   `internal/config/backup_rotation_test.go` (backup glob matches).
 - `cmd/launch_exitcode_test.go` - `#nosec G204` + `nosemgrep go_subproc_rule-subproc,dangerous-exec-command` on the wrapper-child harness spawning `os.Executable()` (the test binary itself) so exit-code propagation through `Execute()` can be asserted.
-- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `cmd/codex_version_test.go`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the resolution/launch pipeline's `isExecutable` gate to accept them. The codex stub is never actually executed (`stubCodexProbe` swaps `codexVersionProbe` for a fake).
+- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `cmd/codex_version_test.go` — both the faked-probe stub and the real-probe stub in `TestCodexBinaryVersion_RealProbe`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the resolution/launch pipeline's `isExecutable` gate to accept them. The `stubCodexProbe` stub is never executed (the probe is swapped for a fake); `TestCodexBinaryVersion_RealProbe`'s stub is executed — that is the point (it covers the real probe).
 - `internal/config/write_test.go` and `cmd/helpers_test_phases_test.go` - `nosemgrep mkdir/fileperm/incorrect-default-permission` alongside the existing `//nolint:gosec` on the intentional read-only dir and its cleanup chmod restore.

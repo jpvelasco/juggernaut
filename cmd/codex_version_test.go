@@ -3,12 +3,22 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/doctor"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 )
+
+// withCodexVersionPath points codexBinaryVersion at dir as its PATH for the
+// test. PATH is process-global, so the original is restored on cleanup.
+func withCodexVersionPath(t *testing.T, dir string) {
+	t.Helper()
+	restorePath := codexVersionPath
+	codexVersionPath = dir
+	t.Cleanup(func() { codexVersionPath = restorePath })
+}
 
 // stubCodexProbe points the version source at a temp PATH dir holding a file
 // named like the codex binary, and stubs the probe to report the given version.
@@ -24,23 +34,45 @@ func stubCodexProbe(t *testing.T, version string) {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o755); err != nil { // #nosec G306 -- stub must be executable; never run (probe is swapped)
 		t.Fatal(err)
 	}
-	restorePath := codexVersionPath
-	codexVersionPath = dir
+	withCodexVersionPath(t, dir)
 	restoreProbe := codexVersionProbe
 	codexVersionProbe = func(string) (string, bool) { return version, true }
-	t.Cleanup(func() {
-		codexVersionPath = restorePath
-		codexVersionProbe = restoreProbe
-	})
+	t.Cleanup(func() { codexVersionProbe = restoreProbe })
 }
 
 // stubCodexAbsent points the version source at an empty PATH dir so the real
 // resolution legitimately fails with exec.ErrNotFound.
 func stubCodexAbsent(t *testing.T) {
 	t.Helper()
-	restorePath := codexVersionPath
-	codexVersionPath = t.TempDir()
-	t.Cleanup(func() { codexVersionPath = restorePath })
+	withCodexVersionPath(t, t.TempDir())
+}
+
+// TestCodexBinaryVersion_RealProbe exercises the real (un-swapped) probe: the
+// stub file is a genuinely executable shell script, so ResolveBinary's
+// isExecutable gate passes and codexVersionProbe's exec line actually runs.
+// The stub is never a real codex binary — it just prints the --version output.
+// Windows shell scripts are not portable, so skip there; the Linux and macOS
+// CI legs cover the probe body (the stub pattern matches launch_exitcode_test.go).
+func TestCodexBinaryVersion_RealProbe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stub is not portable on Windows; covered by the Linux/macOS CI legs")
+	}
+	dir := t.TempDir()
+	name := provider.MustGet("codex").BinaryNames()[0]
+	stub := "#!/bin/sh\necho \"codex-cli 0.148.0-alpha.9\"\n"
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission,go_file-permissions_rule-fileperm -- executable stub needs 0o755
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(stub), 0o755); err != nil { // #nosec G306 -- stub must be executable for ResolveBinary
+		t.Fatal(err)
+	}
+	withCodexVersionPath(t, dir)
+
+	v, ok := codexBinaryVersion()
+	if !ok {
+		t.Fatalf("codexBinaryVersion = (%q, false), want the version printed by the real probe", v)
+	}
+	if v != "0.148.0-alpha.9" {
+		t.Fatalf("codexBinaryVersion = %q, want 0.148.0-alpha.9", v)
+	}
 }
 
 func TestParseCodexVersion(t *testing.T) {
