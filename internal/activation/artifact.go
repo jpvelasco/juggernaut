@@ -84,28 +84,6 @@ func isKnownJuggernautArtifact(path, self string) bool {
 	return samePath(target, self)
 }
 
-// isLegacyClaudeShim returns true if the file at path is a legacy v4.2.6
-// claude.cmd/claude.bat shim that invokes the removed juggernaut --launcher
-// path. These shims must be rejected so they are not selected as the real
-// Claude Code binary.
-//
-//nolint:unused // retained for future v4.2.6 artifact recovery
-func isLegacyClaudeShim(path string) bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-	data, err := os.ReadFile(path) // #nosec G703,G501 -- path is resolved from known config paths, not user input // nosemgrep: go_filesystem_rule-fileread -- path derived from known config paths
-	if err != nil {
-		return false
-	}
-	content := string(data)
-	// Normalize line endings for comparison — legacy shims may have LF or
-	// CRLF endings, and may have trailing whitespace or extra blank lines.
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	content = strings.TrimSpace(content)
-	return strings.Contains(content, "juggernaut --launcher")
-}
-
 func recoverPlatformArtifacts(binDir, self string, names legacyNames) ([]LegacyAction, error) {
 	var actions []LegacyAction
 	for _, name := range names.legacyLaunchers {
