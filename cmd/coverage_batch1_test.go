@@ -746,7 +746,7 @@ func TestLaunchNamedCLI_TokenReadError(t *testing.T) {
 	blockCredentialWrite(t, home)
 
 	grokDir := filepath.Join(home, ".grok")
-	if err := os.MkdirAll(grokDir, 0o700); err != nil {
+	if err := os.MkdirAll(grokDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	cfg := "[juggernaut]\n  [juggernaut.auth]\n    mode = \"" + authmode.BedrockAPIKey + "\"\n  [juggernaut.meta]\n    managedBy = \"juggernaut\"\n"

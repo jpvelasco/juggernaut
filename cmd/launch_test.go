@@ -118,7 +118,7 @@ func TestApply_OpenCode_ProjectScope_WritesAuthMode(t *testing.T) {
 // parseJSONForTest reads and unmarshals a JSON file (test helper).
 func parseJSONForTest(t *testing.T, path string) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // nosemgrep: go_filesystem_rule-fileread -- test fixture path, not user input
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}

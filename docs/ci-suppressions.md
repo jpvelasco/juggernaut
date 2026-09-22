@@ -6,10 +6,20 @@ code adjustment that makes the rule happy; keep a suppression only when the code
 is correct as written and the rule cannot express that. **Never add a new
 suppression without adding it here.**
 
-Counts were last verified during the cleanup in PR #371; keep them current when
-adding or removing suppressions.
+Counts were last verified during the Codacy re-assessment on 2026-09-20: the
+29 cloud findings clear via 21 findings on 16 test-fixture permission-mode
+lines tightened to the repo policy (`0o755` dirs → `0o700`, `0o644` files →
+`0o600`; some lines double-flagged by two rule families), 1 finding on the
+executable-stub suppression in `cmd/codex_version_test.go` (the stub must be
+executable for `ResolveBinary`'s `isExecutable` gate on POSIX; it is never
+actually run — the probe is swapped), and 7 findings on 6 missing suppressions
+added (`codex_version.go` is double-flagged by both exec rules).
+`TestCodexBinaryVersion_RealProbe` (POSIX-only) exercises the real probe so the
+`codex_version.go` exec line stays covered (Codecov patch gate). The
+`isLegacyClaudeShim` deletion also removes a stale `nolint:unused`. Keep these
+current when adding or removing suppressions.
 
-## Fixed instead of suppressed (PR #371)
+## Fixed instead of suppressed
 
 - `internal/provider/base.go` — two `//nolint:staticcheck` on the deprecated
   `strings.Title` replaced with a `titleCaseASCII` helper (equivalent for the
@@ -17,6 +27,15 @@ adding or removing suppressions.
   names use the `displayName` field).
 - `internal/activation/activation_test.go` — `//nolint:unused` removed with the
   genuinely unused `executableFixture` test helper it annotated.
+- `internal/activation/artifact.go` — `isLegacyClaudeShim` and its
+  `//nolint:unused` deleted: the v4.2.6 shim content is unreachable now that
+  v6 routes via `bedrock-runtime`; its test subtest was removed with it.
+- `cmd/uninstall_token_test.go`, `cmd/doctor_test.go` — 16 fixture lines
+  tightened to the repo policy (`MkdirAll 0o755` → `0o700`, `WriteFile 0o644` →
+  `0o600`). Test homes are fake (`setupApplyTest`/`NewTestHome`); Windows
+  ignores these bits. No suppression added; the Cloud
+  `incorrect-default-permission` / `file-permissions` findings for these lines
+  are cleared by the mode change.
 
 ## Remaining suppressions
 
@@ -24,12 +43,13 @@ adding or removing suppressions.
 
 | Location | Suppression | Rule | Rationale |
 | --- | --- | --- | --- |
-| `internal/activation/artifact.go:59,97` | `#nosec G703,G501` + `nosemgrep go_filesystem_rule-fileread` | file-read of a variable path | Reads candidate v4.2.6 shim paths resolved from `binDir` + fixed name lists; read-only, errors handled. |
-| `internal/activation/launch.go:212,224` | `#nosec G703` | os.Stat on variable path | Candidates come from PATH/known config paths; both Stat errors are handled. |
-| `internal/activation/launch.go:297` | `nosemgrep dangerous-exec-command` | exec with a variable command | Executes the real CLI binary resolved by `resolveBinaryFrom`, which skips the Juggernaut binary itself and known v4.2.6 artifacts; a fixed name would break the launch contract. |
+| `internal/activation/artifact.go:59` | `#nosec G703,G501` + `nosemgrep go_filesystem_rule-fileread` | file-read of a variable path | Reads the v4.2.6 shim candidate resolved from `binDir` + fixed name lists; read-only, errors handled. |
+| `internal/activation/launch.go:209,221` | `#nosec G703` | os.Stat on variable path | Candidates come from PATH/known config paths; both Stat errors are handled. |
+| `internal/activation/launch.go:324` | `nosemgrep dangerous-exec-command, go_subproc_rule-subproc` | exec with a variable command | Executes the real CLI binary resolved by `resolveBinaryFrom`, which skips the Juggernaut binary itself and known v4.2.6 artifacts; a fixed name would break the launch contract. |
 | `internal/activation/powershell_discovery.go:52` | `nosemgrep dangerous-exec-command` | exec with a variable command | `exe` comes from a fixed candidate list (`pwsh.exe`/`powershell.exe`) with fixed script args; the selection loop requires a variable. |
 | `internal/keychain/crypter_windows.go:53,67,77` | `#nosec G115,G103` + `nosemgrep use-of-unsafe-block` | integer conversion / unsafe | DPAPI `DATA_BLOB` marshalling requires `unsafe`; sizes are bounded by the keychain limit well under 4GB. |
 | `internal/provider/sidecar.go` (`readSidecarBlock`) | `#nosec G304` | file-read of a variable path | Paths are provider-derived sidecar locations (`.juggernaut.json` next to the provider config), never user input; read-only and every error path is the documented "absent" outcome. |
+| `cmd/codex_version.go` (`codexVersionProbe`) | `#nosec G204` + `nosemgrep dangerous-exec-command, go_subproc_rule-subproc` | exec with a variable command | `path` is the codex binary resolved from a fixed binary-name list on PATH; args are the constant `"--version"` with no shell. |
 
 ### npm launcher (`npm/index.js`, `npm/index.test.js`)
 
@@ -40,7 +60,7 @@ asserts containment under the owning platform package dir, staging uses
 `fs.mkdtempSync` with a constant prefix plus `COPYFILE_EXCL`, and test
 fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
 
-### Test-only Go suppressions (~45 sites)
+### Test-only Go suppressions (~50 sites)
 
 - `// nosemgrep go.lang.correctness.permissions.file_permission.incorrect-default-permission`
   on `os.MkdirAll(..., 0o700)` — the permission is correct for directories and
@@ -53,9 +73,10 @@ fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
 - `//nolint:gosec` in `helpers_test_phases_test.go:1466,2018` (test-only
   `os.WriteFile` fixtures) and `internal/config/write_test.go:66` (intentional
   `0o555` dir to exercise the write-failure path).
-- `internal/activation/artifact.go:92` `//nolint:unused` — `isLegacyClaudeShim`
-  is retained for future v4.2.6 artifact recovery; covered by tests, not yet
-  called from production code.
+- `// nosemgrep go_filesystem_rule-fileread` on `os.ReadFile` of test-created
+  fixtures in `cmd/launch_test.go` (`parseJSONForTest`),
+  `cmd/apply_collision_test.go` (pre-write backup glob match), and
+  `internal/config/backup_rotation_test.go` (backup glob matches).
 - `cmd/launch_exitcode_test.go` - `#nosec G204` + `nosemgrep go_subproc_rule-subproc,dangerous-exec-command` on the wrapper-child harness spawning `os.Executable()` (the test binary itself) so exit-code propagation through `Execute()` can be asserted.
-- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the launch pipeline to resolve and run them.
+- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `cmd/codex_version_test.go` — both the faked-probe stub and the real-probe stub in `TestCodexBinaryVersion_RealProbe`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the resolution/launch pipeline's `isExecutable` gate to accept them. The `stubCodexProbe` stub is never executed (the probe is swapped for a fake); `TestCodexBinaryVersion_RealProbe`'s stub is executed — that is the point (it covers the real probe).
 - `internal/config/write_test.go` and `cmd/helpers_test_phases_test.go` - `nosemgrep mkdir/fileperm/incorrect-default-permission` alongside the existing `//nolint:gosec` on the intentional read-only dir and its cleanup chmod restore.
