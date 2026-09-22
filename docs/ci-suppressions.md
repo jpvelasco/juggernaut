@@ -7,11 +7,15 @@ is correct as written and the rule cannot express that. **Never add a new
 suppression without adding it here.**
 
 Counts were last verified during the Codacy re-assessment on 2026-09-20: the
-29 cloud findings clear via 17 test-fixture permission modes tightened in code
-(22 findings — some lines flagged by two rule families), 6 missing suppressions
-added (7 findings — `codex_version.go` is double-flagged by both exec rules),
-and the `isLegacyClaudeShim` deletion. Keep these current when adding or
-removing suppressions.
+29 cloud findings clear via 21 findings on 16 test-fixture permission-mode
+lines tightened to the repo policy (`0o755` dirs → `0o700`, `0o644` files →
+`0o600`; some lines double-flagged by two rule families), 1 finding on the
+executable-stub suppression in `cmd/codex_version_test.go` (the stub must be
+executable for `ResolveBinary`'s `isExecutable` gate on POSIX; it is never
+actually run — the probe is swapped), and 7 findings on 6 missing suppressions
+added (`codex_version.go` is double-flagged by both exec rules). The
+`isLegacyClaudeShim` deletion also removes a stale `nolint:unused`. Keep these
+current when adding or removing suppressions.
 
 ## Fixed instead of suppressed
 
@@ -24,12 +28,12 @@ removing suppressions.
 - `internal/activation/artifact.go` — `isLegacyClaudeShim` and its
   `//nolint:unused` deleted: the v4.2.6 shim content is unreachable now that
   v6 routes via `bedrock-runtime`; its test subtest was removed with it.
-- `cmd/uninstall_token_test.go`, `cmd/doctor_test.go`, `cmd/codex_version_test.go` —
-  17 test-fixture modes tightened to the repo policy (`MkdirAll 0o755` → `0o700`,
-  `WriteFile 0o644` → `0o600`; the codex stub in `codex_version_test.go` → `0o600`
-  because the probe is swapped for a fake and the stub file is never executed).
-  No suppression added; the Cloud `incorrect-default-permission` /
-  `file-permissions` findings for these lines are cleared by the mode change.
+- `cmd/uninstall_token_test.go`, `cmd/doctor_test.go` — 16 fixture lines
+  tightened to the repo policy (`MkdirAll 0o755` → `0o700`, `WriteFile 0o644` →
+  `0o600`). Test homes are fake (`setupApplyTest`/`NewTestHome`); Windows
+  ignores these bits. No suppression added; the Cloud
+  `incorrect-default-permission` / `file-permissions` findings for these lines
+  are cleared by the mode change.
 
 ## Remaining suppressions
 
@@ -72,5 +76,5 @@ fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
   `cmd/apply_collision_test.go` (pre-write backup glob match), and
   `internal/config/backup_rotation_test.go` (backup glob matches).
 - `cmd/launch_exitcode_test.go` - `#nosec G204` + `nosemgrep go_subproc_rule-subproc,dangerous-exec-command` on the wrapper-child harness spawning `os.Executable()` (the test binary itself) so exit-code propagation through `Execute()` can be asserted.
-- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the launch pipeline to resolve and run them.
+- Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `cmd/codex_version_test.go`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the resolution/launch pipeline's `isExecutable` gate to accept them. The codex stub is never actually executed (`stubCodexProbe` swaps `codexVersionProbe` for a fake).
 - `internal/config/write_test.go` and `cmd/helpers_test_phases_test.go` - `nosemgrep mkdir/fileperm/incorrect-default-permission` alongside the existing `//nolint:gosec` on the intentional read-only dir and its cleanup chmod restore.

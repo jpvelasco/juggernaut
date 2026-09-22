@@ -20,7 +20,8 @@ func stubCodexProbe(t *testing.T, version string) {
 	t.Helper()
 	dir := t.TempDir()
 	name := provider.MustGet("codex").BinaryNames()[0]
-	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o600); err != nil {
+	// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission,go_file-permissions_rule-fileperm -- executable stub needs 0o755 (ResolveBinary's isExecutable gate)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o755); err != nil { // #nosec G306 -- stub must be executable; never run (probe is swapped)
 		t.Fatal(err)
 	}
 	restorePath := codexVersionPath
