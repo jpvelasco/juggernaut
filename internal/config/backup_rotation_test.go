@@ -59,7 +59,7 @@ func TestRotateBackup_RapidWrites_PreservesDistinctStates(t *testing.T) {
 	// {"v": k} for 0 <= k <= n-2 — each recovery point distinct.
 	seen := map[int]bool{}
 	for _, mp := range matches {
-		data, err := os.ReadFile(mp)
+		data, err := os.ReadFile(mp) // nosemgrep: go_filesystem_rule-fileread -- test fixture written by this test under t.TempDir()
 		if err != nil {
 			t.Fatalf("read %s: %v", mp, err)
 		}

@@ -1197,7 +1197,7 @@ region = "us-west-2"
 	if len(matches) == 0 {
 		t.Fatal("expected a pre-write backup of the config")
 	}
-	data, err := os.ReadFile(matches[0])
+	data, err := os.ReadFile(matches[0]) // nosemgrep: go_filesystem_rule-fileread -- pre-write backup written by the apply under test
 	if err != nil {
 		t.Fatalf("read backup: %v", err)
 	}
