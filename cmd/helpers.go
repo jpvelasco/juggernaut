@@ -431,11 +431,7 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 			fmt.Printf("Would write juggernaut auth metadata to %s\n", scPath)
 		}
 	}
-	profiles, err := activation.PlanInstallPaths(home, activation.InstallOptions{})
-	if err != nil {
-		return err
-	}
-	printDryRunProfiles(title, profiles)
+	printDryRunProfiles(title, activation.PlanInstallPaths(home, activation.InstallOptions{}))
 	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
 	if prov.Name() == "claude" {
 		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))

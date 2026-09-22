@@ -845,6 +845,15 @@ func TestPrintApplyDryRun_NoCollisions(t *testing.T) {
 	}
 }
 
+func TestPrintDryRunProfiles_NoneEligible(t *testing.T) {
+	out := captureStdout(t, func() {
+		printDryRunProfiles("Claude", nil)
+	})
+	if !strings.Contains(out, "Would install Juggernaut Claude activation blocks in shell profiles (none eligible)") {
+		t.Fatalf("empty plan should say none eligible, got:\n%s", out)
+	}
+}
+
 func TestPrintApplyDryRun_ListsEligibleProfiles(t *testing.T) {
 	home := setupApplyTestWithReset(t)
 	t.Setenv("PATH", t.TempDir())
