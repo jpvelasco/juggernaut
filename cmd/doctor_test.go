@@ -526,7 +526,7 @@ func TestCheckConfigPathSymlink_WarnsWhenLinked(t *testing.T) {
 	prov := provider.MustGet("claude")
 
 	linkDir := filepath.Join(home, "dotfiles")
-	if err := os.MkdirAll(linkDir, 0o700); err != nil {
+	if err := os.MkdirAll(linkDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	realPath := filepath.Join(linkDir, "settings.json")
@@ -534,7 +534,7 @@ func TestCheckConfigPathSymlink_WarnsWhenLinked(t *testing.T) {
 		t.Fatal(err)
 	}
 	linkPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(linkPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	if err := os.Symlink(realPath, linkPath); err != nil {
@@ -570,7 +570,7 @@ func TestCheckConfigPathSymlink_ConfigPathError(t *testing.T) {
 // unreadable config — not the happy path.
 func TestCheckRuntimeFallback_ConfigReadError(t *testing.T) {
 	home := testutil.NewTestHome(t)
-	if err := os.MkdirAll(filepath.Join(home, ".claude", "settings.json"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".claude", "settings.json"), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	if err := activation.SaveRuntimeState(home, "claude", activation.RuntimeState{
@@ -599,7 +599,7 @@ func TestDoctor_ReportsSymlinkedConfig(t *testing.T) {
 	}
 	home := testutil.NewTestHome(t)
 	linkDir := filepath.Join(home, "dotfiles")
-	if err := os.MkdirAll(linkDir, 0o700); err != nil {
+	if err := os.MkdirAll(linkDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	realPath := filepath.Join(linkDir, "settings.json")
@@ -607,7 +607,7 @@ func TestDoctor_ReportsSymlinkedConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	linkPath := filepath.Join(home, ".claude", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(linkPath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	if err := os.Symlink(realPath, linkPath); err != nil {
