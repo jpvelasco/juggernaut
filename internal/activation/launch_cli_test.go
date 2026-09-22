@@ -382,7 +382,7 @@ func TestTargetConfigPaths_DedupAndFallback(t *testing.T) {
 
 func writeAuthConfig(t *testing.T, path, mode string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	var content string

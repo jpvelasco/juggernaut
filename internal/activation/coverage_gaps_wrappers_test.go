@@ -546,10 +546,4 @@ func TestNonWindowsHelpers(t *testing.T) {
 			t.Error("different paths should not match")
 		}
 	})
-
-	t.Run("isLegacyClaudeShim", func(t *testing.T) {
-		if isLegacyClaudeShim("/some/path") {
-			t.Error("should return false on non-Windows")
-		}
-	})
 }

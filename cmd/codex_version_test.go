@@ -20,7 +20,7 @@ func stubCodexProbe(t *testing.T, version string) {
 	t.Helper()
 	dir := t.TempDir()
 	name := provider.MustGet("codex").BinaryNames()[0]
-	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("stub\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	restorePath := codexVersionPath

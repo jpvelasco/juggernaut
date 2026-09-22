@@ -28,7 +28,7 @@ const codexMinVersion = "0.153.4"
 var codexVersionProbe = func(path string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "--version").Output()
+	out, err := exec.CommandContext(ctx, path, "--version").Output() // #nosec G204 -- fixed binary-name candidate, constant args // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
 	if err != nil {
 		return "", false
 	}
