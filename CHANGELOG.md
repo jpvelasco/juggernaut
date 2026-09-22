@@ -4,6 +4,19 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`doctor` and the README no longer imply that IAM connectivity validates
+  credentials (fixes #470, #472).** `apply --auth=iam` trusts the local AWS
+  credential chain and does not send a signed STS or Bedrock request.
+  `doctor`'s IAM connectivity check is an unsigned reachability probe.
+  API-key mode is probed with the stored bearer token, and only from
+  `doctor`, not during `apply`.
+- **`apply --dry-run` names the shell profiles it would update (fixes #471).**
+  The preview lists the same targets a real apply would write: existing
+  profiles, plus bash, zsh, or fish profiles only when that shell is on
+  `PATH`. It still never invents `~/.profile`.
+
 ## [6.3.1] - 2026-09-05
 
 ### Fixed

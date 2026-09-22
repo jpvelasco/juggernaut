@@ -273,6 +273,74 @@ func TestInstallWith_DoesNotCreateUnusedShellProfiles(t *testing.T) {
 	}
 }
 
+func TestPlanInstallPaths_MatchesInstallWith(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	t.Setenv("PATH", t.TempDir()) // no bash/zsh/fish — only an existing profile is eligible
+
+	bashrc := filepath.Join(home, ".bashrc")
+	if err := os.WriteFile(bashrc, []byte("# user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opts := InstallOptions{PowerShellResult: &ProfileResolverResult{}}
+
+	planned := PlanInstallPaths(home, opts)
+	installed, err := InstallWith(home, opts)
+	if err != nil {
+		t.Fatalf("InstallWith: %v", err)
+	}
+	if len(planned) != 1 || planned[0] != bashrc {
+		t.Fatalf("plan = %v, want [%s]", planned, bashrc)
+	}
+	if len(installed) != len(planned) || installed[0] != planned[0] {
+		t.Fatalf("install = %v, want plan %v", installed, planned)
+	}
+	for _, name := range []string{".zshrc", ".profile"} {
+		if _, err := os.Stat(filepath.Join(home, name)); !os.IsNotExist(err) {
+			t.Errorf("must not create %s", name)
+		}
+	}
+}
+
+func TestPlanInstallPaths_PowerShellInstallTarget(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell install targets are Windows-only")
+	}
+	home := testutil.NewTestHome(t)
+	t.Setenv("PATH", t.TempDir())
+	ps := filepath.Join(home, "Documents", "PowerShell", "profile.ps1")
+	opts := InstallOptions{PowerShellResult: &ProfileResolverResult{
+		InstallTargets: []Target{{Path: ps, Shell: ShellPowerShell}},
+	}}
+	planned := PlanInstallPaths(home, opts)
+	if len(planned) == 0 || planned[0] != ps {
+		t.Fatalf("plan = %v, want PowerShell target first", planned)
+	}
+}
+
+func TestPlanInstallPaths_IterateFailureKeepsPowerShellTargets(t *testing.T) {
+	orig := planIterateTargets
+	planIterateTargets = func(string, *ProfileResolverResult, func(Target) (bool, error)) ([]string, error) {
+		return nil, errors.New("boom")
+	}
+	t.Cleanup(func() { planIterateTargets = orig })
+
+	home := testutil.NewTestHome(t)
+	ps := filepath.Join(home, "profile.ps1")
+	opts := InstallOptions{PowerShellResult: &ProfileResolverResult{
+		InstallTargets: []Target{{Path: ps, Shell: ShellPowerShell}},
+	}}
+	planned := PlanInstallPaths(home, opts)
+	if runtime.GOOS == "windows" {
+		if len(planned) != 1 || planned[0] != ps {
+			t.Fatalf("plan = %v, want the PowerShell target without POSIX results", planned)
+		}
+		return
+	}
+	if len(planned) != 0 {
+		t.Fatalf("plan = %v, want no paths when the POSIX scan fails", planned)
+	}
+}
+
 func TestLaunchInvokesRealClaudeStubWithoutRecursion(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	dir := t.TempDir()

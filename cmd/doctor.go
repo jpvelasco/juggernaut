@@ -20,7 +20,7 @@ import (
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Verify Juggernaut configuration and credentials",
+	Short: "Check configuration, activation, and Bedrock reachability",
 	RunE:  runDoctor,
 }
 

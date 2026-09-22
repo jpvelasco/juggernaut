@@ -113,13 +113,7 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 		installed = append(installed, psInstalled...)
 	}
 
-	psResult := opts.PowerShellResult
-	if runtime.GOOS == "windows" {
-		psResult = nil // PowerShell handled by installPowerShellActivationForSpec above
-	} else {
-		psResult = resolveOrUse(home, psResult)
-	}
-	result, err := iterateAllTargets(home, psResult, func(target Target) (bool, error) {
+	result, err := iterateAllTargets(home, posixScanResult(home, opts.PowerShellResult), func(target Target) (bool, error) {
 		if !shouldWritePOSIXTarget(target) {
 			return false, nil
 		}
@@ -129,6 +123,42 @@ func InstallWith(home string, opts InstallOptions) ([]string, error) {
 		return installed, err
 	}
 	return append(installed, result...), nil
+}
+
+// posixScanResult is the profile set the POSIX pass should visit. Windows
+// installs PowerShell profiles in its own pass and must not scan them again.
+func posixScanResult(home string, ps *ProfileResolverResult) *ProfileResolverResult {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	return resolveOrUse(home, ps)
+}
+
+// planIterateTargets walks profiles for PlanInstallPaths. Tests replace it to
+// exercise the failure path; production uses iterateAllTargets, whose visit
+// predicate here cannot fail.
+var planIterateTargets = iterateAllTargets
+
+// PlanInstallPaths returns the profiles InstallWith would try to update, in
+// the same order, without writing. On Windows that is PowerShell
+// InstallTargets (created even when missing) followed by POSIX profiles that
+// pass shouldWritePOSIXTarget. Elsewhere it is that POSIX filter, plus any
+// injected ActiveTargets the POSIX pass would also visit.
+func PlanInstallPaths(home string, opts InstallOptions) []string {
+	var paths []string
+	if runtime.GOOS == "windows" {
+		ps := resolveOrUse(home, opts.PowerShellResult)
+		for _, target := range ps.InstallTargets {
+			paths = append(paths, target.Path)
+		}
+	}
+	posix, err := planIterateTargets(home, posixScanResult(home, opts.PowerShellResult), func(target Target) (bool, error) {
+		return shouldWritePOSIXTarget(target), nil
+	})
+	if err != nil {
+		return paths
+	}
+	return append(paths, posix...)
 }
 
 // InstallTarget writes or updates the Claude activation block for one profile.

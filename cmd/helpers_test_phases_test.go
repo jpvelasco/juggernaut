@@ -845,6 +845,65 @@ func TestPrintApplyDryRun_NoCollisions(t *testing.T) {
 	}
 }
 
+func TestPrintDryRunProfiles_NoneEligible(t *testing.T) {
+	out := captureStdout(t, func() {
+		printDryRunProfiles("Claude", nil)
+	})
+	if !strings.Contains(out, "Would install Juggernaut Claude activation blocks in shell profiles (none eligible)") {
+		t.Fatalf("empty plan should say none eligible, got:\n%s", out)
+	}
+}
+
+func TestPrintApplyDryRun_ListsEligibleProfiles(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	t.Setenv("PATH", t.TempDir())
+
+	bashrc := filepath.Join(home, ".bashrc")
+	if err := os.WriteFile(bashrc, []byte("# user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	bCfg, err := loadBedrockConfig()
+	if err != nil {
+		t.Skipf("no bedrock config: %v", err)
+	}
+	prov, _ := provider.Get("claude")
+	opts := schema.Options{
+		AuthMode: "iam", Region: "us-west-2", Scope: "user",
+		Version: "5.4.0", Effort: "high", AuthValidated: true,
+	}
+	block, err := schema.Build(bCfg, opts)
+	if err != nil {
+		t.Fatalf("schema.Build: %v", err)
+	}
+	provOpts := provider.Options{
+		SchemaOpts: opts, AuthMode: "iam", Region: "us-west-2",
+		Scope: "user", Version: "5.4.0",
+	}
+
+	out := captureStdout(t, func() {
+		err = printApplyDryRun(home, block, prov, bCfg, provOpts)
+	})
+	if err != nil {
+		t.Fatalf("printApplyDryRun: %v", err)
+	}
+	if !strings.Contains(out, "Would install Juggernaut Claude activation blocks in:") || !strings.Contains(out, bashrc) {
+		t.Fatalf("dry-run should name %s, got:\n%s", bashrc, out)
+	}
+	if strings.Contains(out, ".zshrc") || strings.Contains(out, ".profile") {
+		t.Fatalf("dry-run listed a profile it must not create, got:\n%s", out)
+	}
+	if runtime.GOOS == "windows" {
+		psProfile := filepath.Join(home, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1")
+		if !strings.Contains(out, psProfile) {
+			t.Fatalf("dry-run should name the PowerShell install target %s, got:\n%s", psProfile, out)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".zshrc")); !os.IsNotExist(statErr) {
+		t.Fatal("dry-run created .zshrc")
+	}
+}
+
 func TestPrintApplyDryRun_CollisionsNoForce(t *testing.T) {
 	defer resetFlags()
 	resetFlags()
