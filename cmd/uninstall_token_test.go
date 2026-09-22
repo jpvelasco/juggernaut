@@ -103,7 +103,7 @@ func TestUninstall_FullClaude_WithCodexConfigured_KeepsSharedToken(t *testing.T)
 
 	// Seed a Juggernaut-owned Codex config (user scope).
 	codexDir := filepath.Join(home, ".codex")
-	if err := os.MkdirAll(codexDir, 0o700); err != nil {
+	if err := os.MkdirAll(codexDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("creating codex dir: %v", err)
 	}
 	codexConfig := "model = \"global.openai.gpt-5.6-sol\"\nmodel_provider = \"amazon-bedrock-runtime\"\n[model_providers.amazon-bedrock-runtime.aws]\nregion = \"us-east-1\"\n"
@@ -154,7 +154,7 @@ func seedJuggernautConfig(t *testing.T, home, provName string) {
 	default:
 		t.Fatalf("unknown provider for fixture: %s", provName)
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, file), []byte(body), 0o600); err != nil {
@@ -225,7 +225,7 @@ func TestOtherProviderNeedsToken_DefensiveBranches(t *testing.T) {
 
 	// C) unreadable config (invalid TOML) → fail-safe retain.
 	badTOML := "[model\n"
-	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir .codex: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(badTOML), 0o600); err != nil {
@@ -255,7 +255,7 @@ func TestOtherProviderNeedsToken_DefensiveBranches(t *testing.T) {
 	// F) a nil exclude surveys EVERY provider — the provider "excluded"
 	// from the caller's perspective (claude) must still be surveyed when it
 	// owns a config.
-	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir .claude: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(claudeOwnedSettingsJSON), 0o600); err != nil {

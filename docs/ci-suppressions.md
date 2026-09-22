@@ -6,14 +6,17 @@ code adjustment that makes the rule happy; keep a suppression only when the code
 is correct as written and the rule cannot express that. **Never add a new
 suppression without adding it here.**
 
-Counts were last verified during the Codacy re-assessment on 2026-09-20: the
-29 cloud findings clear via 21 findings on 16 test-fixture permission-mode
-lines tightened to the repo policy (`0o755` dirs → `0o700`, `0o644` files →
-`0o600`; some lines double-flagged by two rule families), 1 finding on the
-executable-stub suppression in `cmd/codex_version_test.go` (the stub must be
-executable for `ResolveBinary`'s `isExecutable` gate on POSIX; it is never
-actually run — the probe is swapped), and 7 findings on 6 missing suppressions
-added (`codex_version.go` is double-flagged by both exec rules).
+Counts were last verified during the Codacy re-assessment on 2026-09-20 and the
+post-merge reanalysis on 2026-09-22: the 29 cloud findings clear as follows —
+14 via the 16 test-fixture permission-mode lines tightened to the repo policy
+(`0o755` dirs → `0o700`, `0o644` files → `0o600`; the `mkdir` and `fileperm`
+rule families accept those modes), 8 via suppressions added on 7 lines
+(`codex_version.go` is double-flagged by both exec rules; the
+`codex_version_test.go` stub keeps `0o755` for the `isExecutable` gate and is
+never run), and 7 via the standard `incorrect-default-permission` nosemgrep on
+the `MkdirAll(..., 0o700)` fixture lines (that rule fires on any permission
+above `0o600`, and a directory must keep the owner-exec bit — matching the ~50
+other `MkdirAll 0o700` fixture sites).
 `TestCodexBinaryVersion_RealProbe` (POSIX-only) exercises the real probe so the
 `codex_version.go` exec line stays covered (Codecov patch gate). The
 `isLegacyClaudeShim` deletion also removes a stale `nolint:unused`. Keep these
@@ -33,9 +36,10 @@ current when adding or removing suppressions.
 - `cmd/uninstall_token_test.go`, `cmd/doctor_test.go` — 16 fixture lines
   tightened to the repo policy (`MkdirAll 0o755` → `0o700`, `WriteFile 0o644` →
   `0o600`). Test homes are fake (`setupApplyTest`/`NewTestHome`); Windows
-  ignores these bits. No suppression added; the Cloud
-  `incorrect-default-permission` / `file-permissions` findings for these lines
-  are cleared by the mode change.
+  ignores these bits. The `file-permissions` (fileperm) and `mkdir` findings
+  clear by the mode change alone; the `incorrect-default-permission` findings
+  on the `MkdirAll 0o700` lines (the rule fires above `0o600`) carry the
+  standard directory nosemgrep below.
 
 ## Remaining suppressions
 
