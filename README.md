@@ -78,7 +78,7 @@ juggernaut apply --auth=bedrock-api-key
 juggernaut apply
 ```
 
-`juggernaut apply` will not enable Bedrock routing unless a valid credential source is confirmed (for Claude Code: no `CLAUDE_CODE_USE_BEDROCK=1` without validated auth).
+`juggernaut apply` writes Bedrock routing for the auth mode you select. It does not call AWS. `--auth=iam` trusts the credential chain already on the machine (environment, shared config, or SSO) and does not run a signed STS or Bedrock request. `--auth=bedrock-api-key` stores the key in the OS keychain and does not probe Bedrock at apply time either. `doctor` is the check: API-key mode sends the stored bearer token; IAM mode only confirms the regional endpoint is reachable (an unsigned request — HTTP 403 with an auth error counts as up). Claude Code signs IAM requests itself when it runs.
 
 ### Multi-CLI (`--cli`)
 
@@ -123,7 +123,7 @@ juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: defa
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
 juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5
 juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
-juggernaut apply --auth=iam --dry-run               # preview without writing
+juggernaut apply --auth=iam --dry-run               # preview config and shell-profile paths, write nothing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
 juggernaut apply --auth=iam --force                 # overwrite colliding foreign leaves (backup kept)
 ```
@@ -143,7 +143,7 @@ claude          # after apply --cli=claude (default)
 |---------|-------------|
 | `apply` | Write Juggernaut config for the target `--cli` and install shell activation. |
 | `show` | Print the current Juggernaut-managed config from user and project scopes. Supports `--cli=claude\|codex\|opencode\|grok` (default claude) and `--json`. |
-| `doctor` | Read-only diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts. Supports `--cli=claude\|codex\|opencode\|grok`. |
+| `doctor` | Read-only diagnostics for settings, activation, CLI binary, and legacy artifacts. IAM connectivity OK means the Bedrock endpoint is reachable, not that credentials were signed and accepted. API-key mode probes with the stored bearer token. Supports `--cli=claude\|codex\|opencode\|grok`. |
 | `logs export` | Write a local diagnostic zip for support. Redacted by default; `--raw` / `--include-secrets` includes secrets for private/self use only. |
 | `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
 | `models refresh` | Discover the models available to the current AWS account and region from native Bedrock (`foundation` + `profile` sources), then cache locally. |

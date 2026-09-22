@@ -431,12 +431,30 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 			fmt.Printf("Would write juggernaut auth metadata to %s\n", scPath)
 		}
 	}
-	fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles\n", title)
+	profiles, err := activation.PlanInstallPaths(home, activation.InstallOptions{})
+	if err != nil {
+		return err
+	}
+	printDryRunProfiles(title, profiles)
 	// Legacy v4.2.6 launcher-artifact recovery is Claude-specific.
 	if prov.Name() == "claude" {
 		fmt.Printf("Would recover known v4.2.6 launcher artifacts in %s\n", activation.DefaultBinDir(home))
 	}
 	return nil
+}
+
+// printDryRunProfiles names the profiles a real apply would try to update.
+// An empty list means none are eligible (no existing profile, and bash, zsh,
+// and fish are not on PATH). .profile is never created from scratch.
+func printDryRunProfiles(title string, paths []string) {
+	if len(paths) == 0 {
+		fmt.Printf("Would install Juggernaut %s activation blocks in shell profiles (none eligible)\n", title)
+		return
+	}
+	fmt.Printf("Would install Juggernaut %s activation blocks in:\n", title)
+	for _, path := range paths {
+		fmt.Printf("  %s\n", path)
+	}
 }
 
 // detectForeignCollisions checks whether the provider's config file already holds

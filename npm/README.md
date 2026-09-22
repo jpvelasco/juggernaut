@@ -135,7 +135,7 @@ juggernaut apply --auth=iam
 That one command:
 
 1. **Writes** Bedrock config to the target CLI's config file (user or project scope)
-2. **Sets** model IDs, region, effort level, permission mode, and routing env vars — only after credentials validate
+2. **Sets** model IDs, region, effort level, permission mode, and routing env vars for the selected auth mode (apply does not call AWS; `doctor` checks the endpoint)
 3. **Installs** a marked shell activation block that delegates to `juggernaut launch`
 
 No overwriting the real CLI binary. No copying API keys into env vars. A backup is made before every write.
@@ -157,7 +157,7 @@ No overwriting the real CLI binary. No copying API keys into env vars. A backup 
 | **IAM / SSO** | `juggernaut apply --auth=iam` | Teams, enterprise, existing AWS identity |
 | **Bedrock API key** | `juggernaut apply --auth=bedrock-api-key` | Solo devs, quick setup |
 | **Interactive** | `juggernaut apply` (no flags) | First run — guided prompts |
-| **Preview** | `juggernaut apply --dry-run` | See what would change, change nothing |
+| **Preview** | `juggernaut apply --dry-run` | See the config and shell profiles that would change; write nothing |
 
 ## Commands
 
@@ -165,7 +165,7 @@ No overwriting the real CLI binary. No copying API keys into env vars. A backup 
 |---------|--------------|
 | `apply` | Configure Bedrock for the target `--cli` and install shell activation |
 | `show` | Print your current Juggernaut config (`--cli=claude\|codex\|opencode\|grok`, `--json`) |
-| `doctor` | Diagnostics for settings, credentials, activation, CLI binary, and legacy artifacts |
+| `doctor` | Diagnostics for settings, activation, CLI binary, and legacy artifacts. IAM connectivity is endpoint reachability, not a signed credential check |
 | `uninstall` | Remove managed config and token; `--full` also removes shell activation |
 | `models refresh` | Discover account/region model inventory from native Bedrock |
 | `models list` | List cached model inventory, optionally filtered by CLI compatibility |
