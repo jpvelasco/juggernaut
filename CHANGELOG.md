@@ -16,6 +16,14 @@ All notable changes to Juggernaut will be documented in this file.
   The preview lists the same targets a real apply would write: existing
   profiles, plus bash, zsh, or fish profiles only when that shell is on
   `PATH`. It still never invents `~/.profile`.
+- **PowerShell activation keeps the `--` argument separator (fixes #479).**
+  On Windows, a bare `Get-Command juggernaut` resolves the npm
+  `juggernaut.ps1` shim ahead of `juggernaut.cmd`, and PowerShell strips the
+  `--` from `juggernaut launch -- @args`, so the first CLI argument was
+  misread as the CLI name and `claude --version` failed with
+  `unknown CLI "--version"`. The generated block now resolves juggernaut with
+  `Get-Command -CommandType Application` (first match), the application shim
+  that preserves `--`. Re-running `apply` rewrites the block in place.
 
 ## [6.3.1] - 2026-09-05
 

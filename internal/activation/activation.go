@@ -167,6 +167,13 @@ func validateMarkers(begin, end string) error {
 // use `launch-cli <cli>` so a pre-multi-CLI binary fails fast instead of
 // silently launching Claude.
 //
+// The PowerShell block resolves juggernaut with
+// `Get-Command -CommandType Application` (first match): a bare
+// `Get-Command juggernaut` would select the npm juggernaut.ps1 ExternalScript
+// ahead of juggernaut.cmd, and PowerShell strips the `--` argument separator
+// on the way in, so runLaunch would see the first CLI arg as the CLI name.
+// The .cmd (or .exe) application shim keeps `--` intact.
+//
 // Every wrapper falls through to the real CLI binary when `juggernaut` is not
 // on PATH. That way an incomplete uninstall (or a PATH without juggernaut)
 // does not break `claude`/`codex`/`grok` with "term not recognized".
@@ -181,9 +188,11 @@ func blockFor(shell Shell, cli, begin, end string) string {
 		panic(err)
 	}
 
-	launchCommand := "juggernaut launch"
+	// launchSubcmd is the juggernaut subcommand the wrapper runs; the shell
+	// prefix ("juggernaut " or a resolved application path) is added per shell.
+	launchSubcmd := "launch"
 	if cli != "claude" {
-		launchCommand = "juggernaut launch-cli " + cli
+		launchSubcmd = "launch-cli " + cli
 	}
 	switch shell {
 	case ShellFish:
@@ -191,7 +200,7 @@ func blockFor(shell Shell, cli, begin, end string) string {
 			begin,
 			"function " + cli,
 			"    if command -q juggernaut",
-			"        " + launchCommand + " -- $argv",
+			"        juggernaut " + launchSubcmd + " -- $argv",
 			"    else",
 			"        command " + cli + " $argv",
 			"    end",
@@ -199,11 +208,15 @@ func blockFor(shell Shell, cli, begin, end string) string {
 			end,
 		}, "\n")
 	case ShellPowerShell:
+		// Invoke the resolved application path (the npm .cmd shim) directly so
+		// `--` reaches runLaunch intact; a bare `Get-Command juggernaut` would
+		// pick the .ps1 shim, which strips `--` (see blockFor doc).
 		return strings.Join([]string{
 			begin,
 			"function global:" + cli + " {",
-			"  if (Get-Command juggernaut -ErrorAction SilentlyContinue) {",
-			"    " + launchCommand + " -- @args",
+			"  $jg = Get-Command juggernaut -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1",
+			"  if ($null -ne $jg -and -not [string]::IsNullOrWhiteSpace($jg.Path)) {",
+			"    & $jg.Path " + launchSubcmd + " -- @args",
 			"  } else {",
 			"    $app = Get-Command " + cli + " -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1",
 			"    if ($null -ne $app -and -not [string]::IsNullOrWhiteSpace($app.Path)) { & $app.Path @args } else {",
@@ -218,7 +231,7 @@ func blockFor(shell Shell, cli, begin, end string) string {
 			begin,
 			cli + "() {",
 			"  if command -v juggernaut >/dev/null 2>&1; then",
-			"    " + launchCommand + " -- \"$@\"",
+			"    juggernaut " + launchSubcmd + " -- \"$@\"",
 			"  else",
 			"    command " + cli + " \"$@\"",
 			"  fi",

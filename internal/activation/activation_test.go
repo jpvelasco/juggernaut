@@ -125,7 +125,7 @@ func TestBlocksContainValidDelegation(t *testing.T) {
 	}{
 		{ShellPOSIX, "juggernaut launch -- \"$@\""},
 		{ShellFish, "juggernaut launch -- $argv"},
-		{ShellPowerShell, "juggernaut launch -- @args"},
+		{ShellPowerShell, "& $jg.Path launch -- @args"},
 	}
 	for _, tt := range tests {
 		block := Block(tt.shell)
@@ -135,6 +135,27 @@ func TestBlocksContainValidDelegation(t *testing.T) {
 		if !strings.Contains(block, tt.want) {
 			t.Fatalf("%s block missing delegation %q: %q", tt.shell, tt.want, block)
 		}
+	}
+}
+
+// TestBlocksPowerShellResolvesJuggernautApplication guards the Windows
+// regression (#479): a bare `Get-Command juggernaut` selects the npm
+// juggernaut.ps1 ExternalScript ahead of juggernaut.cmd, and PowerShell
+// strips the `--` separator on the way in, so the first CLI arg is mistaken
+// for the CLI name. The block must resolve the juggernaut application shim,
+// which keeps `--` intact.
+func TestBlocksPowerShellResolvesJuggernautApplication(t *testing.T) {
+	ps := Block(ShellPowerShell)
+	if !strings.Contains(ps, "Get-Command juggernaut -CommandType Application") {
+		t.Fatalf("powershell block must resolve juggernaut via -CommandType Application (First 1):\n%s", ps)
+	}
+	if !strings.Contains(ps, "& $jg.Path launch -- @args") {
+		t.Fatalf("powershell block must keep the `--` separator when invoking $jg.Path:\n%s", ps)
+	}
+	// The bare check resolves the .ps1 shim, which swallows `--`; it must not
+	// guard the launch call.
+	if strings.Contains(ps, "if (Get-Command juggernaut -ErrorAction SilentlyContinue) {") {
+		t.Fatalf("powershell block must not guard launch with a bare Get-Command check:\n%s", ps)
 	}
 }
 
