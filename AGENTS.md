@@ -56,7 +56,7 @@ Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json
 - Never install/overwrite/move/symlink/delete an unknown file matching a managed CLI binary. Activation blocks for different CLIs must coexist.
 - Bearer token is shared across providers. Uninstalling one non-Claude provider must not delete it; Claude `--scope=project` uninstall must not either while user-scope or non-Claude configs remain.
 - Keep `VERSION`, `bedrock-config.json:version`, `cmd/root.go:Version` in sync (CI verifies).
-- Go toolchain pinned to `go 1.26.6` in `go.mod`; use exact version.
+- Go toolchain pinned to `go 1.26.9` in `go.mod`; use exact version.
 - `apply --auth` is validated before any write — only `iam` or `bedrock-api-key` accepted (`validateAuthFlag`).
 - Claude user-scope apply writes only non-secret runtime state to `~/.juggernaut/runtime/`; project apply must not create global fallback, and tokens must never be written there; user-scope uninstall removes it.
 - `apply --mode=auto` writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` but must warn unless active model is Opus 4.7+ (incl. Opus 5).
