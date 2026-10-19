@@ -326,7 +326,7 @@ func TestGrok_SupportsModel_CRISProfileIDs(t *testing.T) {
 
 // TestGrok_BuildConfig_CRISForms: bare and regional forms normalize to the
 // global. CRIS ID the runtime serves; an explicit regional profile ID is kept
-// verbatim (a us. pin stays us.); every 4.6 form gets the 1M context window.
+// verbatim (a us. pin stays us.); every 4.6 form gets the AWS 500K context window.
 func TestGrok_BuildConfig_CRISForms(t *testing.T) {
 	p, _ := Get("grok")
 	cases := []struct {
@@ -359,6 +359,11 @@ func TestGrok_BuildConfig_CRISForms(t *testing.T) {
 			_, hasContext := bgMap["context_window"]
 			if hasContext != c.context {
 				t.Errorf("context_window present = %v, want %v (model %v)", hasContext, c.context, c.want)
+			}
+			if c.context {
+				if v := bgMap["context_window"]; v != 500000 {
+					t.Errorf("context_window = %v, want 500000 (Grok 4.6 AWS card)", v)
+				}
 			}
 		})
 	}
