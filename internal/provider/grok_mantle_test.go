@@ -46,10 +46,11 @@ func TestGrok_MantleBuildConfig(t *testing.T) {
 
 	block := grokPlanModelBlock(t, plan)
 	want := map[string]any{
-		"model":          "xai.grok-4.6",
-		"base_url":       "https://bedrock-mantle.us-west-2.api.aws/openai/v1",
-		"context_window": 500000,
-		"api_backend":    "responses",
+		"model":             "xai.grok-4.6",
+		"base_url":          "https://bedrock-mantle.us-west-2.api.aws/openai/v1",
+		"context_window":    500000,
+		"api_backend":       "responses",
+		"reasoning_summary": "none",
 	}
 	for k, v := range want {
 		if block[k] != v {
@@ -159,21 +160,28 @@ func TestGrok_MantleRejectsUnsupportedModels(t *testing.T) {
 	}
 }
 
-// TestGrok_MantleRequiresAPIKeyAuth: Grok cannot sign SigV4 for mantle, so an
-// IAM (or unset) auth mode must fail with the API-key remedy rather than write
-// a config that cannot authenticate.
-func TestGrok_MantleRequiresAPIKeyAuth(t *testing.T) {
+// TestGrok_MantleIAMAuthMintsShortTermToken: mantle accepts the same
+// short-term Bedrock API key as runtime, so an IAM apply must wire
+// `auth-token --iam` rather than reject the endpoint.
+func TestGrok_MantleIAMAuthMintsShortTermToken(t *testing.T) {
 	p, _ := Get("grok")
-	for _, mode := range []string{authmode.IAM, ""} {
-		opts := mantleGrokOpts()
-		opts.AuthMode = mode
-		_, err := p.BuildConfig(testConfig(), opts)
-		if err == nil {
-			t.Fatalf("BuildConfig accepted auth mode %q for mantle", mode)
-		}
-		if !strings.Contains(err.Error(), "--auth="+authmode.BedrockAPIKey) {
-			t.Errorf("error = %v, want the --auth=%s remedy", err, authmode.BedrockAPIKey)
-		}
+	opts := mantleGrokOpts()
+	opts.AuthMode = authmode.IAM
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig accepted IAM for mantle? got error: %v", err)
+	}
+	auth, ok := testutil.NestedMapChain(plan.Keys, "auth")
+	if !ok {
+		t.Fatal("[auth] block missing")
+	}
+	authMap := auth.(map[string]any)
+	wantCmd := "juggernaut auth-token --iam --region=us-west-2"
+	if cmd, _ := authMap["auth_provider_command"].(string); cmd != wantCmd {
+		t.Errorf("auth_provider_command = %q, want %q", cmd, wantCmd)
+	}
+	if got, _ := testutil.NestedMapChain(plan.Keys, "juggernaut", "auth", "mode"); got != authmode.IAM {
+		t.Errorf("juggernaut.auth.mode = %v, want iam", got)
 	}
 }
 

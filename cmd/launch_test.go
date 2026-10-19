@@ -33,8 +33,8 @@ func containsStr(haystack, needle string) bool {
 }
 
 // TestApply_NativeCLIs_AcceptIAM: after native bedrock-runtime migration (v6),
-// every CLI (including OpenCode and Grok) supports IAM via SigV4. An explicit
-// --auth=iam must be accepted and should not error.
+// every CLI accepts IAM. Claude/Codex/OpenCode sign SigV4 directly; Grok mints
+// a short-term Bedrock API key because it only speaks bearer auth.
 func TestApply_NativeCLIs_AcceptIAM(t *testing.T) {
 	for _, cli := range []string{"opencode", "grok", "codex"} {
 		t.Run(cli, func(t *testing.T) {
@@ -69,7 +69,10 @@ func TestApply_OpenCode_IAM_WritesJuggernautAuth(t *testing.T) {
 	assertSidecarAuthMode(t, sidecar, authmode.IAM, "us-east-1")
 }
 
-func TestApply_Grok_IAM_OmitsAuthProviderCommand(t *testing.T) {
+// TestApply_Grok_IAM_WritesShortTermTokenCommand: IAM apply wires the [auth]
+// provider to `auth-token --iam --region=...`, which mints a short-term Bedrock
+// API key from the AWS credential chain instead of demanding a keychain key.
+func TestApply_Grok_IAM_WritesShortTermTokenCommand(t *testing.T) {
 	home := setupApplyTest(t)
 	if err := ExecuteArgs([]string{
 		"apply", "--cli=grok", "--auth=iam",
@@ -78,10 +81,11 @@ func TestApply_Grok_IAM_OmitsAuthProviderCommand(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	data := readFileForTest(t, filepath.Join(home, ".grok", "config.toml"))
-	if containsStr(data, "auth_provider_command") {
-		t.Errorf("IAM apply must not write auth_provider_command, got:\n%s", data)
+	want := `auth_provider_command = "juggernaut auth-token --iam --region=us-east-1"`
+	if !containsStr(data, want) {
+		t.Errorf("expected %s, got:\n%s", want, data)
 	}
-	if !containsStr(data, "mode") || !containsStr(data, "iam") {
+	if !containsStr(data, "mode = \"iam\"") {
 		t.Errorf("expected juggernaut.auth.mode=iam, got:\n%s", data)
 	}
 }

@@ -15,17 +15,25 @@ All notable changes to Juggernaut will be documented in this file.
   region. `doctor` probes the mantle endpoint. Runtime stays the default;
   Codex and OpenCode remain runtime-only for now.
 - **Grok can opt in to the `bedrock-mantle` endpoint (continues #497).**
-  `juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle`
-  writes a bare foundation model ID (`xai.grok-4.6` by default, or the
-  mantle-only `xai.grok-4.3`) on
+  `juggernaut apply --cli=grok --endpoint=mantle` writes a bare foundation
+  model ID (`xai.grok-4.6` by default, or the mantle-only `xai.grok-4.3`) on
   `https://bedrock-mantle.{region}.api.aws/openai/v1` with the Responses wire
   API and a recorded `juggernaut.auth.endpoint`. Mantle serves no CRIS
-  profiles, so cross-region IDs are rejected; mantle is Bedrock API key only
-  (Grok cannot sign SigV4), so `--auth=iam` is refused. Apply routes an
-  unserved region to one the selected model is served in (one warning), a
-  plain re-apply keeps the endpoint, `--endpoint=runtime` switches back and
-  clears the mantle-only `api_backend`, and runtime applies now reject
+  profiles, so cross-region IDs are rejected. Apply routes an unserved region
+  to one the selected model is served in (one warning), a plain re-apply keeps
+  the endpoint, `--endpoint=runtime` switches back and clears the mantle-only
+  `api_backend` and `reasoning_summary`, and runtime applies now reject
   mantle-only Grok 4.3 with a pointer to `--endpoint=mantle`.
+- **Grok now authenticates with IAM on both Bedrock endpoints.** The Grok CLI
+  only speaks bearer auth and cannot sign SigV4, so `--auth=iam` used to write
+  a config Grok could not use — it fell back to an interactive xAI sign-in
+  ("Not signed in"). `juggernaut auth-token --iam` now mints a short-term
+  Bedrock API key from the default AWS credential chain (a SigV4-presigned
+  `CallWithBearerToken` URL, capped at 12 hours and at the credentials'
+  remaining lifetime), and Grok's `[auth]` provider runs it:
+  `juggernaut auth-token --iam --region=<region>`. The region is validated to
+  stay shell-safe, and `--auth=bedrock-api-key` keeps reading the keychain
+  key.
 
 ### Changed
 
@@ -68,6 +76,16 @@ All notable changes to Juggernaut will be documented in this file.
   thinking is always on and cannot be disabled. Fable stays at 5.1, and prior
   generations remain selectable via `--opus-model`, `--sonnet-model`, and
   `--haiku-model`.
+
+### Fixed
+
+- **Grok's mantle config no longer fails on `reasoning.summary`.** The mantle
+  gateway rejects the Responses `reasoning.summary` field, so a Juggernaut-
+  written Grok mantle config answered
+  `400 invalid_request_error: Unsupported parameter: 'reasoning.summary'`. The
+  generated `[model.bedrock-grok]` block now sets `reasoning_summary = "none"`
+  as Grok's own Bedrock guidance requires, and switching back to
+  `--endpoint=runtime` clears it together with `api_backend`.
 
 ## [6.3.2] - 2026-09-21
 

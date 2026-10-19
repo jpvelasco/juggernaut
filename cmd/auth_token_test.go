@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -171,5 +173,135 @@ func TestAuthToken_Command_InvalidFormat(t *testing.T) {
 	})
 	if out != "" {
 		t.Errorf("expected no stdout on format error, got %q", out)
+	}
+}
+
+// stubMintBedrockToken replaces the AWS-backed minter for one command test.
+func stubMintBedrockToken(t *testing.T, fn func(context.Context, string) (string, error)) {
+	t.Helper()
+	original := mintBedrockToken
+	mintBedrockToken = fn
+	t.Cleanup(func() { mintBedrockToken = original })
+}
+
+// TestAuthToken_Command_IAM_MintsShortTermToken drives the --iam path used by
+// Grok: mint a short-term key from the credential chain and emit Grok's JSON
+// shape with the key's embedded expiry.
+func TestAuthToken_Command_IAM_MintsShortTermToken(t *testing.T) {
+	var gotRegion string
+	key := makeShortTermKey(time.Now().UTC(), 3600)
+	stubMintBedrockToken(t, func(_ context.Context, region string) (string, error) {
+		gotRegion = region
+		return key, nil
+	})
+
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"auth-token", "--iam", "--region=us-west-2"}); err != nil {
+			t.Fatalf("auth-token --iam: %v", err)
+		}
+	})
+	if gotRegion != "us-west-2" {
+		t.Errorf("minted for region %q, want us-west-2", gotRegion)
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &m); err != nil {
+		t.Fatalf("stdout not valid JSON: %v (%q)", err, out)
+	}
+	if m["access_token"] != key {
+		t.Errorf("access_token mismatch")
+	}
+	exp, ok := m["expires_in"].(float64)
+	if !ok || int(exp) < 3590 || int(exp) > 3600 {
+		t.Errorf("expires_in = %v, want about 3600", m["expires_in"])
+	}
+}
+
+// TestAuthToken_Command_IAM_RegionFromEnv: the Grok command embeds --region,
+// but the env fallback keeps standalone invocations working.
+func TestAuthToken_Command_IAM_RegionFromEnv(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-2")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	var gotRegion string
+	stubMintBedrockToken(t, func(_ context.Context, region string) (string, error) {
+		gotRegion = region
+		return "iam-token", nil
+	})
+	if err := ExecuteArgs([]string{"auth-token", "--iam"}); err != nil {
+		t.Fatalf("auth-token --iam: %v", err)
+	}
+	if gotRegion != "us-east-2" {
+		t.Errorf("minted for region %q, want us-east-2", gotRegion)
+	}
+}
+
+// TestAuthToken_Command_IAM_RequiresRegion: without a flag or env region the
+// command must fail before calling AWS rather than minting for an empty region.
+func TestAuthToken_Command_IAM_RequiresRegion(t *testing.T) {
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	var err error
+	out := captureStdout(t, func() {
+		err = ExecuteArgs([]string{"auth-token", "--iam"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires --region") {
+		t.Fatalf("error = %v, want a requires-region error", err)
+	}
+	if out != "" {
+		t.Errorf("stdout must stay clean, got %q", out)
+	}
+}
+
+// TestAuthToken_Command_IAM_ErrorsKeepStdoutClean: mint failures must not leak
+// diagnostics into the token stream Grok parses.
+func TestAuthToken_Command_IAM_ErrorsKeepStdoutClean(t *testing.T) {
+	stubMintBedrockToken(t, func(context.Context, string) (string, error) {
+		return "", errors.New("sso expired")
+	})
+	out := captureStdout(t, func() {
+		err := ExecuteArgs([]string{"auth-token", "--iam", "--region=us-west-2"})
+		if err == nil {
+			t.Fatal("expected the mint error")
+		}
+		if !strings.Contains(err.Error(), "minting short-term Bedrock token") ||
+			!strings.Contains(err.Error(), "sso expired") {
+			t.Errorf("error = %v, want the wrapped mint error", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("stdout must stay clean on mint error, got %q", out)
+	}
+}
+
+// TestAuthToken_Command_IAM_FormatToken: Codex-style bare output also works for
+// a minted IAM token (no JSON wrapper).
+func TestAuthToken_Command_IAM_FormatToken(t *testing.T) {
+	stubMintBedrockToken(t, func(context.Context, string) (string, error) {
+		return "iam-token", nil
+	})
+	out := captureStdout(t, func() {
+		if err := ExecuteArgs([]string{"auth-token", "--iam", "--region=us-west-2", "--format=token"}); err != nil {
+			t.Fatalf("auth-token --iam --format=token: %v", err)
+		}
+	})
+	if got := strings.TrimSpace(out); got != "iam-token" {
+		t.Errorf("bare IAM output = %q, want iam-token", got)
+	}
+}
+
+// TestAuthToken_Command_IAM_RejectsEmptyToken covers the defensive empty-token
+// branch (a minter regression must not print a blank line as a bearer token).
+func TestAuthToken_Command_IAM_RejectsEmptyToken(t *testing.T) {
+	stubMintBedrockToken(t, func(context.Context, string) (string, error) {
+		return "", nil
+	})
+	var err error
+	out := captureStdout(t, func() {
+		err = ExecuteArgs([]string{"auth-token", "--iam", "--region=us-west-2"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "empty token") {
+		t.Fatalf("error = %v, want an empty-token error", err)
+	}
+	if out != "" {
+		t.Errorf("stdout must stay clean, got %q", out)
 	}
 }

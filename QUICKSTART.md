@@ -15,10 +15,10 @@ Claude Code can also opt in to the parallel `bedrock-mantle` endpoint (runtime r
 juggernaut apply --auth=iam --endpoint=mantle --model=anthropic.claude-sonnet-5
 ```
 
-Grok supports the same opt-in, with a bare foundation model ID and Bedrock API key auth (mantle serves no CRIS profiles and Grok cannot sign SigV4):
+Grok supports the same opt-in, with a bare foundation model ID (mantle serves no CRIS profiles). Grok only speaks bearer auth, so IAM works by minting a short-term Bedrock API key from your AWS credentials, and a stored Bedrock API key works too:
 
 ```bash
-juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle
+juggernaut apply --cli=grok --auth=iam --endpoint=mantle
 juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle --model=xai.grok-4.3   # mantle-only
 ```
 
@@ -53,7 +53,7 @@ Using `--auth=bedrock-api-key` instead? Skip AWS setup entirely — the key is s
 
 ## Other Coding CLIs
 
-Every CLI routes natively via `bedrock-runtime` by default (Juggernaut's Mantle routing removed in v6). Claude Code and Grok can opt in to `bedrock-mantle` with `--endpoint=mantle` (Grok uses Bedrock API key auth there); Codex and OpenCode remain runtime-only. IAM and Bedrock API key both work for every CLI on the runtime endpoint:
+Every CLI routes natively via `bedrock-runtime` by default (Juggernaut's Mantle routing removed in v6). Claude Code and Grok can opt in to `bedrock-mantle` with `--endpoint=mantle`; Codex and OpenCode remain runtime-only. IAM and Bedrock API key both work for every CLI on the runtime endpoint:
 
 ```bash
 juggernaut apply --cli=opencode --auth=iam              # or --auth=bedrock-api-key

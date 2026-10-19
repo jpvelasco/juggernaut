@@ -1,14 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/spf13/cobra"
 )
@@ -22,17 +26,31 @@ const longTermRefreshSecs = 6 * 60 * 60 // 6 hours
 // resetFlags between ExecuteArgs calls.
 var authTokenFormat string
 
+// authTokenIAM mints a short-term Bedrock API key from the default AWS
+// credential chain instead of reading the keychain. authTokenRegion is required
+// in that mode (or supplied via AWS_REGION/AWS_DEFAULT_REGION).
+var (
+	authTokenIAM    bool
+	authTokenRegion string
+)
+
+// mintBedrockToken is a package var so command tests exercise the --iam branch
+// without contacting AWS.
+var mintBedrockToken = discovery.MintBedrockToken
+
 // authTokenCmd is a hidden command invoked by a CLI's external auth provider to
-// fetch the Bedrock bearer token from the keychain. Two consumers, two shapes
-// (--format):
+// fetch a Bedrock bearer token. Three consumers, two shapes (--format):
 //   - "json"  (default) → {"access_token":...,"expires_in":N} — the Grok CLI's
 //     auth_provider_command reads this (see internal/provider/grok.go).
 //   - "token"           → the BARE token on one line — the Codex CLI's
 //     auth.command trims stdout and uses the whole thing as the bearer token
 //     (verified in openai/codex external_bearer.rs), so it must NOT be JSON.
 //
-// stdout MUST contain ONLY the token payload — any stray text breaks parsing —
-// so all diagnostics go to stderr.
+// By default the token comes from the keychain (--auth=bedrock-api-key). With
+// --iam, auth-token mints a short-term Bedrock API key from the caller's AWS
+// credentials; Grok uses this because it can only send a bearer token, not
+// SigV4. Either way, stdout MUST contain ONLY the token payload — any stray
+// text breaks parsing — so all diagnostics go to stderr.
 var authTokenCmd = &cobra.Command{
 	Use:          "auth-token",
 	Short:        "Print the Bedrock bearer token (used by the Grok/Codex external auth providers)",
@@ -44,6 +62,10 @@ var authTokenCmd = &cobra.Command{
 func init() {
 	authTokenCmd.Flags().StringVar(&authTokenFormat, "format", "json",
 		"output format: json (Grok) or token (Codex, bare token)")
+	authTokenCmd.Flags().BoolVar(&authTokenIAM, "iam", false,
+		"mint a short-term Bedrock token from the AWS credential chain")
+	authTokenCmd.Flags().StringVar(&authTokenRegion, "region", "",
+		"AWS region for --iam (defaults to AWS_REGION or AWS_DEFAULT_REGION)")
 	rootCmd.AddCommand(authTokenCmd)
 }
 
@@ -51,22 +73,55 @@ func runAuthToken(_ *cobra.Command, _ []string) error {
 	if authTokenFormat != "json" && authTokenFormat != "token" {
 		return fmt.Errorf("invalid --format %q — must be json or token", authTokenFormat)
 	}
-	home, err := homeDir()
-	if err != nil {
-		return err
-	}
-	token, err := keychain.Default().GetWithFallback(home)
-	if err != nil {
-		// Diagnostics go to stderr; stdout stays clean so the caller never
-		// mis-parses an error message as a token.
-		return fmt.Errorf("%s: %w", keychain.ErrReadingKeychainMsg, err)
+
+	var token string
+	var err error
+	if authTokenIAM {
+		region := authTokenIAMRegion()
+		if region == "" {
+			return errors.New("auth-token --iam requires --region (or AWS_REGION/AWS_DEFAULT_REGION)")
+		}
+		token, err = mintBedrockToken(context.Background(), region)
+		if err != nil {
+			// Diagnostics go to stderr; stdout stays clean so the caller never
+			// mis-parses an error message as a token.
+			return fmt.Errorf("minting short-term Bedrock token from IAM credentials: %w", err)
+		}
+	} else {
+		home, homeErr := homeDir()
+		if homeErr != nil {
+			return homeErr
+		}
+		token, err = keychain.Default().GetWithFallback(home)
+		if err != nil {
+			// Diagnostics go to stderr; stdout stays clean so the caller never
+			// mis-parses an error message as a token.
+			return fmt.Errorf("%s: %w", keychain.ErrReadingKeychainMsg, err)
+		}
 	}
 	if token == "" {
+		if authTokenIAM {
+			return errors.New("IAM token minting returned an empty token")
+		}
 		return errors.New("no Bedrock bearer token stored in the keychain — " +
 			"run juggernaut apply with --auth=" + authmode.BedrockAPIKey + " to store one")
 	}
 	fmt.Println(buildAuthTokenOutput(token, authTokenFormat, time.Now().UTC()))
 	return nil
+}
+
+// authTokenIAMRegion resolves the region used to mint a short-term token: the
+// --region flag first, then the standard AWS region environment variables.
+func authTokenIAMRegion() string {
+	if region := strings.TrimSpace(authTokenRegion); region != "" {
+		return region
+	}
+	for _, key := range []string{"AWS_REGION", "AWS_DEFAULT_REGION"} {
+		if region := strings.TrimSpace(os.Getenv(key)); region != "" {
+			return region
+		}
+	}
+	return ""
 }
 
 // buildAuthTokenOutput renders the token in the requested shape. "token" emits

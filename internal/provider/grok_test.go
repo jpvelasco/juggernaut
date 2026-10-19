@@ -186,10 +186,14 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if _, hasEnvKey := bgMap["env_key"]; hasEnvKey {
 		t.Errorf("env_key must NOT be set (it keeps Grok's login flow alive); got %v", bgMap["env_key"])
 	}
-	// api_backend is mantle-only; runtime plans carry the empty-string delete
-	// sentinel so a mantle→runtime apply clears it from the deep-merged table.
+	// api_backend and reasoning_summary are mantle-only; runtime plans carry
+	// empty-string delete sentinels so a mantle→runtime apply clears them from
+	// the deep-merged table.
 	if got, hasBackend := bgMap["api_backend"]; !hasBackend || got != "" {
 		t.Errorf("api_backend = %v, want the empty deletion sentinel for native bedrock-runtime", got)
+	}
+	if got, hasSummary := bgMap["reasoning_summary"]; !hasSummary || got != "" {
+		t.Errorf("reasoning_summary = %v, want the empty deletion sentinel for native bedrock-runtime", got)
 	}
 	modelsDefault, ok := testutil.NestedMapChain(plan.Keys, "models", "default")
 	if !ok || modelsDefault != "bedrock-grok" {
@@ -237,29 +241,81 @@ func TestGrok_BuildConfig_AuthBlock(t *testing.T) {
 	}
 }
 
-// TestGrok_BuildConfig_IAM_OmitsAuthProviderCommand: IAM apply must not write
-// auth_provider_command (that command demands a keychain token) and must persist
-// juggernaut.auth.mode so launch can skip token injection.
-func TestGrok_BuildConfig_IAM_OmitsAuthProviderCommand(t *testing.T) {
+// TestGrok_BuildConfig_IAMWritesShortTermTokenCommand: IAM apply wires the
+// [auth] provider to `auth-token --iam`, which mints a short-term Bedrock API
+// key from the AWS credential chain. The region is embedded because Grok runs
+// the command outside the launch wrapper.
+func TestGrok_BuildConfig_IAMWritesShortTermTokenCommand(t *testing.T) {
 	p, _ := Get("grok")
-	plan, err := p.BuildConfig(testConfig(), baseOpts())
+	opts := baseOpts()
+	opts.AuthMode = authmode.IAM
+	opts.Region = "us-east-1"
+	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
 		t.Fatalf("BuildConfig: %v", err)
 	}
 	auth, ok := testutil.NestedMapChain(plan.Keys, "auth")
 	if !ok {
-		t.Fatal("[auth] block missing (needed so re-apply can strip API-key leaves)")
+		t.Fatal("[auth] block missing")
 	}
 	authMap, ok := auth.(map[string]any)
 	if !ok {
 		t.Fatalf("[auth] not a map: %T", auth)
 	}
-	if cmd, _ := authMap["auth_provider_command"].(string); cmd != "" {
-		t.Errorf("IAM must not set auth_provider_command, got %q", cmd)
+	wantCmd := "juggernaut auth-token --iam --region=us-east-1"
+	if cmd, _ := authMap["auth_provider_command"].(string); cmd != wantCmd {
+		t.Errorf("auth_provider_command = %q, want %q", cmd, wantCmd)
+	}
+	if authMap["auth_provider_label"] != "Bedrock" {
+		t.Errorf("auth_provider_label = %v, want Bedrock", authMap["auth_provider_label"])
 	}
 	jb, ok := testutil.NestedMapChain(plan.Keys, "juggernaut", "auth", "mode")
 	if !ok || jb != authmode.IAM {
 		t.Errorf("juggernaut.auth.mode = %v, want iam", jb)
+	}
+}
+
+// TestGrokAuthProviderCommand: API-key mode reads the keychain without a
+// region-scoped command; IAM mode embeds only shell-safe region names.
+func TestGrokAuthProviderCommand(t *testing.T) {
+	got, err := grokAuthProviderCommand(authmode.BedrockAPIKey, "us-west-2")
+	if err != nil || got != grokAuthCommand {
+		t.Errorf("API-key command = %q, %v; want %q", got, err, grokAuthCommand)
+	}
+	got, err = grokAuthProviderCommand(authmode.IAM, "us-west-2")
+	if err != nil || got != grokAuthCommand+" --iam --region=us-west-2" {
+		t.Errorf("IAM command = %q, %v; want the minted-token command", got, err)
+	}
+	for _, bad := range []string{"", "us-west-2; touch /tmp/pwned", "us west 2"} {
+		if _, err := grokAuthProviderCommand(authmode.IAM, bad); err == nil {
+			t.Errorf("IAM command accepted unsafe/empty region %q", bad)
+		}
+	}
+}
+
+// TestGrok_BuildConfig_IAMCommandUsesResolvedRegion: a Bedrock API key only
+// works in the region it was minted for, so the auth command must carry the
+// region the model block actually points at — not the requested one.
+func TestGrok_BuildConfig_IAMCommandUsesResolvedRegion(t *testing.T) {
+	p, _ := Get("grok")
+	opts := baseOpts()
+	opts.AuthMode = authmode.IAM
+	opts.Region = "me-south-1" // not served by the global Grok 4.7 profile
+	opts.RegionExplicit = true
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	block, ok := testutil.NestedMapChain(plan.Keys, "model", grokModelName)
+	if !ok {
+		t.Fatal("[model.bedrock-grok] missing")
+	}
+	base, _ := block.(map[string]any)["base_url"].(string)
+	wantRegion := strings.TrimSuffix(strings.TrimPrefix(base, "https://bedrock-runtime."), ".amazonaws.com/openai/v1")
+	auth, _ := testutil.NestedMapChain(plan.Keys, "auth")
+	cmd, _ := auth.(map[string]any)["auth_provider_command"].(string)
+	if !strings.HasSuffix(cmd, "--region="+wantRegion) {
+		t.Errorf("auth_provider_command = %q, want it to mint for %q (base_url %q)", cmd, wantRegion, base)
 	}
 }
 
