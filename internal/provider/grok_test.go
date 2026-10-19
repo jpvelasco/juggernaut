@@ -2,6 +2,7 @@ package provider
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -154,7 +155,7 @@ func TestGrok_OwnsConfig(t *testing.T) {
 }
 
 // TestGrok_BuildConfig writes the [model.bedrock-grok] block (base_url→
-// bedrock-runtime /openai/v1, model xai.grok-4.6) + [models].default + an
+// bedrock-runtime /openai/v1, model xai.grok-4.7) + [models].default + an
 // [auth] block. Crucially it does NOT set env_key: with env_key, Grok's
 // credential order (api_key→env_key→XAI_API_KEY) still runs the interactive
 // login for the session. The [auth] auth_provider_command is what replaces login.
@@ -176,8 +177,8 @@ func TestGrok_BuildConfig(t *testing.T) {
 	}
 	// The bare default is normalized to the global. CRIS profile ID that the
 	// bedrock-runtime endpoint actually serves.
-	if bgMap["model"] != "global.xai.grok-4.6" {
-		t.Errorf("model = %v, want global.xai.grok-4.6", bgMap["model"])
+	if bgMap["model"] != "global.xai.grok-4.7" {
+		t.Errorf("model = %v, want global.xai.grok-4.7", bgMap["model"])
 	}
 	if base, _ := bgMap["base_url"].(string); base != "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1" {
 		t.Errorf("base_url = %q, want .../openai/v1", base)
@@ -292,9 +293,9 @@ func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
 	if bgMap["model"] != "global.xai.grok-4.4" {
 		t.Errorf("model = %v, want global.xai.grok-4.4", bgMap["model"])
 	}
-	// Non-4.6 models don't get context_window
+	// Models outside the documented roster don't get context_window.
 	if _, hasContext := bgMap["context_window"]; hasContext {
-		t.Error("non-4.6 model must not have context_window")
+		t.Error("model outside the documented roster must not have context_window")
 	}
 }
 
@@ -309,6 +310,9 @@ func TestGrok_SupportsModel_CRISProfileIDs(t *testing.T) {
 		id   string
 		want bool
 	}{
+		{id: "global.xai.grok-4.7", want: true},
+		{id: "us.xai.grok-4.7", want: true},
+		{id: "xai.grok-4.7", want: true},
 		{id: "global.xai.grok-4.6", want: true},
 		{id: "us.xai.grok-4.6", want: true},
 		{id: "xai.grok-4.6", want: true},
@@ -326,19 +330,22 @@ func TestGrok_SupportsModel_CRISProfileIDs(t *testing.T) {
 
 // TestGrok_BuildConfig_CRISForms: bare and regional forms normalize to the
 // global. CRIS ID the runtime serves; an explicit regional profile ID is kept
-// verbatim (a us. pin stays us.); every 4.6 form gets the AWS 500K context window.
+// verbatim (a us. pin stays us.); each documented model gets its AWS card's
+// context window (4.7 = 524288, 4.6 = 500000).
 func TestGrok_BuildConfig_CRISForms(t *testing.T) {
 	p, _ := Get("grok")
 	cases := []struct {
-		in, want string
-		context  bool
+		in, want      string
+		contextWindow int
 	}{
-		{in: "", want: "global.xai.grok-4.6", context: true},
-		{in: "xai.grok-4.6", want: "global.xai.grok-4.6", context: true},
-		{in: "grok-4.6", want: "global.xai.grok-4.6", context: true},
-		{in: "us.xai.grok-4.6", want: "us.xai.grok-4.6", context: true},
-		{in: "global.xai.grok-4.6", want: "global.xai.grok-4.6", context: true},
-		{in: "us.xai.grok-4.4", want: "us.xai.grok-4.4", context: false},
+		{in: "", want: "global.xai.grok-4.7", contextWindow: 524288},
+		{in: "xai.grok-4.7", want: "global.xai.grok-4.7", contextWindow: 524288},
+		{in: "grok-4.7", want: "global.xai.grok-4.7", contextWindow: 524288},
+		{in: "us.xai.grok-4.7", want: "us.xai.grok-4.7", contextWindow: 524288},
+		{in: "global.xai.grok-4.7", want: "global.xai.grok-4.7", contextWindow: 524288},
+		{in: "us.xai.grok-4.6", want: "us.xai.grok-4.6", contextWindow: 500000},
+		{in: "global.xai.grok-4.6", want: "global.xai.grok-4.6", contextWindow: 500000},
+		{in: "us.xai.grok-4.4", want: "us.xai.grok-4.4", contextWindow: 0},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
@@ -356,16 +363,73 @@ func TestGrok_BuildConfig_CRISForms(t *testing.T) {
 			if bgMap["model"] != c.want {
 				t.Errorf("model = %v, want %v", bgMap["model"], c.want)
 			}
-			_, hasContext := bgMap["context_window"]
-			if hasContext != c.context {
-				t.Errorf("context_window present = %v, want %v (model %v)", hasContext, c.context, c.want)
+			gotContext, hasContext := bgMap["context_window"]
+			if c.contextWindow == 0 {
+				if hasContext {
+					t.Errorf("context_window present = %v, want absent (model %v)", gotContext, c.want)
+				}
+				return
 			}
-			if c.context {
-				if v := bgMap["context_window"]; v != 500000 {
-					t.Errorf("context_window = %v, want 500000 (Grok 4.6 AWS card)", v)
+			if !hasContext {
+				t.Fatalf("context_window missing for %v", c.want)
+			}
+			if gotContext != c.contextWindow {
+				t.Errorf("context_window = %v, want %d (AWS model card)", gotContext, c.contextWindow)
+			}
+		})
+	}
+}
+
+// TestGrokModelFacts pins the per-model AWS card facts that drive
+// context_window and region routing: counts (so roster updates are deliberate)
+// plus representative members and non-members of each profile's region set.
+func TestGrokModelFacts(t *testing.T) {
+	tests := []struct {
+		id            string
+		contextWindow int
+		globalCount   int
+		globalIn      string
+		globalOut     string
+	}{
+		{"xai.grok-4.7", 524288, 28, "eu-west-1", "me-south-1"},
+		{"xai.grok-4.6", 500000, 29, "me-south-1", "ca-west-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			facts, ok := grokModelFacts(tt.id)
+			if !ok {
+				t.Fatalf("%s not in Grok model table", tt.id)
+			}
+			if facts.ContextWindow != tt.contextWindow {
+				t.Errorf("ContextWindow = %d, want %d", facts.ContextWindow, tt.contextWindow)
+			}
+			if len(facts.GlobalRegions) != tt.globalCount {
+				t.Errorf("len(GlobalRegions) = %d, want %d", len(facts.GlobalRegions), tt.globalCount)
+			}
+			if !slices.Contains(facts.GlobalRegions, tt.globalIn) {
+				t.Errorf("GlobalRegions missing documented region %s", tt.globalIn)
+			}
+			if slices.Contains(facts.GlobalRegions, tt.globalOut) {
+				t.Errorf("GlobalRegions must not contain non-serving region %s", tt.globalOut)
+			}
+			if len(facts.USRegions) != 6 {
+				t.Errorf("len(USRegions) = %d, want 6", len(facts.USRegions))
+			}
+			for name, regions := range map[string][]string{"GlobalRegions": facts.GlobalRegions, "USRegions": facts.USRegions} {
+				if len(regions) == 0 || regions[0] != "us-east-1" {
+					t.Errorf("%s[0] = %v, want us-east-1 (Iron Fist fallback)", name, regions)
 				}
 			}
 		})
+	}
+	// A regional profile form resolves to the same facts as its bare ID.
+	for _, id := range []string{"global.xai.grok-4.7", "us.xai.grok-4.7"} {
+		if facts, ok := grokModelFacts(id); !ok || facts.ContextWindow != 524288 {
+			t.Errorf("grokModelFacts(%q) = %+v, %v; want the 4.7 card facts", id, facts, ok)
+		}
+	}
+	if _, ok := grokModelFacts("xai.grok-4.4"); ok {
+		t.Error("undocumented model must not resolve to card facts")
 	}
 }
 
@@ -382,27 +446,75 @@ func TestGrok_BuildConfig_UnknownCRISFamily(t *testing.T) {
 	}
 }
 
+// TestGrok_BuildConfig_RegionIronFist: the default 4.7 global. profile is
+// callable from eu-west-1 (per the AWS card), but not from me-south-1. An
+// unlisted region is OVERRIDDEN to us-east-1 (base_url reflects it) rather
+// than written as-is; a serving region is kept silently.
 func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("grok")
+
+	// eu-west-1 serves the Grok 4.7 global. profile → kept, silent.
 	opts := baseOpts()
 	opts.Region = "eu-west-1"
 	opts.RegionExplicit = true
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
-		t.Fatalf("BuildConfig should not fail on an unlisted region: %v", err)
+		t.Fatalf("BuildConfig should not fail for a serving region: %v", err)
 	}
 	bg, ok := testutil.NestedMapChain(plan.Keys, "model", grokModelName)
 	if !ok {
 		t.Fatalf("[model.%s] missing", grokModelName)
 	}
 	bgMap := bg.(map[string]any)
+	if base := bgMap["base_url"].(string); !strings.Contains(base, "eu-west-1") {
+		t.Errorf("eu-west-1 serves the grok-4.7 global profile and must be kept, got %q", base)
+	}
+	if len(plan.Warnings) != 0 {
+		t.Errorf("eu-west-1 is a known region and must not warn, got %v", plan.Warnings)
+	}
+
+	// me-south-1 does not serve the 4.7 global. profile → override, warn.
+	opts.Region = "me-south-1"
+	plan, err = p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig should not fail on a non-serving region: %v", err)
+	}
+	bg, ok = testutil.NestedMapChain(plan.Keys, "model", grokModelName)
+	if !ok {
+		t.Fatalf("[model.%s] missing", grokModelName)
+	}
+	bgMap = bg.(map[string]any)
+	if base := bgMap["base_url"].(string); strings.Contains(base, "me-south-1") {
+		t.Errorf("base_url must not use the non-serving region me-south-1, got %q", base)
+	}
+	if len(plan.Warnings) == 0 || !strings.Contains(strings.Join(plan.Warnings, " "), "us-east-1") {
+		t.Errorf("expected a us-east-1 region-override message for grok-4.7 in me-south-1, got %v", plan.Warnings)
+	}
+
+	// A us. profile uses the US source-region set: eu-west-1 serves the global
+	// 4.7 profile but is not a us. source region, so it is overridden.
+	opts.Model = "us.xai.grok-4.7"
+	plan, err = p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig should not fail for a us. profile: %v", err)
+	}
+	bg, ok = testutil.NestedMapChain(plan.Keys, "model", grokModelName)
+	if !ok {
+		t.Fatalf("[model.%s] missing", grokModelName)
+	}
+	bgMap = bg.(map[string]any)
+	if model := bgMap["model"]; model != "us.xai.grok-4.7" {
+		t.Errorf("model = %v, want us.xai.grok-4.7 (explicit profile kept)", model)
+	}
 	if base := bgMap["base_url"].(string); strings.Contains(base, "eu-west-1") {
-		t.Errorf("base_url must not use the non-serving region eu-west-1, got %q", base)
+		t.Errorf("base_url must not use eu-west-1 for a us. profile, got %q", base)
 	}
 	if len(plan.Warnings) == 0 {
-		t.Error("expected a region-override message for grok-4.6 in eu-west-1")
+		t.Error("expected a region-override message for us.xai.grok-4.7 in eu-west-1")
 	}
-	// us-west-2 IS a known grok-4.6 region → kept, silent.
+	opts.Model = ""
+
+	// us-west-2 IS a known grok-4.7 region → kept, silent.
 	opts.Region = "us-west-2"
 	plan, _ = p.BuildConfig(testConfig(), opts)
 	bg, ok = testutil.NestedMapChain(plan.Keys, "model", grokModelName)
@@ -411,7 +523,7 @@ func TestGrok_BuildConfig_RegionIronFist(t *testing.T) {
 	}
 	bgMap = bg.(map[string]any)
 	if base := bgMap["base_url"].(string); !strings.Contains(base, "us-west-2") {
-		t.Errorf("us-west-2 serves grok-4.6 and must be kept, got %q", base)
+		t.Errorf("us-west-2 serves grok-4.7 and must be kept, got %q", base)
 	}
 	if len(plan.Warnings) != 0 {
 		t.Errorf("us-west-2 is a known region and must not warn, got %v", plan.Warnings)

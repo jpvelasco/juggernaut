@@ -652,8 +652,8 @@ auth_provider_command = "juggernaut auth-token"
 	if strings.Contains(written, "bedrock-mantle") {
 		t.Errorf("migrated config must NOT contain bedrock-mantle URL, got:\n%s", written)
 	}
-	if !strings.Contains(written, "xai.grok-4.6") {
-		t.Errorf("migrated config should have v6 default model xai.grok-4.6, got:\n%s", written)
+	if !strings.Contains(written, "xai.grok-4.7") {
+		t.Errorf("migrated config should have v6 default model xai.grok-4.7, got:\n%s", written)
 	}
 
 	// A backup of the legacy config should have been created.
@@ -857,8 +857,8 @@ auth_provider_command = "juggernaut auth-token"
 	if strings.Contains(written, "bedrock-mantle") {
 		t.Errorf("migrated config must NOT contain bedrock-mantle URL, got:\n%s", written)
 	}
-	if !strings.Contains(written, "xai.grok-4.6") {
-		t.Errorf("migrated config should have v6 default model xai.grok-4.6, got:\n%s", written)
+	if !strings.Contains(written, "xai.grok-4.7") {
+		t.Errorf("migrated config should have v6 default model xai.grok-4.7, got:\n%s", written)
 	}
 
 	// A backup of the legacy config should have been created.
@@ -1216,7 +1216,7 @@ func TestApply_Grok_AlreadyMigrated_ReapplyDoesNotReannounce(t *testing.T) {
 default = "bedrock-grok"
 
 [model.bedrock-grok]
-model = "global.xai.grok-4.6"
+model = "global.xai.grok-4.7"
 base_url = "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1"
 name = "Amazon Bedrock (Runtime)"
 `)
