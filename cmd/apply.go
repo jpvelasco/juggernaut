@@ -22,6 +22,7 @@ var applyCmd = &cobra.Command{
 var applyFlags struct {
 	cli                    string
 	auth                   string
+	endpoint               string
 	bedrockKey             string
 	preserveKey            bool
 	region                 string
@@ -49,6 +50,7 @@ func init() {
 	f := applyCmd.Flags()
 	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: "+provider.SupportedNames())
 	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
+	f.StringVar(&applyFlags.endpoint, "endpoint", "", "Bedrock endpoint: runtime (default) or mantle (opt-in; Claude Code only)")
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")
@@ -116,6 +118,9 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err := validateAuthFlag(); err != nil {
 		return err
 	}
+	if err := validateEndpointFlag(); err != nil {
+		return err
+	}
 
 	prov, err := provider.Get(applyFlags.cli)
 	if err != nil {
@@ -131,10 +136,16 @@ func runApply(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	endpoint, err := resolveApplyEndpoint(home, prov)
+	if err != nil {
+		return err
+	}
+
 	authMode, region, opusplan, err := resolveApplyInputs(home, bCfg, prov)
 	if err != nil {
 		return err
 	}
+	region = resolveEndpointRegion(endpoint, region)
 
 	var token string
 	if !applyFlags.dryRun {
@@ -144,7 +155,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	plan, err := buildApplyPlan(home, region, bCfg, authMode, opusplan)
+	plan, err := buildApplyPlan(home, region, bCfg, authMode, endpoint, opusplan)
 	if err != nil {
 		return err
 	}
@@ -161,13 +172,13 @@ type applyPlan struct {
 
 // buildApplyPlan resolves models and options, then builds the schema
 // block and provider options. This is the planning phase — no side effects.
-func buildApplyPlan(home, region string, bCfg *bedrock.Config, authMode string, opusplan bool) (*applyPlan, error) {
-	models, err := resolveApplyModels()
+func buildApplyPlan(home, region string, bCfg *bedrock.Config, authMode, endpoint string, opusplan bool) (*applyPlan, error) {
+	models, err := resolveApplyModelsForEndpoint(endpoint, home)
 	if err != nil {
 		return nil, err
 	}
 
-	opts := buildApplyOptions(authMode, region, opusplan, models)
+	opts := buildApplyOptions(authMode, endpoint, region, opusplan, models)
 	block, err := schema.Build(bCfg, opts)
 	if err != nil {
 		return nil, err
@@ -219,16 +230,8 @@ type resolvedModels struct {
 
 // resolveApplyModels extracts and validates all model-related flags.
 func resolveApplyModels() (*resolvedModels, error) {
-	opusModel := applyFlags.opusModel
-	sonnetModel := applyFlags.sonnetModel
-	haikuModel := applyFlags.haikuModel
-	fableModel := applyFlags.fableModel
-	if applyFlags.model != "" {
-		opusModel = applyFlags.model
-		sonnetModel = applyFlags.model
-		haikuModel = applyFlags.model
-		fableModel = applyFlags.model
-	}
+	models := &resolvedModels{}
+	overlayExplicitModels(models)
 
 	fallbackModels, err := parseCommaSeparatedModels(applyFlags.fallbackModel, "--fallback-model")
 	if err != nil {
@@ -244,22 +247,135 @@ func resolveApplyModels() (*resolvedModels, error) {
 		return nil, fmt.Errorf("%s", schema.ErrEnforceRequiresAvailable)
 	}
 
-	return &resolvedModels{
-		opusModel:              opusModel,
-		sonnetModel:            sonnetModel,
-		haikuModel:             haikuModel,
-		fableModel:             fableModel,
-		fallbackModels:         fallbackModels,
-		availableModels:        availableModels,
-		enforceAvailableModels: applyFlags.enforceAvailableModels,
-	}, nil
+	models.fallbackModels = fallbackModels
+	models.availableModels = availableModels
+	models.enforceAvailableModels = applyFlags.enforceAvailableModels
+	return models, nil
+}
+
+// overlayExplicitModels applies explicit tier flags to m. --model wins over
+// every per-tier flag, matching the documented flag precedence.
+func overlayExplicitModels(m *resolvedModels) {
+	if applyFlags.opusModel != "" {
+		m.opusModel = applyFlags.opusModel
+	}
+	if applyFlags.sonnetModel != "" {
+		m.sonnetModel = applyFlags.sonnetModel
+	}
+	if applyFlags.haikuModel != "" {
+		m.haikuModel = applyFlags.haikuModel
+	}
+	if applyFlags.fableModel != "" {
+		m.fableModel = applyFlags.fableModel
+	}
+	if applyFlags.model != "" {
+		m.opusModel = applyFlags.model
+		m.sonnetModel = applyFlags.model
+		m.haikuModel = applyFlags.model
+		m.fableModel = applyFlags.model
+	}
+}
+
+// hasExplicitModelFlags reports whether the user pinned any Claude tier model
+// on this invocation.
+func hasExplicitModelFlags() bool {
+	return applyFlags.model != "" || applyFlags.opusModel != "" ||
+		applyFlags.sonnetModel != "" || applyFlags.haikuModel != "" ||
+		applyFlags.fableModel != ""
+}
+
+// resolveApplyModelsForEndpoint layers mantle-specific model behavior on top of
+// the normal flag resolution. Mantle model IDs are account-allowlisted, so a
+// re-apply of a mantle config preserves the previous tier pins instead of
+// resetting them to the runtime defaults. Explicit flags still win.
+func resolveApplyModelsForEndpoint(endpoint, home string) (*resolvedModels, error) {
+	models, err := resolveApplyModels()
+	if err != nil || endpoint != bedrock.EndpointMantle {
+		return models, err
+	}
+	if err := preserveMantleModels(models, home); err != nil {
+		return nil, err
+	}
+	if hasExplicitModelFlags() {
+		if err := validateMantleModelFlags(); err != nil {
+			return nil, err
+		}
+	}
+	return models, nil
+}
+
+// preserveMantleModels seeds m from the previous mantle config's
+// modelOverrides, then re-applies explicit flags. It is a no-op unless the
+// existing config is Juggernaut-managed and already opted in to mantle.
+func preserveMantleModels(m *resolvedModels, home string) error {
+	existing, isReapply, err := detectReapplyConfig(provider.MustGet("claude"), home, applyFlags.scope)
+	if err != nil {
+		return err
+	}
+	if !isReapply || existingEndpoint(existing) != bedrock.EndpointMantle {
+		return nil
+	}
+	jBlock, ok := existing["juggernaut"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var block schema.Block
+	if err := fromMap(jBlock, &block); err != nil {
+		return fmt.Errorf("reading existing mantle model overrides: %w", err)
+	}
+	preserved := block.Models
+	if preserved.Opus != "" {
+		m.opusModel = preserved.Opus
+	}
+	if preserved.Sonnet != "" {
+		m.sonnetModel = preserved.Sonnet
+	}
+	if preserved.Haiku != "" {
+		m.haikuModel = preserved.Haiku
+	}
+	if preserved.Fable != "" {
+		m.fableModel = preserved.Fable
+	}
+	overlayExplicitModels(m)
+	return nil
+}
+
+// validateMantleModelFlags rejects runtime-format IDs when the user explicitly
+// pins a model for the mantle endpoint. Mantle does not support CRIS prefixes
+// or version suffixes; Claude Code routes by ID format.
+func validateMantleModelFlags() error {
+	if applyFlags.model != "" {
+		return requireMantleModelID("--model", applyFlags.model)
+	}
+	for _, f := range []struct{ flag, value string }{
+		{"--opus-model", applyFlags.opusModel},
+		{"--sonnet-model", applyFlags.sonnetModel},
+		{"--haiku-model", applyFlags.haikuModel},
+		{"--fable-model", applyFlags.fableModel},
+	} {
+		if f.value == "" {
+			continue
+		}
+		if err := requireMantleModelID(f.flag, f.value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func requireMantleModelID(flag, value string) error {
+	if bedrock.IsMantleModelID(value) {
+		return nil
+	}
+	return fmt.Errorf("%s %q is not a mantle model ID; mantle requires a bare anthropic.* ID with no CRIS prefix or version suffix (for example anthropic.claude-sonnet-5)", flag, value)
 }
 
 // buildApplyOptions constructs the schema.Options from resolved inputs.
-func buildApplyOptions(authMode, region string, opusplan bool, models *resolvedModels) schema.Options {
+func buildApplyOptions(authMode, endpoint, region string, opusplan bool, models *resolvedModels) schema.Options {
 	return schema.Options{
 		AuthMode:               authMode,
 		Region:                 region,
+		Endpoint:               endpoint,
 		Effort:                 applyFlags.effort,
 		Scope:                  applyFlags.scope,
 		Version:                Version,

@@ -295,19 +295,60 @@ func checkConnectivity(r *doctor.Report, home, token string, scopes []string) {
 		return
 	}
 
-	modelID := cfg.Models.Haiku
-	result := checkBedrockConnectivity(mode, region, modelID, token)
+	endpoint, _ := auth["endpoint"].(string)
+	switch endpoint {
+	case "", bedrock.EndpointRuntime:
+		modelID := cfg.Models.Haiku
+		result := checkBedrockConnectivity(mode, region, modelID, token)
+		reportConnectivity(r, "bedrock connectivity", result, mode, region)
+	case bedrock.EndpointMantle:
+		if !bedrock.MantleRegionSupported(region) {
+			r.Check("bedrock connectivity (mantle)", doctor.Fail,
+				fmt.Sprintf("region %s does not serve the mantle endpoint; re-run `juggernaut apply --endpoint=mantle` to switch to a supported region", region))
+			return
+		}
+		if env, ok := data["env"].(map[string]any); !ok || env["CLAUDE_CODE_USE_MANTLE"] != "1" {
+			r.Check("mantle configuration", doctor.Warn,
+				"juggernaut.auth.endpoint is mantle but CLAUDE_CODE_USE_MANTLE is not set; re-run `juggernaut apply` to repair")
+		}
+		result := checkMantleConnectivity(mode, region, token)
+		reportConnectivity(r, "bedrock connectivity (mantle)", result, mode, region)
+	default:
+		r.Check("bedrock connectivity", doctor.Fail,
+			fmt.Sprintf("unknown endpoint %q in the juggernaut block; re-run `juggernaut apply` to repair", endpoint))
+	}
+}
+
+func reportConnectivity(r *doctor.Report, label string, result *bedrock.ConnectivityResult, mode, region string) {
 	status := doctor.OK
 	if result.IsFailure() {
 		status = doctor.Fail
 	}
-
 	elapsed := result.Elapsed.Round(time.Millisecond)
 	detail := fmt.Sprintf("%s (%s, %s, %s)", result.Message, mode, region, elapsed)
 	if result.StatusCode > 0 {
 		detail = fmt.Sprintf("%s, HTTP %d", detail, result.StatusCode)
 	}
-	r.Check("bedrock connectivity", status, detail)
+	r.Check(label, status, detail)
+}
+
+// mantleReachabilityProbe is a package var so tests can avoid live network
+// calls; production uses the real bedrock-mantle probe.
+var mantleReachabilityProbe = bedrock.CheckMantleReachability
+
+func checkMantleConnectivity(mode, region, token string) *bedrock.ConnectivityResult {
+	if authmode.IsBedrockAPIKey(mode) && token == "" {
+		return &bedrock.ConnectivityResult{
+			OK:       false,
+			AuthMode: mode,
+			Region:   region,
+			Message:  "bedrock API key not found in keychain",
+		}
+	}
+	// IAM and API-key modes share the same unsigned reachability probe: the
+	// endpoint returns 401/403 without credentials, which proves it is there.
+	// Claude Code signs or sends the key on the real request.
+	return mantleReachabilityProbe(region)
 }
 
 func checkBedrockConnectivity(mode, region, modelID, token string) *bedrock.ConnectivityResult {

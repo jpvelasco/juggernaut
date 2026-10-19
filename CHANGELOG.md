@@ -4,6 +4,17 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Claude Code can opt in to the `bedrock-mantle` endpoint (starts #497).**
+  `juggernaut apply --cli=claude --endpoint=mantle --model=anthropic.<id>`
+  writes `CLAUDE_CODE_USE_MANTLE=1` alongside `CLAUDE_CODE_USE_BEDROCK=1`,
+  persists the choice in `juggernaut.auth.endpoint`, preserves mantle model
+  pins on re-apply, rejects runtime-format pins (CRIS prefixes and version
+  suffixes) for mantle, and routes unsupported regions to a mantle-served
+  region. `doctor` probes the mantle endpoint. Runtime stays the default;
+  Codex, OpenCode, and Grok remain runtime-only for now.
+
 ### Changed
 
 - **Runtime-routed CLIs no longer offer mantle-only models (fixes #496).**
@@ -15,8 +26,8 @@ All notable changes to Juggernaut will be documented in this file.
   selectable.
 - **Docs no longer describe the AWS `bedrock-mantle` endpoint as dead
   (fixes #498).** Juggernaut v6 removed its own Mantle routing; the endpoint
-  remains a live AWS offering, and opt-in support is tracked in #497. No
-  behavior change.
+  remains a live AWS offering. Claude Code can opt in with
+  `--endpoint=mantle`; support for the other CLIs is tracked in #497.
 - **Grok default advances to Grok 4.7 (fixes #494).** `--cli=grok` now writes
   `global.xai.grok-4.7` (from 4.6) and records the AWS-published 524,288-token
   shared context window. Each documented Grok model carries its own card facts:

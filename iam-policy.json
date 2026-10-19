@@ -27,6 +27,15 @@
       "Resource": "*"
     },
     {
+      "Sid": "AllowMantleInference",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-mantle:CreateInference",
+        "bedrock-mantle:CountTokens"
+      ],
+      "Resource": "arn:aws:bedrock-mantle:*:*:project/*"
+    },
+    {
       "Sid": "AllowMarketplaceSubscription",
       "Effect": "Allow",
       "Action": [

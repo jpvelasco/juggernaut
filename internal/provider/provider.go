@@ -158,7 +158,7 @@ func init() {
 		binaryName:   "claude",
 		capabilities: []Capability{
 			CapAutoMode, Cap1MContext, CapOpusplan, CapThinking,
-			CapServiceTiers, CapEffortLevels, CapNativeAuth,
+			CapServiceTiers, CapEffortLevels, CapNativeAuth, CapMantleEndpoint,
 		},
 		catalogSources: []string{"foundation", "profile"},
 	}})

@@ -114,6 +114,17 @@ func BlockAuthMode(block map[string]any) string {
 	return mode
 }
 
+// BlockEndpoint extracts the endpoint from a parsed juggernaut block
+// ("" when absent, which means runtime).
+func BlockEndpoint(block map[string]any) string {
+	auth, ok := block["auth"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	endpoint, _ := auth["endpoint"].(string)
+	return endpoint
+}
+
 // SidecarExists reports whether the sidecar for scope exists on disk.
 func SidecarExists(p Provider, home, scope string) bool {
 	src, ok := p.(SidecarAuthSource)

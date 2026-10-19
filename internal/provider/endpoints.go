@@ -74,3 +74,12 @@ func bareModelID(modelID string) string {
 	}
 	return bare
 }
+
+// ResolveEndpointRegion applies the Iron Fist region policy to the mantle
+// endpoint's verified region list. Mantle has no per-model region data in
+// Juggernaut, so the endpoint's region list is the constraint: a requested
+// region that does not serve mantle is overridden to the first verified
+// region, with a message the caller prints as a warning.
+func ResolveEndpointRegion(requested string, explicit bool) (region, message string, switched bool) {
+	return resolveModelRegion(requested, explicit, bedrock.MantleRegions)
+}
