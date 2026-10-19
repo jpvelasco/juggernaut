@@ -19,6 +19,9 @@ func (c claude) SupportsModel(model CatalogModel) ModelSupport {
 		if !strings.Contains(m.ID, "anthropic.claude-") {
 			return ModelSupport{Reason: "Claude Code supports Anthropic Claude models"}
 		}
+		if !RuntimeSupported(m.ID, m.Source) {
+			return ModelSupport{Reason: mantleOnlyReason}
+		}
 		return ModelSupport{Supported: true, Reason: "native Claude model"}
 	})
 }

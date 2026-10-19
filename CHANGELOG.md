@@ -6,6 +6,13 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Changed
 
+- **Runtime-routed CLIs no longer offer mantle-only models (fixes #496).**
+  OpenCode's `whitelist`, Codex's GPT-5.6 family filter, and Grok's `xai.grok-`
+  filter now reject catalog entries AWS serves only on `bedrock-mantle`
+  (Claude Mythos 5, Gemma 4, GPT-5.4/5.5, the Daybreak GPT-5.6 variants, and
+  Grok 4.3). Runtime model lists and configs for supported models are
+  unchanged; Claude Mythos 5.1 (runtime-only) and Grok 4.6/4.7 remain
+  selectable.
 - **Docs no longer describe the AWS `bedrock-mantle` endpoint as dead
   (fixes #498).** Juggernaut v6 removed its own Mantle routing; the endpoint
   remains a live AWS offering, and opt-in support is tracked in #497. No

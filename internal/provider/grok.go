@@ -249,6 +249,9 @@ func (g grok) SupportsModel(model CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
 			return ModelSupport{Reason: "Grok no longer uses Mantle (native only)"}
 		}
+		if !RuntimeSupported(m.ID, m.Source) {
+			return ModelSupport{Reason: mantleOnlyReason}
+		}
 		// Catalog entries carry CRIS profile IDs (global.xai.grok-4.6,
 		// us.xai.grok-4.6); strip the regional prefix so the bare xai.grok-
 		// family check matches them, not just the bare foundation form.

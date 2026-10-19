@@ -125,7 +125,9 @@ func TestOpenCode_BuildConfig_DefaultAlias(t *testing.T) {
 		{ID: "openai.gpt-oss-120b-1:0", Status: "ACTIVE", Source: "foundation"},
 		{ID: "moonshotai.kimi-k2.5", Status: "ACTIVE", Source: "profile"},
 		{ID: "zai.glm-4.7", Status: "ACTIVE", Source: "foundation"},
-		{ID: "openai.gpt-5.6-sol", Status: "ACTIVE", Source: "mantle"}, // excluded: native-only
+		{ID: "openai.gpt-5.6-sol", Status: "ACTIVE", Source: "mantle"},     // excluded: legacy mantle source
+		{ID: "google.gemma-4-31b", Status: "ACTIVE", Source: "foundation"}, // excluded: mantle-only
+		{ID: "openai.gpt-5.5", Status: "ACTIVE", Source: "foundation"},     // excluded: mantle-only
 	}
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {

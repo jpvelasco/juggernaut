@@ -64,7 +64,7 @@ func TestRunModelsList_CliFilterWithProviderError(t *testing.T) {
 	when := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	if err := discovery.SaveCachedModels(home, "111122223333", "scope", "us-west-2",
 		[]discovery.Source{discovery.SourceFoundation},
-		[]discovery.DiscoveredModel{{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"}},
+		[]discovery.DiscoveredModel{{ID: "xai.grok-4.6", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"}},
 		when); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestRunModelsList_CliFilterWithProviderError(t *testing.T) {
 	if err := runModelsList(command, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "xai.grok-4.3") {
+	if !strings.Contains(output.String(), "xai.grok-4.6") {
 		t.Fatalf("grok list missing model:\n%s", output.String())
 	}
 	if !strings.Contains(output.String(), "yes") {
@@ -289,10 +289,10 @@ func TestModelsList_FiltersByProvider(t *testing.T) {
 			cli:           "grok",
 			cachedSources: []discovery.Source{discovery.SourceFoundation},
 			models: []discovery.DiscoveredModel{
-				{ID: "xai.grok-4.3", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
+				{ID: "xai.grok-4.6", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 				{ID: "moonshotai.kimi-k2.5", Source: discovery.SourceFoundation, Status: "ACTIVE", Availability: "AVAILABLE"},
 			},
-			wantPresent: []string{"xai.grok-4.3"},
+			wantPresent: []string{"xai.grok-4.6"},
 			wantAbsent:  []string{"moonshotai.kimi-k2.5"},
 		},
 		{
