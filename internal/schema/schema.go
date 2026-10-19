@@ -17,6 +17,7 @@ const SchemaVersion = 2
 type Options struct {
 	AuthMode               string
 	Region                 string
+	Endpoint               string // "", "runtime", or "mantle"; runtime is the default
 	Effort                 string
 	Scope                  string
 	Version                string
@@ -48,8 +49,9 @@ type Block struct {
 
 // Auth holds the authentication configuration within the Juggernaut block.
 type Auth struct {
-	Mode   string `json:"mode"`
-	Region string `json:"region"`
+	Mode     string `json:"mode"`
+	Region   string `json:"region"`
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // ModelOverrides holds the Bedrock model IDs for each tier.
@@ -111,10 +113,18 @@ var validServiceTiers = map[string]bool{
 // and cmd/apply flag validation.
 const ErrEnforceRequiresAvailable = "--enforce-available-models requires --available-models to be set to a non-empty list"
 
+// MantleNoModelWarning is emitted when the mantle endpoint is enabled but no
+// pinned tier uses the mantle model-ID format. Runtime models keep working in
+// the same dual-endpoint config, so this is a heads-up, not an error.
+const MantleNoModelWarning = "mantle endpoint enabled, but no mantle-format model is pinned; runtime model IDs stay pinned and Claude Code routes by ID format. Pass --model=anthropic.<id> (or add one to --available-models and select it with /model)."
+
 // Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
 		return nil, fmt.Errorf("unsupported region %q — run `juggernaut doctor` for supported regions", opts.Region)
+	}
+	if opts.Endpoint != "" && !bedrock.ValidEndpoint(opts.Endpoint) {
+		return nil, fmt.Errorf("invalid endpoint %q — must be %q or %q", opts.Endpoint, bedrock.EndpointRuntime, bedrock.EndpointMantle)
 	}
 	if !validEfforts[opts.Effort] {
 		return nil, fmt.Errorf("invalid effort %q — must be one of: low, medium, high, xhigh, max, auto", opts.Effort)
@@ -146,6 +156,12 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if IsFable5Model(fable) {
 		warnings = append(warnings, FableDataRetentionWarning)
 	}
+	if opts.Endpoint == bedrock.EndpointMantle {
+		selectable := append([]string{opus, sonnet, haiku, fable}, availableModels...)
+		if !hasMantleModel(selectable...) {
+			warnings = append(warnings, MantleNoModelWarning)
+		}
+	}
 
 	return assembleBlock(opts, opus, sonnet, haiku, fable, env, fallbackModels, availableModels, warnings), nil
 }
@@ -156,8 +172,9 @@ func assembleBlock(opts Options, opus, sonnet, haiku, fable string, env map[stri
 	fallbackModels, availableModels []string, warnings []string) *Block {
 	return &Block{
 		Auth: Auth{
-			Mode:   opts.AuthMode,
-			Region: opts.Region,
+			Mode:     opts.AuthMode,
+			Region:   opts.Region,
+			Endpoint: persistedEndpoint(opts.Endpoint),
 		},
 		Models: ModelOverrides{
 			Opus:     opus,
@@ -185,6 +202,24 @@ func assembleBlock(opts Options, opus, sonnet, haiku, fable string, env map[stri
 		},
 		Warnings: warnings,
 	}
+}
+
+// persistedEndpoint stores only non-default endpoints. Runtime is the default
+// and stays omitted so existing settings.json output is byte-identical.
+func persistedEndpoint(endpoint string) string {
+	if endpoint == bedrock.EndpointMantle {
+		return endpoint
+	}
+	return ""
+}
+
+func hasMantleModel(ids ...string) bool {
+	for _, id := range ids {
+		if bedrock.IsMantleModelID(id) {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveTierModels fills in per-tier model IDs from the config defaults.
@@ -218,6 +253,13 @@ func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable stri
 	}
 
 	env["AWS_REGION"] = opts.Region
+	if opts.Endpoint == bedrock.EndpointMantle {
+		// Claude Code treats Bedrock and Mantle as parallel endpoints: keep
+		// CLAUDE_CODE_USE_BEDROCK=1 (from the shared environment) and turn on
+		// mantle as well. It routes each request by model-ID format, so runtime
+		// model IDs keep working in the same config.
+		env["CLAUDE_CODE_USE_MANTLE"] = "1"
+	}
 	env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = claudeCodeContextModelID(opus, opts.Use1M)
 	env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = claudeCodeContextModelID(sonnet, opts.Use1M)
 	env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = haiku
@@ -345,7 +387,10 @@ func (b *Block) AutoModeAvailable() bool {
 var RegionalInferencePrefixes = bedrock.RegionalInferencePrefixes
 
 func claudeCodeContextModelID(model string, use1M bool) string {
-	if !use1M || strings.HasSuffix(model, "[1m]") || !supportsClaudeCode1M(model) {
+	if !use1M || strings.HasSuffix(model, "[1m]") || !supportsClaudeCode1M(model) || bedrock.IsMantleModelID(model) {
+		// Mantle APIs do not take the client-side [1m] annotation: 1M context is
+		// the default on mantle for Sonnet 5 / Opus 4.7+, and appending the
+		// suffix would change the model ID mantle routes on.
 		return model
 	}
 	return model + "[1m]"

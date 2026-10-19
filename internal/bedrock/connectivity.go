@@ -44,6 +44,12 @@ var bedrockEndpoint = func(region, modelID string) string {
 	return fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke", region, modelID)
 }
 
+// mantleEndpoint builds the bedrock-mantle model-list URL for a region. It is a
+// var so tests can redirect the probe to a local httptest server.
+var mantleEndpoint = func(region string) string {
+	return fmt.Sprintf("https://bedrock-mantle.%s.api.aws/v1/models", region)
+}
+
 // ConnectivityResult holds the outcome of a Bedrock connectivity check.
 type ConnectivityResult struct {
 	OK         bool
@@ -75,6 +81,58 @@ func CheckAPIKeyConnectivity(token, region, modelID string) *ConnectivityResult 
 // A 403 with an auth-related error body means the endpoint is reachable.
 func CheckIAMConnectivity(region, modelID string) *ConnectivityResult {
 	return probe(probeOpts{authMode: "iam", isIAM: true}, region, modelID)
+}
+
+// CheckMantleReachability verifies that the bedrock-mantle endpoint exists in
+// region. It sends an unauthenticated GET to the model-list route: 200, 401,
+// and 403 all prove the endpoint is reachable; 404 (route or region missing),
+// 5xx, and transport errors fail. No SigV4 signing or API key is used — Claude
+// Code authenticates the real request itself.
+func CheckMantleReachability(region string) *ConnectivityResult {
+	start := time.Now()
+	req, err := http.NewRequest(http.MethodGet, mantleEndpoint(region), nil)
+	if err != nil {
+		return failResult(EndpointMantle, region, "",
+			fmt.Sprintf("failed to create request: %v", err), time.Since(start))
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return failResult(EndpointMantle, region, "",
+			fmt.Sprintf("request failed: %v", err), time.Since(start))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	elapsed := time.Since(start)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return &ConnectivityResult{
+			OK:         true,
+			AuthMode:   EndpointMantle,
+			Region:     region,
+			StatusCode: resp.StatusCode,
+			Message:    "endpoint reachable",
+			Elapsed:    elapsed,
+		}
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return &ConnectivityResult{
+			OK:         true,
+			AuthMode:   EndpointMantle,
+			Region:     region,
+			StatusCode: resp.StatusCode,
+			Message:    "endpoint reachable (auth required — Claude Code signs or sends the API key)",
+			Elapsed:    elapsed,
+		}
+	default:
+		return &ConnectivityResult{
+			OK:         false,
+			AuthMode:   EndpointMantle,
+			Region:     region,
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("unexpected HTTP %d from mantle endpoint", resp.StatusCode),
+			Elapsed:    elapsed,
+		}
+	}
 }
 
 // probe sends a minimal InvokeModel request and interprets the response

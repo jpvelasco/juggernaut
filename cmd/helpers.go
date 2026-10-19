@@ -183,11 +183,62 @@ func validateAuthFlag() error {
 		applyFlags.auth, authmode.IAM, authmode.BedrockAPIKey)
 }
 
+// validateEndpointFlag rejects an unknown --endpoint before any state is read.
+// Inherited endpoints are checked again in resolveApplyEndpoint.
+func validateEndpointFlag() error {
+	if applyFlags.endpoint == "" || bedrock.ValidEndpoint(applyFlags.endpoint) {
+		return nil
+	}
+	return fmt.Errorf("unknown endpoint %q; valid endpoints are %q (default) and %q",
+		applyFlags.endpoint, bedrock.EndpointRuntime, bedrock.EndpointMantle)
+}
+
 func resolveOpusplanConflict() error {
 	if applyFlags.noOpusplan && applyFlags.opusplan {
 		return fmt.Errorf("--no-opusplan cannot be combined with --opusplan")
 	}
 	return nil
+}
+
+// resolveApplyEndpoint resolves the Bedrock endpoint for this apply: an
+// explicit --endpoint wins, then the endpoint recorded in an existing
+// Juggernaut-managed config, then runtime. Mantle is rejected for any CLI that
+// has not implemented it, so a flag typo cannot produce an unusable config.
+func resolveApplyEndpoint(home string, prov provider.Provider) (string, error) {
+	endpoint := applyFlags.endpoint
+	if endpoint == "" {
+		existing, isReapply, err := detectReapplyConfig(prov, home, applyFlags.scope)
+		if err != nil {
+			return "", err
+		}
+		if isReapply {
+			endpoint = existingEndpoint(existing)
+		}
+	}
+	if endpoint == "" {
+		endpoint = bedrock.EndpointRuntime
+	}
+	if !bedrock.ValidEndpoint(endpoint) {
+		return "", fmt.Errorf("unknown endpoint %q in the existing configuration; valid endpoints are %q and %q",
+			endpoint, bedrock.EndpointRuntime, bedrock.EndpointMantle)
+	}
+	if endpoint == bedrock.EndpointMantle && !prov.Supports(provider.CapMantleEndpoint) {
+		return "", fmt.Errorf("the mantle endpoint is not supported for %s yet; only Claude Code has first-class mantle support", prov.DisplayName())
+	}
+	return endpoint, nil
+}
+
+// resolveEndpointRegion applies the mantle endpoint's region policy. Runtime
+// uses the caller's already-resolved region untouched.
+func resolveEndpointRegion(endpoint, region string) string {
+	if endpoint != bedrock.EndpointMantle {
+		return region
+	}
+	resolved, message, switched := provider.ResolveEndpointRegion(region, applyFlags.region != "")
+	if switched {
+		fmt.Printf("⚠ mantle endpoint: %s\n", message)
+	}
+	return resolved
 }
 
 func resolveApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provider) (authMode, region string, opusplan bool, err error) {
@@ -263,6 +314,16 @@ func existingAuthMode(existing map[string]any) string {
 		return ""
 	}
 	return provider.BlockAuthMode(jBlock)
+}
+
+// existingEndpoint extracts the endpoint from a parsed provider config's
+// in-file juggernaut block ("" when absent, which means runtime).
+func existingEndpoint(existing map[string]any) string {
+	jBlock, ok := existing["juggernaut"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return provider.BlockEndpoint(jBlock)
 }
 
 // resolveAuthMode determines the authentication mode through the resolution

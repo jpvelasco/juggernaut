@@ -90,7 +90,7 @@ juggernaut apply
 | Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
 
 ```bash
-# Every CLI routes natively via bedrock-runtime (IAM or Bedrock API key)
+# Every CLI defaults to bedrock-runtime (Claude Code can opt in to mantle below)
 juggernaut apply --cli=opencode --auth=iam              # or --auth=bedrock-api-key
 juggernaut apply --cli=codex --auth=iam
 juggernaut apply --cli=grok --auth=iam
@@ -128,6 +128,27 @@ juggernaut apply --auth=iam --scope=project         # write to ./.claude/setting
 juggernaut apply --auth=iam --force                 # overwrite colliding foreign leaves (backup kept)
 ```
 
+### Mantle endpoint (opt-in, Claude Code)
+
+Claude Code can use the parallel `bedrock-mantle` endpoint while keeping runtime routing available in the same config:
+
+```bash
+# Pin a mantle-format model. Mantle IDs are bare anthropic.* IDs — no CRIS
+# prefix (global./us./eu./...) and no version suffix (-v1:0).
+juggernaut apply --cli=claude --auth=iam --endpoint=mantle \
+  --model=anthropic.claude-sonnet-5
+
+# Or pin each tier (IDs are examples; mantle availability is account-allowlisted).
+juggernaut apply --cli=claude --auth=iam --endpoint=mantle \
+  --opus-model=anthropic.claude-opus-4-7 \
+  --sonnet-model=anthropic.claude-sonnet-5 \
+  --haiku-model=anthropic.claude-haiku-4-5
+```
+
+Juggernaut writes `CLAUDE_CODE_USE_MANTLE=1` next to the existing `CLAUDE_CODE_USE_BEDROCK=1`; Claude Code routes each request by model-ID format. `juggernaut.auth.endpoint=mantle` records the choice, so a plain re-apply keeps the mantle endpoint and its model pins. Pass `--endpoint=runtime` to switch back. Runtime stays the default, and only Claude Code currently supports this option — Codex, OpenCode, and Grok remain runtime-only.
+
+Mantle serves a subset of regions; `apply` overrides an unsupported region to a mantle-served one and prints a warning. `doctor` probes the mantle endpoint. IAM needs `bedrock-mantle:CreateInference` and `bedrock-mantle:CountTokens` in addition to the runtime actions (see [`iam-policy.json`](iam-policy.json)); Bedrock API keys use the same credential. To surface mantle IDs in Claude Code's `/model` picker, add them to `--available-models` (that flag also restricts the picker to the listed entries).
+
 ## Launch
 
 ```bash
@@ -143,7 +164,7 @@ claude          # after apply --cli=claude (default)
 |---------|-------------|
 | `apply` | Write Juggernaut config for the target `--cli` and install shell activation. |
 | `show` | Print the current Juggernaut-managed config from user and project scopes. Supports `--cli=claude\|codex\|opencode\|grok` (default claude) and `--json`. |
-| `doctor` | Read-only diagnostics for settings, activation, CLI binary, and legacy artifacts. IAM connectivity OK means the Bedrock endpoint is reachable, not that credentials were signed and accepted. API-key mode probes with the stored bearer token. Supports `--cli=claude\|codex\|opencode\|grok`. |
+| `doctor` | Read-only diagnostics for settings, activation, CLI binary, and legacy artifacts. IAM connectivity OK means the Bedrock endpoint is reachable, not that credentials were signed and accepted. API-key mode probes with the stored bearer token. For the mantle endpoint, doctor checks the mantle region and probes its reachability. Supports `--cli=claude\|codex\|opencode\|grok`. |
 | `logs export` | Write a local diagnostic zip for support. Redacted by default; `--raw` / `--include-secrets` includes secrets for private/self use only. |
 | `uninstall` | Remove managed config keys and optionally the bearer token. Use `--full` to remove shell activation. |
 | `models refresh` | Discover the models available to the current AWS account and region from native Bedrock (`foundation` + `profile` sources), then cache locally. |
@@ -300,6 +321,19 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
 
 See [`iam-policy.json`](iam-policy.json) for the complete policy. Model catalog list and availability actions do not support resource-level permissions; restrict model invocation resources to specific regions and model ARNs where practical.
 
+If you opt in to the mantle endpoint (`--endpoint=mantle`), also allow the mantle inference actions from [`iam-policy.json`](iam-policy.json). They are project-scoped:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "bedrock-mantle:CreateInference",
+    "bedrock-mantle:CountTokens"
+  ],
+  "Resource": "arn:aws:bedrock-mantle:*:*:project/*"
+}
+```
+
 ## Uninstall
 
 ```bash
@@ -315,7 +349,7 @@ juggernaut uninstall --full
 
 ## Migrating from v3/v4 and upgrading to v6
 
-Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Juggernaut's Mantle routing was removed — every CLI now uses `bedrock-runtime` (the AWS `bedrock-mantle` endpoint remains available; opt-in support is tracked in [#497](https://github.com/jpvelasco/juggernaut/issues/497)). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone, Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6` (written as the `global.xai.grok-4.6` CRIS profile ID), OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
+Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Juggernaut's Mantle routing was removed — every CLI defaults to `bedrock-runtime` (Claude Code can opt back in to the AWS `bedrock-mantle` endpoint with `--endpoint=mantle`; support for the other CLIs is tracked in [#497](https://github.com/jpvelasco/juggernaut/issues/497)). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone (use `--endpoint`), Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6` (written as the `global.xai.grok-4.6` CRIS profile ID), OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
 
 Re-applying over a Mantle-era config migrates it automatically (a backup is saved first): the old Codex `model_provider = "amazon-bedrock"` is rewritten to the built-in `amazon-bedrock-runtime` and the stale `model_providers.amazon-bedrock` table is removed. Requires Codex CLI ≥ 0.153.4 for Codex — `apply` and `doctor` warn on older binaries.
 

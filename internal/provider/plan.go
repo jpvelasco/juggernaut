@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
@@ -28,10 +29,15 @@ func ToMap(v any) (map[string]any, error) {
 // persist so launch can read auth mode (IAM vs API key) from the same file
 // apply wrote.
 func juggernautAuthBlock(opts Options, region string) (map[string]any, error) {
+	endpoint := opts.Endpoint
+	if endpoint == bedrock.EndpointRuntime {
+		endpoint = ""
+	}
 	block := &schema.Block{
 		Auth: schema.Auth{
-			Mode:   opts.AuthMode,
-			Region: region,
+			Mode:     opts.AuthMode,
+			Region:   region,
+			Endpoint: endpoint,
 		},
 		Meta: schema.Meta{
 			SchemaVersion: schema.SchemaVersion,
@@ -59,6 +65,9 @@ type Options struct {
 	SchemaOpts schema.Options
 	// Region is the resolved AWS region. Shared by all providers.
 	Region string
+	// Endpoint is "runtime" (the default) or "mantle". Only providers that
+	// advertise CapMantleEndpoint receive mantle; runtime providers ignore it.
+	Endpoint string
 	// RegionExplicit is true when the user passed --region, false when Region was
 	// filled from the global default. Region-routed providers use it to word the
 	// auto-switch message; the switch itself (to a region that actually serves
@@ -92,6 +101,7 @@ type Options struct {
 func (o *Options) FromSchemaOptions(s schema.Options) {
 	o.SchemaOpts = s
 	o.Region = s.Region
+	o.Endpoint = s.Endpoint
 	o.AuthMode = s.AuthMode
 	o.Scope = s.Scope
 	o.Version = s.Version
@@ -190,6 +200,10 @@ const (
 	// supports this; resolveAuthMode falls back to a bearer token only for a
 	// provider that does not.
 	CapNativeAuth
+	// CapMantleEndpoint: the CLI can opt in to the bedrock-mantle endpoint.
+	// Claude Code has first-class support (CLAUDE_CODE_USE_MANTLE); other CLIs
+	// need a custom provider shape and remain runtime-only for now.
+	CapMantleEndpoint
 )
 
 // ConfigPlan is what a Provider persists to its config file at apply time.
