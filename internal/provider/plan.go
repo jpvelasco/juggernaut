@@ -60,9 +60,10 @@ type Options struct {
 	// Region is the resolved AWS region. Shared by all providers.
 	Region string
 	// RegionExplicit is true when the user passed --region, false when Region was
-	// filled from the global default. Mantle providers use this to decide whether
-	// they may auto-switch a model to a region that actually serves it (default)
-	// or must honor the user's explicit choice (and only warn).
+	// filled from the global default. Region-routed providers use it to word the
+	// auto-switch message; the switch itself (to a region that actually serves
+	// the model) happens either way — Juggernaut never writes a config for a
+	// region that can't serve the model.
 	RegionExplicit bool
 	// AuthMode is the auth mode (iam or bedrock-api-key). Used by non-Claude
 	// providers. Claude reads it from SchemaOpts.
@@ -72,12 +73,11 @@ type Options struct {
 	// Version is the Juggernaut version string. Used by non-Claude providers.
 	Version string
 	Model   string // friendly model key or override (provider-interpreted)
-	Route   string // "mantle" (default) or "native"
 	// ModelCatalog is the cached or freshly discovered account/region inventory.
 	// Providers decide which entries their client protocol can actually use.
 	ModelCatalog []CatalogModel
-	// RefreshedSources lists the source names (e.g. "native", "mantle") that
-	// were successfully refreshed for this cache entry. A source present here
+	// RefreshedSources lists the source names (e.g. "foundation", "profile")
+	// that were successfully refreshed for this cache entry. A source present here
 	// but absent from ModelCatalog means the refresh returned zero entries —
 	// which is distinct from "never refreshed" and still counts as proof that
 	// the model is unavailable.
@@ -87,7 +87,7 @@ type Options struct {
 // FromSchemaOptions stores schema.Options directly so the Claude provider can
 // pass it to schema.Build without a field-by-field round-trip. It also populates
 // the flat fields (Region, AuthMode, Scope, Version) that non-Claude providers
-// read. The remaining fields (RegionExplicit, Model, Route, ModelCatalog,
+// read. The remaining fields (RegionExplicit, Model, ModelCatalog,
 // RefreshedSources) are the caller's responsibility.
 func (o *Options) FromSchemaOptions(s schema.Options) {
 	o.SchemaOpts = s
@@ -98,7 +98,8 @@ func (o *Options) FromSchemaOptions(s schema.Options) {
 }
 
 // CatalogModel is the SDK-independent model fact passed from discovery into a
-// provider. Source is "foundation", "profile", or "mantle".
+// provider. Source is "foundation" or "profile"; "mantle" appears only in
+// legacy caches, which are dropped on load.
 type CatalogModel struct {
 	ID           string
 	Status       string
@@ -121,8 +122,8 @@ type ModelSupport struct {
 // catalogSelectionState reports whether a cache contains the provider's
 // relevant source and whether the selected model is usable according to that
 // provider. A cache containing only another provider's sources is equivalent
-// to no cache, so a partial native-only refresh never produces a false Mantle
-// warning (and vice versa). When refreshedSources is non-nil, a source present
+// to no cache, so a partial refresh never produces a false warning from a
+// foreign source. When refreshedSources is non-nil, a source present
 // there but absent from the model list still counts as "refreshed but empty" —
 // meaning the model is provably unavailable rather than merely unrefreshed.
 func catalogSelectionState(models []CatalogModel, selectedID string, p CatalogProvider, refreshedSources []string) (hasRelevantSource, selectedAvailable bool) {
@@ -185,9 +186,9 @@ const (
 	// CapEffortLevels: reasoning-effort levels. Claude + Codex (gpt-5.x).
 	CapEffortLevels
 	// CapNativeAuth: the CLI can authenticate to Bedrock WITHOUT a bearer token
-	// (IAM/SSO via SigV4 on the native bedrock-runtime path). Claude supports this;
-	// the Mantle-only CLIs (Codex, OpenCode, Grok) do NOT — Mantle requires a
-	// bearer token, so apply must reject --auth=iam for them.
+	// (IAM/SSO via SigV4 on the native bedrock-runtime path). Every v6 provider
+	// supports this; resolveAuthMode falls back to a bearer token only for a
+	// provider that does not.
 	CapNativeAuth
 )
 
@@ -195,7 +196,7 @@ const (
 type ConfigPlan struct {
 	Keys        map[string]any // merged into the config file (provider's format)
 	ManagedKeys []string       // top-level keys Juggernaut owns → removed on uninstall
-	Warnings    []string       // actionable heads-ups (Mantle tradeoffs, auto-mode gating)
+	Warnings    []string       // actionable heads-ups (region/model notes, auto-mode gating)
 	// RuntimeEnv is the non-secret environment that may be retained separately
 	// when a provider opts into runtime-state fallback.
 	RuntimeEnv map[string]string
@@ -222,7 +223,7 @@ func (p ConfigPlan) Validate() error {
 type LaunchSpec struct {
 	TokenEnvVar         string            // env var the keychain bearer token is injected into
 	StaticEnv           map[string]string // static enable-flags, e.g. CLAUDE_CODE_USE_BEDROCK=1
-	NeedsToken          bool              // Mantle: true; native-IAM path: may be false
+	NeedsToken          bool              // true when the launch wrapper must inject the bearer token
 	PersistRuntimeState bool              // retain user-scope auth + RuntimeEnv as a drift fallback
 	ExtraArgs           []string          // extra args appended to the real CLI invocation (future)
 }

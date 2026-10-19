@@ -277,7 +277,8 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 }
 
 // TestCatalogUnavailableWarning_NoMantleMention: the user-facing warning names
-// the region, not the internal endpoint — Mantle was removed in v6 (#452).
+// the region, not the internal endpoint — Juggernaut stopped routing through
+// Mantle in v6 (#452).
 func TestCatalogUnavailableWarning_NoMantleMention(t *testing.T) {
 	p, _ := Get("opencode")
 	w := catalogUnavailableWarning(

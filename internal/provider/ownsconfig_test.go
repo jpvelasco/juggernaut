@@ -54,7 +54,8 @@ func TestCodex_OwnsConfig_RuntimeProvider(t *testing.T) {
 
 // TestCodex_CleanLegacy: a migrate must delete the v5 custom
 // model_providers.amazon-bedrock table (deep-merge would otherwise preserve
-// it as a sibling, and it points at the dead Mantle endpoint), while keeping
+// it as a sibling, and it points at the Mantle endpoint Juggernaut v6 no longer
+// routes through), while keeping
 // user-defined providers and dropping an emptied model_providers table.
 func TestCodex_CleanLegacy(t *testing.T) {
 	p, _ := Get("codex")

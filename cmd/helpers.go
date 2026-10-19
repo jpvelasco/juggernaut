@@ -266,10 +266,10 @@ func existingAuthMode(existing map[string]any) string {
 }
 
 // resolveAuthMode determines the authentication mode through the resolution
-// chain: flag value → provider default (BedrockAPIKey for Mantle-only CLIs) →
-// sidecar block (project then user, when the provider keeps the block outside
-// the vendor-validated config) → in-file juggernaut block (legacy) → bedrock
-// config default.
+// chain: flag value → provider default (BedrockAPIKey only for a provider
+// without native SigV4 support) → sidecar block (project then user, when the
+// provider keeps the block outside the vendor-validated config) → in-file
+// juggernaut block (legacy) → bedrock config default.
 func resolveAuthMode(flagValue, home string, prov provider.Provider, bCfg *bedrock.Config, existing map[string]any) string {
 	if flagValue != "" {
 		return flagValue
@@ -502,7 +502,8 @@ func applyWriteGate(home string, prov provider.Provider, plan provider.ConfigPla
 //     tables, including hybrid v6 model IDs still aimed at a Mantle URL
 //   - Codex model_provider == "amazon-bedrock" (the v5 custom provider) — ANY
 //     model, since v6 routes Codex through the built-in amazon-bedrock-runtime
-//     and the custom amazon-bedrock table still points at the dead Mantle host
+//     and the custom amazon-bedrock table still points at the Mantle host
+//     Juggernaut v6 no longer routes through
 func isJuggernautLegacy(existing map[string]any) bool {
 	if existing == nil {
 		return false
@@ -629,7 +630,7 @@ func migrateLegacyJuggernautConfig(prov provider.Provider, home, scope string) b
 // writing, so the user sees the migration is happening, not a refusal.
 func announceMigration(prov provider.Provider) {
 	fmt.Printf("Migrating %s: the existing config was written by Juggernaut v5 (Mantle era).\n", prov.DisplayName())
-	fmt.Println("Mantle endpoints are removed in v6; the config will be rewritten to route via bedrock-runtime.")
+	fmt.Println("Juggernaut no longer routes through Mantle in v6; the config will be rewritten to route via bedrock-runtime.")
 	fmt.Println("A backup of the old config is saved before writing.")
 	fmt.Println("After applying, re-run: juggernaut models refresh --source native --region <region>")
 }

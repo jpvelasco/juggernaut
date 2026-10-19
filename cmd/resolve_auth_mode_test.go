@@ -82,14 +82,15 @@ func TestResolveAuthMode_Table(t *testing.T) {
 			prov: codex, bCfg: bCfgAPI, existing: existingIAM,
 			want: authmode.IAM,
 		},
-		// Grok still defaults to BedrockAPIKey (mantle-only); OpenCode now supports native and follows bCfg.
+		// Every v6 provider supports native SigV4; with no flag and no stored
+		// block, apply follows the bedrock config default.
 		{
-			name: "OpenCode_no_flag_defaults_bedrock_api_key", flagVal: "",
+			name: "OpenCode_no_flag_follows_config", flagVal: "",
 			prov: mustProvider(t, "opencode"), bCfg: bCfgIAM, existing: nil,
 			want: authmode.IAM,
 		},
 		{
-			name: "Grok_no_flag_defaults_bedrock_api_key", flagVal: "",
+			name: "Grok_no_flag_follows_config", flagVal: "",
 			prov: mustProvider(t, "grok"), bCfg: bCfgIAM, existing: nil,
 			want: authmode.IAM,
 		},

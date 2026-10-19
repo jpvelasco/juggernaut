@@ -7,12 +7,12 @@ import (
 
 // regionAllowed reports whether region is in the model's set of known-available
 // regions. An empty set means "no verified region data" — callers treat that as
-// unconstrained (see resolveMantleRegion).
+// unconstrained (see resolveModelRegion).
 func regionAllowed(region string, known []string) bool {
 	return slices.Contains(known, region)
 }
 
-// resolveMantleRegion applies the shared Mantle region policy — the "Iron Fist":
+// resolveModelRegion applies the shared region policy — the "Iron Fist":
 // a model is only reachable where it's verified available (known), and a user's
 // configured region cannot be assumed to serve it, so Juggernaut ALWAYS routes to
 // a region that actually works rather than writing a config that can't
@@ -28,7 +28,7 @@ func regionAllowed(region string, known []string) bool {
 //
 // (A future flag may let users force a non-serving region; for now the Iron Fist
 // guarantees a working config.)
-func resolveMantleRegion(requested string, explicit bool, known []string) (region, message string, switched bool) {
+func resolveModelRegion(requested string, explicit bool, known []string) (region, message string, switched bool) {
 	if len(known) == 0 || regionAllowed(requested, known) {
 		return requested, "", false
 	}
@@ -41,12 +41,12 @@ func resolveMantleRegion(requested string, explicit bool, known []string) (regio
 		source, requested, known[0], known), true
 }
 
-// assembleMantleWarnings builds the warning list shared by Mantle-based
+// assembleRegionWarnings builds the warning list shared by region-routed
 // providers (Codex, Grok). It combines the region-switch message (if any)
 // with the catalog unavailability warning (if applicable). The separator
 // parameter controls how the model ID and region message are joined:
 // Codex uses ": " while Grok uses " ".
-func assembleMantleWarnings(regionMsg, modelID, region, catalogSuffix, sep string, p CatalogProvider, models []CatalogModel, refreshedSources []string) []string {
+func assembleRegionWarnings(regionMsg, modelID, region, catalogSuffix, sep string, p CatalogProvider, models []CatalogModel, refreshedSources []string) []string {
 	var warnings []string
 	if regionMsg != "" {
 		warnings = append(warnings, modelID+sep+regionMsg)
@@ -57,8 +57,8 @@ func assembleMantleWarnings(regionMsg, modelID, region, catalogSuffix, sep strin
 	return warnings
 }
 
-// buildWithRegionWarnings resolves the Mantle region (if the model has known
-// regions), then calls the provided build function with the final region.
+// buildWithRegionWarnings resolves the model's serving region (when it has
+// known regions), then calls the provided build function with the final region.
 // It appends the region-switch message and catalog unavailability warning to
 // the returned warnings. This unifies the region + warning pattern shared by
 // Codex and Grok BuildConfig implementations.
@@ -72,7 +72,7 @@ func buildWithRegionWarnings(opts Options, modelID string, modelRegions []string
 	region := opts.Region
 	regionMsg := ""
 	if len(modelRegions) > 0 {
-		region, regionMsg, _ = resolveMantleRegion(opts.Region, opts.RegionExplicit, modelRegions)
+		region, regionMsg, _ = resolveModelRegion(opts.Region, opts.RegionExplicit, modelRegions)
 	}
 
 	plan, err := build(region)
@@ -80,7 +80,7 @@ func buildWithRegionWarnings(opts Options, modelID string, modelRegions []string
 		return ConfigPlan{}, err
 	}
 
-	plan.Warnings = append(plan.Warnings, assembleMantleWarnings(
+	plan.Warnings = append(plan.Warnings, assembleRegionWarnings(
 		regionMsg, modelID, region, "refresh the catalog or select a listed model", sep,
 		p, opts.ModelCatalog, opts.RefreshedSources,
 	)...)

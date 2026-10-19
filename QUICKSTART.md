@@ -17,7 +17,7 @@ curl -fsSL https://claude.ai/install.sh | bash
 
 Run `juggernaut apply` without flags for an interactive first-run prompt. Apply does not call AWS: IAM trusts the local credential chain, and a Bedrock API key is stored without a probe at apply time (`doctor` checks reachability for IAM, and sends the bearer token for API-key mode). If the target config already has foreign values on keys Juggernaut would write, apply refuses unless you pass `--force`. `--dry-run` names the shell profiles a real apply would update.
 
-Upgrading from an older Juggernaut? Install v6 directly with npm (`npm install -g juggernaut-bedrock@latest`); there is no required v3 → v4 → v5 chain. **v6 is breaking:** Mantle is removed — every CLI now uses `bedrock-runtime`. After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI (`juggernaut apply --cli=<cli> --region <region>`); a re-apply over a Mantle-era config migrates it in place (backup saved first). Codex now routes through its built-in `amazon-bedrock-runtime` provider and needs Codex CLI ≥ 0.153.4 (`npm i -g @openai/codex@latest` if `apply`/`doctor` warn). Windows v3 API-key users who need to keep an old DPAPI-stored key should still use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
+Upgrading from an older Juggernaut? Install v6 directly with npm (`npm install -g juggernaut-bedrock@latest`); there is no required v3 → v4 → v5 chain. **v6 is breaking:** Juggernaut's Mantle routing was removed — every CLI now uses `bedrock-runtime` (the AWS `bedrock-mantle` endpoint remains available; opt-in support is tracked in [#497](https://github.com/jpvelasco/juggernaut/issues/497)). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI (`juggernaut apply --cli=<cli> --region <region>`); a re-apply over a Mantle-era config migrates it in place (backup saved first). Codex now routes through its built-in `amazon-bedrock-runtime` provider and needs Codex CLI ≥ 0.153.4 (`npm i -g @openai/codex@latest` if `apply`/`doctor` warn). Windows v3 API-key users who need to keep an old DPAPI-stored key should still use the bridge script in [README.md](README.md#windows-v3-api-key-installs).
 
 ## Prerequisites (if using IAM/SSO)
 
@@ -40,7 +40,7 @@ Using `--auth=bedrock-api-key` instead? Skip AWS setup entirely — the key is s
 
 ## Other Coding CLIs
 
-Every CLI routes natively via `bedrock-runtime` (Mantle removed in v6). IAM and Bedrock API key both work for every CLI:
+Every CLI routes natively via `bedrock-runtime` (Juggernaut's Mantle routing removed in v6; the AWS endpoint remains available). IAM and Bedrock API key both work for every CLI:
 
 ```bash
 juggernaut apply --cli=opencode --auth=iam              # or --auth=bedrock-api-key
