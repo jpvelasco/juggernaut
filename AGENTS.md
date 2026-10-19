@@ -62,8 +62,8 @@ Config paths: Claude `~/.claude/settings.json` (user) / `./.claude/settings.json
 - `apply --mode=auto` writes `CLAUDE_CODE_ENABLE_AUTO_MODE=1` but must warn unless active model is Opus 4.7+ (incl. Opus 5).
 - `--fallback-model`, `--service-tier`, `--always-thinking`, `--effort`, `skipWebFetchPreflight` are managed; `max`/`auto` effort are env-only, fixed levels also persist as native `effortLevel`.
 - Preserve compat for `launch`/`launch-cli`, hidden `auth-token`, deprecated flags, and exit-code passthrough (`Execute()` exits with wrapped CLI's status; launch commands silence cobra error/usage).
-- Mantle removed in v6 — all CLIs route via `bedrock-runtime`; after upgrade `juggernaut models refresh --source native --region <region>`.
-- v5 Codex configs still on the custom `amazon-bedrock` provider id are legacy for v6 (that table points at the dead Mantle host): a plain `apply` migrates them to the built-in `amazon-bedrock-runtime` and strips `model_providers.amazon-bedrock` (Codex-only — OpenCode's `provider.amazon-bedrock` is a different, current table and never gets touched). The version gate requires Codex ≥ 0.153.4 (warns on apply/doctor).
+- Juggernaut's Mantle routing was removed in v6 (the AWS `bedrock-mantle` endpoint remains available; opt-in support is tracked in #497) — all CLIs route via `bedrock-runtime`; after upgrade `juggernaut models refresh --source native --region <region>`.
+- v5 Codex configs still on the custom `amazon-bedrock` provider id are legacy for v6 (that table points at the Mantle host v6 no longer routes through): a plain `apply` migrates them to the built-in `amazon-bedrock-runtime` and strips `model_providers.amazon-bedrock` (Codex-only — OpenCode's `provider.amazon-bedrock` is a different, current table and never gets touched). The version gate requires Codex ≥ 0.153.4 (warns on apply/doctor).
 - Suppressions (`//nolint`, `#nosec`, `// nosemgrep`) require rationale in `docs/ci-suppressions.md`; prefer code fix over suppression.
 
 ## Testing

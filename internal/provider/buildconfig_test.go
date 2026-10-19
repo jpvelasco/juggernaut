@@ -153,7 +153,7 @@ func TestClaude_Supports(t *testing.T) {
 }
 
 // TestAllCLIs_SupportNativeAuth verifies that every CLI now supports CapNativeAuth
-// (IAM) via native bedrock-runtime; no CLI is Mantle-only after the v6 migration.
+// (IAM) via native bedrock-runtime; no CLI routes through Mantle after the v6 migration.
 func TestAllCLIs_SupportNativeAuth(t *testing.T) {
 	for _, name := range []string{"codex", "opencode", "grok"} {
 		p, _ := Get(name)

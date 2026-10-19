@@ -288,8 +288,8 @@ func buildProviderOptions(home, region string, scopts schema.Options) (provider.
 	// provider selects the right model instead of silently defaulting.
 	provOpts.Model = applyFlags.model
 	// Whether the region was explicitly chosen (vs filled from the global
-	// default). Providers auto-switch a model to a region that serves it
-	// only when the region was defaulted; an explicit --region is honored.
+	// default). Providers use it to word the region auto-switch message; a
+	// non-serving region is overridden either way (the Iron Fist).
 	provOpts.RegionExplicit = applyFlags.region != ""
 	catalog, sources, err := cachedProviderCatalog(home, region)
 	if err != nil {

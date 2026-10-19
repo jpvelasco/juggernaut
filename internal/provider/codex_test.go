@@ -112,7 +112,7 @@ func TestCodexModel_Unknown(t *testing.T) {
 }
 
 // TestCodexModel_AllModelsHaveRegions guards that every Codex model has
-// non-empty region info — an empty list would cause resolveMantleRegion to
+// non-empty region info — an empty list would cause resolveModelRegion to
 // silently pass through any user region, potentially writing an unreachable config.
 func TestCodexModel_AllModelsHaveRegions(t *testing.T) {
 	for key, m := range codexModels {

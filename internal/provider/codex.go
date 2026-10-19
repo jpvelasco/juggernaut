@@ -21,10 +21,12 @@ import (
 // Unlike Claude Code it has NO "use bedrock" env var — routing lives entirely
 // in the config file.
 //
-// Routing note: Juggernaut v6 dropped Mantle. v5 wrote the CUSTOM
-// "amazon-bedrock" provider (model_providers.amazon-bedrock) whose base_url
-// pointed at bedrock-mantle; those configs are migrated on apply (see
-// StripLegacyConfig / CleanLegacy). v6+ writes the built-in amazon-bedrock-runtime.
+// Routing note: Juggernaut v6 removed its own Mantle routing (the AWS
+// bedrock-mantle endpoint remains available; opt-in support is tracked in
+// issue #497). v5 wrote the CUSTOM "amazon-bedrock" provider
+// (model_providers.amazon-bedrock) whose base_url pointed at bedrock-mantle;
+// those configs are migrated on apply (see StripLegacyConfig / CleanLegacy).
+// v6+ writes the built-in amazon-bedrock-runtime.
 type codex struct {
 	BaseProvider
 }
@@ -35,8 +37,9 @@ type codex struct {
 const CodexBedrockRuntimeProviderID = "amazon-bedrock-runtime"
 
 // CodexLegacyProviderID is the custom provider id Juggernaut v5 (Mantle era)
-// wrote. It still resolves to bedrock-mantle, which is dead in v6 — configs
-// still pinned to it are migrated to CodexBedrockRuntimeProviderID on apply.
+// wrote. It targets the bedrock-mantle endpoint, which Juggernaut v6 no longer
+// routes through — configs still pinned to it are migrated to
+// CodexBedrockRuntimeProviderID on apply.
 const CodexLegacyProviderID = "amazon-bedrock"
 
 // ConfigPath is ~/.codex/config.toml (user) or ./.codex/config.toml (project).
@@ -263,7 +266,8 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 // migrating an existing Codex config to the built-in amazon-bedrock-runtime
 // provider. Deep-merge preserves sibling tables, so without this strip the
 // stale Mantle-era table would persist forever and codex would 404 on it (it
-// still points at the removed Mantle endpoint). This is Codex-scoped: the
+// still points at the Mantle endpoint Juggernaut v6 no longer routes through).
+// This is Codex-scoped: the
 // "provider.amazon-bedrock" table OpenCode uses is a different, still-current
 // native provider and is never touched.
 func (c codex) CleanLegacy(existing map[string]any) {

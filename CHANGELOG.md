@@ -6,6 +6,10 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Changed
 
+- **Docs no longer describe the AWS `bedrock-mantle` endpoint as dead
+  (fixes #498).** Juggernaut v6 removed its own Mantle routing; the endpoint
+  remains a live AWS offering, and opt-in support is tracked in #497. No
+  behavior change.
 - **Grok default advances to Grok 4.7 (fixes #494).** `--cli=grok` now writes
   `global.xai.grok-4.7` (from 4.6) and records the AWS-published 524,288-token
   shared context window. Each documented Grok model carries its own card facts:
@@ -102,7 +106,8 @@ findings.
   foundation IDs that serve in-region.
 - **Catalog warning no longer names Mantle (fixes #452).** The
   "was not returned as ACTIVE and available" apply warning referred to the
-  removed Mantle endpoint; it now just names the region.
+  Mantle endpoint, which Juggernaut no longer routes through; it now just
+  names the region.
 - **Scoped uninstalls no longer delete the shared Bedrock bearer token
   (fixes #455).** `uninstall --scope=user` behaved like `--scope=project`:
   a partial removal that must keep the credential the surviving scopes (and

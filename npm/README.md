@@ -87,7 +87,7 @@ juggernaut models list --region=us-west-2 --cli=opencode
 
 ## Upgrading
 
-Older Juggernaut users can install v6 directly. **v6 is breaking:** Mantle routing was removed — every CLI now uses `bedrock-runtime` (native Bedrock). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI you use:
+Older Juggernaut users can install v6 directly. **v6 is breaking:** Juggernaut's Mantle routing was removed — every CLI now uses `bedrock-runtime` (native Bedrock); the AWS `bedrock-mantle` endpoint remains available, with opt-in support tracked in [#497](https://github.com/jpvelasco/juggernaut/issues/497). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and re-apply each CLI you use:
 
 ```bash
 npm install -g juggernaut-bedrock@latest

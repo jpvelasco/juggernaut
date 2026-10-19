@@ -12,4 +12,4 @@ See `AGENTS.md` for commands, architecture, merge gates, and engineering constra
 
 - **Provider extensibility:** routing is wired behind `provider.Provider`; a new CLI is a `BaseProvider`-backed struct (one file) + one `register(...)` call in `internal/provider/provider.go`; `cmd/` selects by name and gates flags via `Supports(Capability)`. New CLI-specific knobs become a `Capability`, not a CLI-name branch.
 - **Provider isolation:** CLI-specific config lives behind `Provider.BuildConfig`; `cmd/` never branches on CLI name except the three pre-existing Claude-specific paths in `doctor.go`/`helpers.go`.
-- **Native routing:** every CLI routes via `bedrock-runtime` (Mantle removed in v6). Re-run `juggernaut models refresh --source native --region <region>` after upgrading to repopulate `~/.juggernaut/model-catalog.json`.
+- **Native routing:** every CLI routes via `bedrock-runtime` (Juggernaut's Mantle routing was removed in v6; the AWS `bedrock-mantle` endpoint remains available, with opt-in support tracked in #497). Re-run `juggernaut models refresh --source native --region <region>` after upgrading to repopulate `~/.juggernaut/model-catalog.json`.
