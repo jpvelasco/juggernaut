@@ -16,8 +16,10 @@ func TestTask3_Grok_NativeEndpoint(t *testing.T) {
 	if base, _ := m["base_url"].(string); base != "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1" {
 		t.Errorf("base_url = %q, want bedrock-runtime", base)
 	}
-	if _, ok := m["api_backend"]; ok {
-		t.Errorf("api_backend should be removed for native, got %v", m["api_backend"])
+	// api_backend is mantle-only; runtime plans carry the empty-string delete
+	// sentinel so a mantle→runtime apply clears it from the deep-merged table.
+	if got, ok := m["api_backend"]; !ok || got != "" {
+		t.Errorf("api_backend = %v, want the empty deletion sentinel for native", got)
 	}
 }
 

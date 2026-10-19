@@ -52,6 +52,76 @@ func TestMergeConfigPlan_SetAndDelete(t *testing.T) {
 	}
 }
 
+// TestMergeConfigPlanDeep_FreshTableDropsDeleteSentinels verifies the deep
+// merge does not write empty-string delete sentinels into a table created from
+// scratch (there is no existing table to merge into), at any nesting depth.
+func TestMergeConfigPlanDeep_FreshTableDropsDeleteSentinels(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	m := NewManager(path)
+
+	if err := m.MergeConfigPlanDeep(map[string]any{
+		"model": map[string]any{
+			"bedrock-grok": map[string]any{
+				"model":       "global.xai.grok-4.7",
+				"api_backend": "", // sentinel: must not be written on a fresh table
+				"nested": map[string]any{
+					"kept": "yes",
+					"dead": "",
+				},
+			},
+		},
+	}, []string{"model"}); err != nil {
+		t.Fatalf("MergeConfigPlanDeep: %v", err)
+	}
+
+	got, err := m.Read()
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	block := got["model"].(map[string]any)["bedrock-grok"].(map[string]any)
+	if _, ok := block["api_backend"]; ok {
+		t.Error("empty api_backend sentinel must not be written to a fresh table")
+	}
+	if block["model"] != "global.xai.grok-4.7" {
+		t.Errorf("model = %v, want global.xai.grok-4.7", block["model"])
+	}
+	nested := block["nested"].(map[string]any)
+	if _, ok := nested["dead"]; ok {
+		t.Error("nested empty-string sentinel must not be written")
+	}
+	if nested["kept"] != "yes" {
+		t.Errorf("nested kept = %v, want yes", nested["kept"])
+	}
+
+	// An existing table still deletes the sentinel key and preserves siblings.
+	block["api_backend"] = "responses"
+	if err := m.Write(got); err != nil {
+		t.Fatalf("Write seeded table: %v", err)
+	}
+	if err := m.MergeConfigPlanDeep(map[string]any{
+		"model": map[string]any{
+			"bedrock-grok": map[string]any{
+				"api_backend": "",
+				"model":       "global.xai.grok-4.7",
+			},
+		},
+	}, []string{"model"}); err != nil {
+		t.Fatalf("MergeConfigPlanDeep re-apply: %v", err)
+	}
+	got, err = m.Read()
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	block = got["model"].(map[string]any)["bedrock-grok"].(map[string]any)
+	if _, ok := block["api_backend"]; ok {
+		t.Error("empty api_backend must delete an existing table entry")
+	}
+	nested = block["nested"].(map[string]any)
+	if nested["kept"] != "yes" {
+		t.Error("user sibling in existing table must survive")
+	}
+}
+
 // TestMergeConfigPlan_PermissionsDeepMerge verifies only permissions.defaultMode
 // is managed; user allow/deny rules survive.
 func TestMergeConfigPlan_PermissionsDeepMerge(t *testing.T) {

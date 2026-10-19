@@ -10,12 +10,12 @@ import (
 )
 
 // grok is the OFFICIAL xAI Grok CLI provider (grok / grok.exe, config TOML at
-// ~/.grok/config.toml). Juggernaut routes to Grok 4.7 on native Bedrock
-// (bedrock-runtime /openai/v1) by writing a [model.bedrock-grok] block
-// (base_url → bedrock-runtime) selected via [models].default. API-key apply
-// also writes an [auth] block whose auth_provider_command runs
-// `juggernaut auth-token`; IAM apply omits that command so Grok does not
-// demand a keychain bearer token.
+// ~/.grok/config.toml). Juggernaut routes to Grok on native Bedrock
+// (bedrock-runtime /openai/v1) by default, or — opt-in — through the parallel
+// bedrock-mantle endpoint. Both write a [model.bedrock-grok] block selected via
+// [models].default. API-key apply also writes an [auth] block whose
+// auth_provider_command runs `juggernaut auth-token`; IAM apply omits that
+// command so Grok does not demand a keychain bearer token.
 //
 // Why the [auth] block (not env_key): Grok's per-model credential order is
 // api_key → env_key → XAI_API_KEY, but a custom [model.*] block does NOT satisfy
@@ -36,11 +36,10 @@ const grokModelName = "bedrock-grok"
 // token as {"access_token":...,"expires_in":...}.
 const grokAuthCommand = "juggernaut auth-token"
 
-// grokBedrockModel describes one xAI model reachable through native Bedrock
-// (bedrock-runtime /openai/v1). Every current Grok model is
-// inference-profile-only on that endpoint — the bare foundation ID is not
-// callable in-Region — so requests must name the us. geo or global.
-// cross-Region inference profile.
+// grokBedrockModel describes one xAI model reachable through Bedrock. On
+// bedrock-runtime every current Grok model is inference-profile-only (requests
+// name a us. geo or global. cross-Region profile); on bedrock-mantle the same
+// models are served as bare foundation IDs, in-region only.
 //
 // ContextWindow is the AWS-published window shared between input and output
 // (model cards, checked 2026-10-19); the Grok client uses it for compaction
@@ -48,15 +47,20 @@ const grokAuthCommand = "juggernaut auth-token"
 // USRegions/GlobalRegions are the commercial source regions each profile type
 // is callable from per the card. us-east-1 stays first in both — it is the
 // Iron Fist fallback and the region Juggernaut's own defaults target.
+// MantleRegions is the verified in-region availability on bedrock-mantle (nil
+// = the model is not served there).
 type grokBedrockModel struct {
 	ContextWindow int
 	USRegions     []string
 	GlobalRegions []string
+	MantleRegions []string
 }
 
 // grokModels maps a bare Bedrock model ID to its documented facts. Unknown
-// xai.grok-* families remain selectable verbatim; they just get no
-// context_window or region enforcement.
+// xai.grok-* families remain selectable verbatim on runtime; they just get no
+// context_window or region enforcement. Mantle rejects unknown models because
+// every mantle config pins one region, and we only write a region verified to
+// serve that model.
 var grokModels = map[string]grokBedrockModel{
 	"xai.grok-4.7": {
 		ContextWindow: 524288,
@@ -67,6 +71,7 @@ var grokModels = map[string]grokBedrockModel{
 			"ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-south-2", "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-southeast-5", "ap-southeast-7", "ap-east-2",
 			"me-central-1", "il-central-1", "sa-east-1",
 		},
+		// Grok 4.7 is runtime-only; the mantle endpoint has no entry for it.
 	},
 	"xai.grok-4.6": {
 		ContextWindow: 500000,
@@ -77,6 +82,13 @@ var grokModels = map[string]grokBedrockModel{
 			"ap-east-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-south-2", "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-southeast-5", "ap-southeast-7",
 			"il-central-1", "me-central-1", "me-south-1", "sa-east-1",
 		},
+		MantleRegions: []string{"us-west-2", "us-gov-east-1"},
+	},
+	// Grok 4.3 is mantle-only (the runtime endpoint has no entry for it), so it
+	// has no CRIS regions; the runtime path rejects it up front.
+	"xai.grok-4.3": {
+		ContextWindow: 1000000,
+		MantleRegions: []string{"us-west-2", "us-east-1", "us-east-2", "us-gov-west-1"},
 	},
 }
 
@@ -84,6 +96,11 @@ var grokModels = map[string]grokBedrockModel{
 // inference-profile ID (the bare foundation ID xai.grok-4.7 400s on the
 // bedrock-runtime endpoint, which only serves CRIS profile IDs).
 const grokDefaultModelID = "global.xai.grok-4.7"
+
+// grokMantleDefaultModelID is the Grok model Juggernaut pins when the mantle
+// endpoint is selected: the bare foundation ID. Mantle serves no inference
+// profiles, and the runtime default (4.7) is not served there.
+const grokMantleDefaultModelID = "xai.grok-4.6"
 
 // grokModelFacts resolves a model ID under any form (bare foundation ID,
 // global./us. profile) to its documented facts.
@@ -115,6 +132,55 @@ func normalizeGrokModelID(modelID string) (string, bool) {
 		return "global.xai." + modelID, true
 	}
 	return "", false
+}
+
+// normalizeGrokMantleModelID resolves the model for the mantle endpoint. Mantle
+// serves bare foundation IDs only (no cross-region inference) and each model in
+// its own regions; anything without verified mantle data is rejected rather
+// than written into a config that fails at request time.
+func normalizeGrokMantleModelID(modelID string) (string, error) {
+	if modelID == "" {
+		modelID = grokMantleDefaultModelID
+	}
+	if bare := bedrock.StripRegionPrefix(modelID); bare != modelID {
+		bare = bareModelID(bare)
+		if facts, ok := grokModels[bare]; ok && len(facts.MantleRegions) > 0 {
+			return "", fmt.Errorf(
+				"%q is a cross-region inference profile; the mantle endpoint requires the bare ID %q",
+				modelID, bare)
+		}
+		return "", fmt.Errorf(
+			"%q is a cross-region inference profile; the mantle endpoint requires a bare xai.grok-* ID",
+			modelID)
+	}
+	if strings.HasPrefix(modelID, "grok-") {
+		modelID = "xai." + modelID
+	}
+	modelID = bareModelID(modelID)
+	facts, ok := grokModels[modelID]
+	if !ok {
+		return "", fmt.Errorf(
+			"unknown Grok mantle model %q; mantle supports xai.grok-4.6 (default) and xai.grok-4.3",
+			modelID)
+	}
+	if len(facts.MantleRegions) == 0 {
+		return "", fmt.Errorf(
+			"%s is not served on the mantle endpoint; use --endpoint=runtime (or --model=%s)",
+			modelID, grokMantleDefaultModelID)
+	}
+	return modelID, nil
+}
+
+// MantleRegions implements MantleRegionSource: the verified mantle regions for
+// the selected model (default xai.grok-4.6). Invalid or non-mantle models
+// return nil so callers fall back to the endpoint-wide list; BuildConfig
+// rejects them with an actionable error.
+func (g grok) MantleRegions(modelID string) []string {
+	mantleID, err := normalizeGrokMantleModelID(modelID)
+	if err != nil {
+		return nil
+	}
+	return grokModels[mantleID].MantleRegions
 }
 
 // ConfigPath is ALWAYS ~/.grok/config.toml. Grok's project-scoped
@@ -170,19 +236,38 @@ func (g grok) LaunchSpec() LaunchSpec {
 	}
 }
 
-// BuildConfig writes a [model.bedrock-grok] block routing to Grok 4.7 on native
-// Bedrock (bedrock-runtime /openai/v1), [models].default, a juggernaut.auth
-// block for launch, and — only for Bedrock API key auth — an [auth] block
-// whose auth_provider_command supplies the keychain bearer token so Grok skips
-// its interactive sign-in.
+// BuildConfig writes a [model.bedrock-grok] block routing the Grok CLI to
+// Bedrock, [models].default, a juggernaut.auth block for launch, and — only for
+// Bedrock API key auth — an [auth] block whose auth_provider_command supplies
+// the keychain bearer token so Grok skips its interactive sign-in.
+//
+// Runtime (default) targets bedrock-runtime /openai/v1 with a CRIS profile ID;
+// the opt-in mantle endpoint targets bedrock-mantle /openai/v1 with a bare
+// foundation ID and the Responses wire API.
 //
 // Deliberately NO env_key on the model block: with env_key set, Grok's session
 // still falls through to interactive login. The [auth] block is the documented
 // way to replace login entirely.
 func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+	if opts.Endpoint == bedrock.EndpointMantle {
+		return g.buildMantleConfig(opts)
+	}
+	return g.buildRuntimeConfig(opts)
+}
+
+// buildRuntimeConfig targets bedrock-runtime. The endpoint serves only CRIS
+// profile IDs, so every bare form is normalized to a global. profile ID.
+func (g grok) buildRuntimeConfig(opts Options) (ConfigPlan, error) {
 	modelID, ok := normalizeGrokModelID(opts.Model)
 	if !ok {
 		return ConfigPlan{}, fmt.Errorf("unknown Grok model %q (expected a discovered xai.grok-* model)", opts.Model)
+	}
+	// Mantle-only families (Grok 4.3) have no runtime endpoint; refuse rather
+	// than write a profile ID that fails at request time.
+	if !RuntimeSupported(modelID, "foundation") {
+		return ConfigPlan{}, fmt.Errorf(
+			"model %q is available only on the bedrock-mantle endpoint; re-run with --endpoint=mantle",
+			opts.Model)
 	}
 
 	// Route to a region that can actually invoke the selected profile rather
@@ -204,51 +289,95 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 			"model":    modelID,
 			"base_url": baseURL,
 			"name":     modelID + " (Amazon Bedrock)",
+			// Empty string is the merge-time delete sentinel: switching from
+			// the mantle endpoint back to runtime must not leave the Responses
+			// wire API behind (runtime speaks the default Chat Completions).
+			"api_backend": "",
 		}
 		if known {
 			// Use the AWS-published context window for the selected model; the
 			// client derives compaction thresholds from it.
 			modelBlock["context_window"] = facts.ContextWindow
 		}
-		keys := map[string]any{
-			"model": map[string]any{
-				grokModelName: modelBlock,
-			},
-			"models": map[string]any{
-				"default": grokModelName,
-			},
-		}
-		blockMap, err := juggernautAuthBlock(opts, region)
-		if err != nil {
-			return ConfigPlan{}, err
-		}
-		keys["juggernaut"] = blockMap
-		if authmode.IsBedrockAPIKey(opts.AuthMode) {
-			keys["auth"] = map[string]any{
-				"auth_provider_command": grokAuthCommand,
-				"auth_provider_label":   "Bedrock",
-			}
-		} else {
-			// Empty strings delete owned [auth] leaves on re-apply so IAM
-			// does not leave auth_provider_command pointing at auth-token.
-			keys["auth"] = map[string]any{
-				"auth_provider_command": "",
-				"auth_provider_label":   "",
-			}
-		}
-
-		return ConfigPlan{
-			Keys:        keys,
-			ManagedKeys: g.NativeManagedKeys(),
-		}, nil
+		return g.grokPlan(opts, region, modelBlock)
 	})
+}
+
+// buildMantleConfig targets the opt-in bedrock-mantle endpoint with the bare
+// foundation model ID. Mantle is API-key only: the Grok CLI sends the bearer
+// token from [auth] and cannot sign SigV4 requests.
+func (g grok) buildMantleConfig(opts Options) (ConfigPlan, error) {
+	if !authmode.IsBedrockAPIKey(opts.AuthMode) {
+		return ConfigPlan{}, fmt.Errorf(
+			"the Grok CLI reaches the mantle endpoint with a Bedrock API key, not SigV4; re-run with --auth=%s",
+			authmode.BedrockAPIKey)
+	}
+	modelID, err := normalizeGrokMantleModelID(opts.Model)
+	if err != nil {
+		return ConfigPlan{}, err
+	}
+	facts := grokModels[modelID]
+
+	// Mantle has no cross-region inference and each model is served in its own
+	// regions, so the Iron Fist keeps a serving region or moves to the model's
+	// first verified one.
+	region, regionMsg, _ := resolveModelRegion(opts.Region, opts.RegionExplicit, facts.MantleRegions)
+
+	baseURL := fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1", region)
+	modelBlock := map[string]any{
+		"model":          modelID,
+		"base_url":       baseURL,
+		"name":           modelID + " (Amazon Bedrock Mantle)",
+		"context_window": facts.ContextWindow,
+		"api_backend":    "responses",
+	}
+	plan, err := g.grokPlan(opts, region, modelBlock)
+	if err != nil {
+		return ConfigPlan{}, err
+	}
+	if regionMsg != "" {
+		plan.Warnings = append(plan.Warnings, modelID+" "+regionMsg)
+	}
+	return plan, nil
+}
+
+// grokPlan assembles the config shape shared by both endpoints: the named model
+// block selected via [models].default, the juggernaut.auth record launch reads,
+// and the [auth] block — the API-key provider command, or empty leaves that
+// delete it on re-apply so IAM does not leave auth-token wired up.
+func (g grok) grokPlan(opts Options, region string, modelBlock map[string]any) (ConfigPlan, error) {
+	keys := map[string]any{
+		"model": map[string]any{
+			grokModelName: modelBlock,
+		},
+		"models": map[string]any{
+			"default": grokModelName,
+		},
+	}
+	blockMap, err := juggernautAuthBlock(opts, region)
+	if err != nil {
+		return ConfigPlan{}, err
+	}
+	keys["juggernaut"] = blockMap
+	if authmode.IsBedrockAPIKey(opts.AuthMode) {
+		keys["auth"] = map[string]any{
+			"auth_provider_command": grokAuthCommand,
+			"auth_provider_label":   "Bedrock",
+		}
+	} else {
+		keys["auth"] = map[string]any{
+			"auth_provider_command": "",
+			"auth_provider_label":   "",
+		}
+	}
+	return ConfigPlan{
+		Keys:        keys,
+		ManagedKeys: g.NativeManagedKeys(),
+	}, nil
 }
 
 func (g grok) SupportsModel(model CatalogModel) ModelSupport {
 	return g.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
-		if m.Source == "mantle" {
-			return ModelSupport{Reason: "Grok no longer uses Mantle (native only)"}
-		}
 		if !RuntimeSupported(m.ID, m.Source) {
 			return ModelSupport{Reason: mantleOnlyReason}
 		}

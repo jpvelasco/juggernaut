@@ -50,7 +50,7 @@ func init() {
 	f := applyCmd.Flags()
 	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: "+provider.SupportedNames())
 	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
-	f.StringVar(&applyFlags.endpoint, "endpoint", "", "Bedrock endpoint: runtime (default) or mantle (opt-in; Claude Code only)")
+	f.StringVar(&applyFlags.endpoint, "endpoint", "", "Bedrock endpoint: runtime (default) or mantle (opt-in; Claude Code and Grok)")
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")
@@ -145,7 +145,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	region = resolveEndpointRegion(endpoint, region)
+	region = resolveEndpointRegion(endpoint, region, prov)
 
 	var token string
 	if !applyFlags.dryRun {
@@ -155,7 +155,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	plan, err := buildApplyPlan(home, region, bCfg, authMode, endpoint, opusplan)
+	plan, err := buildApplyPlan(prov, home, region, bCfg, authMode, endpoint, opusplan)
 	if err != nil {
 		return err
 	}
@@ -172,8 +172,8 @@ type applyPlan struct {
 
 // buildApplyPlan resolves models and options, then builds the schema
 // block and provider options. This is the planning phase — no side effects.
-func buildApplyPlan(home, region string, bCfg *bedrock.Config, authMode, endpoint string, opusplan bool) (*applyPlan, error) {
-	models, err := resolveApplyModelsForEndpoint(endpoint, home)
+func buildApplyPlan(prov provider.Provider, home, region string, bCfg *bedrock.Config, authMode, endpoint string, opusplan bool) (*applyPlan, error) {
+	models, err := resolveApplyModelsForEndpoint(prov, endpoint, home)
 	if err != nil {
 		return nil, err
 	}
@@ -277,12 +277,14 @@ func overlayExplicitModels(m *resolvedModels) {
 }
 
 // resolveApplyModelsForEndpoint layers mantle-specific model behavior on top of
-// the normal flag resolution. Mantle model IDs are account-allowlisted, so a
-// re-apply of a mantle config preserves the previous tier pins instead of
-// resetting them to the runtime defaults. Explicit flags still win.
-func resolveApplyModelsForEndpoint(endpoint, home string) (*resolvedModels, error) {
+// the normal flag resolution. Only Claude Code has mantle tier pins and
+// anthropic.* model-ID rules; other mantle-capable CLIs (Grok) validate their
+// own model IDs in BuildConfig. Mantle model IDs are account-allowlisted, so a
+// Claude re-apply of a mantle config preserves the previous tier pins instead
+// of resetting them to the runtime defaults. Explicit flags still win.
+func resolveApplyModelsForEndpoint(prov provider.Provider, endpoint, home string) (*resolvedModels, error) {
 	models, err := resolveApplyModels()
-	if err != nil || endpoint != bedrock.EndpointMantle {
+	if err != nil || endpoint != bedrock.EndpointMantle || prov.Name() != "claude" {
 		return models, err
 	}
 	if err := preserveMantleModels(models, home); err != nil {
