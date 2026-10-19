@@ -251,6 +251,9 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
 			return ModelSupport{Reason: "Codex no longer uses Mantle (native only)"}
 		}
+		if !RuntimeSupported(m.ID, m.Source) {
+			return ModelSupport{Reason: mantleOnlyReason}
+		}
 		// The GPT-6.1, GPT-6, and GPT-5.6 families may appear in the catalog as
 		// either the base foundation ID (openai.gpt-6.1-*) or an inference-profile
 		// ID (global.openai.gpt-6.1-* / us.openai.gpt-6.1-*). Accept all of them;

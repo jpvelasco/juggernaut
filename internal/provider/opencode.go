@@ -186,6 +186,9 @@ func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
 			return ModelSupport{Reason: "OpenCode's Bedrock provider no longer uses Mantle (native only)"}
 		}
+		if !RuntimeSupported(m.ID, m.Source) {
+			return ModelSupport{Reason: mantleOnlyReason}
+		}
 		return ModelSupport{Supported: true, Reason: "native Bedrock Chat-compatible candidate"}
 	})
 }

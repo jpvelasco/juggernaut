@@ -303,7 +303,8 @@ func TestGrok_BuildConfig_GrokPrefixNormalizes(t *testing.T) {
 // (global.xai.grok-4.6, us.xai.grok-4.6) — the SupportsModel gate must accept
 // them, not just the bare xai.grok-* foundation form. Regression: the old
 // HasPrefix("xai.grok-") check hid every live profile ID from
-// `models list --cli=grok`.
+// `models list --cli=grok`. Grok 4.3 is mantle-only, so it is rejected even
+// though its ID matches the xai.grok- family filter.
 func TestGrok_SupportsModel_CRISProfileIDs(t *testing.T) {
 	p, _ := Get("grok")
 	cases := []struct {
@@ -316,7 +317,8 @@ func TestGrok_SupportsModel_CRISProfileIDs(t *testing.T) {
 		{id: "global.xai.grok-4.6", want: true},
 		{id: "us.xai.grok-4.6", want: true},
 		{id: "xai.grok-4.6", want: true},
-		{id: "global.xai.grok-4.3", want: true},
+		{id: "global.xai.grok-4.3", want: false}, // mantle-only
+		{id: "xai.grok-4.3", want: false},        // mantle-only
 		{id: "openai.gpt-5.6-sol", want: false},
 		{id: "xai.grok-4.6-eu", want: true}, // still the xai.grok- family after prefix strip
 	}
