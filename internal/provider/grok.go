@@ -73,7 +73,7 @@ func normalizeGrokModelID(modelID string) (string, bool) {
 
 // grokModelIs46 reports whether modelID is the Grok 4.6 model under any form
 // (bare, global.xai.grok-4.6, us.xai.grok-4.6) — the only model with a verified
-// 1M context window and a verified serving-region set.
+// 500K context window and a verified serving-region set.
 func grokModelIs46(modelID string) bool {
 	return bedrock.StripRegionPrefix(modelID) == "xai.grok-4.6"
 }
@@ -161,7 +161,10 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 			"name":     modelID + " (Amazon Bedrock)",
 		}
 		if grokModelIs46(modelID) {
-			modelBlock["context_window"] = 1000000
+			// AWS serves Grok 4.6 with a 500K context window (model card,
+			// checked 2026-10-19). The client uses this value for compaction
+			// thresholds, so an inflated value invites server-side errors.
+			modelBlock["context_window"] = 500000
 		}
 		keys := map[string]any{
 			"model": map[string]any{
