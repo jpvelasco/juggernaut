@@ -29,6 +29,36 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+// TestRootConfigIncludesLiveBedrockRegions guards the supported-regions gate:
+// AWS model cards list global. cross-region inference from every commercial
+// Region with a bedrock-runtime endpoint, so the embedded list must cover them.
+func TestRootConfigIncludesLiveBedrockRegions(t *testing.T) {
+	repoRoot := filepath.Join("..", "..")
+	cfg, err := bedrock.Load(filepath.Join(repoRoot, "bedrock-config.json"))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	for _, region := range []string{
+		// Regions added when the list was refreshed (#492).
+		"us-west-1", "ca-west-1", "eu-north-1", "eu-south-1", "eu-south-2",
+		"ap-south-2", "ap-northeast-3", "ap-southeast-4", "ap-southeast-5",
+		"ap-southeast-6", "ap-southeast-7", "ap-east-2", "af-south-1", "mx-central-1",
+		// Regions kept from the original list.
+		"il-central-1", "me-south-1", "me-central-1", "ap-southeast-3",
+	} {
+		if !cfg.IsSupportedRegion(region) {
+			t.Errorf("regions must include %s (bedrock-runtime endpoint available)", region)
+		}
+	}
+	seen := make(map[string]bool, len(cfg.Regions))
+	for _, region := range cfg.Regions {
+		if seen[region] {
+			t.Errorf("duplicate region %q", region)
+		}
+		seen[region] = true
+	}
+}
+
 func TestLoad_RejectsWrongFilename(t *testing.T) {
 	_, err := bedrock.Load(filepath.Join("..", "..", "go.mod"))
 	if err == nil {
