@@ -55,19 +55,34 @@ func TestCodex_ActivationMarkers(t *testing.T) {
 	}
 }
 
-// --- Per-model table (all facts live-verified 2026-08-29 native Bedrock) ---
+// --- Per-model table (all facts live-verified 2026-10-19 native Bedrock) ---
 
-// TestCodexModel_GPT55 pins the GPT-5.6-sol model ID and region availability.
-func TestCodexModel_GPT55(t *testing.T) {
-	m, ok := codexModel("sol")
-	if !ok {
-		t.Fatal("sol not in Codex model table")
+// TestCodexModel_CurrentGeneration pins the refreshed roster: sol/luna/astra
+// track the GPT-6 generation and terra stays on GPT-5.6 (there is no GPT-6
+// Terra). Regions[0] must stay us-east-1 — it is the Iron Fist fallback.
+func TestCodexModel_CurrentGeneration(t *testing.T) {
+	want := map[string]string{
+		"sol":   "global.openai.gpt-6.1-sol",
+		"luna":  "global.openai.gpt-6-luna",
+		"astra": "global.openai.gpt-6-astra",
+		"terra": "global.openai.gpt-5.6-terra",
 	}
-	if m.ModelID != "global.openai.gpt-5.6-sol" {
-		t.Errorf("ModelID = %q, want global.openai.gpt-5.6-sol", m.ModelID)
-	}
-	if len(m.Regions) == 0 {
-		t.Error("sol should have non-empty regions")
+	for key, wantID := range want {
+		m, ok := codexModel(key)
+		if !ok {
+			t.Errorf("%s not in Codex model table", key)
+			continue
+		}
+		if m.ModelID != wantID {
+			t.Errorf("%s ModelID = %q, want %q", key, m.ModelID, wantID)
+		}
+		if len(m.Regions) == 0 {
+			t.Errorf("%s should have non-empty regions", key)
+			continue
+		}
+		if m.Regions[0] != "us-east-1" {
+			t.Errorf("%s Regions[0] = %q, want us-east-1 (Iron Fist fallback)", key, m.Regions[0])
+		}
 	}
 	// Old gpt-5.5 should be retired.
 	if _, ok := codexModel("gpt-5.5"); ok {
@@ -110,7 +125,7 @@ func TestCodexModel_AllModelsHaveRegions(t *testing.T) {
 	}
 }
 
-// TestCodex_DefaultModel is sol (the flagship for GPT-5.6).
+// TestCodex_DefaultModel is sol (the GPT-6.1 flagship).
 func TestCodex_DefaultModel(t *testing.T) {
 	if got := codexDefaultModel(); got != "sol" {
 		t.Errorf("default Codex model = %q, want sol", got)

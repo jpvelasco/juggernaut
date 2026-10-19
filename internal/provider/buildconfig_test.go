@@ -229,8 +229,8 @@ func TestCodex_BuildConfig_AmazonBedrockProvider(t *testing.T) {
 	if plan.Keys["model_provider"] != "amazon-bedrock-runtime" {
 		t.Errorf("model_provider = %v, want amazon-bedrock-runtime", plan.Keys["model_provider"])
 	}
-	if plan.Keys["model"] != "global.openai.gpt-5.6-sol" {
-		t.Errorf("model = %v, want global.openai.gpt-5.6-sol", plan.Keys["model"])
+	if plan.Keys["model"] != "global.openai.gpt-6.1-sol" {
+		t.Errorf("model = %v, want global.openai.gpt-6.1-sol", plan.Keys["model"])
 	}
 	// baseOpts uses the default region us-west-2 (non-explicit). sol is available
 	// in us-west-2, so no auto-switch.
@@ -259,14 +259,15 @@ func TestCodex_BuildConfig_UnknownModel(t *testing.T) {
 	}
 }
 
-// TestCodex_BuildConfig_RegionIronFist: sol is us-east-1/2 and us-west-2, so ANY
-// non-serving region — even one the user passed explicitly — is overridden to a
-// known-good region. Juggernaut never writes a config that can't reach the model.
+// TestCodex_BuildConfig_RegionIronFist: sol's GPT-6.1 global profile is not
+// available in me-south-1, so ANY non-serving region — even one the user passed
+// explicitly — is overridden to a known-good region. Juggernaut never writes a
+// config that can't reach the model.
 func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 	p, _ := Get("codex")
 	opts := baseOpts()
 	opts.Model = "sol"
-	opts.Region = "eu-west-1" // not in sol's known regions
+	opts.Region = "me-south-1" // not in sol's known regions
 	opts.RegionExplicit = true
 	plan, err := p.BuildConfig(testConfig(), opts)
 	if err != nil {
@@ -277,7 +278,7 @@ func TestCodex_BuildConfig_RegionIronFist(t *testing.T) {
 		t.Fatal("model_providers.amazon-bedrock-runtime.aws.region missing")
 	}
 	if got := region.(string); got != "us-east-1" {
-		t.Errorf("region = %q, want us-east-1 (overridden from eu-west-1)", got)
+		t.Errorf("region = %q, want us-east-1 (overridden from me-south-1)", got)
 	}
 	if len(plan.Warnings) == 0 {
 		t.Error("expected a message noting the region override")

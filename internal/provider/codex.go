@@ -87,32 +87,64 @@ func (c codex) OwnedSubKeys() map[string][]string {
 }
 
 // codexBedrockModel describes one OpenAI-family model reachable through native
-// Bedrock from Codex. Sourced from live foundation + inference-profile
-// verification (2026-08-30).
+// Bedrock from Codex. Sourced from the AWS model cards and the regional
+// availability matrix (verified 2026-10-19).
 //
-// The GPT-5.6 family is INFERENCE_PROFILE-only on native Bedrock: the base
-// foundation ID (openai.gpt-5.6-sol) is listed and ACTIVE but returns 400
-// "on-demand throughput isn't supported" when invoked. Only the inference
-// profile IDs (global.openai.gpt-5.6-sol, us.openai.gpt-5.6-sol) are callable.
-// Juggernaut therefore writes the global. profile ID as the default.
+// The GPT-6.1, GPT-6, and GPT-5.6 families are INFERENCE_PROFILE-only on
+// native Bedrock: the base foundation ID (openai.gpt-6.1-sol) is listed and
+// ACTIVE but returns 400 "on-demand throughput isn't supported" when invoked.
+// Only the inference profile IDs (global.openai.gpt-6.1-sol,
+// us.openai.gpt-6.1-sol) are callable. Juggernaut therefore writes the global.
+// profile ID as the default.
 type codexBedrockModel struct {
-	ModelID string   // Bedrock inference-profile model ID, e.g. "global.openai.gpt-5.6-sol"
-	Regions []string // regions where available (informational)
+	ModelID string   // Bedrock inference-profile model ID, e.g. "global.openai.gpt-6.1-sol"
+	Regions []string // regions where the global profile is available (drives the Iron Fist)
 }
 
-// codexModels maps a friendly key to its verified native facts.
+// codexGPT6Regions are the regions where the GPT-6 generation's global
+// inference profiles are available. GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, and
+// GPT-6 Astra publish the same set (AWS regional availability matrix,
+// verified 2026-10-19). Regions[0] is the Iron Fist fallback — keep us-east-1
+// first so an unsupported region deterministically routes to the flagship
+// region.
+var codexGPT6Regions = []string{
+	"us-east-1", "us-east-2", "us-west-1", "us-west-2",
+	"ca-central-1", "ca-west-1",
+	"eu-central-1", "eu-central-2", "eu-north-1", "eu-south-1", "eu-south-2", "eu-west-1", "eu-west-2", "eu-west-3",
+	"ap-east-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-south-2", "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-southeast-5", "ap-southeast-6", "ap-southeast-7",
+	"af-south-1", "il-central-1", "mx-central-1", "sa-east-1",
+}
+
+// codexGPT56Regions are the regions where the GPT-5.6 global profiles are
+// available (AWS regional availability matrix, verified 2026-10-19). Terra is
+// the only GPT-5.6 model on the roster — there is no GPT-6 Terra.
+var codexGPT56Regions = []string{
+	"us-east-1", "us-east-2", "us-west-1", "us-west-2",
+	"ca-central-1",
+	"eu-central-1", "eu-central-2", "eu-north-1", "eu-south-1", "eu-south-2", "eu-west-1", "eu-west-2", "eu-west-3",
+	"ap-east-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-south-2", "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-southeast-5", "ap-southeast-7",
+	"il-central-1", "me-central-1", "me-south-1", "sa-east-1",
+}
+
+// codexModels maps a friendly key to its verified native facts. Sol, Luna, and
+// Astra track the current GPT-6 generation; Terra has no GPT-6 successor, so
+// it stays on the last Terra generation (GPT-5.6).
 var codexModels = map[string]codexBedrockModel{
 	"sol": {
-		ModelID: "global.openai.gpt-5.6-sol",
-		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
+		ModelID: "global.openai.gpt-6.1-sol",
+		Regions: codexGPT6Regions,
+	},
+	"luna": {
+		ModelID: "global.openai.gpt-6-luna",
+		Regions: codexGPT6Regions,
+	},
+	"astra": {
+		ModelID: "global.openai.gpt-6-astra",
+		Regions: codexGPT6Regions,
 	},
 	"terra": {
 		ModelID: "global.openai.gpt-5.6-terra",
-		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
-	},
-	"luna": {
-		ModelID: "global.openai.gpt-5.6-luna",
-		Regions: []string{"us-east-1", "us-east-2", "us-west-2"},
+		Regions: codexGPT56Regions,
 	},
 	// NOTE: gpt-oss is intentionally absent. Current Codex is Responses-API-only
 	// (it rejects `wire_api = "chat"` at config load), but gpt-oss on Bedrock
@@ -120,45 +152,48 @@ var codexModels = map[string]codexBedrockModel{
 	// gpt-oss remains available via OpenCode (which speaks Chat Completions).
 }
 
-// codexModel resolves a friendly key (sol/terra/luna) or a raw Bedrock model ID
-// (global.openai.gpt-5.6-sol, openai.gpt-5.6-sol, or gpt-5.6-sol) to a
-// codexBedrockModel. Unknown families return the zero value with ok=false.
+// codexModel resolves a friendly key (sol/luna/astra/terra) or a raw Bedrock
+// model ID from the GPT-6.1, GPT-6, or GPT-5.6 family (global.openai.gpt-6.1-sol,
+// openai.gpt-6-astra, or gpt-5.6-terra) to a codexBedrockModel. Unknown
+// families return the zero value with ok=false.
 func codexModel(key string) (codexBedrockModel, bool) {
 	m, ok := codexModels[key]
 	if ok {
 		return m, true
 	}
-	// Accept the raw forms the user may pass:
-	//   "gpt-5.6-sol"            → canonical global profile ID
-	//   "openai.gpt-5.6-sol"     → same (base ID form, auto-upgraded to global.)
-	//   "global.openai.gpt-5.6-sol" → already canonical
-	// The GPT-5.6 family is INFERENCE_PROFILE-only, so any non-global form is
-	// normalized to the global. profile ID.
-	switch {
-	case strings.HasPrefix(key, "global.openai.gpt-5.6-"):
-		return codexBedrockModel{ModelID: key}, true
-	case strings.HasPrefix(key, "openai.gpt-5.6-"):
-		return codexBedrockModel{ModelID: "global." + key}, true
-	case strings.HasPrefix(key, "gpt-5.6-"):
-		return codexBedrockModel{ModelID: "global.openai." + key}, true
+	// Accept the raw forms the user may pass, for every supported family:
+	//   "gpt-6.1-sol"               → canonical global profile ID
+	//   "openai.gpt-6.1-sol"        → same (base ID form, auto-upgraded to global.)
+	//   "global.openai.gpt-6.1-sol" → already canonical
+	// The GPT-6.1, GPT-6, and GPT-5.6 families are INFERENCE_PROFILE-only, so
+	// any non-global form is normalized to the global. profile ID.
+	for _, family := range []string{"gpt-6.1-", "gpt-6-", "gpt-5.6-"} {
+		switch {
+		case strings.HasPrefix(key, "global.openai."+family):
+			return codexBedrockModel{ModelID: key}, true
+		case strings.HasPrefix(key, "openai."+family):
+			return codexBedrockModel{ModelID: "global." + key}, true
+		case strings.HasPrefix(key, family):
+			return codexBedrockModel{ModelID: "global.openai." + key}, true
+		}
 	}
 	return m, ok
 }
 
-// codexDefaultModel is sol — the flagship for GPT-5.6.
+// codexDefaultModel is sol — the flagship, now on GPT-6.1.
 func codexDefaultModel() string { return "sol" }
 
 // BuildConfig writes Codex's config.toml using the built-in
 // amazon-bedrock-runtime provider. This provider routes to the bedrock-runtime
 // Responses endpoint and ships a model catalog with native Bedrock inference
-// profile IDs (global.openai.gpt-5.6-sol etc.), eliminating the "Model metadata
+// profile IDs (global.openai.gpt-6.1-sol etc.), eliminating the "Model metadata
 // not found" warning. It handles SigV4 itself, so no base_url or env_key is
 // written — only the [aws] region sub-table is needed.
 //
-// The GPT-5.6 family is INFERENCE_PROFILE-only on native Bedrock: the base
-// foundation ID (openai.gpt-5.6-sol) returns 400 "on-demand throughput isn't
-// supported" when invoked. Juggernaut writes the global. profile ID so the
-// config is actually callable.
+// The GPT-6.1, GPT-6, and GPT-5.6 families are INFERENCE_PROFILE-only on
+// native Bedrock: the base foundation ID (openai.gpt-6.1-sol) returns 400
+// "on-demand throughput isn't supported" when invoked. Juggernaut writes the
+// global. profile ID so the config is actually callable.
 //
 // The built-in provider uses the standard AWS credential chain:
 // AWS_BEARER_TOKEN_BEDROCK env var (injected by Juggernaut's launch wrapper) or
@@ -166,7 +201,7 @@ func codexDefaultModel() string { return "sol" }
 //
 // Config shape:
 //
-//	model = "global.openai.gpt-5.6-sol"
+//	model = "global.openai.gpt-6.1-sol"
 //	model_provider = "amazon-bedrock-runtime"
 //	[model_providers.amazon-bedrock-runtime.aws]
 //	  region = "us-west-2"
@@ -177,7 +212,7 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 	}
 	m, ok := codexModel(key)
 	if !ok {
-		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-5.6-* model: sol, terra, luna)", key)
+		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-6.1-*, openai.gpt-6-*, or openai.gpt-5.6-* model: sol, luna, astra, terra)", key)
 	}
 
 	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", c, func(region string) (ConfigPlan, error) {
@@ -213,12 +248,12 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
 			return ModelSupport{Reason: "Codex no longer uses Mantle (native only)"}
 		}
-		// The GPT-5.6 family may appear in the catalog as either the base
-		// foundation ID (openai.gpt-5.6-*) or an inference-profile ID
-		// (global.openai.gpt-5.6-* / us.openai.gpt-5.6-*). Accept both; only
-		// the profile IDs are actually callable on-demand.
-		if !strings.Contains(m.ID, "gpt-5.6") {
-			return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-5.6 models (sol, terra, luna)"}
+		// The GPT-6.1, GPT-6, and GPT-5.6 families may appear in the catalog as
+		// either the base foundation ID (openai.gpt-6.1-*) or an inference-profile
+		// ID (global.openai.gpt-6.1-* / us.openai.gpt-6.1-*). Accept all of them;
+		// only the profile IDs are actually callable on-demand.
+		if !strings.Contains(m.ID, "gpt-6") && !strings.Contains(m.ID, "gpt-5.6") {
+			return ModelSupport{Reason: "Codex's built-in Bedrock provider supports OpenAI GPT-6.x and GPT-5.6 models (sol, luna, astra, terra)"}
 		}
 		return ModelSupport{Supported: true, Reason: "Codex Responses model"}
 	})

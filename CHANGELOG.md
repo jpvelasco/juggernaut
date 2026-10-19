@@ -6,6 +6,16 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Changed
 
+- **Codex default advances to GPT-6.1 Sol; the roster tracks the GPT-6
+  generation (fixes #495).** `sol` is now `global.openai.gpt-6.1-sol` (was
+  GPT-5.6), `luna` is `global.openai.gpt-6-luna`, and `astra`
+  (`global.openai.gpt-6-astra`) joins the roster. `terra` stays on GPT-5.6
+  (`global.openai.gpt-5.6-terra`) — there is no GPT-6 Terra. Raw IDs from all
+  three families (`gpt-6.1-sol`, `openai.gpt-6-astra`, `gpt-5.6-terra`, ...)
+  continue to normalize to the callable `global.` inference-profile ID, and the
+  region check now uses each model's current documented global-profile
+  availability (31 regions for GPT-6.x, 29 for GPT-5.6). Previous-generation
+  models remain selectable by passing a raw model ID to `--model`.
 - **Default Claude models advance to the 5.5 generation (fixes #491).** The
   primary/Sonnet default becomes `global.anthropic.claude-sonnet-5-5`, the
   default Opus override `global.anthropic.claude-opus-5-5`, and the

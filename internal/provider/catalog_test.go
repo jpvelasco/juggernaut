@@ -23,6 +23,8 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 		{"codex", catalogModel("openai.gpt-5.6-sol", "foundation"), true},
 		{"codex", catalogModel("global.openai.gpt-5.6-sol", "foundation"), true},
 		{"codex", catalogModel("us.openai.gpt-5.6-sol", "foundation"), true},
+		{"codex", catalogModel("openai.gpt-6.1-sol", "foundation"), true},
+		{"codex", catalogModel("global.openai.gpt-6-astra", "profile"), true},
 		{"codex", catalogModel("openai.gpt-oss-120b-1:0", "foundation"), false},
 		{"opencode", catalogModel("moonshotai.kimi-k2.5", "foundation"), true},
 		{"opencode", catalogModel("zai.glm-5", "foundation"), true},
@@ -70,15 +72,18 @@ func TestProviders_CatalogSources(t *testing.T) {
 }
 
 func TestCodexModel_AcceptsRawDiscoveredID(t *testing.T) {
-	// The GPT-5.6 family is INFERENCE_PROFILE-only; codexModel normalizes any
-	// non-global form to the global. profile ID.
+	// The GPT-6.1, GPT-6, and GPT-5.6 families are INFERENCE_PROFILE-only;
+	// codexModel normalizes any non-global form to the global. profile ID.
 	cases := []struct {
 		key, want string
 	}{
 		{"openai.gpt-5.6-sol", "global.openai.gpt-5.6-sol"},
 		{"gpt-5.6-sol", "global.openai.gpt-5.6-sol"},
 		{"global.openai.gpt-5.6-sol", "global.openai.gpt-5.6-sol"},
-		{"sol", "global.openai.gpt-5.6-sol"},
+		{"gpt-6.1-sol", "global.openai.gpt-6.1-sol"},
+		{"openai.gpt-6.1-sol", "global.openai.gpt-6.1-sol"},
+		{"global.openai.gpt-6.1-sol", "global.openai.gpt-6.1-sol"},
+		{"sol", "global.openai.gpt-6.1-sol"},
 	}
 	for _, c := range cases {
 		model, ok := codexModel(c.key)
@@ -239,7 +244,7 @@ func TestDynamicModelSelectionAndCatalogWarnings(t *testing.T) {
 		model string
 		id    string
 	}{
-		{"codex", "sol", "global.openai.gpt-5.6-sol"},
+		{"codex", "sol", "global.openai.gpt-6.1-sol"},
 		// Grok's native catalog carries CRIS profile IDs (global.xai.grok-4.6);
 		// BuildConfig normalizes the bare "grok-4.6" key to the same global. ID.
 		{"grok", "grok-4.6", "global.xai.grok-4.6"},

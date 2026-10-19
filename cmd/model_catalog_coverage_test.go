@@ -455,6 +455,8 @@ func TestProviderSupportsCatalogModel_UsesProviderCheck(t *testing.T) {
 		{"claude", "openai.gpt-5.5", "foundation", false},
 		{"codex", "openai.gpt-5.6-sol", "foundation", true},
 		{"codex", "global.openai.gpt-5.6-sol", "profile", true},
+		{"codex", "openai.gpt-6.1-sol", "foundation", true},
+		{"codex", "global.openai.gpt-6.1-sol", "profile", true},
 		{"codex", "anthropic.claude-opus-4-8", "foundation", false},
 		{"grok", "xai.grok-4.6", "foundation", true},
 		{"grok", "moonshotai.kimi-k2.5", "foundation", false},
