@@ -276,14 +276,6 @@ func overlayExplicitModels(m *resolvedModels) {
 	}
 }
 
-// hasExplicitModelFlags reports whether the user pinned any Claude tier model
-// on this invocation.
-func hasExplicitModelFlags() bool {
-	return applyFlags.model != "" || applyFlags.opusModel != "" ||
-		applyFlags.sonnetModel != "" || applyFlags.haikuModel != "" ||
-		applyFlags.fableModel != ""
-}
-
 // resolveApplyModelsForEndpoint layers mantle-specific model behavior on top of
 // the normal flag resolution. Mantle model IDs are account-allowlisted, so a
 // re-apply of a mantle config preserves the previous tier pins instead of
@@ -296,10 +288,8 @@ func resolveApplyModelsForEndpoint(endpoint, home string) (*resolvedModels, erro
 	if err := preserveMantleModels(models, home); err != nil {
 		return nil, err
 	}
-	if hasExplicitModelFlags() {
-		if err := validateMantleModelFlags(); err != nil {
-			return nil, err
-		}
+	if err := validateMantleModelFlags(); err != nil {
+		return nil, err
 	}
 	return models, nil
 }
