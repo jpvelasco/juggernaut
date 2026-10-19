@@ -278,7 +278,7 @@ var autoModeCapablePrefixes = []string{
 
 // IsAutoModeCapableModel reports whether modelID is a model that can use auto
 // permission mode on Bedrock/Vertex/Foundry: Claude Sonnet 5, Opus 4.7 or later
-// (4.7, 4.8, 5). Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified
+// (4.7, 4.8, 5, 5.5). Sonnet 4.6, Haiku, older Opus, and Fable are excluded. Verified
 // against https://code.claude.com/docs/en/permission-modes ("only Claude Sonnet
 // 5, Opus 4.7 or later, and Fable 5"). Note claude-sonnet-5 is capable while
 // claude-sonnet-4-6 is not — the version digits matter, so match the full token,
@@ -403,16 +403,15 @@ func (b *Block) NativeKeys() NativeKeys {
 
 func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 	overrides := map[string]string{
-		"opus":                      models.Opus,
-		"claude-opus-5":             models.Opus,
-		"anthropic.claude-opus-5":   models.Opus,
-		"sonnet":                    models.Sonnet,
-		"claude-sonnet-5":           models.Sonnet,
-		"anthropic.claude-sonnet-5": models.Sonnet,
-		"haiku":                     models.Haiku,
-		"claude-haiku-4-5":          models.Haiku,
-		"claude-haiku-4-5-20251001": models.Haiku,
-		"anthropic.claude-haiku-4-5-20251001-v1:0": models.Haiku,
+		"opus":                        models.Opus,
+		"claude-opus-5-5":             models.Opus,
+		"anthropic.claude-opus-5-5":   models.Opus,
+		"sonnet":                      models.Sonnet,
+		"claude-sonnet-5-5":           models.Sonnet,
+		"anthropic.claude-sonnet-5-5": models.Sonnet,
+		"haiku":                       models.Haiku,
+		"claude-haiku-5-5":            models.Haiku,
+		"anthropic.claude-haiku-5-5":  models.Haiku,
 	}
 	if models.Fable != "" {
 		overrides["fable"] = models.Fable
@@ -423,11 +422,11 @@ func nativeModelOverrides(models ModelOverrides, use1M bool) map[string]string {
 	}
 	if use1M {
 		overrides["opus[1m]"] = models.Opus
-		overrides["claude-opus-5[1m]"] = models.Opus
-		overrides["anthropic.claude-opus-5[1m]"] = models.Opus
+		overrides["claude-opus-5-5[1m]"] = models.Opus
+		overrides["anthropic.claude-opus-5-5[1m]"] = models.Opus
 		overrides["sonnet[1m]"] = models.Sonnet
-		overrides["claude-sonnet-5[1m]"] = models.Sonnet
-		overrides["anthropic.claude-sonnet-5[1m]"] = models.Sonnet
+		overrides["claude-sonnet-5-5[1m]"] = models.Sonnet
+		overrides["anthropic.claude-sonnet-5-5[1m]"] = models.Sonnet
 		if models.Fable != "" {
 			overrides["fable[1m]"] = models.Fable
 			overrides["claude-fable-5[1m]"] = models.Fable

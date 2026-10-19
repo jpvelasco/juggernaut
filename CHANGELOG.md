@@ -4,6 +4,19 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Default Claude models advance to the 5.5 generation (fixes #491).** The
+  primary/Sonnet default becomes `global.anthropic.claude-sonnet-5-5`, the
+  default Opus override `global.anthropic.claude-opus-5-5`, and the
+  fast/subagent model `global.anthropic.claude-haiku-5-5` (from Sonnet 5 /
+  Opus 5 / Haiku 4.5). All three are 1M-context, 128K-output models; Haiku 5.5
+  is the first Haiku with effort controls and now declares supported
+  capabilities so Claude Code offers effort levels for it. Opus 5.5's adaptive
+  thinking is always on and cannot be disabled. Fable stays at 5.1, and prior
+  generations remain selectable via `--opus-model`, `--sonnet-model`, and
+  `--haiku-model`.
+
 ## [6.3.2] - 2026-09-21
 
 **Patch release.** Fixes the PowerShell launch separator bug, makes IAM

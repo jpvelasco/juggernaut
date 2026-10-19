@@ -63,9 +63,9 @@ juggernaut logs export                 # redacted zip for support
 ## What Gets Configured
 
 - Bedrock routing enabled (auth-gated)
-- Claude Sonnet 5 as the primary model (Global CRIS inference profile)
-- Claude Opus 5 as the default Opus override, with adaptive thinking and 1M context accounting (the default output cap is 32768 tokens; the model supports up to 128K)
-- Claude Haiku 4.5 as fast/background model
+- Claude Sonnet 5.5 as the primary model (Global CRIS inference profile)
+- Claude Opus 5.5 as the default Opus override, with adaptive thinking and 1M context accounting (the default output cap is 32768 tokens; the model supports up to 128K)
+- Claude Haiku 5.5 as fast/background model (first Haiku with effort controls)
 - Claude Code 1M context accounting for Opus and Sonnet by default
 - All three model tiers visible in `/model` selector
 - Optimized token limits (32768 output, 65536 thinking)
@@ -84,7 +84,7 @@ juggernaut apply --auth=iam --opusplan
 juggernaut apply --auth=iam --mode=auto
 
 # Curate the /model picker (user/project settings — not OS-managed enforcement)
-juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5-5 --enforce-available-models
 
 # Override the subagent/background model
 juggernaut apply --auth=iam --haiku-model=global.anthropic.claude-sonnet-4-6

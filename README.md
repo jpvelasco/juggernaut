@@ -121,8 +121,8 @@ juggernaut apply --auth=iam --mode=auto             # enable agentic safety-clas
 juggernaut apply --auth=iam --always-thinking       # extended thinking on by default
 juggernaut apply --auth=iam --service-tier=flex     # Bedrock service tier: default | flex | priority
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
-juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5
-juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
+juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5-5
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5-5 --enforce-available-models
 juggernaut apply --auth=iam --dry-run               # preview config and shell-profile paths, write nothing
 juggernaut apply --auth=iam --scope=project         # write to ./.claude/settings.json
 juggernaut apply --auth=iam --force                 # overwrite colliding foreign leaves (backup kept)
@@ -179,32 +179,32 @@ Each provider filters the live inventory by what its client protocol can use: Cl
 
 | Tier | Model | Global CRIS Profile |
 |------|-------|---------------------|
-| **Primary** | Claude Sonnet 5 | `global.anthropic.claude-sonnet-5` |
-| **Opus** | Claude Opus 5 | `global.anthropic.claude-opus-5` |
-| **Fable alias** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
-| **Fast / subagent** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| **Primary** | Claude Sonnet 5.5 | `global.anthropic.claude-sonnet-5-5` |
+| **Opus** | Claude Opus 5.5 | `global.anthropic.claude-opus-5-5` |
+| **Fable alias** | Claude Fable 5.1 | `global.anthropic.claude-fable-5-1` |
+| **Fast / subagent** | Claude Haiku 5.5 | `global.anthropic.claude-haiku-5-5` |
 
 Juggernaut appends Claude Code's `[1m]` suffix to the Opus and Sonnet alias environment variables by default, and to the configured Fable alias when it matches Claude Code's Fable ID. Claude Code accounts against 1M context for supported aliases locally, then strips that suffix before calling Bedrock. Use `--no-1m-context` to opt out.
 
-Claude Opus 5 is the default Opus tier and supports adaptive thinking, max effort, 1M context, and 128K output on Bedrock. Opus 4.7 and 4.8 remain available by passing `--opus-model`. Fable defaults to `global.anthropic.claude-fable-5`, verified live against AWS Bedrock's `ListFoundationModels`/`ListInferenceProfiles` APIs (`ACTIVE` status). Pass `--fable-model` to override with a different Bedrock-accessible model ID.
+Claude Opus 5.5 is the default Opus tier and supports adaptive thinking (always on, cannot be disabled), max effort, 1M context, and 128K output on Bedrock. Opus 5, 4.8, and 4.7 remain available by passing `--opus-model`. Fable defaults to `global.anthropic.claude-fable-5-1`, verified live against AWS Bedrock's `ListFoundationModels`/`ListInferenceProfiles` APIs (`ACTIVE` status). Pass `--fable-model` to override with a different Bedrock-accessible model ID.
 
 > **Fable data retention:** Anthropic requires opting in to `provider_data_share` before Fable calls succeed on Bedrock — AWS retains inputs/outputs for up to 30 days and shares them with Anthropic for abuse detection/human review ([AWS docs](https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html)). Juggernaut has no way to check your account's actual opt-in status (no AWS API exposes it), so `apply` and `doctor` both print this as a standing warning whenever Fable is configured — it is not a promise about what is or isn't collected, only what AWS documents.
 
 Override any tier:
 
 ```bash
-juggernaut apply --auth=iam --opus-model=global.anthropic.claude-opus-5
+juggernaut apply --auth=iam --opus-model=global.anthropic.claude-opus-5-5
 juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>
-juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-5  # override all model aliases
-juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5,global.anthropic.claude-sonnet-5
-juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5 --enforce-available-models
+juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-5-5  # override all model aliases
+juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5-5,global.anthropic.claude-sonnet-5-5
+juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5-5 --enforce-available-models
 ```
 
 `--available-models`/`--enforce-available-models` write to your user/project `settings.json`, which Claude Code merges with any other non-managed settings the user controls — this curates the `/model` picker, it is not a tamper-resistant restriction. For organization-wide enforcement a user can't bypass, deploy `availableModels`/`enforceAvailableModels` in Claude Code's OS-level managed settings (e.g. `/etc/claude-code/managed-settings.json`) instead; Juggernaut does not write there.
 
 ## Effort Levels
 
-Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, `max`, and `auto`; Claude Code falls back to the highest supported level for the active model. Juggernaut writes fixed persisted levels (`low`, `medium`, `high`, `xhigh`) to both native `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`. Juggernaut defaults to `high`, which matches the supported effort levels of Sonnet 5 and Opus 5.
+Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, `max`, and `auto`; Claude Code falls back to the highest supported level for the active model. Juggernaut writes fixed persisted levels (`low`, `medium`, `high`, `xhigh`) to both native `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`. Juggernaut defaults to `high`, which matches the supported effort levels of Sonnet 5.5, Opus 5.5, and Haiku 5.5 (the first Haiku with effort controls).
 
 | Level | Behavior |
 |-------|----------|
@@ -219,7 +219,7 @@ Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhi
 juggernaut apply --auth=iam --effort=max
 ```
 
-> On Opus 4.8 and 4.7, only adaptive thinking is supported — manual thinking mode is rejected by the API. Opus 5's Bedrock model card documents adaptive thinking on by default; it can be disabled, but doing so caps effort at `high`.
+> On Opus 4.8 and 4.7, only adaptive thinking is supported — manual thinking mode is rejected by the API. Opus 5's Bedrock model card documents adaptive thinking on by default; it can be disabled, but doing so caps effort at `high`. Opus 5.5's card documents adaptive thinking as always on — it cannot be disabled. Haiku 5.5 is the first Haiku with effort controls; disabling its adaptive thinking caps effort at `high`.
 
 ## Permission Modes
 
@@ -271,9 +271,9 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "AWS_REGION": "us-west-2",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "32768",
     "MAX_THINKING_TOKENS": "65536",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-5[1m]",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-5[1m]",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-5-5[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-5-5[1m]",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-5-5",
     "CLAUDE_CODE_EFFORT_LEVEL": "high",
     "ENABLE_PROMPT_CACHING_1H": "1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"

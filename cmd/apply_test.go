@@ -146,10 +146,10 @@ func TestApply_WritesSettings_IAM(t *testing.T) {
 	if env["CLAUDE_CODE_USE_BEDROCK"] != "1" {
 		t.Error("expected CLAUDE_CODE_USE_BEDROCK=1 in top-level env")
 	}
-	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5[1m]" {
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5-5[1m]" {
 		t.Errorf("expected Opus default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
-	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5[1m]" {
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5-5[1m]" {
 		t.Errorf("expected Sonnet default model to carry [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
 	if env["ANTHROPIC_DEFAULT_FABLE_MODEL"] != "global.anthropic.claude-fable-5-1[1m]" {
@@ -185,10 +185,10 @@ func TestApply_No1MContextDisablesExtendedContext(t *testing.T) {
 		t.Fatalf("settings.json is not valid JSON: %v", err)
 	}
 	env := settings["env"].(map[string]any)
-	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5" {
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "global.anthropic.claude-opus-5-5" {
 		t.Errorf("expected Opus default model without [1m], got %v", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
-	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5" {
+	if env["ANTHROPIC_DEFAULT_SONNET_MODEL"] != "global.anthropic.claude-sonnet-5-5" {
 		t.Errorf("expected Sonnet default model without [1m], got %v", env["ANTHROPIC_DEFAULT_SONNET_MODEL"])
 	}
 	if env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
