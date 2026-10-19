@@ -46,11 +46,14 @@ func profilesForConfig(cfg *bedrock.Config, statusBySuffix map[string]string) []
 // by end-to-end models check tests (which call loadBedrockConfig).
 func activeProfilesForEmbeddedConfig() []discovery.DiscoveredModel {
 	return []discovery.DiscoveredModel{
+		{ID: "global.anthropic.claude-opus-5-5", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-sonnet-5-5", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-haiku-5-5", Status: "ACTIVE", Provider: "Anthropic"},
+		{ID: "global.anthropic.claude-fable-5-1", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-opus-5", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-sonnet-5", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-sonnet-4-6", Status: "ACTIVE", Provider: "Anthropic"},
 		{ID: "global.anthropic.claude-haiku-4-5-20251001-v1:0", Status: "ACTIVE", Provider: "Anthropic"},
-		{ID: "global.anthropic.claude-fable-5-1", Status: "ACTIVE", Provider: "Anthropic"},
 	}
 }
 

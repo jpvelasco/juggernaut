@@ -190,16 +190,16 @@ The inventory is cached per account/region at `~/.juggernaut/model-catalog.json`
 
 | Tier | Model | Global inference profile |
 |------|-------|--------------------------|
-| **Primary** | Claude Sonnet 5 | `global.anthropic.claude-sonnet-5` |
-| **Opus** | Claude Opus 5 | `global.anthropic.claude-opus-5` |
-| **Fable** | Claude Fable 5 | `global.anthropic.claude-fable-5` |
-| **Fast** | Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| **Primary** | Claude Sonnet 5.5 | `global.anthropic.claude-sonnet-5-5` |
+| **Opus** | Claude Opus 5.5 | `global.anthropic.claude-opus-5-5` |
+| **Fable** | Claude Fable 5.1 | `global.anthropic.claude-fable-5-1` |
+| **Fast** | Claude Haiku 5.5 | `global.anthropic.claude-haiku-5-5` |
 
-Claude Opus 5 is the default Opus tier on Bedrock, with adaptive thinking, 1M context, and 128K output. Opus 4.7 and 4.8 remain available through `--opus-model`. Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Use `--no-1m-context` to opt out.
+Claude Opus 5.5 is the default Opus tier on Bedrock, with adaptive thinking (always on), 1M context, and 128K output. Opus 5, 4.8, and 4.7 remain available through `--opus-model`. Juggernaut enables Claude Code's 1M context accounting for Opus and Sonnet by appending `[1m]` to the alias environment variables. Use `--no-1m-context` to opt out.
 
-Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-5`
+Override all aliases: `juggernaut apply --auth=iam --model=global.anthropic.claude-sonnet-5-5`
 Override one tier: `juggernaut apply --auth=iam --fable-model=<bedrock-fable-model-id>`
-Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5,global.anthropic.claude-sonnet-5`
+Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.anthropic.claude-opus-5-5,global.anthropic.claude-sonnet-5-5`
 
 ## Effort levels
 
@@ -209,7 +209,7 @@ Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | m
 juggernaut apply --auth=iam --effort=max
 ```
 
-Default: `high`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported. Opus 5 supports adaptive thinking on by default; disabling it caps effort at `high`.
+Default: `high`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported. Opus 5 supports adaptive thinking on by default; disabling it caps effort at `high`. Opus 5.5's adaptive thinking is always on and cannot be disabled. Haiku 5.5 adds effort controls — the first Haiku to support them.
 
 ## Permission modes
 

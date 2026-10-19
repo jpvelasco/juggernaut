@@ -147,11 +147,11 @@ func TestBuild_Use1MAnnotatesPinnedClaudeCodeModels(t *testing.T) {
 	if native.Model != "opusplan[1m]" {
 		t.Errorf("expected native model=opusplan[1m], got %q", native.Model)
 	}
-	if native.ModelOverrides["claude-sonnet-5[1m]"] != "global.anthropic.claude-sonnet-5" {
-		t.Errorf("expected [1m] Sonnet override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-sonnet-5[1m]"])
+	if native.ModelOverrides["claude-sonnet-5-5[1m]"] != "global.anthropic.claude-sonnet-5" {
+		t.Errorf("expected [1m] Sonnet override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-sonnet-5-5[1m]"])
 	}
-	if native.ModelOverrides["claude-opus-5[1m]"] != "global.anthropic.claude-opus-5" {
-		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-5[1m]"])
+	if native.ModelOverrides["claude-opus-5-5[1m]"] != "global.anthropic.claude-opus-5" {
+		t.Errorf("expected [1m] Opus override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-opus-5-5[1m]"])
 	}
 	if native.ModelOverrides["claude-fable-5[1m]"] != "global.anthropic.claude-fable-5" {
 		t.Errorf("expected [1m] Fable override to map to unsuffixed provider ID, got %q", native.ModelOverrides["claude-fable-5[1m]"])
@@ -184,7 +184,7 @@ func TestBuild_No1MDisablesClaudeCodeExtendedContext(t *testing.T) {
 	if block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] != "1" {
 		t.Errorf("expected CLAUDE_CODE_DISABLE_1M_CONTEXT=1, got %q", block.Env["CLAUDE_CODE_DISABLE_1M_CONTEXT"])
 	}
-	if _, ok := block.NativeKeys().ModelOverrides["claude-sonnet-5[1m]"]; ok {
+	if _, ok := block.NativeKeys().ModelOverrides["claude-sonnet-5-5[1m]"]; ok {
 		t.Error("[1m] model override should be omitted when Use1M=false")
 	}
 	if _, ok := block.NativeKeys().ModelOverrides["claude-fable-5[1m]"]; ok {
@@ -575,12 +575,12 @@ func TestNativeKeys_ModelOverridesIncludeClaudeCodeVersionKeys(t *testing.T) {
 		t.Fatalf("Build() error: %v", err)
 	}
 	overrides := block.NativeKeys().ModelOverrides
-	for _, key := range []string{"sonnet", "claude-sonnet-5", "anthropic.claude-sonnet-5"} {
+	for _, key := range []string{"sonnet", "claude-sonnet-5-5", "anthropic.claude-sonnet-5-5"} {
 		if overrides[key] != "global.anthropic.claude-sonnet-5" {
 			t.Errorf("expected %s to map to global Sonnet profile, got %q", key, overrides[key])
 		}
 	}
-	for _, key := range []string{"opus", "claude-opus-5", "anthropic.claude-opus-5"} {
+	for _, key := range []string{"opus", "claude-opus-5-5", "anthropic.claude-opus-5-5"} {
 		if overrides[key] != "global.anthropic.claude-opus-5" {
 			t.Errorf("expected %s to map to global Opus profile, got %q", key, overrides[key])
 		}
@@ -663,6 +663,36 @@ func TestBuild_Use1M_RecognizesGovCloudOpus(t *testing.T) {
 	}
 }
 
+// TestBuild_Use1M_RecognizesClaude55Generation pins the 1M context gate for the
+// 5.5 generation: the pinned Opus/Sonnet 5.5 IDs must be annotated [1m] the
+// same way 5.0 IDs are (#491).
+func TestBuild_Use1M_RecognizesClaude55Generation(t *testing.T) {
+	opts := schema.Options{
+		AuthMode:      "iam",
+		Region:        "us-west-2",
+		Effort:        "xhigh",
+		Scope:         "user",
+		Version:       "6.3.2",
+		AuthValidated: true,
+		Use1M:         true,
+		OpusModel:     "global.anthropic.claude-opus-5-5",
+		SonnetModel:   "global.anthropic.claude-sonnet-5-5",
+	}
+	block, err := schema.Build(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if got := block.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"]; got != "global.anthropic.claude-opus-5-5[1m]" {
+		t.Errorf("expected Opus 5.5 annotated with [1m], got %q", got)
+	}
+	if got := block.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"]; got != "global.anthropic.claude-sonnet-5-5[1m]" {
+		t.Errorf("expected Sonnet 5.5 annotated with [1m], got %q", got)
+	}
+	if got := block.NativeKeys().ModelOverrides["claude-opus-5-5[1m]"]; got != "global.anthropic.claude-opus-5-5" {
+		t.Errorf("expected claude-opus-5-5[1m] to map to unsuffixed 5.5 ID, got %q", got)
+	}
+}
+
 func TestBuild_NoBedrockFlagWithoutValidation(t *testing.T) {
 	opts := schema.Options{
 		AuthMode:      "iam",
@@ -687,19 +717,25 @@ func TestIsAutoModeCapableModel(t *testing.T) {
 		want  bool
 	}{
 		// Supported on Bedrock (verified against code.claude.com/docs/en/permission-modes):
-		// Sonnet 5, and Opus 4.7 or later (4.7, 4.8, 5) — with any region prefix / [1m] suffix.
+		// Sonnet 5/5.5, and Opus 4.7 or later (4.7, 4.8, 5, 5.5) — with any region prefix / [1m] suffix.
 		{"global.anthropic.claude-opus-5", true},
 		{"global.anthropic.claude-opus-5[1m]", true},
+		{"global.anthropic.claude-opus-5-5", true},
+		{"global.anthropic.claude-opus-5-5[1m]", true},
 		{"global.anthropic.claude-opus-4-8", true},
 		{"global.anthropic.claude-opus-4-8[1m]", true},
 		{"us.anthropic.claude-opus-4-7", true},
 		{"anthropic.claude-opus-4-7", true},
 		{"claude-opus-4-8", true},
 		{"claude-opus-5", true},
+		{"claude-opus-5-5", true},
 		{"global.anthropic.claude-sonnet-5", true},
 		{"global.anthropic.claude-sonnet-5[1m]", true},
+		{"global.anthropic.claude-sonnet-5-5", true},
+		{"global.anthropic.claude-sonnet-5-5[1m]", true},
 		{"us.anthropic.claude-sonnet-5", true},
 		{"claude-sonnet-5", true},
+		{"claude-sonnet-5-5", true},
 		// Not supported: Sonnet 4.6, Haiku, older Opus, Fable, empty.
 		{"global.anthropic.claude-sonnet-4-6", false},
 		{"global.anthropic.claude-sonnet-4-6[1m]", false},
