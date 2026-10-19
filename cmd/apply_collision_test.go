@@ -705,8 +705,8 @@ region = "us-east-1"
 		t.Fatalf("read config after apply: %v", err)
 	}
 	written := string(content)
-	if !strings.Contains(written, "global.openai.gpt-5.6-sol") {
-		t.Errorf("migrated config should have v6 default model global.openai.gpt-5.6-sol, got:\n%s", written)
+	if !strings.Contains(written, "global.openai.gpt-6.1-sol") {
+		t.Errorf("migrated config should have v6 default model global.openai.gpt-6.1-sol, got:\n%s", written)
 	}
 	if strings.Contains(written, "openai.gpt-5.5") {
 		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
@@ -869,7 +869,7 @@ auth_provider_command = "juggernaut auth-token"
 }
 
 // TestApply_Codex_LegacyJuggernautConfig_Force_MigratesToV6: --force over a
-// legacy v5 Codex config must succeed, write the v6 model ID (gpt-5.6-sol),
+// legacy v5 Codex config must succeed, write the v6 model ID (gpt-6.1-sol),
 // and drop the old GPT-5.5 model.
 func TestApply_Codex_LegacyJuggernautConfig_Force_MigratesToV6(t *testing.T) {
 	home := setupApplyTest(t)
@@ -904,8 +904,8 @@ wire_api = "responses"
 		t.Fatalf("read config after apply: %v", err)
 	}
 	written := string(content)
-	if !strings.Contains(written, "global.openai.gpt-5.6-sol") {
-		t.Errorf("migrated config should have v6 default model global.openai.gpt-5.6-sol, got:\n%s", written)
+	if !strings.Contains(written, "global.openai.gpt-6.1-sol") {
+		t.Errorf("migrated config should have v6 default model global.openai.gpt-6.1-sol, got:\n%s", written)
 	}
 	if strings.Contains(written, "openai.gpt-5.5") {
 		t.Errorf("migrated config must NOT contain old v5 model openai.gpt-5.5, got:\n%s", written)
@@ -1043,7 +1043,7 @@ func TestApply_Codex_MantleProvider_PlainApplyMigrates(t *testing.T) {
 	out := applyCLI(t, "codex")
 	written := readHomeFile(t, filepath.Dir(path), path)
 	assertMigrated(t, out, written,
-		[]string{"global.openai.gpt-5.6-sol", "amazon-bedrock"},
+		[]string{"global.openai.gpt-6.1-sol", "amazon-bedrock"},
 		[]string{"bedrock-mantle", "openai.gpt-5.5"},
 	)
 	if matches, _ := filepath.Glob(path + ".backup.*"); len(matches) == 0 {
@@ -1062,7 +1062,7 @@ func TestApply_Codex_HybridMantleLeftover_PlainApplyMigrates(t *testing.T) {
 	out := applyCLI(t, "codex")
 	written := readHomeFile(t, filepath.Dir(path), path)
 	assertMigrated(t, out, written,
-		[]string{"global.openai.gpt-5.6-sol", "amazon-bedrock"},
+		[]string{"global.openai.gpt-6.1-sol", "amazon-bedrock"},
 		[]string{"bedrock-mantle"},
 	)
 	// The hybrid fixture is the definitive legacy-table case: v6 model ID
@@ -1178,7 +1178,7 @@ func TestApply_Codex_AlreadyMigrated_ReapplyDoesNotReannounce(t *testing.T) {
 	home := setupApplyTest(t)
 	setupIsolatedKeychain(t)
 	path := writeHomeFile(t, home, ".codex", "config.toml",
-		`model = "global.openai.gpt-5.6-sol"
+		`model = "global.openai.gpt-6.1-sol"
 model_provider = "amazon-bedrock-runtime"
 
 [model_providers.amazon-bedrock-runtime.aws]
