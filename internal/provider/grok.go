@@ -10,7 +10,7 @@ import (
 )
 
 // grok is the OFFICIAL xAI Grok CLI provider (grok / grok.exe, config TOML at
-// ~/.grok/config.toml). Juggernaut routes to Grok 4.6 on native Bedrock
+// ~/.grok/config.toml). Juggernaut routes to Grok 4.7 on native Bedrock
 // (bedrock-runtime /openai/v1) by writing a [model.bedrock-grok] block
 // (base_url → bedrock-runtime) selected via [models].default. API-key apply
 // also writes an [auth] block whose auth_provider_command runs
@@ -36,15 +36,61 @@ const grokModelName = "bedrock-grok"
 // token as {"access_token":...,"expires_in":...}.
 const grokAuthCommand = "juggernaut auth-token"
 
-// grokRegions are the regions where xai.grok-4.6 is verified available on native
-// Bedrock (live-checked 2026-08-29, foundation in us-west-2). apply warns—does
-// not fail—outside this set.
-var grokRegions = []string{"us-east-1", "us-east-2", "us-west-2"}
+// grokBedrockModel describes one xAI model reachable through native Bedrock
+// (bedrock-runtime /openai/v1). Every current Grok model is
+// inference-profile-only on that endpoint — the bare foundation ID is not
+// callable in-Region — so requests must name the us. geo or global.
+// cross-Region inference profile.
+//
+// ContextWindow is the AWS-published window shared between input and output
+// (model cards, checked 2026-10-19); the Grok client uses it for compaction
+// thresholds, so an inflated value invites server-side errors.
+// USRegions/GlobalRegions are the commercial source regions each profile type
+// is callable from per the card. us-east-1 stays first in both — it is the
+// Iron Fist fallback and the region Juggernaut's own defaults target.
+type grokBedrockModel struct {
+	ContextWindow int
+	USRegions     []string
+	GlobalRegions []string
+}
+
+// grokModels maps a bare Bedrock model ID to its documented facts. Unknown
+// xai.grok-* families remain selectable verbatim; they just get no
+// context_window or region enforcement.
+var grokModels = map[string]grokBedrockModel{
+	"xai.grok-4.7": {
+		ContextWindow: 524288,
+		USRegions:     []string{"us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1", "ca-west-1"},
+		GlobalRegions: []string{
+			"us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1",
+			"eu-north-1", "eu-west-1", "eu-west-2", "eu-west-3", "eu-central-1", "eu-central-2", "eu-south-1", "eu-south-2",
+			"ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-south-2", "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-southeast-5", "ap-southeast-7", "ap-east-2",
+			"me-central-1", "il-central-1", "sa-east-1",
+		},
+	},
+	"xai.grok-4.6": {
+		ContextWindow: 500000,
+		USRegions:     []string{"us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1", "ca-west-1"},
+		GlobalRegions: []string{
+			"us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1",
+			"eu-central-1", "eu-central-2", "eu-north-1", "eu-south-1", "eu-south-2", "eu-west-1", "eu-west-2", "eu-west-3",
+			"ap-east-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1", "ap-south-2", "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-southeast-5", "ap-southeast-7",
+			"il-central-1", "me-central-1", "me-south-1", "sa-east-1",
+		},
+	},
+}
 
 // grokDefaultModelID is the Grok model Juggernaut pins by default: the global.
-// inference-profile ID (the bare foundation ID xai.grok-4.6 400s on the
+// inference-profile ID (the bare foundation ID xai.grok-4.7 400s on the
 // bedrock-runtime endpoint, which only serves CRIS profile IDs).
-const grokDefaultModelID = "global.xai.grok-4.6"
+const grokDefaultModelID = "global.xai.grok-4.7"
+
+// grokModelFacts resolves a model ID under any form (bare foundation ID,
+// global./us. profile) to its documented facts.
+func grokModelFacts(modelID string) (grokBedrockModel, bool) {
+	facts, ok := grokModels[bedrock.StripRegionPrefix(modelID)]
+	return facts, ok
+}
 
 // normalizeGrokModelID resolves the model the user passed into a CRIS
 // inference-profile ID the bedrock-runtime endpoint actually accepts. The
@@ -69,13 +115,6 @@ func normalizeGrokModelID(modelID string) (string, bool) {
 		return "global.xai." + modelID, true
 	}
 	return "", false
-}
-
-// grokModelIs46 reports whether modelID is the Grok 4.6 model under any form
-// (bare, global.xai.grok-4.6, us.xai.grok-4.6) — the only model with a verified
-// 500K context window and a verified serving-region set.
-func grokModelIs46(modelID string) bool {
-	return bedrock.StripRegionPrefix(modelID) == "xai.grok-4.6"
 }
 
 // ConfigPath is ALWAYS ~/.grok/config.toml. Grok's project-scoped
@@ -131,7 +170,7 @@ func (g grok) LaunchSpec() LaunchSpec {
 	}
 }
 
-// BuildConfig writes a [model.bedrock-grok] block routing to Grok 4.6 on native
+// BuildConfig writes a [model.bedrock-grok] block routing to Grok 4.7 on native
 // Bedrock (bedrock-runtime /openai/v1), [models].default, a juggernaut.auth
 // block for launch, and — only for Bedrock API key auth — an [auth] block
 // whose auth_provider_command supplies the keychain bearer token so Grok skips
@@ -146,11 +185,17 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 		return ConfigPlan{}, fmt.Errorf("unknown Grok model %q (expected a discovered xai.grok-* model)", opts.Model)
 	}
 
-	// Route to a region that actually serves grok-4.6 rather than writing a
-	// config that can't reach it.
+	// Route to a region that can actually invoke the selected profile rather
+	// than writing a config that can't reach the model. Global and US profiles
+	// have different source-region sets; an unknown xai.grok-* model has no
+	// verified data and passes through unconstrained.
+	facts, known := grokModelFacts(modelID)
 	var modelRegions []string
-	if grokModelIs46(modelID) {
-		modelRegions = grokRegions
+	if known {
+		modelRegions = facts.GlobalRegions
+		if strings.HasPrefix(modelID, "us.") {
+			modelRegions = facts.USRegions
+		}
 	}
 
 	return buildWithRegionWarnings(opts, modelID, modelRegions, " ", g, func(region string) (ConfigPlan, error) {
@@ -160,11 +205,10 @@ func (g grok) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error)
 			"base_url": baseURL,
 			"name":     modelID + " (Amazon Bedrock)",
 		}
-		if grokModelIs46(modelID) {
-			// AWS serves Grok 4.6 with a 500K context window (model card,
-			// checked 2026-10-19). The client uses this value for compaction
-			// thresholds, so an inflated value invites server-side errors.
-			modelBlock["context_window"] = 500000
+		if known {
+			// Use the AWS-published context window for the selected model; the
+			// client derives compaction thresholds from it.
+			modelBlock["context_window"] = facts.ContextWindow
 		}
 		keys := map[string]any{
 			"model": map[string]any{

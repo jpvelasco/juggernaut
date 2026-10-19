@@ -6,6 +6,13 @@ All notable changes to Juggernaut will be documented in this file.
 
 ### Changed
 
+- **Grok default advances to Grok 4.7 (fixes #494).** `--cli=grok` now writes
+  `global.xai.grok-4.7` (from 4.6) and records the AWS-published 524,288-token
+  shared context window. Each documented Grok model carries its own card facts:
+  4.6 keeps its 500K window, and the Iron Fist region check now uses the model
+  card's source regions for the selected profile (global vs `us.`) instead of a
+  three-region list — EU/APAC users keep their region where the global profile
+  is documented. Other `xai.grok-*` IDs remain selectable verbatim.
 - **Codex default advances to GPT-6.1 Sol; the roster tracks the GPT-6
   generation (fixes #495).** `sol` is now `global.openai.gpt-6.1-sol` (was
   GPT-5.6), `luna` is `global.openai.gpt-6-luna`, and `astra`

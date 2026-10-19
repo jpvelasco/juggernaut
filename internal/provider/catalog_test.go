@@ -31,6 +31,7 @@ func TestProviders_ClassifyDiscoveredModels(t *testing.T) {
 		{"opencode", catalogModel("qwen.qwen3-coder-480b-a35b-v1:0", "foundation"), true},
 		{"opencode", catalogModel("openai.gpt-oss-120b-1:0", "foundation"), true},
 		{"grok", catalogModel("xai.grok-4.6", "foundation"), true},
+		{"grok", catalogModel("global.xai.grok-4.7", "profile"), true},
 		{"grok", catalogModel("moonshotai.kimi-k2.5", "foundation"), false},
 		{"claude", catalogModel("anthropic.claude-opus-4-8", "mantle"), false},
 		{"codex", catalogModel("openai.gpt-5.6-sol", "mantle"), false},
