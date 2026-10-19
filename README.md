@@ -90,7 +90,7 @@ juggernaut apply
 | Grok | `--cli=grok` | `~/.grok/config.toml` (user scope only) |
 
 ```bash
-# Every CLI defaults to bedrock-runtime (Claude Code can opt in to mantle below)
+# Every CLI defaults to bedrock-runtime (Claude Code and Grok can opt in to mantle below)
 juggernaut apply --cli=opencode --auth=iam              # or --auth=bedrock-api-key
 juggernaut apply --cli=codex --auth=iam
 juggernaut apply --cli=grok --auth=iam
@@ -128,7 +128,7 @@ juggernaut apply --auth=iam --scope=project         # write to ./.claude/setting
 juggernaut apply --auth=iam --force                 # overwrite colliding foreign leaves (backup kept)
 ```
 
-### Mantle endpoint (opt-in, Claude Code)
+### Mantle endpoint (opt-in, Claude Code and Grok)
 
 Claude Code can use the parallel `bedrock-mantle` endpoint while keeping runtime routing available in the same config:
 
@@ -145,9 +145,21 @@ juggernaut apply --cli=claude --auth=iam --endpoint=mantle \
   --haiku-model=anthropic.claude-haiku-4-5
 ```
 
-Juggernaut writes `CLAUDE_CODE_USE_MANTLE=1` next to the existing `CLAUDE_CODE_USE_BEDROCK=1`; Claude Code routes each request by model-ID format. `juggernaut.auth.endpoint=mantle` records the choice, so a plain re-apply keeps the mantle endpoint and its model pins. Pass `--endpoint=runtime` to switch back. Runtime stays the default, and only Claude Code currently supports this option — Codex, OpenCode, and Grok remain runtime-only.
+Juggernaut writes `CLAUDE_CODE_USE_MANTLE=1` next to the existing `CLAUDE_CODE_USE_BEDROCK=1`; Claude Code routes each request by model-ID format. `juggernaut.auth.endpoint=mantle` records the choice, so a plain re-apply keeps the mantle endpoint and its model pins. Pass `--endpoint=runtime` to switch back.
 
-Mantle serves a subset of regions; `apply` overrides an unsupported region to a mantle-served one and prints a warning. `doctor` probes the mantle endpoint. IAM needs `bedrock-mantle:CreateInference` and `bedrock-mantle:CountTokens` in addition to the runtime actions (see [`iam-policy.json`](iam-policy.json)); Bedrock API keys use the same credential. To surface mantle IDs in Claude Code's `/model` picker, add them to `--available-models` (that flag also restricts the picker to the listed entries).
+Grok can opt in to the same endpoint. Mantle serves no cross-region inference profiles, so Grok is pinned to a bare foundation ID (`xai.grok-4.6` by default, or the mantle-only `xai.grok-4.3`) and the Responses wire API. Mantle is Bedrock API key only — Grok sends the bearer token and cannot sign SigV4 requests:
+
+```bash
+juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle
+# Pin Grok 4.3 (mantle-only; not available on bedrock-runtime):
+juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle --model=xai.grok-4.3
+```
+
+Grok 4.6 is served in `us-west-2` and `us-gov-east-1`; Grok 4.3 in `us-west-2`, `us-east-1`, `us-east-2`, and `us-gov-west-1`. `apply` routes an unserved region to one the selected model is served in and prints a warning. Grok 4.7 is runtime-only.
+
+Runtime stays the default; Claude Code and Grok support this option, while Codex and OpenCode remain runtime-only.
+
+Mantle serves a subset of regions; `apply` overrides an unsupported region to a mantle-served one and prints a warning. For Claude Code, `doctor` probes the mantle endpoint. Claude Code's IAM path needs `bedrock-mantle:CreateInference` and `bedrock-mantle:CountTokens` in addition to the runtime actions (see [`iam-policy.json`](iam-policy.json)); Bedrock API keys use the same credential. To surface mantle IDs in Claude Code's `/model` picker, add them to `--available-models` (that flag also restricts the picker to the listed entries).
 
 ## Launch
 
@@ -349,7 +361,7 @@ juggernaut uninstall --full
 
 ## Migrating from v3/v4 and upgrading to v6
 
-Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Juggernaut's Mantle routing was removed — every CLI defaults to `bedrock-runtime` (Claude Code can opt back in to the AWS `bedrock-mantle` endpoint with `--endpoint=mantle`; support for the other CLIs is tracked in [#497](https://github.com/jpvelasco/juggernaut/issues/497)). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone (use `--endpoint`), Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6` (written as the `global.xai.grok-4.6` CRIS profile ID), OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
+Go straight to v5/v6 with npm. You do not need to install an intermediate v3 or v4 release first. **v6 is breaking:** Juggernaut's Mantle routing was removed — every CLI defaults to `bedrock-runtime` (Claude Code and Grok can opt back in to the AWS `bedrock-mantle` endpoint with `--endpoint=mantle`; Codex/OpenCode support is tracked in [#497](https://github.com/jpvelasco/juggernaut/issues/497)). After upgrading, re-run `juggernaut models refresh --source native --region <region>` and `juggernaut apply --cli=<cli> --region <region>` per CLI; `--mantle`/`--no-mantle`/`--mantle-url` and `mantle` catalog source are gone (use `--endpoint`), Codex `gpt-5.5`/`5.4` → `gpt-5.6` `sol`/`terra`/`luna`, Grok `xai.grok-4.3` → `xai.grok-4.6` on runtime (4.3 remains available through `--endpoint=mantle` with an API key), written as the `global.xai.grok-4.6` CRIS profile ID, OpenCode switches from `provider.bedrock-mantle` to the built-in `provider.amazon-bedrock` (verify `qwen3-coder`/`gpt-oss` IDs now end in `-1:0` / `-v1:0`).
 
 Re-applying over a Mantle-era config migrates it automatically (a backup is saved first): the old Codex `model_provider = "amazon-bedrock"` is rewritten to the built-in `amazon-bedrock-runtime` and the stale `model_providers.amazon-bedrock` table is removed. Requires Codex CLI ≥ 0.153.4 for Codex — `apply` and `doctor` warn on older binaries.
 

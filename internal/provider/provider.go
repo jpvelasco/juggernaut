@@ -183,7 +183,7 @@ func init() {
 		displayName:    "Grok",
 		configFormat:   "toml",
 		binaryName:     "grok",
-		capabilities:   []Capability{CapNativeAuth},
+		capabilities:   []Capability{CapNativeAuth, CapMantleEndpoint},
 		catalogSources: []string{"foundation", "profile"},
 	}})
 }

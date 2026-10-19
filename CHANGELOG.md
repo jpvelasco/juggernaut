@@ -13,7 +13,19 @@ All notable changes to Juggernaut will be documented in this file.
   pins on re-apply, rejects runtime-format pins (CRIS prefixes and version
   suffixes) for mantle, and routes unsupported regions to a mantle-served
   region. `doctor` probes the mantle endpoint. Runtime stays the default;
-  Codex, OpenCode, and Grok remain runtime-only for now.
+  Codex and OpenCode remain runtime-only for now.
+- **Grok can opt in to the `bedrock-mantle` endpoint (continues #497).**
+  `juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle`
+  writes a bare foundation model ID (`xai.grok-4.6` by default, or the
+  mantle-only `xai.grok-4.3`) on
+  `https://bedrock-mantle.{region}.api.aws/openai/v1` with the Responses wire
+  API and a recorded `juggernaut.auth.endpoint`. Mantle serves no CRIS
+  profiles, so cross-region IDs are rejected; mantle is Bedrock API key only
+  (Grok cannot sign SigV4), so `--auth=iam` is refused. Apply routes an
+  unserved region to one the selected model is served in (one warning), a
+  plain re-apply keeps the endpoint, `--endpoint=runtime` switches back and
+  clears the mantle-only `api_backend`, and runtime applies now reject
+  mantle-only Grok 4.3 with a pointer to `--endpoint=mantle`.
 
 ### Changed
 
@@ -21,13 +33,14 @@ All notable changes to Juggernaut will be documented in this file.
   OpenCode's `whitelist`, Codex's GPT-5.6 family filter, and Grok's `xai.grok-`
   filter now reject catalog entries AWS serves only on `bedrock-mantle`
   (Claude Mythos 5, Gemma 4, GPT-5.4/5.5, the Daybreak GPT-5.6 variants, and
-  Grok 4.3). Runtime model lists and configs for supported models are
+  Grok 4.3, which is now reachable through Grok's mantle opt-in instead).
+  Runtime model lists and configs for supported models are
   unchanged; Claude Mythos 5.1 (runtime-only) and Grok 4.6/4.7 remain
   selectable.
 - **Docs no longer describe the AWS `bedrock-mantle` endpoint as dead
   (fixes #498).** Juggernaut v6 removed its own Mantle routing; the endpoint
-  remains a live AWS offering. Claude Code can opt in with
-  `--endpoint=mantle`; support for the other CLIs is tracked in #497.
+  remains a live AWS offering. Claude Code and Grok can opt in with
+  `--endpoint=mantle`; Codex/OpenCode support is tracked in #497.
 - **Grok default advances to Grok 4.7 (fixes #494).** `--cli=grok` now writes
   `global.xai.grok-4.7` (from 4.6) and records the AWS-published 524,288-token
   shared context window. Each documented Grok model carries its own card facts:

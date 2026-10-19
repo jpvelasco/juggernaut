@@ -201,8 +201,9 @@ const (
 	// provider that does not.
 	CapNativeAuth
 	// CapMantleEndpoint: the CLI can opt in to the bedrock-mantle endpoint.
-	// Claude Code has first-class support (CLAUDE_CODE_USE_MANTLE); other CLIs
-	// need a custom provider shape and remain runtime-only for now.
+	// Claude Code has first-class dual-endpoint support (CLAUDE_CODE_USE_MANTLE);
+	// Grok uses a mantle base_url + Responses wire API with API-key auth.
+	// Codex and OpenCode remain runtime-only for now.
 	CapMantleEndpoint
 )
 

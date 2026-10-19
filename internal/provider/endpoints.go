@@ -75,11 +75,34 @@ func bareModelID(modelID string) string {
 	return bare
 }
 
-// ResolveEndpointRegion applies the Iron Fist region policy to the mantle
-// endpoint's verified region list. Mantle has no per-model region data in
-// Juggernaut, so the endpoint's region list is the constraint: a requested
-// region that does not serve mantle is overridden to the first verified
+// ResolveMantleRegion applies the Iron Fist region policy to the regions
+// verified to serve the mantle endpoint — the endpoint-wide list for providers
+// without per-model data, or a provider's model-specific list. A requested
+// region that does not serve the selection is overridden to the first verified
 // region, with a message the caller prints as a warning.
-func ResolveEndpointRegion(requested string, explicit bool) (region, message string, switched bool) {
-	return resolveModelRegion(requested, explicit, bedrock.MantleRegions)
+func ResolveMantleRegion(requested string, explicit bool, known []string) (region, message string, switched bool) {
+	return resolveModelRegion(requested, explicit, known)
+}
+
+// MantleRegionSource is an optional Provider extension for mantle support whose
+// models have per-model region availability (Grok). Callers run the Iron Fist
+// with these regions before BuildConfig so the model-specific constraint is
+// enforced once, with a single warning. Providers without per-model data
+// (Claude Code) do not implement it and use the endpoint-wide verified list.
+type MantleRegionSource interface {
+	// MantleRegions returns the verified regions that serve modelID on the
+	// mantle endpoint. An empty result means "no model-specific data".
+	MantleRegions(modelID string) []string
+}
+
+// MantleRegionsFor returns the regions p's selected model is served from on the
+// mantle endpoint: the provider's per-model list when it has one, else the
+// endpoint-wide verified list.
+func MantleRegionsFor(p Provider, modelID string) []string {
+	if src, ok := p.(MantleRegionSource); ok {
+		if regions := src.MantleRegions(modelID); len(regions) > 0 {
+			return regions
+		}
+	}
+	return bedrock.MantleRegions
 }

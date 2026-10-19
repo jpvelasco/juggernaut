@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
+	"github.com/jpvelasco/juggernaut/v5/internal/config"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -46,7 +49,7 @@ func TestApply_Endpoint_RejectsInvalidInputs(t *testing.T) {
 			noWrite: ".claude/settings.json",
 		},
 		{
-			name:    "mantle is Claude-only",
+			name:    "mantle is Claude and Grok only",
 			args:    []string{"apply", "--cli=codex", "--auth=iam", "--endpoint=mantle"},
 			want:    "not supported for Codex",
 			noWrite: ".codex/config.toml",
@@ -281,5 +284,226 @@ func TestApply_Endpoint_MalformedMantleOverridesRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "reading existing mantle model overrides") {
 		t.Errorf("error = %v, want a model-override read error", err)
+	}
+}
+
+// readGrokTOML parses the applied Grok config through the same TOML format
+// manager apply wrote it with.
+func readGrokTOML(t *testing.T, home string) map[string]any {
+	t.Helper()
+	tomlFmt, err := config.FormatByName("toml")
+	if err != nil {
+		t.Fatalf("toml format: %v", err)
+	}
+	mgr := config.NewManagerWithFormat(filepath.Join(home, ".grok", "config.toml"), tomlFmt)
+	got, err := mgr.Read()
+	if err != nil {
+		t.Fatalf("parse grok config.toml: %v", err)
+	}
+	return got
+}
+
+func grokTOMLModelBlock(t *testing.T, cfg map[string]any) map[string]any {
+	t.Helper()
+	modelTbl, ok := cfg["model"].(map[string]any)
+	if !ok {
+		t.Fatalf("[model] table missing: %v", cfg)
+	}
+	block, ok := modelTbl["bedrock-grok"].(map[string]any)
+	if !ok {
+		t.Fatalf("[model.bedrock-grok] missing: %v", modelTbl)
+	}
+	return block
+}
+
+// TestApply_Endpoint_GrokMantleWritesConfig: the Grok mantle opt-in writes the
+// bare foundation model on the mantle base URL, the Responses wire API, the
+// API-key auth-provider block, and the endpoint record launch/re-apply reads.
+func TestApply_Endpoint_GrokMantleWritesConfig(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	setupIsolatedKeychain(t)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+		"--region=us-west-2", "--endpoint=mantle", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	cfg := readGrokTOML(t, home)
+	block := grokTOMLModelBlock(t, cfg)
+	if block["model"] != "xai.grok-4.6" {
+		t.Errorf("model = %v, want the bare mantle default xai.grok-4.6", block["model"])
+	}
+	if block["base_url"] != "https://bedrock-mantle.us-west-2.api.aws/openai/v1" {
+		t.Errorf("base_url = %v, want the mantle base URL", block["base_url"])
+	}
+	if block["api_backend"] != "responses" {
+		t.Errorf("api_backend = %v, want responses", block["api_backend"])
+	}
+	if got := fmt.Sprint(block["context_window"]); got != "500000" {
+		t.Errorf("context_window = %v, want 500000", got)
+	}
+
+	authTbl, ok := cfg["auth"].(map[string]any)
+	if !ok {
+		t.Fatal("[auth] table missing")
+	}
+	if cmd, _ := authTbl["auth_provider_command"].(string); !strings.Contains(cmd, "auth-token") {
+		t.Errorf("auth_provider_command = %v, want `juggernaut auth-token`", authTbl["auth_provider_command"])
+	}
+
+	jAuth, ok := testutil.NestedMapChain(cfg, "juggernaut", "auth")
+	if !ok {
+		t.Fatalf("juggernaut.auth block missing: %v", cfg)
+	}
+	jMap := jAuth.(map[string]any)
+	if jMap["endpoint"] != bedrock.EndpointMantle {
+		t.Errorf("juggernaut.auth.endpoint = %v, want mantle", jMap["endpoint"])
+	}
+	if jMap["mode"] != authmode.BedrockAPIKey {
+		t.Errorf("juggernaut.auth.mode = %v, want %s", jMap["mode"], authmode.BedrockAPIKey)
+	}
+	if jMap["region"] != "us-west-2" {
+		t.Errorf("juggernaut.auth.region = %v, want us-west-2", jMap["region"])
+	}
+}
+
+// TestApply_Endpoint_GrokMantleModelFlag: Claude's anthropic.* mantle-ID
+// validation must not run for Grok; the Grok provider validates the bare
+// foundation ID and pins its own context window.
+func TestApply_Endpoint_GrokMantleModelFlag(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	setupIsolatedKeychain(t)
+
+	if err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+		"--region=us-east-1", "--endpoint=mantle", "--model=xai.grok-4.3", "--skip-preflight",
+	}); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	cfg := readGrokTOML(t, home)
+	block := grokTOMLModelBlock(t, cfg)
+	if block["model"] != "xai.grok-4.3" {
+		t.Errorf("model = %v, want xai.grok-4.3", block["model"])
+	}
+	if got := fmt.Sprint(block["context_window"]); got != "1000000" {
+		t.Errorf("context_window = %v, want 1000000", got)
+	}
+	if block["base_url"] != "https://bedrock-mantle.us-east-1.api.aws/openai/v1" {
+		t.Errorf("base_url = %v, want the us-east-1 mantle URL (served by 4.3)", block["base_url"])
+	}
+}
+
+// TestApply_Endpoint_GrokMantleRegionSwitchSingleWarning: a region that serves
+// mantle but not the selected model is switched straight to the model's region
+// with ONE warning (the endpoint-level list must not correct it first).
+func TestApply_Endpoint_GrokMantleRegionSwitchSingleWarning(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	setupIsolatedKeychain(t)
+
+	var applyErr error
+	out := captureStdout(t, func() {
+		applyErr = ExecuteArgs([]string{
+			"apply", "--cli=grok", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(),
+			"--region=eu-west-1", "--endpoint=mantle", "--skip-preflight",
+		})
+	})
+	if applyErr != nil {
+		t.Fatalf("apply error: %v", applyErr)
+	}
+	if !strings.Contains(out, "using us-west-2 instead") {
+		t.Errorf("expected a switch to the model's first mantle region, got:\n%s", out)
+	}
+	if n := strings.Count(out, "⚠ mantle endpoint:"); n != 1 {
+		t.Errorf("expected exactly one mantle region warning, got %d:\n%s", n, out)
+	}
+
+	cfg := readGrokTOML(t, home)
+	block := grokTOMLModelBlock(t, cfg)
+	if block["base_url"] != "https://bedrock-mantle.us-west-2.api.aws/openai/v1" {
+		t.Errorf("base_url = %v, want the us-west-2 mantle URL", block["base_url"])
+	}
+	jAuth := cfg["juggernaut"].(map[string]any)["auth"].(map[string]any)
+	if jAuth["region"] != "us-west-2" {
+		t.Errorf("juggernaut.auth.region = %v, want us-west-2", jAuth["region"])
+	}
+}
+
+// TestApply_Endpoint_GrokMantleRejectsIAM: Grok cannot sign SigV4 for mantle,
+// so an IAM apply must fail with the API-key remedy and write nothing.
+func TestApply_Endpoint_GrokMantleRejectsIAM(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+
+	err := ExecuteArgs([]string{
+		"apply", "--cli=grok", "--auth=iam", "--region=us-west-2", "--endpoint=mantle", "--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("apply accepted --auth=iam for the Grok mantle endpoint")
+	}
+	if !strings.Contains(err.Error(), "--auth="+authmode.BedrockAPIKey) {
+		t.Errorf("error = %v, want the --auth=%s remedy", err, authmode.BedrockAPIKey)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".grok", "config.toml")); statErr == nil {
+		t.Error("rejected apply wrote .grok/config.toml")
+	}
+}
+
+// TestApply_Endpoint_GrokMantleReapplyKeepsEndpoint: a plain re-apply keeps the
+// mantle endpoint and is NOT mistaken for the v5 Mantle-era config (which the
+// migration path would rewrite to bedrock-runtime with a migration notice).
+func TestApply_Endpoint_GrokMantleReapplyKeepsEndpoint(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	setupIsolatedKeychain(t)
+
+	applyCLI(t, "grok", "--endpoint=mantle")
+
+	out := applyCLI(t, "grok")
+	if strings.Contains(out, "written by Juggernaut v5") {
+		t.Errorf("re-apply over a mantle config must NOT trigger the v5 migration notice, got:\n%s", out)
+	}
+
+	cfg := readGrokTOML(t, home)
+	block := grokTOMLModelBlock(t, cfg)
+	if block["base_url"] != "https://bedrock-mantle.us-west-2.api.aws/openai/v1" {
+		t.Errorf("base_url = %v, want the mantle URL to survive re-apply", block["base_url"])
+	}
+	if block["model"] != "xai.grok-4.6" {
+		t.Errorf("model = %v, want the mantle default to survive re-apply", block["model"])
+	}
+	jAuth := cfg["juggernaut"].(map[string]any)["auth"].(map[string]any)
+	if jAuth["endpoint"] != bedrock.EndpointMantle {
+		t.Errorf("juggernaut.auth.endpoint = %v, want mantle after re-apply", jAuth["endpoint"])
+	}
+}
+
+// TestApply_Endpoint_GrokMantleToRuntimeClearsMantleOnlyKeys: switching back to
+// runtime deep-merges the same [model.bedrock-grok] table, so the mantle-only
+// api_backend must be actively cleared and the runtime default restored.
+func TestApply_Endpoint_GrokMantleToRuntimeClearsMantleOnlyKeys(t *testing.T) {
+	home := setupApplyTestWithReset(t)
+	setupIsolatedKeychain(t)
+
+	applyCLI(t, "grok", "--endpoint=mantle")
+	applyCLI(t, "grok", "--endpoint=runtime")
+
+	cfg := readGrokTOML(t, home)
+	block := grokTOMLModelBlock(t, cfg)
+	if got, ok := block["api_backend"]; ok {
+		t.Errorf("api_backend = %v, want it cleared when switching to runtime", got)
+	}
+	if block["base_url"] != "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1" {
+		t.Errorf("base_url = %v, want the runtime URL", block["base_url"])
+	}
+	if block["model"] != "global.xai.grok-4.7" {
+		t.Errorf("model = %v, want the runtime default", block["model"])
+	}
+	if got := fmt.Sprint(block["context_window"]); got != "524288" {
+		t.Errorf("context_window = %v, want 524288", got)
+	}
+	jAuth := cfg["juggernaut"].(map[string]any)["auth"].(map[string]any)
+	if _, ok := jAuth["endpoint"]; ok {
+		t.Errorf("juggernaut.auth.endpoint = %v, want it cleared for runtime", jAuth["endpoint"])
 	}
 }

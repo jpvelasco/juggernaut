@@ -223,18 +223,21 @@ func resolveApplyEndpoint(home string, prov provider.Provider) (string, error) {
 			endpoint, bedrock.EndpointRuntime, bedrock.EndpointMantle)
 	}
 	if endpoint == bedrock.EndpointMantle && !prov.Supports(provider.CapMantleEndpoint) {
-		return "", fmt.Errorf("the mantle endpoint is not supported for %s yet; only Claude Code has first-class mantle support", prov.DisplayName())
+		return "", fmt.Errorf("the mantle endpoint is not supported for %s yet; Claude Code and Grok support it", prov.DisplayName())
 	}
 	return endpoint, nil
 }
 
 // resolveEndpointRegion applies the mantle endpoint's region policy. Runtime
-// uses the caller's already-resolved region untouched.
-func resolveEndpointRegion(endpoint, region string) string {
+// uses the caller's already-resolved region untouched. Providers with per-model
+// mantle availability (Grok) narrow the list to the selected model, so a served
+// region is never switched twice.
+func resolveEndpointRegion(endpoint, region string, prov provider.Provider) string {
 	if endpoint != bedrock.EndpointMantle {
 		return region
 	}
-	resolved, message, switched := provider.ResolveEndpointRegion(region, applyFlags.region != "")
+	resolved, message, switched := provider.ResolveMantleRegion(
+		region, applyFlags.region != "", provider.MantleRegionsFor(prov, applyFlags.model))
 	if switched {
 		fmt.Printf("⚠ mantle endpoint: %s\n", message)
 	}
@@ -582,6 +585,12 @@ func isJuggernautLegacy(existing map[string]any) bool {
 }
 
 func grokMantleBaseURL(existing map[string]any) bool {
+	// v6+ records an opted-in mantle choice in the juggernaut block. Such a
+	// config legitimately points at the mantle host; only a config without the
+	// endpoint record is the v5 Mantle-era leftover.
+	if existingEndpoint(existing) == bedrock.EndpointMantle {
+		return false
+	}
 	model, ok := existing["model"].(map[string]any)
 	if !ok {
 		return false

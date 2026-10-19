@@ -186,8 +186,10 @@ func TestGrok_BuildConfig(t *testing.T) {
 	if _, hasEnvKey := bgMap["env_key"]; hasEnvKey {
 		t.Errorf("env_key must NOT be set (it keeps Grok's login flow alive); got %v", bgMap["env_key"])
 	}
-	if _, hasBackend := bgMap["api_backend"]; hasBackend {
-		t.Errorf("api_backend must NOT be set for native bedrock-runtime (was Mantle only), got %v", bgMap["api_backend"])
+	// api_backend is mantle-only; runtime plans carry the empty-string delete
+	// sentinel so a mantle→runtime apply clears it from the deep-merged table.
+	if got, hasBackend := bgMap["api_backend"]; !hasBackend || got != "" {
+		t.Errorf("api_backend = %v, want the empty deletion sentinel for native bedrock-runtime", got)
 	}
 	modelsDefault, ok := testutil.NestedMapChain(plan.Keys, "models", "default")
 	if !ok || modelsDefault != "bedrock-grok" {

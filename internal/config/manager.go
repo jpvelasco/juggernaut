@@ -316,10 +316,35 @@ func mergeNestedPrefix(existing map[string]any, k string, v any, path string, pr
 				}
 			}
 		}
+		// A table assigned wholesale has no existing siblings to merge into;
+		// drop its empty-string leaves so the delete sentinel is not written.
+		if inMap, isInMap := sv.(map[string]any); isInMap {
+			dst[sk] = stripEmptyStringLeaves(inMap)
+			continue
+		}
 		dst[sk] = sv
 	}
 	existing[k] = dst
 	return nil
+}
+
+// stripEmptyStringLeaves returns a copy of v with empty-string values removed
+// at every depth. Empty string is the plan merge's delete sentinel, so writing
+// it verbatim into a freshly created table would leave a dead key behind.
+// Non-map values pass through unchanged.
+func stripEmptyStringLeaves(v any) any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	out := make(map[string]any, len(m))
+	for k, sv := range m {
+		if s, ok := sv.(string); ok && s == "" {
+			continue
+		}
+		out[k] = stripEmptyStringLeaves(sv)
+	}
+	return out
 }
 
 // mergePermissions sets or removes only the permissions.defaultMode sub-key,
