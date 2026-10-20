@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
@@ -13,9 +14,13 @@ import (
 // ~/.grok/config.toml). Juggernaut routes to Grok on native Bedrock
 // (bedrock-runtime /openai/v1) by default, or — opt-in — through the parallel
 // bedrock-mantle endpoint. Both write a [model.bedrock-grok] block selected via
-// [models].default. API-key apply also writes an [auth] block whose
-// auth_provider_command runs `juggernaut auth-token`; IAM apply omits that
-// command so Grok does not demand a keychain bearer token.
+// [models].default and an [auth] block whose auth_provider_command runs
+// `juggernaut auth-token`.
+//
+// Grok only speaks bearer auth; it does not sign SigV4. API-key applies read the
+// stored Bedrock key from the keychain. IAM/SSO applies mint a short-term
+// Bedrock API key from the AWS credential chain (auth-token --iam), so IAM
+// works on both runtime and mantle without a long-term key.
 //
 // Why the [auth] block (not env_key): Grok's per-model credential order is
 // api_key → env_key → XAI_API_KEY, but a custom [model.*] block does NOT satisfy
@@ -32,9 +37,14 @@ type grok struct {
 const grokModelName = "bedrock-grok"
 
 // grokAuthCommand is the auth_provider_command Grok runs (via sh -c) to fetch
-// the bearer token. It maps to cmd/auth_token.go, which prints the keychain
-// token as {"access_token":...,"expires_in":...}.
+// the bearer token. It maps to cmd/auth_token.go: the keychain token for
+// API-key mode, or a short-term token minted from IAM credentials with --iam.
 const grokAuthCommand = "juggernaut auth-token"
+
+// grokRegionRE keeps the region embedded in grokAuthCommand shell-safe. AWS
+// region names are lowercase letters, digits, and hyphens; anything else could
+// turn the auth provider command into shell injection.
+var grokRegionRE = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // grokBedrockModel describes one xAI model reachable through Bedrock. On
 // bedrock-runtime every current Grok model is inference-profile-only (requests
@@ -229,7 +239,8 @@ func (g grok) OwnsConfig(data map[string]any) bool {
 func (g grok) LaunchSpec() LaunchSpec {
 	// Token injection is decided at launch from the stored auth mode:
 	// API key → inject AWS_BEARER_TOKEN_BEDROCK (and write auth_provider_command);
-	// IAM → AWS credential chain, no keychain token.
+	// IAM → no keychain token; Grok runs `auth-token --iam`, which mints a
+	// short-term bearer token from the AWS credential chain.
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  false, // auth mode in juggernaut block decides at launch
@@ -237,9 +248,10 @@ func (g grok) LaunchSpec() LaunchSpec {
 }
 
 // BuildConfig writes a [model.bedrock-grok] block routing the Grok CLI to
-// Bedrock, [models].default, a juggernaut.auth block for launch, and — only for
-// Bedrock API key auth — an [auth] block whose auth_provider_command supplies
-// the keychain bearer token so Grok skips its interactive sign-in.
+// Bedrock, [models].default, a juggernaut.auth block for launch, and an [auth]
+// block whose auth_provider_command supplies the bearer token so Grok skips its
+// interactive sign-in. API-key mode reads the keychain; IAM mode mints a
+// short-term Bedrock API key from the AWS credential chain.
 //
 // Runtime (default) targets bedrock-runtime /openai/v1 with a CRIS profile ID;
 // the opt-in mantle endpoint targets bedrock-mantle /openai/v1 with a bare
@@ -289,10 +301,12 @@ func (g grok) buildRuntimeConfig(opts Options) (ConfigPlan, error) {
 			"model":    modelID,
 			"base_url": baseURL,
 			"name":     modelID + " (Amazon Bedrock)",
-			// Empty string is the merge-time delete sentinel: switching from
-			// the mantle endpoint back to runtime must not leave the Responses
-			// wire API behind (runtime speaks the default Chat Completions).
-			"api_backend": "",
+			// Empty strings are merge-time delete sentinels: switching from the
+			// mantle endpoint back to runtime must not leave the Responses wire
+			// API or its reasoning_summary override behind (runtime speaks the
+			// default Chat Completions).
+			"api_backend":       "",
+			"reasoning_summary": "",
 		}
 		if known {
 			// Use the AWS-published context window for the selected model; the
@@ -304,14 +318,10 @@ func (g grok) buildRuntimeConfig(opts Options) (ConfigPlan, error) {
 }
 
 // buildMantleConfig targets the opt-in bedrock-mantle endpoint with the bare
-// foundation model ID. Mantle is API-key only: the Grok CLI sends the bearer
-// token from [auth] and cannot sign SigV4 requests.
+// foundation model ID. Both auth modes work: API-key mode reads the keychain,
+// IAM mode mints a short-term Bedrock API key (the Grok CLI only speaks bearer
+// auth, so auth-token --iam supplies the token).
 func (g grok) buildMantleConfig(opts Options) (ConfigPlan, error) {
-	if !authmode.IsBedrockAPIKey(opts.AuthMode) {
-		return ConfigPlan{}, fmt.Errorf(
-			"the Grok CLI reaches the mantle endpoint with a Bedrock API key, not SigV4; re-run with --auth=%s",
-			authmode.BedrockAPIKey)
-	}
 	modelID, err := normalizeGrokMantleModelID(opts.Model)
 	if err != nil {
 		return ConfigPlan{}, err
@@ -330,6 +340,9 @@ func (g grok) buildMantleConfig(opts Options) (ConfigPlan, error) {
 		"name":           modelID + " (Amazon Bedrock Mantle)",
 		"context_window": facts.ContextWindow,
 		"api_backend":    "responses",
+		// Mantle rejects the Responses reasoning.summary field for Grok;
+		// Grok's own Bedrock docs require "none" here.
+		"reasoning_summary": "none",
 	}
 	plan, err := g.grokPlan(opts, region, modelBlock)
 	if err != nil {
@@ -341,10 +354,28 @@ func (g grok) buildMantleConfig(opts Options) (ConfigPlan, error) {
 	return plan, nil
 }
 
+// grokAuthProviderCommand returns the [auth] command for the selected mode.
+// API-key mode reads the keychain key. IAM mode embeds the region so Grok can
+// mint a region-scoped short-term Bedrock API key; Grok runs the command through
+// `sh -c`, so grokRegionRE keeps the region shell-safe.
+//
+// The region MUST be the resolved one (the same region in the model's
+// base_url): a Bedrock API key only works in the region it was minted for, and
+// the Iron Fist may move an unserved request to a different region.
+func grokAuthProviderCommand(authMode, region string) (string, error) {
+	if authmode.IsBedrockAPIKey(authMode) {
+		return grokAuthCommand, nil
+	}
+	if !grokRegionRE.MatchString(region) {
+		return "", fmt.Errorf("invalid region %q for the Grok auth provider command", region)
+	}
+	return fmt.Sprintf("%s --iam --region=%s", grokAuthCommand, region), nil
+}
+
 // grokPlan assembles the config shape shared by both endpoints: the named model
 // block selected via [models].default, the juggernaut.auth record launch reads,
-// and the [auth] block — the API-key provider command, or empty leaves that
-// delete it on re-apply so IAM does not leave auth-token wired up.
+// and the [auth] block whose auth_provider_command supplies the bearer token
+// (keychain key for API-key mode, minted short-term key for IAM).
 func (g grok) grokPlan(opts Options, region string, modelBlock map[string]any) (ConfigPlan, error) {
 	keys := map[string]any{
 		"model": map[string]any{
@@ -359,16 +390,13 @@ func (g grok) grokPlan(opts Options, region string, modelBlock map[string]any) (
 		return ConfigPlan{}, err
 	}
 	keys["juggernaut"] = blockMap
-	if authmode.IsBedrockAPIKey(opts.AuthMode) {
-		keys["auth"] = map[string]any{
-			"auth_provider_command": grokAuthCommand,
-			"auth_provider_label":   "Bedrock",
-		}
-	} else {
-		keys["auth"] = map[string]any{
-			"auth_provider_command": "",
-			"auth_provider_label":   "",
-		}
+	authCommand, err := grokAuthProviderCommand(opts.AuthMode, region)
+	if err != nil {
+		return ConfigPlan{}, err
+	}
+	keys["auth"] = map[string]any{
+		"auth_provider_command": authCommand,
+		"auth_provider_label":   "Bedrock",
 	}
 	return ConfigPlan{
 		Keys:        keys,

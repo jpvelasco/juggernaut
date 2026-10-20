@@ -100,6 +100,8 @@ juggernaut models refresh --source native --region us-west-2
 
 **Codex:** requires Codex CLI ≥ 0.153.4 (the first release with the built-in `amazon-bedrock-runtime` provider). Juggernaut pins `model_provider = "amazon-bedrock-runtime"` plus a region under `[model_providers.amazon-bedrock-runtime.aws]` — no custom `base_url`. If your `codex` binary is older, `apply` and `doctor` warn; update with `npm i -g @openai/codex@latest`.
 
+**Grok:** the Grok CLI only speaks bearer auth, so with `--auth=iam` Juggernaut points Grok's `[auth]` provider at `juggernaut auth-token --iam`, which mints a short-term Bedrock API key from your AWS credentials (SSO included) — no API key to store, and the key is refreshed automatically. `--auth=bedrock-api-key` keeps reading the keychain key.
+
 Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it (only the last dependent CLI clears it).
 
 ### Safety model
@@ -147,12 +149,14 @@ juggernaut apply --cli=claude --auth=iam --endpoint=mantle \
 
 Juggernaut writes `CLAUDE_CODE_USE_MANTLE=1` next to the existing `CLAUDE_CODE_USE_BEDROCK=1`; Claude Code routes each request by model-ID format. `juggernaut.auth.endpoint=mantle` records the choice, so a plain re-apply keeps the mantle endpoint and its model pins. Pass `--endpoint=runtime` to switch back.
 
-Grok can opt in to the same endpoint. Mantle serves no cross-region inference profiles, so Grok is pinned to a bare foundation ID (`xai.grok-4.6` by default, or the mantle-only `xai.grok-4.3`) and the Responses wire API. Mantle is Bedrock API key only — Grok sends the bearer token and cannot sign SigV4 requests:
+Grok can opt in to the same endpoint. Mantle serves no cross-region inference profiles, so Grok is pinned to a bare foundation ID (`xai.grok-4.6` by default, or the mantle-only `xai.grok-4.3`) and the Responses wire API. Both auth modes work on mantle: `--auth=bedrock-api-key` reads the keychain key, and `--auth=iam` mints a short-term Bedrock API key from your AWS credentials:
 
 ```bash
+juggernaut apply --cli=grok --auth=iam --endpoint=mantle
+# A stored Bedrock API key works too:
 juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle
 # Pin Grok 4.3 (mantle-only; not available on bedrock-runtime):
-juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle --model=xai.grok-4.3
+juggernaut apply --cli=grok --auth=iam --endpoint=mantle --model=xai.grok-4.3
 ```
 
 Grok 4.6 is served in `us-west-2` and `us-gov-east-1`; Grok 4.3 in `us-west-2`, `us-east-1`, `us-east-2`, and `us-gov-west-1`. `apply` routes an unserved region to one the selected model is served in and prints a warning. Grok 4.7 is runtime-only.

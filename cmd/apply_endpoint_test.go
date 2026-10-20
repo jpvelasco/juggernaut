@@ -341,6 +341,9 @@ func TestApply_Endpoint_GrokMantleWritesConfig(t *testing.T) {
 	if block["api_backend"] != "responses" {
 		t.Errorf("api_backend = %v, want responses", block["api_backend"])
 	}
+	if block["reasoning_summary"] != "none" {
+		t.Errorf("reasoning_summary = %v, want none (mantle rejects reasoning.summary)", block["reasoning_summary"])
+	}
 	if got := fmt.Sprint(block["context_window"]); got != "500000" {
 		t.Errorf("context_window = %v, want 500000", got)
 	}
@@ -431,22 +434,37 @@ func TestApply_Endpoint_GrokMantleRegionSwitchSingleWarning(t *testing.T) {
 	}
 }
 
-// TestApply_Endpoint_GrokMantleRejectsIAM: Grok cannot sign SigV4 for mantle,
-// so an IAM apply must fail with the API-key remedy and write nothing.
-func TestApply_Endpoint_GrokMantleRejectsIAM(t *testing.T) {
+// TestApply_Endpoint_GrokMantleIAM: IAM works on mantle too — Grok's [auth]
+// provider mints a short-term Bedrock API key from the AWS credential chain,
+// and the config still carries the Responses wire API and reasoning override.
+func TestApply_Endpoint_GrokMantleIAM(t *testing.T) {
 	home := setupApplyTestWithReset(t)
 
-	err := ExecuteArgs([]string{
+	if err := ExecuteArgs([]string{
 		"apply", "--cli=grok", "--auth=iam", "--region=us-west-2", "--endpoint=mantle", "--skip-preflight",
-	})
-	if err == nil {
-		t.Fatal("apply accepted --auth=iam for the Grok mantle endpoint")
+	}); err != nil {
+		t.Fatalf("apply --auth=iam --endpoint=mantle: %v", err)
 	}
-	if !strings.Contains(err.Error(), "--auth="+authmode.BedrockAPIKey) {
-		t.Errorf("error = %v, want the --auth=%s remedy", err, authmode.BedrockAPIKey)
+
+	cfg := readGrokTOML(t, home)
+	block := grokTOMLModelBlock(t, cfg)
+	if block["base_url"] != "https://bedrock-mantle.us-west-2.api.aws/openai/v1" {
+		t.Errorf("base_url = %v, want the mantle URL", block["base_url"])
 	}
-	if _, statErr := os.Stat(filepath.Join(home, ".grok", "config.toml")); statErr == nil {
-		t.Error("rejected apply wrote .grok/config.toml")
+	if block["reasoning_summary"] != "none" {
+		t.Errorf("reasoning_summary = %v, want none", block["reasoning_summary"])
+	}
+	authTbl, ok := cfg["auth"].(map[string]any)
+	if !ok {
+		t.Fatal("[auth] table missing")
+	}
+	wantCmd := "juggernaut auth-token --iam --region=us-west-2"
+	if cmd, _ := authTbl["auth_provider_command"].(string); cmd != wantCmd {
+		t.Errorf("auth_provider_command = %q, want %q", cmd, wantCmd)
+	}
+	jAuth := cfg["juggernaut"].(map[string]any)["auth"].(map[string]any)
+	if jAuth["mode"] != authmode.IAM {
+		t.Errorf("juggernaut.auth.mode = %v, want iam", jAuth["mode"])
 	}
 }
 
