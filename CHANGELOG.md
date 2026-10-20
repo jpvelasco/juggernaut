@@ -4,6 +4,12 @@ All notable changes to Juggernaut will be documented in this file.
 
 ## [Unreleased]
 
+## [6.4.0] - 2026-10-19
+
+**Minor release.** Adds opt-in `bedrock-mantle` routing for Claude Code and
+Grok, IAM authentication for Grok, and advances the default model rosters to
+Claude 5.5, GPT-6.1 Sol, and Grok 4.7.
+
 ### Added
 
 - **Claude Code can opt in to the `bedrock-mantle` endpoint (starts #497).**
@@ -86,6 +92,12 @@ All notable changes to Juggernaut will be documented in this file.
   generated `[model.bedrock-grok]` block now sets `reasoning_summary = "none"`
   as Grok's own Bedrock guidance requires, and switching back to
   `--endpoint=runtime` clears it together with `api_backend`.
+- **`apply` accepts every live commercial Bedrock region (fixes #499).** The
+  embedded Claude region list now covers every commercial AWS Region where
+  Bedrock serves Claude, adding `us-west-1`, `eu-north-1`, `eu-south-1`,
+  `eu-south-2`, `ap-southeast-4` through `ap-southeast-7`, `ap-northeast-3`,
+  `ap-south-2`, `ap-east-2`, `ca-west-1`, `af-south-1`, and `mx-central-1`;
+  GovCloud partitions remain intentionally excluded.
 
 ## [6.3.2] - 2026-09-21
 
@@ -1604,7 +1616,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.3.2...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.4.0...HEAD
+[6.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.4.0
 [6.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.2
 [6.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.1
 [6.3.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.0
