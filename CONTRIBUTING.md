@@ -71,6 +71,14 @@ Architecture, provider inventory, managed keys, and CI/release design live in
 Defaults and model pins live in `bedrock-config.json` (embedded into the binary at
 build time). Do not hardcode Bedrock model IDs or env defaults in scripts.
 
+Every CLI defaults to `bedrock-runtime`; `apply --endpoint=mantle` is opt-in.
+Codex and OpenCode mantle use native Responses providers and bare model IDs.
+The shared model/region policy lives in `internal/provider/mantle_openai.go`;
+OpenCode mantle emits V2 `providers` settings while its runtime output remains
+compatible with existing configurations. Preserve both auth modes, sidecar scope,
+unknown user entries, and v5 migration behavior when changing endpoint routing.
+Run the mantle provider/apply/doctor tests as well as the default-output goldens.
+
 For Claude Code governance flags (`--available-models`, `--enforce-available-models`),
 remember they write user/project settings only — not OS-level managed settings.
 

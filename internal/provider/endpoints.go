@@ -8,7 +8,9 @@ import (
 
 // mantleOnlyReason is the rejection reason shared by every runtime-routed
 // provider when a catalog entry exists only on the bedrock-mantle endpoint.
-const mantleOnlyReason = "available only on the bedrock-mantle endpoint (opt-in tracked in #497)"
+const mantleOnlyReason = "available only on the bedrock-mantle endpoint (use --endpoint=mantle)"
+
+const legacyMantleCacheReason = "legacy mantle cache; refresh --source native and apply --endpoint=mantle for mantle models"
 
 // runtimeUnavailable lists the foundation-model families that AWS documents as
 // served only on the bedrock-mantle endpoint. Runtime-routed CLIs must not

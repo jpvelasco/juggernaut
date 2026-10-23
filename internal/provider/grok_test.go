@@ -92,7 +92,7 @@ func TestDeepMergeContract(t *testing.T) {
 	}{
 		"claude":   {nil, nil},
 		"codex":    {[]string{"model_providers"}, map[string][]string{"model_providers": {CodexBedrockRuntimeProviderID + ".aws.region", CodexLegacyProviderID + ".aws.region"}}},
-		"opencode": {[]string{"provider"}, map[string][]string{"provider": {"amazon-bedrock"}}},
+		"opencode": {[]string{"provider", "providers"}, map[string][]string{"provider": {"amazon-bedrock"}, "providers": {"amazon-bedrock-mantle"}}},
 		"grok":     {[]string{"model", "models", "auth"}, map[string][]string{"model": {"bedrock-grok"}, "models": {"default"}, "auth": {"auth_provider_command", "auth_provider_label"}}},
 	}
 	for name, want := range cases {

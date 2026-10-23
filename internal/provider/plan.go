@@ -209,7 +209,7 @@ const (
 	// CapMantleEndpoint: the CLI can opt in to the bedrock-mantle endpoint.
 	// Claude Code has first-class dual-endpoint support (CLAUDE_CODE_USE_MANTLE);
 	// Grok uses a mantle base_url + Responses wire API with API-key auth.
-	// Codex and OpenCode remain runtime-only for now.
+	// Codex and OpenCode use their native mantle Responses providers.
 	CapMantleEndpoint
 )
 

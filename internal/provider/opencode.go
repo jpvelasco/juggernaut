@@ -11,19 +11,22 @@ import (
 
 // opencode is the OpenCode CLI provider (sst/anomalyco, config JSON at
 // ~/.config/opencode/opencode.json). OpenCode is model-agnostic, so it routes
-// via the built-in amazon-bedrock provider (options.region + live-discovered
+// via the built-in amazon-bedrock provider by default (options.region + live-discovered
 // models + whitelist). Unlike Codex it has no "use bedrock" env var — routing
 // lives in the config; the bearer token / IAM SigV4 chain is used at runtime.
 //
 // OpenCode targets any native Bedrock model compatible with Chat Completions.
 // Juggernaut injects the account's cached live inventory (foundation + profile)
-// instead of maintaining a roster.
+// instead of maintaining a runtime roster. Opt-in mantle uses V2's native
+// mantle Responses package and the shared verified OpenAI model/region roster.
 type opencode struct {
 	BaseProvider
 }
 
 // bedrockProviderID is the provider key written into opencode.json.
 const bedrockProviderID = "amazon-bedrock"
+
+const openCodeMantleProviderID = "amazon-bedrock-mantle"
 
 // ConfigPath is ~/.config/opencode/opencode.json (user) or ./opencode.json
 // (project).
@@ -40,7 +43,7 @@ func (o opencode) ConfigPath(home, scope string) (string, error) {
 // and rejects unknown top-level keys, so Juggernaut keeps the block in a
 // sidecar file next to the config (SidecarAuthSource).
 func (o opencode) NativeManagedKeys() []string {
-	return []string{"model", "provider"}
+	return []string{"model", "provider", "providers"}
 }
 
 // SidecarPath is the .juggernaut.json file next to the opencode config for
@@ -69,18 +72,23 @@ func (o opencode) SidecarPaths(home string) []string {
 
 // DeepMergeKeys: "provider" is a nested map where a user may have their own
 // providers (anthropic, openai, …); merge only our amazon-bedrock entry.
-func (o opencode) DeepMergeKeys() []string { return []string{"provider"} }
+func (o opencode) DeepMergeKeys() []string { return []string{"provider", "providers"} }
 
-// OwnedSubKeys: uninstall removes only our amazon-bedrock provider from the
-// provider map (the model leaf is removed whole).
+// OwnedSubKeys: uninstall removes only our runtime and mantle provider entries
+// (the model leaf is removed whole).
 func (o opencode) OwnedSubKeys() map[string][]string {
-	return map[string][]string{"provider": {bedrockProviderID}}
+	return map[string][]string{"provider": {bedrockProviderID}, "providers": {openCodeMantleProviderID}}
 }
 
 // OwnsConfig recognizes a config Juggernaut wrote by our amazon-bedrock provider
 // under the "provider" map — NOT a plain user opencode.json that merely has a
 // "provider" block for other vendors or a "model" key.
 func (o opencode) OwnsConfig(data map[string]any) bool {
+	if providers, ok := data["providers"].(map[string]any); ok {
+		if _, found := providers[openCodeMantleProviderID]; found {
+			return true
+		}
+	}
 	prov, ok := data["provider"].(map[string]any)
 	if !ok {
 		return false
@@ -130,6 +138,9 @@ func opencodeDefaultModel() string { return "gpt-oss-120b" }
 // rejects unknown top-level keys, so Juggernaut writes it to the sidecar
 // file (see SidecarAuthSource).
 func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+	if opts.Endpoint == bedrock.EndpointMantle {
+		return o.buildMantleConfig(opts)
+	}
 	key := opts.Model
 	if key == "" {
 		key = opencodeDefaultModel()
@@ -176,7 +187,7 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 			"model":    bedrockProviderID + "/" + modelID,
 			"provider": map[string]any{bedrockProviderID: providerTable},
 		},
-		ManagedKeys: o.NativeManagedKeys(),
+		ManagedKeys: []string{"model", "provider"},
 		Warnings:    warnings,
 	}, nil
 }
@@ -184,7 +195,7 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 func (o opencode) SupportsModel(model CatalogModel) ModelSupport {
 	return o.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
-			return ModelSupport{Reason: "OpenCode's Bedrock provider no longer uses Mantle (native only)"}
+			return ModelSupport{Reason: legacyMantleCacheReason}
 		}
 		if !RuntimeSupported(m.ID, m.Source) {
 			return ModelSupport{Reason: mantleOnlyReason}
