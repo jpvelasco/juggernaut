@@ -324,13 +324,16 @@ func TestApply_NoProfile_ConflictWithProfile(t *testing.T) {
 // pinned so a regression can neither break bearer applies nor route a
 // profile through them.
 func TestApply_NoProfile_InertWithBearerAuth(t *testing.T) {
+	// The bearer path stores the key in the OS keychain before writing, so
+	// runners without an unlockable keychain must skip instead of hanging.
+	testutil.SkipIfNoKeychain(t)
 	home := setupApplyTest(t)
 	stubValidateProfileOK(t)
 
 	if err := ExecuteArgs([]string{
 		"apply",
 		"--auth=" + authmode.BedrockAPIKey,
-		"--bedrock-key=k",
+		bedrockKeyFlag(),
 		"--region=us-west-2",
 		"--no-profile",
 		"--scope=user",
