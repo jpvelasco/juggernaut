@@ -2,6 +2,26 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.5.1] - 2026-10-23
+
+**Patch release.** Removes Codex’s unrecognized-setting warning while
+preserving Bedrock authentication and configuration migration.
+
+### Fixed
+
+- **Codex auth metadata no longer lives in `config.toml`.** An owner-only
+  `.juggernaut.json` beside the config stores the auth mode, AWS profile,
+  region, and endpoint. Plain apply migrates older metadata, removing the
+  `juggernaut is ignored` warning and allowing `--strict-config`.
+- **Project authentication retains precedence during migration.** A migrated
+  user sidecar cannot override a legacy project config. Apply and
+  scope-filtered doctor read metadata from the selected scope.
+- **Sidecar persistence protects authentication state.** Metadata records
+  the provider’s resolved region. If saving the sidecar fails, apply aborts
+  before removing the legacy in-file metadata.
+
+## [Unreleased]
+
 ## [6.5.0] - 2026-10-23
 
 **Feature release.** Adds opt-in Mantle routing for Codex and OpenCode V2,
@@ -35,17 +55,6 @@ named AWS profile support, and a Go toolchain security update.
   routing, model, and region settings before checking endpoint reachability.
   OpenCode endpoint selection uses the selected scope's auth sidecar,
   and endpoint switches preserve other providers.
-
-## [Unreleased]
-
-### Fixed
-
-- **Codex no longer warns that `juggernaut` is an unrecognized setting.**
-  Auth metadata moves to an owner-only `.juggernaut.json` beside `config.toml`.
-  Plain apply migrates older metadata, retaining auth mode, profile, and endpoint;
-  launch supports both formats and preserves project precedence during migration.
-  Sidecars record the provider's resolved region, and a failed sidecar write
-  aborts the config rewrite before legacy metadata is removed.
 
 ## [6.4.0] - 2026-10-19
 
@@ -1659,7 +1668,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.5.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.5.1...HEAD
+[6.5.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.1
 [6.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.0
 [6.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.4.0
 [6.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.2
