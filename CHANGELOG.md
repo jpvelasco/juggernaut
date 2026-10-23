@@ -2,6 +2,40 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.5.0] - 2026-10-23
+
+**Feature release.** Adds opt-in Mantle routing for Codex and OpenCode V2,
+named AWS profile support, and a Go toolchain security update.
+
+### Added
+
+- **Codex and OpenCode V2 can opt in to Mantle (fixes #497).**
+  `apply --endpoint=mantle` configures native Responses providers with
+  bare OpenAI model IDs, defaulting to GPT-6 Astra. Both clients support
+  native IAM signing and the shared Bedrock API key. Model-specific region
+  checks reject CRIS IDs and select a serving region. Runtime remains
+  the default, and v5 migration behavior is preserved.
+- **Named AWS profiles across IAM authentication paths (fixes #510).**
+  `apply --profile <name>` validates and saves a local AWS profile for
+  launch and token generation. Re-apply preserves the selection;
+  `--no-profile` clears it. An exported `AWS_PROFILE` takes precedence
+  when launching the CLI.
+
+### Fixed
+
+- **Doctor diagnoses unusable saved IAM profiles.** Missing or renamed
+  profiles now produce actionable diagnostics, including how to select
+  another profile or clear the saved selection.
+- **Go toolchain updated to 1.26.10.** Incorporates the standard-library
+  `crypto/x509` fix for GO-2026-6809.
+
+### Changed
+
+- **Mantle diagnostics cover Codex and OpenCode.** Doctor validates native
+  routing, model, and region settings before checking endpoint reachability.
+  OpenCode endpoint selection uses the selected scope's auth sidecar,
+  and endpoint switches preserve other providers.
+
 ## [Unreleased]
 
 ## [6.4.0] - 2026-10-19
@@ -1616,7 +1650,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.4.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.5.0...HEAD
+[6.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.0
 [6.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.4.0
 [6.3.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.2
 [6.3.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.3.1
