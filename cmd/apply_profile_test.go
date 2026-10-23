@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
+	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
@@ -319,33 +320,50 @@ func TestApply_NoProfile_ConflictWithProfile(t *testing.T) {
 	}
 }
 
-// TestApply_NoProfile_InertWithBearerAuth: bearer auth never stores a profile,
-// so --no-profile is accepted (not a command error) and changes nothing —
-// pinned so a regression can neither break bearer applies nor route a
-// profile through them.
-func TestApply_NoProfile_InertWithBearerAuth(t *testing.T) {
-	// The bearer path stores the key in the OS keychain before writing, so
-	// runners without an unlockable keychain must skip instead of hanging.
-	testutil.SkipIfNoKeychain(t)
+// TestApply_NoProfile_BearerDryRun: bearer auth never stores a profile, so
+// --no-profile is accepted (not a command error) and changes nothing — pinned
+// so a regression can neither break bearer applies nor route a profile
+// through them. --dry-run keeps the keychain out of the loop: a real bearer
+// apply blocks on the OS keychain write, which hangs keychain-less CI
+// runners even behind a successful probe.
+func TestApply_NoProfile_BearerDryRun(t *testing.T) {
 	home := setupApplyTest(t)
 	stubValidateProfileOK(t)
 
 	if err := ExecuteArgs([]string{
 		"apply",
 		"--auth=" + authmode.BedrockAPIKey,
-		bedrockKeyFlag(),
 		"--region=us-west-2",
 		"--no-profile",
+		"--dry-run",
 		"--scope=user",
 		"--skip-preflight",
 	}); err != nil {
-		t.Fatalf("bearer apply with --no-profile error: %v", err)
+		t.Fatalf("bearer dry-run with --no-profile error: %v", err)
 	}
 	if len(validateProfileCalls) != 0 {
 		t.Errorf("validator must not run for bearer auth; calls = %v", validateProfileCalls)
 	}
-	if got := juggernautAuthValue(t, home, "profile"); got != "" {
-		t.Errorf("juggernaut.auth.profile = %q, want absent for bearer auth", got)
+	if _, statErr := os.Stat(filepath.Join(home, ".claude", "settings.json")); !os.IsNotExist(statErr) {
+		t.Error("dry-run must not write settings.json")
+	}
+}
+
+// TestResolveApplyProfile_NoProfile_BearerInert is the write-path unit
+// test for the same contract: bearer resolution ignores --no-profile and
+// yields the ambient chain.
+func TestResolveApplyProfile_NoProfile_BearerInert(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+	home := setupApplyTest(t)
+
+	applyFlags.noProfile = true
+	profile, err := resolveApplyProfile(provider.MustGet("claude"), home, authmode.BedrockAPIKey)
+	if err != nil {
+		t.Fatalf("resolveApplyProfile(bearer, --no-profile) error: %v", err)
+	}
+	if profile != "" {
+		t.Errorf("profile = %q, want empty for bearer auth", profile)
 	}
 }
 
