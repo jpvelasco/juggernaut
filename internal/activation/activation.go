@@ -83,6 +83,7 @@ type LaunchOptions struct {
 // provider.LaunchSpec (the activation package stays provider-free; cmd/ maps
 // LaunchSpec → LaunchTarget).
 type LaunchTarget struct {
+	PrepareArgs      func(binary string, args []string) []string
 	BinaryNames      []string
 	TokenEnvVar      string
 	StaticEnv        map[string]string

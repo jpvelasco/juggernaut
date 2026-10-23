@@ -85,8 +85,10 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	// First non-empty juggernaut.auth.mode wins (project then user); the same
 	// winning block may also pin a named AWS profile for the credential chain.
 	storedProfile := ""
+	targetManaged := false
 	for _, path := range targetConfigPaths(target) {
 		if jb, ok := readAuthBlockFromConfig(path); ok && jb.AuthMode != "" {
+			targetManaged = true
 			storedProfile = jb.Profile
 			managed = true
 			wantToken = authmode.IsBedrockAPIKey(jb.AuthMode)
@@ -158,6 +160,9 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	binPath, err := resolveBinaryFrom(opts.Path, target.BinaryNames, self, opts.SelfPaths)
 	if err != nil {
 		return fmt.Errorf("real %s binary not found on PATH", target.BinaryNames[0])
+	}
+	if targetManaged && target.PrepareArgs != nil {
+		opts.Args = target.PrepareArgs(binPath, opts.Args)
 	}
 	return opts.Runner(binPath, opts.Args, env)
 }

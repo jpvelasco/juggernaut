@@ -22,6 +22,14 @@ preserving Bedrock authentication and configuration migration.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Managed Codex sessions no longer inherit a stale daemon's AWS environment.**
+  The launch wrapper selects `--no-daemon` when supported, keeping the current
+  profile or bearer token in the session process. Existing shared sessions are
+  not interrupted, explicit remote/server commands remain unchanged, and older
+  Codex versions retain their existing invocation.
+
 ## [6.5.0] - 2026-10-23
 
 **Feature release.** Adds opt-in Mantle routing for Codex and OpenCode V2,

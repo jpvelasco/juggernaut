@@ -35,6 +35,8 @@ Codex requires ≥ 0.153.4; OpenCode mantle was verified with V2 2.1.4. Omit `--
 
 If Codex reports that `juggernaut` is an unrecognized setting, re-run `juggernaut apply --cli=codex` after upgrading. Auth metadata now lives in `.codex/.juggernaut.json` beside the native config, and apply migrates the old block automatically. Load the updated shell activation and launch with `codex`, or use `juggernaut launch codex` directly.
 
+The Codex wrapper automatically adds `--no-daemon` on versions that support it, so a stale shared Codex server cannot override the AWS credentials for a normal managed session. Explicit remote connections and server-management commands remain unchanged. There is no need to reboot or restart other Codex sessions.
+
 For the Claude Code setup, Claude Code from Anthropic is a prerequisite:
 
 ```bash
