@@ -37,6 +37,7 @@ func juggernautAuthBlock(opts Options, region string) (map[string]any, error) {
 		Auth: schema.Auth{
 			Mode:     opts.AuthMode,
 			Region:   region,
+			Profile:  opts.Profile,
 			Endpoint: endpoint,
 		},
 		Meta: schema.Meta{
@@ -77,6 +78,10 @@ type Options struct {
 	// AuthMode is the auth mode (iam or bedrock-api-key). Used by non-Claude
 	// providers. Claude reads it from SchemaOpts.
 	AuthMode string
+	// Profile is the named AWS profile for IAM auth ("" = ambient default
+	// chain). Non-Claude providers embed it in their auth plumbing (Grok) or
+	// the juggernaut block; providers that don't care ignore it.
+	Profile string
 	// Scope is user or project scope. Used by non-Claude providers.
 	Scope string
 	// Version is the Juggernaut version string. Used by non-Claude providers.
@@ -103,6 +108,7 @@ func (o *Options) FromSchemaOptions(s schema.Options) {
 	o.Region = s.Region
 	o.Endpoint = s.Endpoint
 	o.AuthMode = s.AuthMode
+	o.Profile = s.Profile
 	o.Scope = s.Scope
 	o.Version = s.Version
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -181,7 +182,59 @@ func collectDoctorReport(home, cli, scopeFilter string) (*doctor.Report, error) 
 	if isClaude {
 		legacyArtifactStatus(home, r)
 	}
+	checkAWSProfile(r, prov, home, scopes)
 	return r, nil
+}
+
+// checkAWSProfile reports whether IAM credential resolution is deterministic
+// for this CLI. Bearer-token auth never reads a profile (no check), and an
+// unmanaged config has nothing to check either. The effective named profile
+// is: the juggernaut.auth profile (sidecar, then in-file block) → ambient
+// AWS_PROFILE → none (warn). A stored profile is re-validated so a renamed or
+// removed profile surfaces here instead of failing at CLI runtime (the issue
+// #510 all-green-until-launch failure); the ambient env value is deliberately
+// not validated — it is the user's own live choice.
+func checkAWSProfile(r *doctor.Report, prov provider.Provider, home string, scopes []string) {
+	mode, profile := managedAuthModeAndProfile(prov, home, scopes)
+	if mode != authmode.IAM {
+		return
+	}
+	if profile != "" {
+		if err := validateAWSProfile(context.Background(), "", profile); err != nil {
+			r.Check("aws profile", doctor.Warn,
+				"stored profile cannot be resolved: "+err.Error()+
+					" — run `juggernaut apply --profile <name>` (or `export AWS_PROFILE=<name>`) with a valid profile, "+
+					"or `juggernaut apply --no-profile` to return to the ambient default chain")
+			return
+		}
+		r.Check("aws profile", doctor.OK, "named profile \""+profile+"\" (persisted in juggernaut.auth)")
+		return
+	}
+	if env := strings.TrimSpace(os.Getenv("AWS_PROFILE")); env != "" {
+		r.Check("aws profile", doctor.OK, "using AWS_PROFILE=\""+env+"\" from the environment")
+		return
+	}
+	r.Check("aws profile", doctor.Warn,
+		"no named AWS profile stored and AWS_PROFILE is unset — credentials resolve through the default profile, which fails outright when only named profiles exist; "+
+			"run `juggernaut apply --profile <name>` or `export AWS_PROFILE=<name>`")
+}
+
+// managedAuthModeAndProfile reads the effective juggernaut auth state: the
+// sidecar block for providers that keep the block outside their config, else
+// the first in-file juggernaut block across scopes (project then user).
+func managedAuthModeAndProfile(prov provider.Provider, home string, scopes []string) (mode, profile string) {
+	if block, ok := provider.ReadSidecarBlock(prov, home); ok {
+		return provider.BlockAuthMode(block), provider.BlockProfile(block)
+	}
+	for _, scope := range scopes {
+		data := readProviderScopeData(prov, home, scope)
+		if jb, ok := data["juggernaut"].(map[string]any); ok {
+			if m := provider.BlockAuthMode(jb); m != "" {
+				return m, provider.BlockProfile(jb)
+			}
+		}
+	}
+	return "", ""
 }
 
 func claudeCommandStatus() (doctor.Status, string) {

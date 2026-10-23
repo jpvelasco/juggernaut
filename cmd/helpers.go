@@ -13,6 +13,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
+	"github.com/jpvelasco/juggernaut/v5/internal/discovery"
 	"github.com/jpvelasco/juggernaut/v5/internal/keychain"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
@@ -169,6 +170,13 @@ func toProviderOptions(o schema.Options) provider.Options {
 	return po
 }
 
+// validateAWSProfile is the swap point for profile resolution checks: it
+// validates that a named shared-config profile can be loaded and carries a
+// credentials provider. Real implementation performs local file reads only
+// (SSO/assume-role credentials resolve lazily), never an AWS network call;
+// tests stub it so no AWS state is touched.
+var validateAWSProfile = discovery.ValidateProfile
+
 // validateAuthFlag rejects unknown --auth values up front. Every downstream
 // consumer compares the mode by exact string, so a typo would otherwise fall
 // into the IAM path, silently drop --bedrock-key, and still write a config
@@ -181,6 +189,63 @@ func validateAuthFlag() error {
 	}
 	return fmt.Errorf("unknown --auth mode %q; valid modes are %q and %q",
 		applyFlags.auth, authmode.IAM, authmode.BedrockAPIKey)
+}
+
+// resolveApplyProfile determines the named AWS profile through the same
+// precedence as the auth mode: explicit --profile flag → --no-profile
+// (explicit clear: ambient default chain, never validated) → sidecar blocks
+// (project then user, when the provider keeps the block outside its config)
+// → in-file juggernaut block → "" (ambient default chain). It is only
+// meaningful for IAM: bearer auth stores no profile, so --profile is a
+// command error there while --no-profile is accepted but inert, and a
+// re-apply that switches to bearer auth clears the stored profile instead of
+// preserving a block that can never be read.
+func resolveApplyProfile(prov provider.Provider, home, authMode string) (string, error) {
+	flag := strings.TrimSpace(applyFlags.profile)
+	if applyFlags.noProfile && flag != "" {
+		return "", fmt.Errorf("--no-profile cannot be combined with --profile")
+	}
+	if authMode != authmode.IAM {
+		if flag != "" {
+			return "", fmt.Errorf("--profile requires --auth=iam; bearer-token auth never reads an AWS profile")
+		}
+		return "", nil
+	}
+	if flag != "" {
+		if !schema.ValidProfileName(flag) {
+			return "", fmt.Errorf("invalid --profile %q — profile names may contain only letters, digits, dot, underscore, and dash", flag)
+		}
+		return flag, nil
+	}
+	// --no-profile is the escape hatch for a deleted or renamed stored
+	// profile: without it, a plain re-apply re-validates the inherited name
+	// and fails, leaving no way back to the ambient default chain. Nothing
+	// is validated here — there is nothing left to validate, and the
+	// ambient chain is the user's live choice (doctor reports on it).
+	if applyFlags.noProfile {
+		return "", nil
+	}
+	if p, ok := provider.ReadSidecarProfile(prov, home); ok {
+		return p, nil
+	}
+	existing, isReapply, err := detectReapplyConfig(prov, home, applyFlags.scope)
+	if err != nil {
+		return "", err
+	}
+	if !isReapply {
+		return "", nil
+	}
+	return existingProfile(existing), nil
+}
+
+// existingProfile extracts the named AWS profile from a parsed provider
+// config's in-file juggernaut block ("" when absent).
+func existingProfile(existing map[string]any) string {
+	jBlock, ok := existing["juggernaut"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return provider.BlockProfile(jBlock)
 }
 
 // validateEndpointFlag rejects an unknown --endpoint before any state is read.

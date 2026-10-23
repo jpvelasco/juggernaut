@@ -44,10 +44,18 @@ type bedrockClient interface {
 var loadDefaultAWSConfig = config.LoadDefaultConfig
 var makeBedrockClient = func(cfg aws.Config) bedrockClient { return bedrock.NewFromConfig(cfg) }
 
-// loadAWSConfig returns an AWS config for the given region using the default
-// credential chain. Shared by newClient and CallerAccount.
-func loadAWSConfig(ctx context.Context, region string) (aws.Config, error) {
-	cfg, err := loadDefaultAWSConfig(ctx, config.WithRegion(region))
+// loadAWSConfig returns an AWS config for the given region, optionally
+// selecting a named shared-config profile ("" = ambient default chain). Shared
+// by newClient, CallerAccount, MintBedrockToken, and ValidateProfile.
+func loadAWSConfig(ctx context.Context, region, profile string) (aws.Config, error) {
+	var opts []func(*config.LoadOptions) error
+	opts = append(opts, config.WithRegion(region))
+	if profile != "" {
+		// WithSharedConfigProfile("") is a no-op: an empty option falls back to
+		// AWS_PROFILE/the default profile, keeping the ambient chain intact.
+		opts = append(opts, config.WithSharedConfigProfile(profile))
+	}
+	cfg, err := loadDefaultAWSConfig(ctx, opts...)
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("loading AWS config: %w", err)
 	}
@@ -57,7 +65,7 @@ func loadAWSConfig(ctx context.Context, region string) (aws.Config, error) {
 // newClient builds a real Bedrock client for region using the default AWS
 // credential chain (IAM/SSO/env — whatever the caller already has configured).
 func newClient(ctx context.Context, region string) (bedrockClient, error) {
-	cfg, err := loadAWSConfig(ctx, region)
+	cfg, err := loadAWSConfig(ctx, region, "")
 	if err != nil {
 		return nil, err
 	}

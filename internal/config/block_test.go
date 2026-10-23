@@ -113,3 +113,52 @@ func TestParseJuggernautBlock_WithPermissionMode(t *testing.T) {
 		t.Errorf("PermissionMode = %q, want auto", jb.PermissionMode)
 	}
 }
+
+// TestParseJuggernautBlock_WithProfile checks the named AWS profile written by
+// apply --profile is read back by launch/doctor (a block written before this
+// field existed must still parse with an empty profile).
+func TestParseJuggernautBlock_WithProfile(t *testing.T) {
+	data := map[string]any{
+		"juggernaut": map[string]any{
+			"auth": map[string]any{
+				"mode":    "iam",
+				"region":  "us-west-2",
+				"profile": "developer",
+			},
+			"meta": map[string]any{
+				"managedBy": "juggernaut",
+			},
+		},
+	}
+	jb, ok := ParseJuggernautBlock(data)
+	if !ok {
+		t.Fatal("expected owned block")
+	}
+	if jb.Profile != "developer" {
+		t.Errorf("Profile = %q, want developer", jb.Profile)
+	}
+	if jb.AuthMode != "iam" {
+		t.Errorf("AuthMode = %q, want iam", jb.AuthMode)
+	}
+}
+
+func TestParseJuggernautBlock_ProfileOptional(t *testing.T) {
+	data := map[string]any{
+		"juggernaut": map[string]any{
+			"auth": map[string]any{
+				"mode":   "iam",
+				"region": "us-west-2",
+			},
+			"meta": map[string]any{
+				"managedBy": "juggernaut",
+			},
+		},
+	}
+	jb, ok := ParseJuggernautBlock(data)
+	if !ok {
+		t.Fatal("expected owned block")
+	}
+	if jb.Profile != "" {
+		t.Errorf("Profile = %q, want empty", jb.Profile)
+	}
+}

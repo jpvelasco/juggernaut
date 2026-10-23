@@ -49,6 +49,8 @@ export AWS_PROFILE=<your-profile>
 aws sts get-caller-identity
 ```
 
+Credentials live in a named SSO/shared-config profile (no `default` profile)? Skip the manual `export AWS_PROFILE`: pin it once with `juggernaut apply --auth=iam --profile=<your-profile>`. Launch exports `AWS_PROFILE` to the wrapped CLI (your own shell export still wins), and `doctor` warns when an IAM config has neither a stored profile nor `AWS_PROFILE`. A re-apply without the flag keeps the pin; `juggernaut apply --no-profile` clears it and returns to the ambient login flow.
+
 Using `--auth=bedrock-api-key` instead? Skip AWS setup entirely — the key is stored securely in your OS keychain.
 
 ## Other Coding CLIs

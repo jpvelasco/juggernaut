@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -26,6 +27,8 @@ var applyFlags struct {
 	bedrockKey             string
 	preserveKey            bool
 	region                 string
+	profile                string
+	noProfile              bool
 	model                  string
 	opusModel              string
 	sonnetModel            string
@@ -54,6 +57,8 @@ func init() {
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")
+	f.StringVar(&applyFlags.profile, "profile", "", "named AWS profile for IAM credential resolution (requires --auth=iam)")
+	f.BoolVar(&applyFlags.noProfile, "no-profile", false, "clear any stored AWS profile and use the ambient credential chain")
 	f.StringVar(&applyFlags.model, "model", "", "model ID or provider-specific convenience alias")
 	f.StringVar(&applyFlags.opusModel, "opus-model", "", "override Opus model ID")
 	f.StringVar(&applyFlags.sonnetModel, "sonnet-model", "", "override Sonnet model ID")
@@ -147,6 +152,20 @@ func runApply(_ *cobra.Command, _ []string) error {
 	}
 	region = resolveEndpointRegion(endpoint, region, prov)
 
+	profile, err := resolveApplyProfile(prov, home, authMode)
+	if err != nil {
+		return err
+	}
+	// Fail fast on an unusable profile before anything is planned or written —
+	// the same contract as validateAuthFlag. Shared-config loading reads local
+	// files only (SSO/assume-role credentials resolve lazily), so this never
+	// calls AWS.
+	if profile != "" {
+		if err := validateAWSProfile(context.Background(), region, profile); err != nil {
+			return err
+		}
+	}
+
 	var token string
 	if !applyFlags.dryRun {
 		token, err = resolveCredential(authMode, home)
@@ -155,7 +174,7 @@ func runApply(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	plan, err := buildApplyPlan(prov, home, region, bCfg, authMode, endpoint, opusplan)
+	plan, err := buildApplyPlan(prov, home, region, bCfg, authMode, endpoint, opusplan, profile)
 	if err != nil {
 		return err
 	}
@@ -172,13 +191,13 @@ type applyPlan struct {
 
 // buildApplyPlan resolves models and options, then builds the schema
 // block and provider options. This is the planning phase — no side effects.
-func buildApplyPlan(prov provider.Provider, home, region string, bCfg *bedrock.Config, authMode, endpoint string, opusplan bool) (*applyPlan, error) {
+func buildApplyPlan(prov provider.Provider, home, region string, bCfg *bedrock.Config, authMode, endpoint string, opusplan bool, profile string) (*applyPlan, error) {
 	models, err := resolveApplyModelsForEndpoint(prov, endpoint, home)
 	if err != nil {
 		return nil, err
 	}
 
-	opts := buildApplyOptions(authMode, endpoint, region, opusplan, models)
+	opts := buildApplyOptions(authMode, endpoint, region, opusplan, models, profile)
 	block, err := schema.Build(bCfg, opts)
 	if err != nil {
 		return nil, err
@@ -363,11 +382,12 @@ func requireMantleModelID(flag, value string) error {
 }
 
 // buildApplyOptions constructs the schema.Options from resolved inputs.
-func buildApplyOptions(authMode, endpoint, region string, opusplan bool, models *resolvedModels) schema.Options {
+func buildApplyOptions(authMode, endpoint, region string, opusplan bool, models *resolvedModels, profile string) schema.Options {
 	return schema.Options{
 		AuthMode:               authMode,
 		Region:                 region,
 		Endpoint:               endpoint,
+		Profile:                profile,
 		Effort:                 applyFlags.effort,
 		Scope:                  applyFlags.scope,
 		Version:                Version,

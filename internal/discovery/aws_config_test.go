@@ -26,7 +26,7 @@ func TestLoadAWSConfig_HappyPath(t *testing.T) {
 		return aws.Config{Region: options.Region}, nil
 	}
 
-	got, err := loadAWSConfig(context.Background(), wantRegion)
+	got, err := loadAWSConfig(context.Background(), wantRegion, "")
 	if err != nil {
 		t.Fatalf("loadAWSConfig() error: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestLoadAWSConfig_ErrorPath(t *testing.T) {
 		return aws.Config{}, errors.New("credentials unavailable")
 	}
 
-	_, err := loadAWSConfig(context.Background(), "us-west-2")
+	_, err := loadAWSConfig(context.Background(), "us-west-2", "")
 	if err == nil {
 		t.Fatal("expected error when loadDefaultAWSConfig fails")
 	}
@@ -63,7 +63,7 @@ func TestLoadAWSConfig_ZeroConfigOnError(t *testing.T) {
 		return aws.Config{}, errors.New("no config")
 	}
 
-	got, err := loadAWSConfig(context.Background(), "eu-west-1")
+	got, err := loadAWSConfig(context.Background(), "eu-west-1", "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
