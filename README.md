@@ -88,7 +88,7 @@ If your credentials live in a named SSO/shared-config profile (no `default` prof
 juggernaut apply --auth=iam --profile=developer
 ```
 
-The profile name is validated against your local shared config files (file reads only — no AWS call) and persisted in the `juggernaut.auth` block. `juggernaut launch` then exports `AWS_PROFILE=<profile>` to the wrapped CLI unless your shell already exports its own value, and `doctor` warns when an IAM config has no profile stored and `AWS_PROFILE` isn't set. Requires `--auth=iam`; a later `apply --auth=bedrock-api-key` clears it.
+The profile name is validated against your local shared config files (file reads only — no AWS call) and persisted in the `juggernaut.auth` block. A re-apply without the flag keeps the stored profile, while `--no-profile` explicitly clears it and returns to the ambient default chain. If that stored profile is later renamed or deleted from your shared config files, a plain re-apply fails on validation — switch to another profile or run `juggernaut apply --no-profile` to come back to the ambient chain. `juggernaut launch` then exports `AWS_PROFILE=<profile>` to the wrapped CLI unless your shell already exports its own value, and `doctor` warns when an IAM config has no profile stored and `AWS_PROFILE` isn't set. Requires `--auth=iam`; a later `apply --auth=bedrock-api-key` clears it.
 
 ### Multi-CLI (`--cli`)
 
@@ -128,6 +128,7 @@ Juggernaut treats existing configuration and real CLI binaries as untouchable. F
 ```bash
 juggernaut apply --auth=iam --region=us-east-1
 juggernaut apply --auth=iam --profile=developer       # pin a named SSO/shared-config profile
+juggernaut apply --auth=iam --no-profile              # clear a stored profile, use the ambient chain
 juggernaut apply --auth=iam --opusplan              # Opus in /plan, Sonnet in execute
 juggernaut apply --auth=iam --effort=high           # low | medium | high | xhigh | max | auto
 juggernaut apply --auth=iam --mode=auto             # enable agentic safety-classifier mode

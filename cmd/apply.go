@@ -28,6 +28,7 @@ var applyFlags struct {
 	preserveKey            bool
 	region                 string
 	profile                string
+	noProfile              bool
 	model                  string
 	opusModel              string
 	sonnetModel            string
@@ -57,6 +58,7 @@ func init() {
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")
 	f.StringVar(&applyFlags.profile, "profile", "", "named AWS profile for IAM credential resolution (requires --auth=iam)")
+	f.BoolVar(&applyFlags.noProfile, "no-profile", false, "clear any stored AWS profile and use the ambient credential chain")
 	f.StringVar(&applyFlags.model, "model", "", "model ID or provider-specific convenience alias")
 	f.StringVar(&applyFlags.opusModel, "opus-model", "", "override Opus model ID")
 	f.StringVar(&applyFlags.sonnetModel, "sonnet-model", "", "override Sonnet model ID")

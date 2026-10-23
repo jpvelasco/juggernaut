@@ -203,7 +203,8 @@ func checkAWSProfile(r *doctor.Report, prov provider.Provider, home string, scop
 		if err := validateAWSProfile(context.Background(), "", profile); err != nil {
 			r.Check("aws profile", doctor.Warn,
 				"stored profile cannot be resolved: "+err.Error()+
-					" — run `juggernaut apply --profile <name>` (or `export AWS_PROFILE=<name>`) with a valid profile")
+					" — run `juggernaut apply --profile <name>` (or `export AWS_PROFILE=<name>`) with a valid profile, "+
+					"or `juggernaut apply --no-profile` to return to the ambient default chain")
 			return
 		}
 		r.Check("aws profile", doctor.OK, "named profile \""+profile+"\" (persisted in juggernaut.auth)")

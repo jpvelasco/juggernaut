@@ -74,7 +74,7 @@ func settingsEnvValue(t *testing.T, home, key string) string {
 }
 
 // TestApply_WritesProfile_IAM pins the full --profile write path for Claude:
-// JSX survives in both places consumers read it — the managed env (the CLI's
+// the profile is persisted in both places consumers read it — the managed env (the CLI's
 // own environment injection) and juggernaut.auth.profile (read by launch and
 // doctor).
 func TestApply_WritesProfile_IAM(t *testing.T) {
@@ -103,9 +103,8 @@ func TestApply_WritesProfile_IAM(t *testing.T) {
 	}
 }
 
-// TestApply_Profile_ValidationStubsRegion passes the resolved region to the
-// profile validator — shared config files are per-region only in the SSO
-// session sense, so the resolved region governs which profile is usable.
+// TestApply_Profile_NoValidationWithoutProfile: without --profile the
+// validator is never invoked and no profile is persisted (ambient chain).
 func TestApply_Profile_NoValidationWithoutProfile(t *testing.T) {
 	home := setupApplyTest(t)
 	stubValidateProfileOK(t)
@@ -236,6 +235,114 @@ func TestApply_ReapplyPreservesProfile(t *testing.T) {
 	}
 	if got := settingsEnvValue(t, home, "AWS_PROFILE"); got != "developer" {
 		t.Errorf("env AWS_PROFILE after re-apply = %q, want developer", got)
+	}
+}
+
+// TestApply_NoProfile_ClearsStoredProfile: --no-profile on a re-apply drops
+// the stored profile from every consumer (juggernaut.auth.profile and the
+// managed env) and returns to the ambient chain. This is the escape hatch for
+// a profile deleted from the shared config, where every plain re-apply fails
+// on re-validation.
+func TestApply_NoProfile_ClearsStoredProfile(t *testing.T) {
+	home := setupApplyTest(t)
+	stubValidateProfileOK(t)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--profile=developer",
+		"--scope=user",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("first apply error: %v", err)
+	}
+
+	// Once the stored profile stops resolving, a plain re-apply must stay
+	// stuck on validation — the trap --no-profile exists to escape.
+	validateProfileCalls = nil
+	stubValidateProfileErr(t, context.Canceled)
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--scope=user",
+		"--skip-preflight",
+	}); err == nil {
+		t.Fatal("plain re-apply must fail once the stored profile stops resolving")
+	}
+
+	// The exit hatch clears the profile without validating it (there is
+	// nothing left to validate) and still writes a managed config.
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--no-profile",
+		"--scope=user",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("clearing re-apply error: %v", err)
+	}
+	if got := juggernautAuthValue(t, home, "profile"); got != "" {
+		t.Errorf("juggernaut.auth.profile after --no-profile = %q, want cleared", got)
+	}
+	if got := settingsEnvValue(t, home, "AWS_PROFILE"); got != "" {
+		t.Errorf("env AWS_PROFILE after --no-profile = %q, want cleared", got)
+	}
+}
+
+// TestApply_NoProfile_ConflictWithProfile: the precedence chain only holds
+// when the explicit pin and the explicit clear cannot both be set — the
+// contradiction is a command error before anything is written.
+func TestApply_NoProfile_ConflictWithProfile(t *testing.T) {
+	home := setupApplyTest(t)
+	stubValidateProfileOK(t)
+
+	err := ExecuteArgs([]string{
+		"apply",
+		"--auth=iam",
+		"--region=us-west-2",
+		"--profile=developer",
+		"--no-profile",
+		"--scope=user",
+		"--skip-preflight",
+	})
+	if err == nil {
+		t.Fatal("apply accepted --profile together with --no-profile")
+	}
+	if !strings.Contains(err.Error(), "--no-profile cannot be combined with --profile") {
+		t.Errorf("error = %v, want the conflicting-flags message", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".claude", "settings.json")); !os.IsNotExist(statErr) {
+		t.Error("nothing must be written when the flags conflict")
+	}
+}
+
+// TestApply_NoProfile_InertWithBearerAuth: bearer auth never stores a profile,
+// so --no-profile is accepted (not a command error) and changes nothing —
+// pinned so a regression can neither break bearer applies nor route a
+// profile through them.
+func TestApply_NoProfile_InertWithBearerAuth(t *testing.T) {
+	home := setupApplyTest(t)
+	stubValidateProfileOK(t)
+
+	if err := ExecuteArgs([]string{
+		"apply",
+		"--auth=" + authmode.BedrockAPIKey,
+		"--bedrock-key=k",
+		"--region=us-west-2",
+		"--no-profile",
+		"--scope=user",
+		"--skip-preflight",
+	}); err != nil {
+		t.Fatalf("bearer apply with --no-profile error: %v", err)
+	}
+	if len(validateProfileCalls) != 0 {
+		t.Errorf("validator must not run for bearer auth; calls = %v", validateProfileCalls)
+	}
+	if got := juggernautAuthValue(t, home, "profile"); got != "" {
+		t.Errorf("juggernaut.auth.profile = %q, want absent for bearer auth", got)
 	}
 }
 

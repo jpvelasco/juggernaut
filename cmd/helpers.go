@@ -192,14 +192,19 @@ func validateAuthFlag() error {
 }
 
 // resolveApplyProfile determines the named AWS profile through the same
-// precedence as the auth mode: explicit --profile flag → sidecar blocks
-// (project then user, when the provider keeps the block outside its config) →
-// in-file juggernaut block → "" (ambient default chain). It is only
-// meaningful for IAM: combining --profile with bearer auth is a command
-// error, and a re-apply that switches to bearer auth clears the stored
-// profile instead of preserving a block that can never be read.
+// precedence as the auth mode: explicit --profile flag → --no-profile
+// (explicit clear: ambient default chain, never validated) → sidecar blocks
+// (project then user, when the provider keeps the block outside its config)
+// → in-file juggernaut block → "" (ambient default chain). It is only
+// meaningful for IAM: bearer auth stores no profile, so --profile is a
+// command error there while --no-profile is accepted but inert, and a
+// re-apply that switches to bearer auth clears the stored profile instead of
+// preserving a block that can never be read.
 func resolveApplyProfile(prov provider.Provider, home, authMode string) (string, error) {
 	flag := strings.TrimSpace(applyFlags.profile)
+	if applyFlags.noProfile && flag != "" {
+		return "", fmt.Errorf("--no-profile cannot be combined with --profile")
+	}
 	if authMode != authmode.IAM {
 		if flag != "" {
 			return "", fmt.Errorf("--profile requires --auth=iam; bearer-token auth never reads an AWS profile")
@@ -211,6 +216,14 @@ func resolveApplyProfile(prov provider.Provider, home, authMode string) (string,
 			return "", fmt.Errorf("invalid --profile %q — profile names may contain only letters, digits, dot, underscore, and dash", flag)
 		}
 		return flag, nil
+	}
+	// --no-profile is the escape hatch for a deleted or renamed stored
+	// profile: without it, a plain re-apply re-validates the inherited name
+	// and fails, leaving no way back to the ambient default chain. Nothing
+	// is validated here — there is nothing left to validate, and the
+	// ambient chain is the user's live choice (doctor reports on it).
+	if applyFlags.noProfile {
+		return "", nil
 	}
 	if p, ok := provider.ReadSidecarProfile(prov, home); ok {
 		return p, nil
