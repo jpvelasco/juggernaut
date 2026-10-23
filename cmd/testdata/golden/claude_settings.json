@@ -76,7 +76,7 @@
       "schemaVersion": 2,
       "scope": "user",
       "use1mContext": true,
-      "version": "6.5.1"
+      "version": "6.5.2"
     },
     "modelOverrides": {
       "fable": "global.anthropic.claude-fable-5-1",

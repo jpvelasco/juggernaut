@@ -2,6 +2,24 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.5.2] - 2026-10-23
+
+**Patch release.** Keeps managed Codex sessions from using stale
+AWS credentials in a shared background server.
+
+### Fixed
+
+- **Interactive Codex uses the current AWS environment.** Juggernaut
+  adds `--no-daemon` when supported, keeping the saved profile or
+  injected bearer token in the session process instead of attaching
+  to a stale daemon.
+- **Existing server workflows remain available.** Explicit remote
+  connections and daemon-management commands pass through unchanged.
+  Older Codex versions retain their existing invocation, and running
+  shared sessions are not restarted or interrupted.
+
+## [Unreleased]
+
 ## [6.5.1] - 2026-10-23
 
 **Patch release.** Removes Codex’s unrecognized-setting warning while
@@ -19,16 +37,6 @@ preserving Bedrock authentication and configuration migration.
 - **Sidecar persistence protects authentication state.** Metadata records
   the provider’s resolved region. If saving the sidecar fails, apply aborts
   before removing the legacy in-file metadata.
-
-## [Unreleased]
-
-### Fixed
-
-- **Managed Codex sessions no longer inherit a stale daemon's AWS environment.**
-  The launch wrapper selects `--no-daemon` when supported, keeping the current
-  profile or bearer token in the session process. Existing shared sessions are
-  not interrupted, explicit remote/server commands remain unchanged, and older
-  Codex versions retain their existing invocation.
 
 ## [6.5.0] - 2026-10-23
 
@@ -1676,7 +1684,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.5.1...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.5.2...HEAD
+[6.5.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.2
 [6.5.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.1
 [6.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.0
 [6.4.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.4.0
