@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 )
 
@@ -18,6 +19,7 @@ type Options struct {
 	AuthMode               string
 	Region                 string
 	Endpoint               string // "", "runtime", or "mantle"; runtime is the default
+	Profile                string // named AWS profile for IAM auth; "" = ambient default chain
 	Effort                 string
 	Scope                  string
 	Version                string
@@ -51,6 +53,7 @@ type Block struct {
 type Auth struct {
 	Mode     string `json:"mode"`
 	Region   string `json:"region"`
+	Profile  string `json:"profile,omitempty"`
 	Endpoint string `json:"endpoint,omitempty"`
 }
 
@@ -118,6 +121,26 @@ const ErrEnforceRequiresAvailable = "--enforce-available-models requires --avail
 // the same dual-endpoint config, so this is a heads-up, not an error.
 const MantleNoModelWarning = "mantle endpoint enabled, but no mantle-format model is pinned; runtime model IDs stay pinned and Claude Code routes by ID format. Pass --model=anthropic.<id> (or add one to --available-models and select it with /model)."
 
+// ValidProfileName reports whether profile matches the shell-safe named-AWS-
+// profile grammar (ASCII letters, digits, dot, underscore, dash). Non-Claude
+// providers embed the profile in shell commands, so the grammar must stay
+// strictly safe; both cmd/ (apply flag validation) and internal/provider (Grok
+// auth command) enforce it through this shared predicate.
+func ValidProfileName(profile string) bool {
+	if profile == "" {
+		return false
+	}
+	for _, r := range profile {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // Build constructs and validates a Block from bedrock config and options.
 func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	if !cfg.IsSupportedRegion(opts.Region) {
@@ -134,6 +157,14 @@ func Build(cfg *bedrock.Config, opts Options) (*Block, error) {
 	}
 	if opts.ServiceTier != "" && !validServiceTiers[opts.ServiceTier] {
 		return nil, fmt.Errorf("invalid service-tier %q — must be one of: default, flex, priority", opts.ServiceTier)
+	}
+	if opts.Profile != "" {
+		if opts.AuthMode != authmode.IAM {
+			return nil, fmt.Errorf("--profile requires --auth=iam; bearer-token auth never reads an AWS profile")
+		}
+		if !ValidProfileName(opts.Profile) {
+			return nil, fmt.Errorf("invalid --profile %q — profile names must use letters, digits, dot, underscore, or dash only", opts.Profile)
+		}
 	}
 
 	opus, sonnet, haiku, fable := resolveTierModels(cfg, opts)
@@ -174,6 +205,7 @@ func assembleBlock(opts Options, opus, sonnet, haiku, fable string, env map[stri
 		Auth: Auth{
 			Mode:     opts.AuthMode,
 			Region:   opts.Region,
+			Profile:  opts.Profile,
 			Endpoint: persistedEndpoint(opts.Endpoint),
 		},
 		Models: ModelOverrides{
@@ -253,6 +285,13 @@ func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable stri
 	}
 
 	env["AWS_REGION"] = opts.Region
+	// A named-profile apply also pins AWS_PROFILE, so the launched CLI resolves
+	// credentials from the profile deterministically even when it never goes
+	// through the launch wrapper. Omitted without --profile: existing configs
+	// must keep rendering byte-identically.
+	if opts.Profile != "" {
+		env["AWS_PROFILE"] = opts.Profile
+	}
 	if opts.Endpoint == bedrock.EndpointMantle {
 		// Claude Code treats Bedrock and Mantle as parallel endpoints: keep
 		// CLAUDE_CODE_USE_BEDROCK=1 (from the shared environment) and turn on

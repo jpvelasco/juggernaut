@@ -87,6 +87,17 @@ func WriteSidecar(p Provider, home string, opts Options) error {
 // the provider's sidecar paths (project then user). ok is false when the
 // provider has no sidecar or no readable sidecar declares a mode.
 func ReadSidecarAuthMode(p Provider, home string) (mode string, ok bool) {
+	block, ok := ReadSidecarBlock(p, home)
+	if !ok {
+		return "", false
+	}
+	return BlockAuthMode(block), true
+}
+
+// ReadSidecarProfile reads the named AWS profile from the provider's sidecar
+// blocks (project then user), like ReadSidecarAuthMode. Returns ok=false for
+// non-sidecar providers.
+func ReadSidecarProfile(p Provider, home string) (profile string, ok bool) {
 	src, isSidecar := p.(SidecarAuthSource)
 	if !isSidecar {
 		return "", false
@@ -96,11 +107,32 @@ func ReadSidecarAuthMode(p Provider, home string) (mode string, ok bool) {
 		if !ok {
 			continue
 		}
-		if mode := BlockAuthMode(block); mode != "" {
-			return mode, true
+		if profile := BlockProfile(block); profile != "" {
+			return profile, true
 		}
 	}
 	return "", false
+}
+
+// ReadSidecarBlock reads the first sidecar block (project then user) whose
+// auth mode is set — the whole managed auth state in one read, so callers can
+// read mode and profile from the same source. ok=false for non-sidecar
+// providers or when no managed sidecar block exists.
+func ReadSidecarBlock(p Provider, home string) (map[string]any, bool) {
+	src, isSidecar := p.(SidecarAuthSource)
+	if !isSidecar {
+		return nil, false
+	}
+	for _, path := range src.SidecarPaths(home) {
+		block, ok := readSidecarBlock(path)
+		if !ok {
+			continue
+		}
+		if BlockAuthMode(block) != "" {
+			return block, true
+		}
+	}
+	return nil, false
 }
 
 // BlockAuthMode extracts the auth mode from a parsed juggernaut block
@@ -112,6 +144,17 @@ func BlockAuthMode(block map[string]any) string {
 	}
 	mode, _ := auth["mode"].(string)
 	return mode
+}
+
+// BlockProfile extracts the named AWS profile from a parsed juggernaut block
+// ("" when absent — ambient default chain).
+func BlockProfile(block map[string]any) string {
+	auth, ok := block["auth"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	profile, _ := auth["profile"].(string)
+	return profile
 }
 
 // BlockEndpoint extracts the endpoint from a parsed juggernaut block

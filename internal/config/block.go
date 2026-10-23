@@ -10,6 +10,9 @@ type JuggernautBlock struct {
 	AuthMode string
 	// Region is the persisted AWS region.
 	Region string
+	// Profile is the persisted named AWS profile ("developer" et al). Empty
+	// when apply ran without --profile — the ambient default chain is used.
+	Profile string
 	// PermissionMode is the persisted permissions.defaultMode.
 	PermissionMode string
 }
@@ -38,6 +41,7 @@ func ParseJuggernautBlock(data map[string]any) (*JuggernautBlock, bool) {
 	if auth, ok := block["auth"].(map[string]any); ok {
 		jb.AuthMode, _ = auth["mode"].(string)
 		jb.Region, _ = auth["region"].(string)
+		jb.Profile, _ = auth["profile"].(string)
 	}
 
 	if meta, ok := block["meta"].(map[string]any); ok {

@@ -8,6 +8,7 @@ import (
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/safepath"
+	"github.com/jpvelasco/juggernaut/v5/internal/schema"
 )
 
 // grok is the OFFICIAL xAI Grok CLI provider (grok / grok.exe, config TOML at
@@ -355,21 +356,29 @@ func (g grok) buildMantleConfig(opts Options) (ConfigPlan, error) {
 }
 
 // grokAuthProviderCommand returns the [auth] command for the selected mode.
-// API-key mode reads the keychain key. IAM mode embeds the region so Grok can
-// mint a region-scoped short-term Bedrock API key; Grok runs the command through
-// `sh -c`, so grokRegionRE keeps the region shell-safe.
+// API-key mode reads the keychain key. IAM mode embeds the region and optional
+// named profile so Grok can mint a region-scoped short-term Bedrock API key
+// from that profile's credentials; Grok runs the command through `sh -c`, so
+// grokRegionRE keeps the region shell-safe and schema.ValidProfileName keeps
+// the profile shell-safe.
 //
 // The region MUST be the resolved one (the same region in the model's
 // base_url): a Bedrock API key only works in the region it was minted for, and
 // the Iron Fist may move an unserved request to a different region.
-func grokAuthProviderCommand(authMode, region string) (string, error) {
+func grokAuthProviderCommand(authMode, region, profile string) (string, error) {
 	if authmode.IsBedrockAPIKey(authMode) {
 		return grokAuthCommand, nil
 	}
 	if !grokRegionRE.MatchString(region) {
 		return "", fmt.Errorf("invalid region %q for the Grok auth provider command", region)
 	}
-	return fmt.Sprintf("%s --iam --region=%s", grokAuthCommand, region), nil
+	if profile == "" {
+		return fmt.Sprintf("%s --iam --region=%s", grokAuthCommand, region), nil
+	}
+	if !schema.ValidProfileName(profile) {
+		return "", fmt.Errorf("invalid profile %q for the Grok auth provider command", profile)
+	}
+	return fmt.Sprintf("%s --iam --region=%s --profile=%s", grokAuthCommand, region, profile), nil
 }
 
 // grokPlan assembles the config shape shared by both endpoints: the named model
@@ -390,7 +399,7 @@ func (g grok) grokPlan(opts Options, region string, modelBlock map[string]any) (
 		return ConfigPlan{}, err
 	}
 	keys["juggernaut"] = blockMap
-	authCommand, err := grokAuthProviderCommand(opts.AuthMode, region)
+	authCommand, err := grokAuthProviderCommand(opts.AuthMode, region, opts.Profile)
 	if err != nil {
 		return ConfigPlan{}, err
 	}

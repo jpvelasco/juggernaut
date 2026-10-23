@@ -28,10 +28,12 @@ var authTokenFormat string
 
 // authTokenIAM mints a short-term Bedrock API key from the default AWS
 // credential chain instead of reading the keychain. authTokenRegion is required
-// in that mode (or supplied via AWS_REGION/AWS_DEFAULT_REGION).
+// in that mode (or supplied via AWS_REGION/AWS_DEFAULT_REGION). authTokenProfile
+// optionally pins a named shared-config profile for that mint.
 var (
-	authTokenIAM    bool
-	authTokenRegion string
+	authTokenIAM     bool
+	authTokenRegion  string
+	authTokenProfile string
 )
 
 // mintBedrockToken is a package var so command tests exercise the --iam branch
@@ -66,6 +68,8 @@ func init() {
 		"mint a short-term Bedrock token from the AWS credential chain")
 	authTokenCmd.Flags().StringVar(&authTokenRegion, "region", "",
 		"AWS region for --iam (defaults to AWS_REGION or AWS_DEFAULT_REGION)")
+	authTokenCmd.Flags().StringVar(&authTokenProfile, "profile", "",
+		"named AWS profile for --iam (shared-config profile backing the credential chain)")
 	rootCmd.AddCommand(authTokenCmd)
 }
 
@@ -76,12 +80,17 @@ func runAuthToken(_ *cobra.Command, _ []string) error {
 
 	var token string
 	var err error
+	profile := strings.TrimSpace(authTokenProfile)
+	if profile != "" && !authTokenIAM {
+		// A profile only changes the IAM mint path; surface it loudly.
+		return errors.New("--profile requires --iam")
+	}
 	if authTokenIAM {
 		region := authTokenIAMRegion()
 		if region == "" {
 			return errors.New("auth-token --iam requires --region (or AWS_REGION/AWS_DEFAULT_REGION)")
 		}
-		token, err = mintBedrockToken(context.Background(), region)
+		token, err = mintBedrockToken(context.Background(), region, profile)
 		if err != nil {
 			// Diagnostics go to stderr; stdout stays clean so the caller never
 			// mis-parses an error message as a token.

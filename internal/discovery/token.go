@@ -65,20 +65,22 @@ var signBedrockToken = func(ctx context.Context, creds aws.Credentials, region s
 	return "bedrock-api-key-" + base64.StdEncoding.EncodeToString([]byte(raw+"&Version=1")), nil
 }
 
-// MintBedrockToken mints a short-term Bedrock API key from the default AWS
-// credential chain for region. The key is valid for at most 12 hours and never
-// longer than the underlying credentials, so callers must treat it as a
-// short-lived secret and refresh it before expiry.
+// MintBedrockToken mints a short-term Bedrock API key from the given region's
+// credential chain — the named shared-config profile when profile is set,
+// otherwise the ambient default chain (AWS_PROFILE, default profile, env...).
+// The key is valid for at most 12 hours and never longer than the underlying
+// credentials, so callers must treat it as a short-lived secret and refresh it
+// before expiry.
 //
 // This is the bridge for clients that speak bearer auth but cannot sign SigV4
 // (the Grok CLI). The IAM/SSO principal must have the Bedrock permissions the
 // eventual request needs; minting itself only presigns locally.
-func MintBedrockToken(ctx context.Context, region string) (string, error) {
+func MintBedrockToken(ctx context.Context, region, profile string) (string, error) {
 	region = strings.TrimSpace(region)
 	if region == "" {
 		return "", errors.New("region is required to mint a short-term Bedrock token")
 	}
-	cfg, err := loadAWSConfig(ctx, region)
+	cfg, err := loadAWSConfig(ctx, region, profile)
 	if err != nil {
 		return "", err
 	}

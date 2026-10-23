@@ -24,7 +24,7 @@ var makeSTSClient = func(cfg aws.Config) stsClient { return sts.NewFromConfig(cf
 // CallerAccount returns the AWS account selected by the default credential
 // chain. It is called only during an explicit catalog refresh.
 func CallerAccount(ctx context.Context, region string) (string, error) {
-	cfg, err := loadAWSConfig(ctx, region)
+	cfg, err := loadAWSConfig(ctx, region, "")
 	if err != nil {
 		return "", err
 	}

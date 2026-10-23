@@ -177,7 +177,7 @@ func TestAuthToken_Command_InvalidFormat(t *testing.T) {
 }
 
 // stubMintBedrockToken replaces the AWS-backed minter for one command test.
-func stubMintBedrockToken(t *testing.T, fn func(context.Context, string) (string, error)) {
+func stubMintBedrockToken(t *testing.T, fn func(context.Context, string, string) (string, error)) {
 	t.Helper()
 	original := mintBedrockToken
 	mintBedrockToken = fn
@@ -190,7 +190,7 @@ func stubMintBedrockToken(t *testing.T, fn func(context.Context, string) (string
 func TestAuthToken_Command_IAM_MintsShortTermToken(t *testing.T) {
 	var gotRegion string
 	key := makeShortTermKey(time.Now().UTC(), 3600)
-	stubMintBedrockToken(t, func(_ context.Context, region string) (string, error) {
+	stubMintBedrockToken(t, func(_ context.Context, region string, _ string) (string, error) {
 		gotRegion = region
 		return key, nil
 	})
@@ -222,7 +222,7 @@ func TestAuthToken_Command_IAM_RegionFromEnv(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-2")
 	t.Setenv("AWS_DEFAULT_REGION", "")
 	var gotRegion string
-	stubMintBedrockToken(t, func(_ context.Context, region string) (string, error) {
+	stubMintBedrockToken(t, func(_ context.Context, region string, _ string) (string, error) {
 		gotRegion = region
 		return "iam-token", nil
 	})
@@ -254,7 +254,7 @@ func TestAuthToken_Command_IAM_RequiresRegion(t *testing.T) {
 // TestAuthToken_Command_IAM_ErrorsKeepStdoutClean: mint failures must not leak
 // diagnostics into the token stream Grok parses.
 func TestAuthToken_Command_IAM_ErrorsKeepStdoutClean(t *testing.T) {
-	stubMintBedrockToken(t, func(context.Context, string) (string, error) {
+	stubMintBedrockToken(t, func(context.Context, string, string) (string, error) {
 		return "", errors.New("sso expired")
 	})
 	out := captureStdout(t, func() {
@@ -275,7 +275,7 @@ func TestAuthToken_Command_IAM_ErrorsKeepStdoutClean(t *testing.T) {
 // TestAuthToken_Command_IAM_FormatToken: Codex-style bare output also works for
 // a minted IAM token (no JSON wrapper).
 func TestAuthToken_Command_IAM_FormatToken(t *testing.T) {
-	stubMintBedrockToken(t, func(context.Context, string) (string, error) {
+	stubMintBedrockToken(t, func(context.Context, string, string) (string, error) {
 		return "iam-token", nil
 	})
 	out := captureStdout(t, func() {
@@ -291,7 +291,7 @@ func TestAuthToken_Command_IAM_FormatToken(t *testing.T) {
 // TestAuthToken_Command_IAM_RejectsEmptyToken covers the defensive empty-token
 // branch (a minter regression must not print a blank line as a bearer token).
 func TestAuthToken_Command_IAM_RejectsEmptyToken(t *testing.T) {
-	stubMintBedrockToken(t, func(context.Context, string) (string, error) {
+	stubMintBedrockToken(t, func(context.Context, string, string) (string, error) {
 		return "", nil
 	})
 	var err error

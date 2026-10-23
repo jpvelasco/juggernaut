@@ -80,6 +80,16 @@ juggernaut apply
 
 `juggernaut apply` writes Bedrock routing for the auth mode you select. It does not call AWS. `--auth=iam` trusts the credential chain already on the machine (environment, shared config, or SSO) and does not run a signed STS or Bedrock request. `--auth=bedrock-api-key` stores the key in the OS keychain and does not probe Bedrock at apply time either. `doctor` is the check: API-key mode sends the stored bearer token; IAM mode only confirms the regional endpoint is reachable (an unsigned request — HTTP 403 with an auth error counts as up). Claude Code signs IAM requests itself when it runs.
 
+### Named AWS profiles (`--profile`)
+
+If your credentials live in a named SSO/shared-config profile (no `default` profile), pin it with `--profile` so the credential chain resolves deterministically:
+
+```bash
+juggernaut apply --auth=iam --profile=developer
+```
+
+The profile name is validated against your local shared config files (file reads only — no AWS call) and persisted in the `juggernaut.auth` block. `juggernaut launch` then exports `AWS_PROFILE=<profile>` to the wrapped CLI unless your shell already exports its own value, and `doctor` warns when an IAM config has no profile stored and `AWS_PROFILE` isn't set. Requires `--auth=iam`; a later `apply --auth=bedrock-api-key` clears it.
+
 ### Multi-CLI (`--cli`)
 
 | CLI | Flag | Config path (user scope) |
@@ -100,7 +110,7 @@ juggernaut models refresh --source native --region us-west-2
 
 **Codex:** requires Codex CLI ≥ 0.153.4 (the first release with the built-in `amazon-bedrock-runtime` provider). Juggernaut pins `model_provider = "amazon-bedrock-runtime"` plus a region under `[model_providers.amazon-bedrock-runtime.aws]` — no custom `base_url`. If your `codex` binary is older, `apply` and `doctor` warn; update with `npm i -g @openai/codex@latest`.
 
-**Grok:** the Grok CLI only speaks bearer auth, so with `--auth=iam` Juggernaut points Grok's `[auth]` provider at `juggernaut auth-token --iam`, which mints a short-term Bedrock API key from your AWS credentials (SSO included) — no API key to store, and the key is refreshed automatically. `--auth=bedrock-api-key` keeps reading the keychain key.
+**Grok:** the Grok CLI only speaks bearer auth, so with `--auth=iam` Juggernaut points Grok's `[auth]` provider at `juggernaut auth-token --iam`, which mints a short-term Bedrock API key from your AWS credentials (SSO included) — no API key to store, and the key is refreshed automatically. A persisted `--profile` is embedded in the mint command (`--profile=<name>`) and threaded into `auth-token --iam`, so Grok works on profile-only machines too. `--auth=bedrock-api-key` keeps reading the keychain key.
 
 Activation blocks for different CLIs coexist in one shell profile. The Bedrock bearer token is **shared** across CLIs — uninstalling one non-Claude CLI does not remove it (only the last dependent CLI clears it).
 
@@ -117,6 +127,7 @@ Juggernaut treats existing configuration and real CLI binaries as untouchable. F
 
 ```bash
 juggernaut apply --auth=iam --region=us-east-1
+juggernaut apply --auth=iam --profile=developer       # pin a named SSO/shared-config profile
 juggernaut apply --auth=iam --opusplan              # Opus in /plan, Sonnet in execute
 juggernaut apply --auth=iam --effort=high           # low | medium | high | xhigh | max | auto
 juggernaut apply --auth=iam --mode=auto             # enable agentic safety-classifier mode

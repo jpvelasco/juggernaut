@@ -67,6 +67,11 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	env := os.Environ()
 	modes := authModes(opts.Home, opts.Warner)
 
+	// A profile exported by the parent shell wins over anything Juggernaut
+	// stored: the user chose it for this session. Empty means "unset" (the SDK
+	// falls back to the default profile), never a deliberate choice.
+	parentProfile := envEntryValue(env, "AWS_PROFILE")
+
 	// Determine whether this launch is Juggernaut-managed and whether it needs a
 	// bearer token. Claude declares its auth mode in ~/.claude/settings.json
 	// (scanned by authModes). Non-Claude CLIs store the auth mode in their own
@@ -77,11 +82,14 @@ func LaunchWithOptions(opts LaunchOptions) error {
 	wantToken := needsBearerToken(modes) || target.NeedsToken
 	var fallbackEnv map[string]string
 
-	// First non-empty juggernaut.auth.mode wins (project then user).
+	// First non-empty juggernaut.auth.mode wins (project then user); the same
+	// winning block may also pin a named AWS profile for the credential chain.
+	storedProfile := ""
 	for _, path := range targetConfigPaths(target) {
-		if mode := readAuthModeFromConfig(path); mode != "" {
+		if jb, ok := readAuthBlockFromConfig(path); ok && jb.AuthMode != "" {
+			storedProfile = jb.Profile
 			managed = true
-			wantToken = authmode.IsBedrockAPIKey(mode)
+			wantToken = authmode.IsBedrockAPIKey(jb.AuthMode)
 			break
 		}
 	}
@@ -108,10 +116,22 @@ func LaunchWithOptions(opts LaunchOptions) error {
 
 	if managed {
 		for k, v := range fallbackEnv {
+			if k == "AWS_PROFILE" && parentProfile != "" {
+				// Skip: the parent's AWS_PROFILE choice must not be clobbered
+				// by the saved runtime env — same precedence as below.
+				continue
+			}
 			env = setEnv(env, k, v)
 		}
 		for k, v := range target.StaticEnv {
 			env = setEnv(env, k, v)
+		}
+		// A stored named profile pins the child's credential chain, but only
+		// when the parent environment did not already choose one (see
+		// parentProfile). This is what makes IAM work for CLIs whose config
+		// format cannot carry environment overrides (Codex, OpenCode).
+		if storedProfile != "" && parentProfile == "" {
+			env = setEnv(env, "AWS_PROFILE", storedProfile)
 		}
 	}
 	if wantToken {
@@ -261,16 +281,16 @@ func needsBearerToken(modes []string) bool {
 	return false
 }
 
-// readAuthModeFromConfig reads the auth mode from a provider config file's
-// juggernaut block. It handles both JSON and TOML formats based on file
-// extension. Returns empty string if the file doesn't exist, has no juggernaut
-// block, or can't be parsed.
-func readAuthModeFromConfig(path string) string {
+// readAuthBlockFromConfig reads the parsed juggernaut block from a provider
+// config file. It handles both JSON and TOML formats based on file extension.
+// Returns ok=false if the file doesn't exist, has no juggernaut block, or
+// can't be parsed.
+func readAuthBlockFromConfig(path string) (*config.JuggernautBlock, bool) {
 	var mgr *config.Manager
 	if strings.HasSuffix(path, ".toml") {
 		f, err := config.FormatByName("toml")
 		if err != nil {
-			return ""
+			return nil, false
 		}
 		mgr = config.NewManagerWithFormat(path, f)
 	} else {
@@ -278,9 +298,15 @@ func readAuthModeFromConfig(path string) string {
 	}
 	data, err := mgr.Read()
 	if err != nil {
-		return ""
+		return nil, false
 	}
-	if jb, ok := config.ParseJuggernautBlock(data); ok {
+	return config.ParseJuggernautBlock(data)
+}
+
+// readAuthModeFromConfig reads the auth mode from a provider config file's
+// juggernaut block (the mode accessor over readAuthBlockFromConfig).
+func readAuthModeFromConfig(path string) string {
+	if jb, ok := readAuthBlockFromConfig(path); ok {
 		return jb.AuthMode
 	}
 	return ""
@@ -359,6 +385,20 @@ func envEntryHasKey(entry, key string) bool {
 		return strings.EqualFold(entryKey, key)
 	}
 	return entryKey == key
+}
+
+// envEntryValue returns the value of key in the env list, or "" when the key
+// is absent. An empty *stored* value is indistinguishable from absent — both
+// mean "not chosen" for precedence purposes.
+func envEntryValue(env []string, key string) string {
+	for _, entry := range env {
+		if !envEntryHasKey(entry, key) {
+			continue
+		}
+		i := strings.IndexByte(entry, '=')
+		return entry[i+1:]
+	}
+	return ""
 }
 
 // --- DefaultBinDir (used by artifact recovery but also by cmd/doctor) ---

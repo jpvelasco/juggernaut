@@ -278,16 +278,16 @@ func TestGrok_BuildConfig_IAMWritesShortTermTokenCommand(t *testing.T) {
 // TestGrokAuthProviderCommand: API-key mode reads the keychain without a
 // region-scoped command; IAM mode embeds only shell-safe region names.
 func TestGrokAuthProviderCommand(t *testing.T) {
-	got, err := grokAuthProviderCommand(authmode.BedrockAPIKey, "us-west-2")
+	got, err := grokAuthProviderCommand(authmode.BedrockAPIKey, "us-west-2", "")
 	if err != nil || got != grokAuthCommand {
 		t.Errorf("API-key command = %q, %v; want %q", got, err, grokAuthCommand)
 	}
-	got, err = grokAuthProviderCommand(authmode.IAM, "us-west-2")
+	got, err = grokAuthProviderCommand(authmode.IAM, "us-west-2", "")
 	if err != nil || got != grokAuthCommand+" --iam --region=us-west-2" {
 		t.Errorf("IAM command = %q, %v; want the minted-token command", got, err)
 	}
 	for _, bad := range []string{"", "us-west-2; touch /tmp/pwned", "us west 2"} {
-		if _, err := grokAuthProviderCommand(authmode.IAM, bad); err == nil {
+		if _, err := grokAuthProviderCommand(authmode.IAM, bad, ""); err == nil {
 			t.Errorf("IAM command accepted unsafe/empty region %q", bad)
 		}
 	}

@@ -63,7 +63,7 @@ func TestMintBedrockToken_StaticCredentials(t *testing.T) {
 		}},
 	}, nil)
 
-	token, err := MintBedrockToken(context.Background(), "us-west-2")
+	token, err := MintBedrockToken(context.Background(), "us-west-2", "")
 	if err != nil {
 		t.Fatalf("MintBedrockToken: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestMintBedrockToken_ExpiringCredentials(t *testing.T) {
 		}},
 	}, nil)
 
-	token, err := MintBedrockToken(context.Background(), "us-east-1")
+	token, err := MintBedrockToken(context.Background(), "us-east-1", "")
 	if err != nil {
 		t.Fatalf("MintBedrockToken: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestMintBedrockToken_RejectsShortLivedCredentials(t *testing.T) {
 					Expires:         tc.expires,
 				}},
 			}, nil)
-			_, err := MintBedrockToken(context.Background(), "us-west-2")
+			_, err := MintBedrockToken(context.Background(), "us-west-2", "")
 			if err == nil {
 				t.Fatal("expected an error for short-lived credentials")
 			}
@@ -158,21 +158,21 @@ func TestMintBedrockToken_RejectsShortLivedCredentials(t *testing.T) {
 
 func TestMintBedrockToken_ErrorPaths(t *testing.T) {
 	t.Run("region required", func(t *testing.T) {
-		if _, err := MintBedrockToken(context.Background(), "  "); err == nil ||
+		if _, err := MintBedrockToken(context.Background(), "  ", ""); err == nil ||
 			!strings.Contains(err.Error(), "region is required") {
 			t.Fatalf("error = %v, want a region-required error", err)
 		}
 	})
 	t.Run("config load", func(t *testing.T) {
 		stubTokenAWSConfig(t, aws.Config{}, errors.New("no config"))
-		if _, err := MintBedrockToken(context.Background(), "us-west-2"); err == nil ||
+		if _, err := MintBedrockToken(context.Background(), "us-west-2", ""); err == nil ||
 			!strings.Contains(err.Error(), "loading AWS config") {
 			t.Fatalf("error = %v, want a loading-AWS-config error", err)
 		}
 	})
 	t.Run("no credentials provider", func(t *testing.T) {
 		stubTokenAWSConfig(t, aws.Config{}, nil)
-		if _, err := MintBedrockToken(context.Background(), "us-west-2"); err == nil ||
+		if _, err := MintBedrockToken(context.Background(), "us-west-2", ""); err == nil ||
 			!strings.Contains(err.Error(), "no credentials provider") {
 			t.Fatalf("error = %v, want a no-credentials-provider error", err)
 		}
@@ -181,7 +181,7 @@ func TestMintBedrockToken_ErrorPaths(t *testing.T) {
 		stubTokenAWSConfig(t, aws.Config{
 			Credentials: stubCredentialsProvider{err: errors.New("sso expired")},
 		}, nil)
-		if _, err := MintBedrockToken(context.Background(), "us-west-2"); err == nil ||
+		if _, err := MintBedrockToken(context.Background(), "us-west-2", ""); err == nil ||
 			!strings.Contains(err.Error(), "sso expired") {
 			t.Fatalf("error = %v, want the credentials error", err)
 		}
