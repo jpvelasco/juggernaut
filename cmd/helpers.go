@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,9 +128,8 @@ func resolvedScopes(filter string) []string {
 }
 
 // resolveLaunchConfigPaths returns this provider's juggernaut.auth.mode sources
-// in launch precedence order: sidecar files first (project then user, for
-// providers that keep the block out of the vendor-validated config), then the
-// config files (project then user, legacy in-file block). Duplicate paths
+// in launch precedence order: project sidecar/config, then user sidecar/config.
+// A migrated user config must never override legacy project auth. Duplicate paths
 // (Grok maps both scopes to the same file) are omitted so launch reads each
 // file once.
 func resolveLaunchConfigPaths(prov provider.Provider, home string) []string {
@@ -145,12 +145,12 @@ func resolveLaunchConfigPaths(prov provider.Provider, home string) []string {
 		seen[p] = struct{}{}
 		paths = append(paths, p)
 	}
-	if src, ok := prov.(provider.SidecarAuthSource); ok {
-		for _, p := range src.SidecarPaths(home) {
-			add(p)
-		}
-	}
 	for _, scope := range []string{"project", "user"} {
+		if src, ok := prov.(provider.SidecarAuthSource); ok {
+			if p, err := src.SidecarPath(home, scope); err == nil {
+				add(p)
+			}
+		}
 		p, err := prov.ConfigPath(home, scope)
 		if err != nil || p == "" {
 			continue
@@ -193,8 +193,8 @@ func validateAuthFlag() error {
 
 // resolveApplyProfile determines the named AWS profile through the same
 // precedence as the auth mode: explicit --profile flag → --no-profile
-// (explicit clear: ambient default chain, never validated) → sidecar blocks
-// (project then user, when the provider keeps the block outside its config)
+// (explicit clear: ambient default chain, never validated) → selected-scope sidecar
+// (when the provider keeps the block outside its config)
 // → in-file juggernaut block → "" (ambient default chain). It is only
 // meaningful for IAM: bearer auth stores no profile, so --profile is a
 // command error there while --no-profile is accepted but inert, and a
@@ -225,15 +225,15 @@ func resolveApplyProfile(prov provider.Provider, home, authMode string) (string,
 	if applyFlags.noProfile {
 		return "", nil
 	}
-	if p, ok := provider.ReadSidecarProfile(prov, home); ok {
-		return p, nil
-	}
 	existing, isReapply, err := detectReapplyConfig(prov, home, applyFlags.scope)
 	if err != nil {
 		return "", err
 	}
 	if !isReapply {
 		return "", nil
+	}
+	if block, ok := provider.ReadScopeAuthBlock(prov, home, applyFlags.scope, existing); ok {
+		return provider.BlockProfile(block), nil
 	}
 	return existingProfile(existing), nil
 }
@@ -399,7 +399,7 @@ func existingEndpoint(existing map[string]any) string {
 
 // resolveAuthMode determines the authentication mode through the resolution
 // chain: flag value → provider default (BedrockAPIKey only for a provider
-// without native SigV4 support) → sidecar block (project then user, when the
+// without native SigV4 support) → sidecar block (for the selected scope, when the
 // provider keeps the block outside the vendor-validated config) → in-file
 // juggernaut block (legacy) → bedrock config default.
 func resolveAuthMode(flagValue, home string, prov provider.Provider, bCfg *bedrock.Config, existing map[string]any) string {
@@ -409,8 +409,10 @@ func resolveAuthMode(flagValue, home string, prov provider.Provider, bCfg *bedro
 	if !prov.Supports(provider.CapNativeAuth) {
 		return authmode.BedrockAPIKey
 	}
-	if mode, ok := provider.ReadSidecarAuthMode(prov, home); ok {
-		return mode
+	if block, ok := provider.ReadScopeAuthBlock(prov, home, applyFlags.scope, existing); ok {
+		if mode := provider.BlockAuthMode(block); mode != "" {
+			return mode
+		}
 	}
 	if mode := existingAuthMode(existing); mode != "" {
 		return mode
@@ -601,7 +603,7 @@ func detectForeignCollisions(home, scope string, prov provider.Provider, plan pr
 	}
 	// A legacy v5 config (Mantle-era) must be migrated even if it passes
 	// OwnsConfig — the old base_url / model IDs are wrong for v6.
-	if prov.OwnsConfig(existing) && !isJuggernautLegacy(existing) {
+	if prov.OwnsConfig(existing) && !isLegacyProviderConfig(prov, home, scope, existing) {
 		return nil, nil
 	}
 	return config.DetectCollisions(existing, plan.Keys, prov.DeepMergeKeys(), prov.OwnedSubKeys()), nil
@@ -758,7 +760,20 @@ func readExistingForLegacy(prov provider.Provider, home, scope string) map[strin
 // legacy configs qualify; a genuinely foreign config is never treated as
 // legacy and still requires --force.
 func migrateLegacyJuggernautConfig(prov provider.Provider, home, scope string) bool {
-	return isJuggernautLegacy(readExistingForLegacy(prov, home, scope))
+	return isLegacyProviderConfig(prov, home, scope, readExistingForLegacy(prov, home, scope))
+}
+
+// Legacy detection needs the effective endpoint even when its metadata is in
+// a sidecar. Enrich a copy so native config reads never gain private keys.
+func isLegacyProviderConfig(prov provider.Provider, home, scope string, existing map[string]any) bool {
+	if block, ok := provider.ReadScopeAuthBlock(prov, home, scope, existing); ok {
+		existing = maps.Clone(existing)
+		if existing == nil {
+			existing = make(map[string]any)
+		}
+		existing["juggernaut"] = block
+	}
+	return isJuggernautLegacy(existing)
 }
 
 // announceMigration prints the v5→v6 migration notice for a legacy
@@ -793,6 +808,9 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if err := plan.Validate(); err != nil {
 		return fmt.Errorf("invalid config plan for %s: %w", prov.Name(), err)
 	}
+	if plan.ResolvedRegion != "" {
+		provOpts.Region = plan.ResolvedRegion
+	}
 
 	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
@@ -823,25 +841,30 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if err != nil {
 		return err
 	}
-	if err := mgr.MergeConfigPlanDeepThen(plan.Keys, prov.DeepMergeKeys(), func(existing map[string]any) {
+	if err := mgr.MergeConfigPlanDeepThen(plan.Keys, prov.DeepMergeKeys(), func(existing map[string]any) error {
+		// Save auth metadata before removing its legacy in-file source. Failure
+		// must abort the native config write rather than lose the saved profile.
+		if err := persistSidecarState(home, prov, provOpts); err != nil {
+			return err
+		}
 		if migrating {
 			stripMantleLeftovers(existing)
-			provider.StripLegacyConfig(prov, existing)
+			provider.StripLegacyConfig(prov, existing, provOpts.Endpoint)
 		}
 		if cleaner, ok := prov.(provider.EndpointCleaner); ok {
 			cleaner.CleanEndpoint(existing, provOpts.Endpoint)
 		}
-		// Sidecar providers (OpenCode) always strip the v6.2.0–v6.3.0
-		// in-file juggernaut block — a plain apply is the migration, even
+		// Sidecar providers strip their legacy in-file juggernaut block —
+		// a plain apply is the migration, even
 		// when no Mantle migration is in flight.
 		if notice := provider.MigrateSidecarLegacy(prov, existing); notice != "" {
 			fmt.Printf("Migrating %s: %s\n", prov.DisplayName(), notice)
 		}
+		return nil
 	}); err != nil {
 		return err
 	}
 
-	persistSidecarState(home, prov, provOpts)
 	persistRuntimeState(home, prov, authMode, plan)
 	if err := installActivation(home, prov); err != nil {
 		return err
@@ -860,15 +883,15 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 // persistSidecarState writes the provider's sidecar auth-mode file (non-secret
 // metadata only — the bearer token stays in the keychain). Providers without
 // the sidecar extension keep the block inside their config, so this is a
-// no-op for them. A sidecar write failure warns but never fails the config
-// write (same secondary-write pattern as persistRuntimeState).
-func persistSidecarState(home string, prov provider.Provider, provOpts provider.Options) {
+// no-op for them. A sidecar write failure aborts the native config write.
+func persistSidecarState(home string, prov provider.Provider, provOpts provider.Options) error {
 	if !provider.HasSidecar(prov) {
-		return
+		return nil
 	}
 	if err := provider.WriteSidecar(prov, home, provOpts); err != nil {
-		warnf("could not write %s auth metadata sidecar: %v", prov.Name(), err)
+		return fmt.Errorf("could not write %s auth metadata sidecar: %w", prov.Name(), err)
 	}
+	return nil
 }
 
 // persistRuntimeState retains only provider-generated, non-secret user-scope

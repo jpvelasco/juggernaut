@@ -220,7 +220,7 @@ func TestCodexMantleLegacyCleanupKeepsNativeRegion(t *testing.T) {
 	}
 	entry := plan.Keys["model_providers"].(map[string]any)["amazon-bedrock"].(map[string]any)
 	entry["base_url"], entry["env_key"], entry["wire_api"], entry["custom"] = "https://example.invalid", "OLD_KEY", "chat", "keep"
-	StripLegacyConfig(p, plan.Keys)
+	StripLegacyConfig(p, plan.Keys, "mantle")
 	if err := p.(MantleConfigChecker).ValidateMantleConfig(plan.Keys, "us-west-2"); err != nil {
 		t.Fatal(err)
 	}

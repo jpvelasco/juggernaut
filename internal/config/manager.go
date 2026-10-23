@@ -238,12 +238,12 @@ func (m *Manager) MergeConfigPlanDeep(keys map[string]any, deepKeys []string) er
 // MergeConfigPlanDeepThen is MergeConfigPlanDeep plus an optional post-merge
 // mutation of the in-memory map, still under the same file lock. Used to
 // strip leftover sibling tables (e.g. Mantle provider blocks) without a
-// second backup rotation.
-func (m *Manager) MergeConfigPlanDeepThen(keys map[string]any, deepKeys []string, then func(map[string]any)) error {
+// second backup rotation. A callback error aborts the config write.
+func (m *Manager) MergeConfigPlanDeepThen(keys map[string]any, deepKeys []string, then func(map[string]any) error) error {
 	return m.mergeConfigPlanDeep(keys, deepKeys, then)
 }
 
-func (m *Manager) mergeConfigPlanDeep(keys map[string]any, deepKeys []string, then func(map[string]any)) error {
+func (m *Manager) mergeConfigPlanDeep(keys map[string]any, deepKeys []string, then func(map[string]any) error) error {
 	return m.withConfig(func(existing map[string]any) error {
 		err := walkManagedKeys(keys, deepKeys, func(key string, value any, action managedKeyAction) error {
 			switch action {
@@ -260,7 +260,7 @@ func (m *Manager) mergeConfigPlanDeep(keys map[string]any, deepKeys []string, th
 			return err
 		}
 		if then != nil {
-			then(existing)
+			return then(existing)
 		}
 		return nil
 	})

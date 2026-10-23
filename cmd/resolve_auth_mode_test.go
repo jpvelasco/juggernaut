@@ -155,6 +155,8 @@ func TestResolveAuthMode_Table(t *testing.T) {
 // block still wins over the default so pre-sidecar configs resolve
 // unchanged.
 func TestResolveAuthMode_OpenCodeSidecar(t *testing.T) {
+	resetFlags()
+	t.Cleanup(resetFlags)
 	home := testutil.NewTestHome(t)
 	prov := mustProvider(t, "opencode")
 	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{AuthMode: authmode.IAM, Region: "us-west-2"}}
@@ -185,7 +187,8 @@ func TestResolveAuthMode_OpenCodeSidecar(t *testing.T) {
 		t.Errorf("user sidecar: got %q, want %s", got, authmode.IAM)
 	}
 
-	// A project-scope sidecar beats the user-scope one (project-then-user).
+	// Apply consults only the selected scope, so project auth cannot leak into
+	// a user-scope apply (or vice versa).
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	if err := provider.WriteSidecar(prov, home, provider.Options{
@@ -193,6 +196,10 @@ func TestResolveAuthMode_OpenCodeSidecar(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("WriteSidecar(project): %v", err)
 	}
+	if got := resolveAuthMode("", home, prov, bCfg, nil); got != authmode.IAM {
+		t.Errorf("project auth leaked into user apply: %q", got)
+	}
+	applyFlags.scope = "project"
 	if got := resolveAuthMode("", home, prov, bCfg, nil); got != authmode.BedrockAPIKey {
 		t.Errorf("project sidecar must beat user: got %q, want %s", got, authmode.BedrockAPIKey)
 	}

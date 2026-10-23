@@ -25,9 +25,8 @@ func ToMap(v any) (map[string]any, error) {
 	return m, nil
 }
 
-// juggernautAuthBlock is the shared [juggernaut] table non-Claude providers
-// persist so launch can read auth mode (IAM vs API key) from the same file
-// apply wrote.
+// juggernautAuthBlock is the shared non-Claude auth metadata. Grok keeps it
+// in-file; Codex and OpenCode keep it in sidecars for launch to read.
 func juggernautAuthBlock(opts Options, region string) (map[string]any, error) {
 	endpoint := opts.Endpoint
 	if endpoint == bedrock.EndpointRuntime {
@@ -215,9 +214,12 @@ const (
 
 // ConfigPlan is what a Provider persists to its config file at apply time.
 type ConfigPlan struct {
-	Keys        map[string]any // merged into the config file (provider's format)
-	ManagedKeys []string       // top-level keys Juggernaut owns → removed on uninstall
-	Warnings    []string       // actionable heads-ups (region/model notes, auto-mode gating)
+	// ResolvedRegion is the effective provider region after model routing. It
+	// keeps separately persisted auth metadata aligned with the native config.
+	ResolvedRegion string
+	Keys           map[string]any // merged into the config file (provider's format)
+	ManagedKeys    []string       // top-level keys Juggernaut owns → removed on uninstall
+	Warnings       []string       // actionable heads-ups (region/model notes, auto-mode gating)
 	// RuntimeEnv is the non-secret environment that may be retained separately
 	// when a provider opts into runtime-state fallback.
 	RuntimeEnv map[string]string

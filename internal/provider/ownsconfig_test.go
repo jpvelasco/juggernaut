@@ -66,7 +66,7 @@ func TestCodex_CleanLegacy(t *testing.T) {
 			CodexLegacyProviderID: map[string]any{"aws": map[string]any{"region": "us-west-2"}},
 		},
 	}
-	p.(LegacyCleaner).CleanLegacy(existing)
+	p.(LegacyCleaner).CleanLegacy(existing, "runtime")
 	if _, ok := existing["model_providers"]; ok {
 		t.Errorf("empty model_providers table should be dropped, got %v", existing["model_providers"])
 	}
@@ -77,7 +77,7 @@ func TestCodex_CleanLegacy(t *testing.T) {
 			"my-own":              map[string]any{"base_url": "http://localhost:1/v1"},
 		},
 	}
-	p.(LegacyCleaner).CleanLegacy(withUser)
+	p.(LegacyCleaner).CleanLegacy(withUser, "runtime")
 	mp := withUser["model_providers"].(map[string]any)
 	if _, ok := mp[CodexLegacyProviderID]; ok {
 		t.Errorf("legacy table must be deleted")

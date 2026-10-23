@@ -48,19 +48,17 @@ func TestOpenCode_SidecarPaths(t *testing.T) {
 		t.Errorf("user sidecar = %q, want %q", user, wantUser)
 	}
 
-	paths := src.SidecarPaths(home)
-	if len(paths) != 2 {
-		t.Fatalf("SidecarPaths = %v, want 2 entries", paths)
-	}
-	if paths[0] != proj || paths[1] != user {
-		t.Errorf("SidecarPaths order = %v, want project then user", paths)
-	}
+}
+
+func readScopeAuthMode(p Provider, home, scope string) (string, bool) {
+	block, ok := ReadScopeAuthBlock(p, home, scope, nil)
+	return BlockAuthMode(block), ok
 }
 
 // TestOpenCode_OtherProvidersHaveNoSidecar pins the extension boundary:
-// only opencode keeps the block outside the vendor file.
+// Claude and Grok retain in-file metadata; Codex and OpenCode use sidecars.
 func TestOpenCode_OtherProvidersHaveNoSidecar(t *testing.T) {
-	for _, name := range []string{"claude", "codex", "grok"} {
+	for _, name := range []string{"claude", "grok"} {
 		p, _ := Get(name)
 		if HasSidecar(p) {
 			t.Errorf("%s must not implement SidecarAuthSource", name)
@@ -119,9 +117,9 @@ func TestSidecar_WriteReadRoundTrip(t *testing.T) {
 		if block := ReadSidecarFile(path); block == nil {
 			t.Fatal("ReadSidecarFile(user) = nil, want the block")
 		}
-		mode, ok := ReadSidecarAuthMode(p, home)
+		mode, ok := readScopeAuthMode(p, home, "user")
 		if !ok || mode != authmode.BedrockAPIKey {
-			t.Errorf("ReadSidecarAuthMode = %q, %v; want bedrock-api-key", mode, ok)
+			t.Errorf("user sidecar auth = %q, %v; want bedrock-api-key", mode, ok)
 		}
 		if err := RemoveSidecar(p, home, []string{"user"}); err != nil {
 			t.Fatalf("RemoveSidecar(user): %v", err)
@@ -154,9 +152,9 @@ func TestSidecar_WriteReadRoundTrip(t *testing.T) {
 		if !samePath(path, want) {
 			t.Errorf("project sidecar = %q, want %q", path, want)
 		}
-		mode, ok := ReadSidecarAuthMode(p, home)
+		mode, ok := readScopeAuthMode(p, home, "project")
 		if !ok || mode != authmode.IAM {
-			t.Errorf("ReadSidecarAuthMode(project) = %q, %v; want iam", mode, ok)
+			t.Errorf("project sidecar auth = %q, %v; want iam", mode, ok)
 		}
 		if err := RemoveSidecar(p, home, []string{"project"}); err != nil {
 			t.Fatalf("RemoveSidecar(project): %v", err)
@@ -186,7 +184,7 @@ func TestSidecar_ReadForeignAndMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Missing file: no mode, no error.
-	if mode, ok := ReadSidecarAuthMode(p, home); ok || mode != "" {
+	if mode, ok := readScopeAuthMode(p, home, "user"); ok || mode != "" {
 		t.Errorf("missing sidecar: got mode %q ok=%v, want empty/false", mode, ok)
 	}
 	// Foreign content with the same filename is never misread (managedBy gate).
@@ -194,14 +192,14 @@ func TestSidecar_ReadForeignAndMissing(t *testing.T) {
 	if err := os.WriteFile(userPath, []byte(foreign), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if mode, ok := ReadSidecarAuthMode(p, home); ok || mode != "" {
+	if mode, ok := readScopeAuthMode(p, home, "user"); ok || mode != "" {
 		t.Errorf("foreign sidecar: got mode %q ok=%v, want empty/false", mode, ok)
 	}
 	// Malformed JSON is silently skipped.
 	if err := os.WriteFile(userPath, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if mode, ok := ReadSidecarAuthMode(p, home); ok || mode != "" {
+	if mode, ok := readScopeAuthMode(p, home, "user"); ok || mode != "" {
 		t.Errorf("malformed sidecar: got mode %q ok=%v, want empty/false", mode, ok)
 	}
 }
@@ -231,7 +229,7 @@ func TestSidecar_ProjectWinsOverUser(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Remove(projPath) })
 
-	mode, ok := ReadSidecarAuthMode(p, home)
+	mode, ok := readScopeAuthMode(p, home, "project")
 	if !ok || mode != authmode.BedrockAPIKey {
 		t.Errorf("project sidecar must win over user: got %q, %v", mode, ok)
 	}
@@ -243,13 +241,13 @@ func TestSidecar_NonSidecarProvidersNoOp(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	opts := baseOpts()
 
-	for _, name := range []string{"claude", "codex", "grok"} {
+	for _, name := range []string{"claude", "grok"} {
 		p := mustGetProvider(t, name)
 		if err := WriteSidecar(p, home, opts); err != nil {
 			t.Errorf("%s: WriteSidecar must be a no-op, got %v", name, err)
 		}
-		if mode, ok := ReadSidecarAuthMode(p, home); ok || mode != "" {
-			t.Errorf("%s: ReadSidecarAuthMode must be empty/false, got %q, %v", name, mode, ok)
+		if mode, ok := readScopeAuthMode(p, home, "user"); ok || mode != "" {
+			t.Errorf("%s: sidecar auth must be empty/false, got %q, %v", name, mode, ok)
 		}
 		if SidecarExists(p, home, "user") {
 			t.Errorf("%s: SidecarExists must be false", name)
@@ -356,7 +354,7 @@ func TestMigrateSidecarLegacy(t *testing.T) {
 
 // errPathSidecar is a SidecarAuthSource whose SidecarPath always fails. It
 // pins that every helper propagates the path error instead of panicking or
-// silently proceeding (SidecarExists/ReadSidecarAuthMode degrade to "absent").
+// silently proceeding (SidecarExists/ReadScopeAuthBlock degrade to "absent").
 // Embedding the Provider interface (unused here) lets it satisfy the Provider
 // parameter types without a full implementation.
 type errPathSidecar struct{ Provider }
@@ -364,8 +362,6 @@ type errPathSidecar struct{ Provider }
 func (errPathSidecar) SidecarPath(string, string) (string, error) {
 	return "", fmt.Errorf("cannot resolve sidecar path")
 }
-
-func (errPathSidecar) SidecarPaths(string) []string { return nil }
 
 func TestSidecar_ErrPathSidecar(t *testing.T) {
 	home := testutil.NewTestHome(t)
@@ -379,8 +375,8 @@ func TestSidecar_ErrPathSidecar(t *testing.T) {
 	if SidecarExists(p, home, "user") {
 		t.Error("SidecarExists must be false when the path cannot be resolved")
 	}
-	if mode, ok := ReadSidecarAuthMode(p, home); ok || mode != "" {
-		t.Errorf("ReadSidecarAuthMode = %q, %v; want empty/false on path error", mode, ok)
+	if mode, ok := readScopeAuthMode(p, home, "user"); ok || mode != "" {
+		t.Errorf("sidecar auth = %q, %v; want empty/false on path error", mode, ok)
 	}
 	if err := RemoveSidecar(p, home, []string{"user"}); err == nil {
 		t.Error("RemoveSidecar must propagate the SidecarPath error")

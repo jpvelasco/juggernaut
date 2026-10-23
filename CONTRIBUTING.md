@@ -79,6 +79,12 @@ compatible with existing configurations. Preserve both auth modes, sidecar scope
 unknown user entries, and v5 migration behavior when changing endpoint routing.
 Run the mantle provider/apply/doctor tests as well as the default-output goldens.
 
+Codex and OpenCode store Juggernaut auth metadata in an owner-only sidecar next
+to the native config. Do not add private keys to either vendor's config schema.
+Test legacy in-file migration, mixed-scope launch precedence, and sidecar-write
+failures when changing this path. `ConfigPlan.ResolvedRegion` carries any provider
+region adjustment into the sidecar.
+
 For Claude Code governance flags (`--available-models`, `--enforce-available-models`),
 remember they write user/project settings only — not OS-level managed settings.
 

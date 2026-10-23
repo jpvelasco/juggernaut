@@ -52,7 +52,7 @@ func TestApplyOpenAIMantleRoundTrip(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if isJuggernautLegacy(data) {
+				if isLegacyProviderConfig(p, home, scope, data) {
 					t.Fatal("current mantle config misclassified as v5")
 				}
 				checker := p.(provider.MantleConfigChecker)

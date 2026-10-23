@@ -1,6 +1,7 @@
 // sidecar.go — auth-mode metadata sidecar for providers whose vendor-validated
 // config file rejects unknown top-level keys.
 //
+// Codex warns on unknown keys (and rejects them in strict mode).
 // OpenCode validates opencode.json against a strict schema
 // (https://opencode.ai/config.json, Config.additionalProperties: false), so the
 // juggernaut auth-mode block cannot live inside the vendor file. Instead, a
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/config"
@@ -25,16 +27,21 @@ const SidecarFilename = ".juggernaut.json"
 
 // SidecarAuthSource is an optional extension implemented by providers that keep
 // the juggernaut auth-mode block outside their vendor-validated config file.
-// Providers without the extension (Claude, Codex, Grok) store the block in the
+// Providers without the extension (Claude, Grok) store the block in the
 // config itself.
 type SidecarAuthSource interface {
 	// SidecarPath returns the sidecar path for the given scope: the file next
 	// to ConfigPath(home, scope).
 	SidecarPath(home, scope string) (string, error)
+}
 
-	// SidecarPaths returns the sidecar paths in launch precedence order
-	// (project then user) so launch reads project-then-user like the config.
-	SidecarPaths(home string) []string
+// configSidecarPath keeps metadata next to the selected provider config.
+func configSidecarPath(p Provider, home, scope string) (string, error) {
+	path, err := p.ConfigPath(home, scope)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(path), SidecarFilename), nil
 }
 
 // HasSidecar reports whether the provider keeps its auth-mode block in a
@@ -81,58 +88,6 @@ func WriteSidecar(p Provider, home string, opts Options) error {
 		return fmt.Errorf("marshaling %s: %w", path, err)
 	}
 	return writeSidecarFile(path, append(encoded, '\n'))
-}
-
-// ReadSidecarAuthMode returns the first non-empty juggernaut.auth.mode across
-// the provider's sidecar paths (project then user). ok is false when the
-// provider has no sidecar or no readable sidecar declares a mode.
-func ReadSidecarAuthMode(p Provider, home string) (mode string, ok bool) {
-	block, ok := ReadSidecarBlock(p, home)
-	if !ok {
-		return "", false
-	}
-	return BlockAuthMode(block), true
-}
-
-// ReadSidecarProfile reads the named AWS profile from the provider's sidecar
-// blocks (project then user), like ReadSidecarAuthMode. Returns ok=false for
-// non-sidecar providers.
-func ReadSidecarProfile(p Provider, home string) (profile string, ok bool) {
-	src, isSidecar := p.(SidecarAuthSource)
-	if !isSidecar {
-		return "", false
-	}
-	for _, path := range src.SidecarPaths(home) {
-		block, ok := readSidecarBlock(path)
-		if !ok {
-			continue
-		}
-		if profile := BlockProfile(block); profile != "" {
-			return profile, true
-		}
-	}
-	return "", false
-}
-
-// ReadSidecarBlock reads the first sidecar block (project then user) whose
-// auth mode is set — the whole managed auth state in one read, so callers can
-// read mode and profile from the same source. ok=false for non-sidecar
-// providers or when no managed sidecar block exists.
-func ReadSidecarBlock(p Provider, home string) (map[string]any, bool) {
-	src, isSidecar := p.(SidecarAuthSource)
-	if !isSidecar {
-		return nil, false
-	}
-	for _, path := range src.SidecarPaths(home) {
-		block, ok := readSidecarBlock(path)
-		if !ok {
-			continue
-		}
-		if BlockAuthMode(block) != "" {
-			return block, true
-		}
-	}
-	return nil, false
 }
 
 // ReadScopeAuthBlock reads the auth metadata for exactly the selected scope.
@@ -220,7 +175,7 @@ func RemoveSidecar(p Provider, home string, scopes []string) error {
 
 // MigrateSidecarLegacy migrates a sidecar provider's existing config in place
 // (called under the config file lock on a plain apply): it removes the
-// in-file juggernaut block left by v6.2.0–v6.3.0 OpenCode applies (now stored
+// in-file juggernaut block left by older Codex/OpenCode applies (now stored
 // in the sidecar) and drops a stale "whitelist" leaf under
 // provider.amazon-bedrock when it is absent/empty (a pre-fix nil slice
 // marshals back to null, which OpenCode's schema rejects). A user-owned
@@ -239,7 +194,7 @@ func MigrateSidecarLegacy(p Provider, existing map[string]any) string {
 		delete(existing, "juggernaut")
 		notices = append(notices, "removed the legacy in-file juggernaut block (auth metadata now lives in the sidecar file)")
 	}
-	if sub, stale := staleOwnedSubKeyLeaf(existing, "provider", "amazon-bedrock", "whitelist"); stale {
+	if sub, stale := staleOwnedSubKeyLeaf(existing, "provider", "amazon-bedrock", "whitelist"); stale && slices.Contains(p.OwnedSubKeys()["provider"], bedrockProviderID) {
 		delete(sub, "whitelist")
 		notices = append(notices, "dropped the stale empty whitelist (OpenCode rejects null/empty arrays)")
 	}

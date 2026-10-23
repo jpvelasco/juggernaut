@@ -468,9 +468,7 @@ func TestUninstall_OpenCode_PreservesUserSiblingKeys(t *testing.T) {
 }
 
 // failSidecarProvider is a sidecar provider whose SidecarPath always fails. It
-// pins the secondary-write degrade paths in cmd: a sidecar write failure only
-// warns (the config write must not fail), and sidecar removal failure is
-// likewise non-fatal. The Provider interface is embedded and never called —
+// pins sidecar write/removal error paths in cmd. The Provider interface is embedded and never called —
 // only the sidecar methods and DisplayName reach the code under test.
 type failSidecarProvider struct {
 	provider.Provider
@@ -480,25 +478,19 @@ func (f failSidecarProvider) SidecarPath(string, string) (string, error) {
 	return "", fmt.Errorf("cannot resolve sidecar path")
 }
 
-func (f failSidecarProvider) SidecarPaths(string) []string { return nil }
-
 func (f failSidecarProvider) Name() string        { return "opencode" }
 func (f failSidecarProvider) DisplayName() string { return "Opencode" }
 
-// TestPersistSidecarState_WarnsOnWriteFailure: when the sidecar cannot be
-// written (path resolution fails), persistSidecarState warns but returns —
-// the config write it accompanies is not rolled back.
-func TestPersistSidecarState_WarnsOnWriteFailure(t *testing.T) {
+// A failed sidecar must prevent removing the legacy in-file auth metadata.
+func TestPersistSidecarState_ReturnsWriteFailure(t *testing.T) {
 	home := setupApplyTest(t)
-	err := captureStderr(t, func() {
-		persistSidecarState(home, failSidecarProvider{}, provider.Options{
-			AuthMode: authmode.BedrockAPIKey,
-			Region:   "us-west-2",
-			Scope:    "user",
-		})
+	err := persistSidecarState(home, failSidecarProvider{}, provider.Options{
+		AuthMode: authmode.BedrockAPIKey,
+		Region:   "us-west-2",
+		Scope:    "user",
 	})
-	if !strings.Contains(err, "auth metadata sidecar") {
-		t.Errorf("expected a sidecar warning, got %q", err)
+	if err == nil || !strings.Contains(err.Error(), "auth metadata sidecar") {
+		t.Errorf("expected a sidecar error, got %v", err)
 	}
 }
 
@@ -507,9 +499,9 @@ func TestPersistSidecarState_WarnsOnWriteFailure(t *testing.T) {
 // direct path must still be safe).
 func TestSidecarPath_NonSidecarProvider(t *testing.T) {
 	home := setupApplyTest(t)
-	codex, _ := provider.Get("codex")
-	if _, err := sidecarPath(codex, home, "user"); err == nil {
-		t.Fatal("sidecarPath(codex) must error — codex has no sidecar")
+	grok, _ := provider.Get("grok")
+	if _, err := sidecarPath(grok, home, "user"); err == nil {
+		t.Fatal("sidecarPath(grok) must error — grok has no sidecar")
 	}
 }
 
@@ -521,7 +513,7 @@ func TestSidecarPath_NonSidecarProvider(t *testing.T) {
 // TestUninstall_OpenCode_RemovesSidecarAndLegacyBlock: a user-scope uninstall
 // of OpenCode must remove both the auth-metadata sidecar (.juggernaut.json)
 // and a legacy in-file juggernaut block left by v6.2.0–v6.3.0, while preserving
-// the rest of the config. Codex/Grok in-file blocks are untouched (they have no
+// the rest of the config. Grok in-file blocks are untouched (it has no
 // sidecar).
 func TestUninstall_OpenCode_RemovesSidecarAndLegacyBlock(t *testing.T) {
 	home := setupApplyTest(t)
@@ -653,7 +645,7 @@ func TestApply_Codex_IAM_Allowed(t *testing.T) {
 		t.Fatalf("apply --cli=codex --auth=iam: %v", err)
 	}
 
-	// Verify the config was written with IAM auth mode in the juggernaut block.
+	// Verify IAM metadata is stored outside Codex's vendor-validated config.
 	cfgPath := filepath.Join(home, ".codex", "config.toml")
 	tomlFmt, _ := config.FormatByName("toml")
 	mgr := config.NewManagerWithFormat(cfgPath, tomlFmt)
@@ -661,9 +653,12 @@ func TestApply_Codex_IAM_Allowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse config.toml: %v", err)
 	}
-	juggernaut, ok := got["juggernaut"].(map[string]any)
+	if _, exists := got["juggernaut"]; exists {
+		t.Fatal("metadata must not appear in config.toml")
+	}
+	juggernaut, ok := provider.ReadScopeAuthBlock(provider.MustGet("codex"), home, "user", got)
 	if !ok {
-		t.Fatalf("juggernaut block not found in config")
+		t.Fatalf("juggernaut block not found in sidecar")
 	}
 	auth, ok := juggernaut["auth"].(map[string]any)
 	if !ok {
@@ -747,28 +742,28 @@ func TestResolveLaunchConfigPaths_ProjectThenUser(t *testing.T) {
 
 	codex, _ := provider.Get("codex")
 	paths := resolveLaunchConfigPaths(codex, home)
-	if len(paths) != 2 {
+	if len(paths) != 4 {
 		t.Fatalf("codex paths = %v, want project then user", paths)
 	}
-	if filepath.ToSlash(paths[0]) != ".codex/config.toml" && filepath.ToSlash(paths[0]) != "./.codex/config.toml" {
-		t.Errorf("codex project path = %q, want ./.codex/config.toml", paths[0])
+	if filepath.ToSlash(paths[0]) != ".codex/.juggernaut.json" {
+		t.Errorf("codex project sidecar path = %q, want .codex/.juggernaut.json", paths[0])
 	}
-	if !strings.Contains(filepath.ToSlash(paths[1]), ".codex/config.toml") {
-		t.Errorf("codex user path = %q, want ~/.codex/config.toml", paths[1])
+	if paths[3] != filepath.Join(home, ".codex", "config.toml") {
+		t.Errorf("codex user path = %q, want ~/.codex/config.toml", paths[3])
 	}
 
 	opencode, _ := provider.Get("opencode")
 	oPaths := resolveLaunchConfigPaths(opencode, home)
 	// OpenCode keeps the auth block in a sidecar (.juggernaut.json), so the
-	// launch candidates are project+user sidecars, then project+user configs.
+	// launch candidates are project sidecar/config, then user sidecar/config.
 	if len(oPaths) != 4 {
 		t.Fatalf("opencode paths = %v, want 4 (project/user sidecars then project/user configs)", oPaths)
 	}
 	if filepath.Base(oPaths[0]) != ".juggernaut.json" {
 		t.Errorf("opencode project sidecar path = %q, want ./.juggernaut.json", oPaths[0])
 	}
-	if filepath.Base(oPaths[2]) != "opencode.json" {
-		t.Errorf("opencode project config path = %q, want ./opencode.json", oPaths[2])
+	if filepath.Base(oPaths[1]) != "opencode.json" {
+		t.Errorf("opencode project config path = %q, want ./opencode.json", oPaths[1])
 	}
 
 	grok, _ := provider.Get("grok")
