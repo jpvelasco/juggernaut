@@ -244,6 +244,9 @@ func (p ConfigPlan) Validate() error {
 // vendor-owned config may be reset can retain non-secret runtime state; bearer
 // tokens are always fetched at launch and never persisted here.
 type LaunchSpec struct {
+	// PrepareArgs adapts a managed launch to the resolved CLI binary. It must
+	// preserve user arguments and leave unmanaged launches unchanged.
+	PrepareArgs         func(binary string, args []string) []string
 	TokenEnvVar         string            // env var the keychain bearer token is injected into
 	StaticEnv           map[string]string // static enable-flags, e.g. CLAUDE_CODE_USE_BEDROCK=1
 	NeedsToken          bool              // true when the launch wrapper must inject the bearer token

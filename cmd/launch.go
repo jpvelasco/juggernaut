@@ -105,6 +105,7 @@ func launchNamedCLI(cli string, args []string) error {
 func launchTargetFor(p provider.Provider, cfgPath string) activation.LaunchTarget {
 	spec := p.LaunchSpec()
 	target := activation.LaunchTarget{
+		PrepareArgs: spec.PrepareArgs,
 		BinaryNames: p.BinaryNames(),
 		TokenEnvVar: spec.TokenEnvVar,
 		StaticEnv:   spec.StaticEnv,

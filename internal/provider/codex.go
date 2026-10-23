@@ -308,6 +308,7 @@ func (c codex) LaunchSpec() LaunchSpec {
 	// Token injection is decided at launch time from the sidecar auth mode:
 	// API key → inject AWS_BEARER_TOKEN_BEDROCK; IAM → SDK credential chain.
 	return LaunchSpec{
+		PrepareArgs: prepareCodexLaunch,
 		TokenEnvVar: authmode.BedrockAuthEnvName,
 		NeedsToken:  false, // auth mode in juggernaut block decides at launch
 	}

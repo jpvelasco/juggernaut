@@ -85,6 +85,12 @@ Test legacy in-file migration, mixed-scope launch precedence, and sidecar-write
 failures when changing this path. `ConfigPlan.ResolvedRegion` carries any provider
 region adjustment into the sidecar.
 
+Provider `LaunchSpec.PrepareArgs` adapts arguments only after that target's
+managed auth metadata is found. Codex probes the resolved binary's help for
+`--no-daemon`, keeping local credentials out of stale shared-server sessions.
+Preserve explicit remote/server commands and old-binary compatibility; test an
+interactive TUI launch as well as `exec` when changing daemon behavior.
+
 For Claude Code governance flags (`--available-models`, `--enforce-available-models`),
 remember they write user/project settings only — not OS-level managed settings.
 
