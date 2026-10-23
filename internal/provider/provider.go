@@ -112,6 +112,16 @@ type LegacyCleaner interface {
 	CleanLegacy(existing map[string]any)
 }
 
+// EndpointCleaner removes inactive endpoint entries after a config merge.
+type EndpointCleaner interface {
+	CleanEndpoint(existing map[string]any, endpoint string)
+}
+
+// MantleConfigChecker validates provider-specific routing against auth metadata.
+type MantleConfigChecker interface {
+	ValidateMantleConfig(data map[string]any, region string) error
+}
+
 // StripLegacyConfig deletes a provider's stale legacy tables from the existing
 // config in place. It is a no-op for providers that don't implement
 // LegacyCleaner (all current CLIs except Codex have no such leftover).
@@ -167,7 +177,7 @@ func init() {
 		displayName:    "Codex",
 		configFormat:   "toml",
 		binaryName:     "codex",
-		capabilities:   []Capability{CapEffortLevels, CapNativeAuth},
+		capabilities:   []Capability{CapEffortLevels, CapNativeAuth, CapMantleEndpoint},
 		catalogSources: []string{"foundation", "profile"},
 	}})
 	register(opencode{BaseProvider: BaseProvider{
@@ -175,7 +185,7 @@ func init() {
 		displayName:    "OpenCode",
 		configFormat:   "json",
 		binaryName:     "opencode",
-		capabilities:   []Capability{CapNativeAuth},
+		capabilities:   []Capability{CapNativeAuth, CapMantleEndpoint},
 		catalogSources: []string{"foundation", "profile"},
 	}})
 	register(grok{BaseProvider: BaseProvider{

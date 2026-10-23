@@ -49,9 +49,9 @@ func TestApply_Endpoint_RejectsInvalidInputs(t *testing.T) {
 			noWrite: ".claude/settings.json",
 		},
 		{
-			name:    "mantle is Claude and Grok only",
-			args:    []string{"apply", "--cli=codex", "--auth=iam", "--endpoint=mantle"},
-			want:    "not supported for Codex",
+			name:    "Codex mantle rejects CRIS",
+			args:    []string{"apply", "--cli=codex", "--auth=iam", "--endpoint=mantle", "--model=global.openai.gpt-6-astra"},
+			want:    "cross-region inference profile",
 			noWrite: ".codex/config.toml",
 		},
 		{

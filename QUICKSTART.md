@@ -22,7 +22,18 @@ juggernaut apply --cli=grok --auth=iam --endpoint=mantle
 juggernaut apply --cli=grok --auth=bedrock-api-key --endpoint=mantle --model=xai.grok-4.3   # mantle-only
 ```
 
-Claude Code from Anthropic is a prerequisite:
+Codex and OpenCode V2 also support mantle using native IAM signing or the shared Bedrock API key. These routes use Responses with bare OpenAI model IDs:
+
+```bash
+juggernaut apply --cli=codex --auth=iam --endpoint=mantle --model=openai.gpt-5.4
+juggernaut apply --cli=opencode --auth=iam --endpoint=mantle --model=openai.gpt-5.4
+juggernaut doctor --cli=opencode
+juggernaut launch opencode -- --standalone
+```
+
+Codex requires ≥ 0.153.4; OpenCode mantle was verified with V2 2.1.4. Omit `--model` for GPT-6 Astra. Mantle has no CRIS; `apply` selects a region that serves the model. Re-apply keeps the endpoint; repeat `--model` for a non-default Codex/OpenCode model. Use `--endpoint=runtime` to switch back. The included IAM policy already grants `bedrock-mantle:CreateInference`. Mantle `doctor` checks routing and reachability, not inference authorization.
+
+For the Claude Code setup, Claude Code from Anthropic is a prerequisite:
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash

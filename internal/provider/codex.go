@@ -21,12 +21,9 @@ import (
 // Unlike Claude Code it has NO "use bedrock" env var — routing lives entirely
 // in the config file.
 //
-// Routing note: Juggernaut v6 removed its own Mantle routing (the AWS
-// bedrock-mantle endpoint remains available; opt-in support is tracked in
-// issue #497). v5 wrote the CUSTOM "amazon-bedrock" provider
-// (model_providers.amazon-bedrock) whose base_url pointed at bedrock-mantle;
-// those configs are migrated on apply (see StripLegacyConfig / CleanLegacy).
-// v6+ writes the built-in amazon-bedrock-runtime.
+// Opt-in mantle uses the built-in amazon-bedrock provider with a bare model
+// ID. The auth endpoint record distinguishes it from v5's custom provider
+// with the same ID; old overrides are migrated by CleanLegacy.
 type codex struct {
 	BaseProvider
 }
@@ -36,10 +33,8 @@ type codex struct {
 // ships it; Juggernaut requires that minimum (see cmd's codex version gate).
 const CodexBedrockRuntimeProviderID = "amazon-bedrock-runtime"
 
-// CodexLegacyProviderID is the custom provider id Juggernaut v5 (Mantle era)
-// wrote. It targets the bedrock-mantle endpoint, which Juggernaut v6 no longer
-// routes through — configs still pinned to it are migrated to
-// CodexBedrockRuntimeProviderID on apply.
+// CodexLegacyProviderID is v5's custom provider ID and Codex's built-in mantle
+// provider ID. A persisted endpoint=mantle marks a current opt-in config.
 const CodexLegacyProviderID = "amazon-bedrock"
 
 // ConfigPath is ~/.codex/config.toml (user) or ./.codex/config.toml (project).
@@ -209,6 +204,13 @@ func codexDefaultModel() string { return "sol" }
 //	[model_providers.amazon-bedrock-runtime.aws]
 //	  region = "us-west-2"
 func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+	if opts.Endpoint == bedrock.EndpointMantle {
+		id, err := openAIMantleModel(opts.Model)
+		if err != nil {
+			return ConfigPlan{}, err
+		}
+		return c.codexPlan(opts, codexBedrockModel{ModelID: id, Regions: openAIMantleRegions[id]}, CodexLegacyProviderID)
+	}
 	key := opts.Model
 	if key == "" {
 		key = codexDefaultModel()
@@ -218,12 +220,21 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-6.1-*, openai.gpt-6-*, or openai.gpt-5.6-* model: sol, luna, astra, terra)", key)
 	}
 
-	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", c, func(region string) (ConfigPlan, error) {
+	return c.codexPlan(opts, m, CodexBedrockRuntimeProviderID)
+}
+
+func (c codex) codexPlan(opts Options, m codexBedrockModel, providerID string) (ConfigPlan, error) {
+	var catalog CatalogProvider = c
+	if opts.Endpoint == bedrock.EndpointMantle {
+		// Runtime discovery cannot prove mantle availability.
+		catalog = nil
+	}
+	return buildWithRegionWarnings(opts, m.ModelID, m.Regions, ": ", catalog, func(region string) (ConfigPlan, error) {
 		keys := map[string]any{
 			"model":          m.ModelID,
-			"model_provider": CodexBedrockRuntimeProviderID,
+			"model_provider": providerID,
 			"model_providers": map[string]any{
-				CodexBedrockRuntimeProviderID: map[string]any{
+				providerID: map[string]any{
 					"aws": map[string]any{
 						"region": region,
 					},
@@ -249,7 +260,7 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 	return c.SupportsModelWith(model, func(m CatalogModel) ModelSupport {
 		if m.Source == "mantle" {
-			return ModelSupport{Reason: "Codex no longer uses Mantle (native only)"}
+			return ModelSupport{Reason: legacyMantleCacheReason}
 		}
 		if !RuntimeSupported(m.ID, m.Source) {
 			return ModelSupport{Reason: mantleOnlyReason}
@@ -276,6 +287,16 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 func (c codex) CleanLegacy(existing map[string]any) {
 	tbl, ok := existing["model_providers"].(map[string]any)
 	if !ok {
+		return
+	}
+	// Cleanup runs after merge. An explicit mantle migration now uses the
+	// built-in provider with this same ID; remove v5 overrides, keeping aws.
+	block, _ := existing["juggernaut"].(map[string]any)
+	if BlockEndpoint(block) == bedrock.EndpointMantle {
+		entry, _ := tbl[CodexLegacyProviderID].(map[string]any)
+		for _, key := range []string{"name", "base_url", "env_key", "wire_api", "requires_openai_auth", "http_headers", "env_http_headers", "auth"} {
+			delete(entry, key)
+		}
 		return
 	}
 	delete(tbl, CodexLegacyProviderID)

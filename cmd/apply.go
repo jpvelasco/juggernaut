@@ -53,7 +53,7 @@ func init() {
 	f := applyCmd.Flags()
 	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: "+provider.SupportedNames())
 	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
-	f.StringVar(&applyFlags.endpoint, "endpoint", "", "Bedrock endpoint: runtime (default) or mantle (opt-in; Claude Code and Grok)")
+	f.StringVar(&applyFlags.endpoint, "endpoint", "", "Bedrock endpoint: runtime (default) or mantle (opt-in)")
 	f.StringVar(&applyFlags.bedrockKey, "bedrock-key", "", "Bedrock API key")
 	f.BoolVar(&applyFlags.preserveKey, "preserve-key", false, "reuse existing key from keychain/env")
 	f.StringVar(&applyFlags.region, "region", "", "AWS region (default: us-west-2)")

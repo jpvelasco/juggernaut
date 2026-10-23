@@ -135,6 +135,23 @@ func ReadSidecarBlock(p Provider, home string) (map[string]any, bool) {
 	return nil, false
 }
 
+// ReadScopeAuthBlock reads the auth metadata for exactly the selected scope.
+// A sidecar is authoritative; older in-file metadata is the fallback.
+func ReadScopeAuthBlock(p Provider, home, scope string, data map[string]any) (map[string]any, bool) {
+	if src, ok := p.(SidecarAuthSource); ok {
+		if path, err := src.SidecarPath(home, scope); err == nil {
+			if block, found := readSidecarBlock(path); found {
+				return block, true
+			}
+		}
+	}
+	if _, ok := config.ParseJuggernautBlock(data); !ok {
+		return nil, false
+	}
+	block, ok := data["juggernaut"].(map[string]any)
+	return block, ok
+}
+
 // BlockAuthMode extracts the auth mode from a parsed juggernaut block
 // ("" when absent).
 func BlockAuthMode(block map[string]any) string {

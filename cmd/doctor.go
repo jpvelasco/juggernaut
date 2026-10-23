@@ -122,6 +122,8 @@ func collectDoctorReport(home, cli, scopeFilter string) (*doctor.Report, error) 
 	// Connectivity reads Claude's juggernaut.auth block; other CLIs store auth differently.
 	if isClaude {
 		checkConnectivity(r, home, token, scopes)
+	} else {
+		checkProviderMantle(r, prov, home, token, scopes)
 	}
 
 	begin, end := prov.ActivationMarkers()

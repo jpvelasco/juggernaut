@@ -278,6 +278,9 @@ func resolveApplyEndpoint(home string, prov provider.Provider) (string, error) {
 		}
 		if isReapply {
 			endpoint = existingEndpoint(existing)
+			if block, ok := provider.ReadScopeAuthBlock(prov, home, applyFlags.scope, existing); ok {
+				endpoint = provider.BlockEndpoint(block)
+			}
 		}
 	}
 	if endpoint == "" {
@@ -288,7 +291,7 @@ func resolveApplyEndpoint(home string, prov provider.Provider) (string, error) {
 			endpoint, bedrock.EndpointRuntime, bedrock.EndpointMantle)
 	}
 	if endpoint == bedrock.EndpointMantle && !prov.Supports(provider.CapMantleEndpoint) {
-		return "", fmt.Errorf("the mantle endpoint is not supported for %s yet; Claude Code and Grok support it", prov.DisplayName())
+		return "", fmt.Errorf("the mantle endpoint is not supported for %s", prov.DisplayName())
 	}
 	return endpoint, nil
 }
@@ -550,7 +553,7 @@ func printApplyDryRun(home string, block *schema.Block, prov provider.Provider, 
 		return nil
 	}
 	if migrating {
-		announceMigration(prov)
+		announceMigration(prov, provOpts.Endpoint)
 	}
 
 	title := prov.DisplayName()
@@ -629,10 +632,8 @@ func applyWriteGate(home string, prov provider.Provider, plan provider.ConfigPla
 //   - Codex model_provider == "bedrock-mantle" (the real v5 provider id)
 //   - leftover [model_providers.bedrock-mantle] / provider.bedrock-mantle
 //     tables, including hybrid v6 model IDs still aimed at a Mantle URL
-//   - Codex model_provider == "amazon-bedrock" (the v5 custom provider) — ANY
-//     model, since v6 routes Codex through the built-in amazon-bedrock-runtime
-//     and the custom amazon-bedrock table still points at the Mantle host
-//     Juggernaut v6 no longer routes through
+//   - Codex model_provider == "amazon-bedrock" without the current opt-in
+//     endpoint=mantle record (the v5 custom provider)
 func isJuggernautLegacy(existing map[string]any) bool {
 	if existing == nil {
 		return false
@@ -644,7 +645,7 @@ func isJuggernautLegacy(existing map[string]any) bool {
 	case ok && isMantleProviderID(mp):
 		return true
 	case ok && mp == provider.CodexLegacyProviderID:
-		return true
+		return existingEndpoint(existing) != bedrock.EndpointMantle
 	}
 	return hasMantleTable(existing["model_providers"]) || hasMantleTable(existing["provider"])
 }
@@ -763,9 +764,13 @@ func migrateLegacyJuggernautConfig(prov provider.Provider, home, scope string) b
 // announceMigration prints the v5→v6 migration notice for a legacy
 // Juggernaut config. Both the dry-run and commit paths call this before
 // writing, so the user sees the migration is happening, not a refusal.
-func announceMigration(prov provider.Provider) {
+func announceMigration(prov provider.Provider, endpoint string) {
 	fmt.Printf("Migrating %s: the existing config was written by Juggernaut v5 (Mantle era).\n", prov.DisplayName())
-	fmt.Println("Juggernaut no longer routes through Mantle in v6; the config will be rewritten to route via bedrock-runtime.")
+	if endpoint == bedrock.EndpointMantle {
+		fmt.Println("Replacing legacy overrides with the current opt-in mantle configuration.")
+	} else {
+		fmt.Println("Juggernaut no longer routes through Mantle in v6; the config will be rewritten to route via bedrock-runtime.")
+	}
 	fmt.Println("A backup of the old config is saved before writing.")
 	fmt.Println("After applying, re-run: juggernaut models refresh --source native --region <region>")
 }
@@ -805,7 +810,7 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		return refuse
 	}
 	if migrating {
-		announceMigration(prov)
+		announceMigration(prov, provOpts.Endpoint)
 	}
 
 	if authmode.IsBedrockAPIKey(authMode) && token != "" {
@@ -822,6 +827,9 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		if migrating {
 			stripMantleLeftovers(existing)
 			provider.StripLegacyConfig(prov, existing)
+		}
+		if cleaner, ok := prov.(provider.EndpointCleaner); ok {
+			cleaner.CleanEndpoint(existing, provOpts.Endpoint)
 		}
 		// Sidecar providers (OpenCode) always strip the v6.2.0–v6.3.0
 		// in-file juggernaut block — a plain apply is the migration, even
