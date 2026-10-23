@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -225,12 +226,12 @@ func checkAWSProfile(r *doctor.Report, prov provider.Provider, home string, scop
 // sidecar block for providers that keep the block outside their config, else
 // the first in-file juggernaut block across scopes (project then user).
 func managedAuthModeAndProfile(prov provider.Provider, home string, scopes []string) (mode, profile string) {
-	if block, ok := provider.ReadSidecarBlock(prov, home); ok {
-		return provider.BlockAuthMode(block), provider.BlockProfile(block)
-	}
-	for _, scope := range scopes {
+	for _, scope := range []string{"project", "user"} {
+		if !slices.Contains(scopes, scope) {
+			continue
+		}
 		data := readProviderScopeData(prov, home, scope)
-		if jb, ok := data["juggernaut"].(map[string]any); ok {
+		if jb, ok := provider.ReadScopeAuthBlock(prov, home, scope, data); ok {
 			if m := provider.BlockAuthMode(jb); m != "" {
 				return m, provider.BlockProfile(jb)
 			}

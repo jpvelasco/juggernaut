@@ -78,6 +78,7 @@ func (o opencode) buildMantleConfig(opts Options) (ConfigPlan, error) {
 		models[m.ID] = mantleOpenCodeModel(m.ID)
 	}
 	plan := ConfigPlan{
+		ResolvedRegion: region,
 		Keys: map[string]any{
 			"model": openCodeMantleProviderID + "/" + id,
 			"providers": map[string]any{openCodeMantleProviderID: map[string]any{

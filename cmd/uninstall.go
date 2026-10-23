@@ -173,7 +173,7 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 		warnf("could not check %s scope: %v", scope, err)
 		return
 	}
-	// Sidecar providers (OpenCode) also own the auth-metadata sidecar file.
+	// Sidecar providers (Codex/OpenCode) also own the auth-metadata sidecar file.
 	// HasManagedKeys short-circuits true on a legacy in-file "juggernaut" key,
 	// so a legacy-only opencode.json still reaches the removal path here.
 	owns := has || provider.SidecarExists(prov, home, scope)

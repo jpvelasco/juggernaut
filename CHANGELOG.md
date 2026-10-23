@@ -38,6 +38,15 @@ named AWS profile support, and a Go toolchain security update.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Codex no longer warns that `juggernaut` is an unrecognized setting.**
+  Auth metadata moves to an owner-only `.juggernaut.json` beside `config.toml`.
+  Plain apply migrates older metadata, retaining auth mode, profile, and endpoint;
+  launch supports both formats and preserves project precedence during migration.
+  Sidecars record the provider's resolved region, and a failed sidecar write
+  aborts the config rewrite before legacy metadata is removed.
+
 ## [6.4.0] - 2026-10-19
 
 **Minor release.** Adds opt-in `bedrock-mantle` routing for Claude Code and

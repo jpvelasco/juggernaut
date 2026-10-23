@@ -49,25 +49,7 @@ func (o opencode) NativeManagedKeys() []string {
 // SidecarPath is the .juggernaut.json file next to the opencode config for
 // the given scope.
 func (o opencode) SidecarPath(home, scope string) (string, error) {
-	cfg, err := o.ConfigPath(home, scope)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(cfg), SidecarFilename), nil
-}
-
-// SidecarPaths lists the sidecar paths in launch precedence order: project
-// then user, matching ConfigPath precedence.
-func (o opencode) SidecarPaths(home string) []string {
-	var paths []string
-	for _, scope := range []string{"project", "user"} {
-		p, err := o.SidecarPath(home, scope)
-		if err != nil {
-			continue
-		}
-		paths = append(paths, p)
-	}
-	return paths
+	return configSidecarPath(o, home, scope)
 }
 
 // DeepMergeKeys: "provider" is a nested map where a user may have their own

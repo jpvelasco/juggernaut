@@ -115,9 +115,10 @@ func TestMergeConfigPlanDeepThen_RunsAfterMergeUnderOneWrite(t *testing.T) {
 		"model_providers": map[string]any{
 			"amazon-bedrock": map[string]any{"aws": map[string]any{"region": "us-west-2"}},
 		},
-	}, []string{"model_providers"}, func(existing map[string]any) {
+	}, []string{"model_providers"}, func(existing map[string]any) error {
 		tbl, _ := existing["model_providers"].(map[string]any)
 		delete(tbl, "bedrock-mantle")
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("MergeConfigPlanDeepThen: %v", err)

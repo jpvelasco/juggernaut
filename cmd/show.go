@@ -118,7 +118,7 @@ func showPayload(prov provider.Provider, home, scope string, data map[string]any
 
 // managedShowConfig copies the juggernaut block (when present) plus the
 // provider's native managed keys so show is CLI-agnostic. Sidecar providers
-// (OpenCode) keep the block in the sidecar file, so include it from there when
+// (Codex/OpenCode) keep the block in the sidecar file, so include it from there when
 // it is not present in the vendor config.
 func managedShowConfig(prov provider.Provider, home, scope string, data map[string]any) map[string]any {
 	out := map[string]any{}

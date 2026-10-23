@@ -34,7 +34,8 @@ type codex struct {
 const CodexBedrockRuntimeProviderID = "amazon-bedrock-runtime"
 
 // CodexLegacyProviderID is v5's custom provider ID and Codex's built-in mantle
-// provider ID. A persisted endpoint=mantle marks a current opt-in config.
+// provider ID. A persisted endpoint=mantle (sidecar or legacy in-file metadata)
+// marks a current opt-in config.
 const CodexLegacyProviderID = "amazon-bedrock"
 
 // ConfigPath is ~/.codex/config.toml (user) or ./.codex/config.toml (project).
@@ -43,6 +44,12 @@ func (c codex) ConfigPath(home, scope string) (string, error) {
 		return filepath.Join(".", ".codex", "config.toml"), nil
 	}
 	return safepath.JoinUnder(home, ".codex", "config.toml")
+}
+
+// Codex warns on unknown config keys (or rejects them with --strict-config),
+// so Juggernaut's auth metadata lives beside config.toml, not inside it.
+func (c codex) SidecarPath(home, scope string) (string, error) {
+	return configSidecarPath(c, home, scope)
 }
 
 // NativeManagedKeys are the top-level config.toml keys Juggernaut owns for Codex.
@@ -61,7 +68,6 @@ func (c codex) OwnsConfig(data map[string]any) bool {
 
 func (c codex) NativeManagedKeys() []string {
 	return []string{
-		"juggernaut",
 		"model",
 		"model_provider",
 		"model_providers",
@@ -242,17 +248,10 @@ func (c codex) codexPlan(opts Options, m codexBedrockModel, providerID string) (
 			},
 		}
 
-		// Persist the juggernaut block so the launch wrapper can read the auth mode
-		// at runtime (IAM → no token needed; API key → inject bearer token).
-		blockMap, err := juggernautAuthBlock(opts, region)
-		if err != nil {
-			return ConfigPlan{}, err
-		}
-		keys["juggernaut"] = blockMap
-
 		return ConfigPlan{
-			Keys:        keys,
-			ManagedKeys: c.NativeManagedKeys(),
+			Keys:           keys,
+			ManagedKeys:    c.NativeManagedKeys(),
+			ResolvedRegion: region,
 		}, nil
 	})
 }
@@ -284,15 +283,14 @@ func (c codex) SupportsModel(model CatalogModel) ModelSupport {
 // This is Codex-scoped: the
 // "provider.amazon-bedrock" table OpenCode uses is a different, still-current
 // native provider and is never touched.
-func (c codex) CleanLegacy(existing map[string]any) {
+func (c codex) CleanLegacy(existing map[string]any, endpoint string) {
 	tbl, ok := existing["model_providers"].(map[string]any)
 	if !ok {
 		return
 	}
-	// Cleanup runs after merge. An explicit mantle migration now uses the
-	// built-in provider with this same ID; remove v5 overrides, keeping aws.
-	block, _ := existing["juggernaut"].(map[string]any)
-	if BlockEndpoint(block) == bedrock.EndpointMantle {
+	// Cleanup runs after merge. The target endpoint comes from apply, not a
+	// metadata key in the vendor file. Mantle reuses this ID: keep its aws table.
+	if endpoint == bedrock.EndpointMantle {
 		entry, _ := tbl[CodexLegacyProviderID].(map[string]any)
 		for _, key := range []string{"name", "base_url", "env_key", "wire_api", "requires_openai_auth", "http_headers", "env_http_headers", "auth"} {
 			delete(entry, key)
@@ -307,7 +305,7 @@ func (c codex) CleanLegacy(existing map[string]any) {
 
 func (c codex) LaunchSpec() LaunchSpec {
 	// Codex has no "use bedrock" flag — routing lives in config.toml.
-	// Token injection is decided at launch time from the stored auth mode:
+	// Token injection is decided at launch time from the sidecar auth mode:
 	// API key → inject AWS_BEARER_TOKEN_BEDROCK; IAM → SDK credential chain.
 	return LaunchSpec{
 		TokenEnvVar: authmode.BedrockAuthEnvName,
