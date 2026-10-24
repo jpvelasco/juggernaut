@@ -66,6 +66,23 @@ func (c codex) OwnsConfig(data map[string]any) bool {
 	return false
 }
 
+// OwnsManagedValue keeps a user-set root "model" alive through uninstall.
+// Codex's model value has no provider prefix to inspect, so ownership is
+// purely record-based: the root model is Juggernaut's only while it still
+// equals the value the last apply wrote (recorded in the auth sidecar). A
+// preserved or later-edited default survives; every other managed key is
+// owned regardless of value.
+func (c codex) OwnsManagedValue(home, scope, key string, value any) bool {
+	if key != "model" {
+		return true
+	}
+	model, ok := value.(string)
+	if !ok {
+		return true
+	}
+	return model != "" && model == sidecarWrittenModel(c, home, scope)
+}
+
 func (c codex) NativeManagedKeys() []string {
 	return []string{
 		"model",
@@ -210,15 +227,35 @@ func codexDefaultModel() string { return "sol" }
 //	[model_providers.amazon-bedrock-runtime.aws]
 //	  region = "us-west-2"
 func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error) {
+	preserved, preserve := codexPreservedModel(opts)
 	if opts.Endpoint == bedrock.EndpointMantle {
 		id, err := openAIMantleModel(opts.Model)
 		if err != nil {
 			return ConfigPlan{}, err
 		}
-		return c.codexPlan(opts, codexBedrockModel{ModelID: id, Regions: openAIMantleRegions[id]}, CodexLegacyProviderID)
+		if preserve {
+			// The preserved model is mantle-shaped by construction; resolve
+			// it so the plan carries its region facts.
+			id, err = openAIMantleModel(preserved)
+			if err != nil {
+				return ConfigPlan{}, err
+			}
+		}
+		plan, err := c.codexPlan(opts, codexBedrockModel{ModelID: id, Regions: openAIMantleRegions[id]}, CodexLegacyProviderID)
+		if err != nil {
+			return ConfigPlan{}, err
+		}
+		if preserve {
+			preserveExistingDefault(&plan, preserved)
+		}
+		return plan, nil
 	}
 	key := opts.Model
-	if key == "" {
+	if preserve {
+		// Region facts come from the preserved model; the file keeps the
+		// user's exact value because the model write is stripped below.
+		key = preserved
+	} else if key == "" {
 		key = codexDefaultModel()
 	}
 	m, ok := codexModel(key)
@@ -226,7 +263,52 @@ func (c codex) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, error
 		return ConfigPlan{}, fmt.Errorf("unknown Codex model %q (expected a discovered openai.gpt-6.1-*, openai.gpt-6-*, or openai.gpt-5.6-* model: sol, luna, astra, terra)", key)
 	}
 
-	return c.codexPlan(opts, m, CodexBedrockRuntimeProviderID)
+	plan, err := c.codexPlan(opts, m, CodexBedrockRuntimeProviderID)
+	if err != nil {
+		return ConfigPlan{}, err
+	}
+	if preserve {
+		preserveExistingDefault(&plan, preserved)
+	}
+	return plan, nil
+}
+
+// codexPreservedModel returns the existing root "model" a plain apply must
+// preserve, and whether one applies. Codex's model is bound to the
+// model_provider Juggernaut pins, so — unlike OpenCode's provider-prefixed
+// root — only a model Codex can actually serve through that provider is
+// worth preserving: one codexModel resolves (the GPT-6.x/5.6 families
+// Juggernaut itself writes, in any spelling). A foreign default (the user's
+// own OpenAI model) would 404 through Bedrock routing, so it falls back to
+// the working convenience default. Cross-endpoint shapes are stale: runtime
+// serves only the global. inference profiles, mantle only the bare openai.*
+// IDs — and a config still routed through the v5 custom provider is a
+// legacy migration target whose model is Juggernaut's own stale write (the
+// runtime path only: mantle reuses that provider id legitimately).
+func codexPreservedModel(opts Options) (string, bool) {
+	if opts.Model != "" {
+		return "", false
+	}
+	existing, ok := opts.Existing["model"].(string)
+	if !ok || existing == "" {
+		return "", false
+	}
+	if _, resolves := codexModel(existing); !resolves {
+		return "", false
+	}
+	if opts.Endpoint == bedrock.EndpointMantle {
+		if strings.HasPrefix(existing, "global.") {
+			return "", false
+		}
+	} else {
+		if strings.HasPrefix(existing, "openai.") {
+			return "", false
+		}
+		if existingProvider, _ := opts.Existing["model_provider"].(string); existingProvider == CodexLegacyProviderID {
+			return "", false
+		}
+	}
+	return existing, true
 }
 
 func (c codex) codexPlan(opts Options, m codexBedrockModel, providerID string) (ConfigPlan, error) {

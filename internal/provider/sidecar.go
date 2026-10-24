@@ -235,6 +235,25 @@ func ReadSidecarFile(path string) map[string]any {
 	return block
 }
 
+// sidecarWrittenModel returns the root default model the last apply recorded
+// in the scope's auth sidecar ("" when absent, preserved, or unreadable).
+// Providers with value-aware uninstall ownership use it to remove only what
+// apply actually wrote.
+func sidecarWrittenModel(p Provider, home, scope string) string {
+	src, ok := p.(SidecarAuthSource)
+	if !ok {
+		return ""
+	}
+	path, err := src.SidecarPath(home, scope)
+	if err != nil {
+		return ""
+	}
+	block := ReadSidecarFile(path)
+	meta, _ := block["meta"].(map[string]any)
+	written, _ := meta["writtenModel"].(string)
+	return written
+}
+
 // readSidecarBlock reads and parses one sidecar file, returning its juggernaut
 // block when present. The path is provider-derived, not user input; a
 // missing/unreadable/malformed file is a normal "absent" outcome.
