@@ -31,7 +31,7 @@ juggernaut doctor --cli=opencode
 juggernaut launch opencode -- --standalone
 ```
 
-Codex requires ≥ 0.153.4; OpenCode mantle was verified with V2 2.1.4. Omit `--model` for GPT-6 Astra. Mantle has no CRIS; `apply` selects a region that serves the model. Re-apply keeps the endpoint; repeat `--model` for a non-default Codex/OpenCode model. Use `--endpoint=runtime` to switch back. The included IAM policy already grants `bedrock-mantle:CreateInference`. Mantle `doctor` checks routing and reachability, not inference authorization.
+Codex requires ≥ 0.153.4; OpenCode mantle was verified with V2 2.1.4. Omit `--model` for GPT-6 Astra. Mantle has no CRIS; `apply` selects a region that serves the model. Re-apply keeps the endpoint; Codex resets to its default model unless `--model` is repeated, while OpenCode preserves whatever default its config already has (`--model` changes it). Use `--endpoint=runtime` to switch back. The included IAM policy already grants `bedrock-mantle:CreateInference`. Mantle `doctor` checks routing and reachability, not inference authorization.
 
 If Codex reports that `juggernaut` is an unrecognized setting, re-run `juggernaut apply --cli=codex` after upgrading. Auth metadata now lives in `.codex/.juggernaut.json` beside the native config, and apply migrates the old block automatically. Load the updated shell activation and launch with `codex`, or use `juggernaut launch codex` directly.
 

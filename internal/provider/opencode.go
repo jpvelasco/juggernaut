@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
@@ -27,6 +28,12 @@ type opencode struct {
 const bedrockProviderID = "amazon-bedrock"
 
 const openCodeMantleProviderID = "amazon-bedrock-mantle"
+
+// openCodeLegacyMantleProviderID is the pre-v6 (Mantle-era) provider key
+// Juggernaut wrote into opencode.json. A root model still pointing at it is
+// a v5 leftover: no v6 apply keeps that entry, so the model is always
+// Juggernaut's to replace (apply) or remove (uninstall).
+const openCodeLegacyMantleProviderID = "bedrock-mantle"
 
 // ConfigPath is ~/.config/opencode/opencode.json (user) or ./opencode.json
 // (project).
@@ -77,6 +84,45 @@ func (o opencode) OwnsConfig(data map[string]any) bool {
 	}
 	_, ok = prov[bedrockProviderID]
 	return ok
+}
+
+// OwnsManagedValue keeps a user's root "model" default alive through
+// uninstall. The runtime prefix alone can't decide ownership — amazon-bedrock
+// is OpenCode's own built-in provider id, so a native Bedrock default
+// (something Juggernaut never wrote) shares it with Juggernaut's writes.
+// A model is Juggernaut's only when it still equals the value the last
+// apply wrote (recorded in the auth sidecar) or it points at a
+// Juggernaut-exclusive provider entry (the mantle id and its v5 leftover,
+// which no native setup uses). Every other managed key is owned regardless
+// of value.
+func (o opencode) OwnsManagedValue(home, scope, key string, value any) bool {
+	if key != "model" {
+		return true
+	}
+	model, ok := value.(string)
+	if !ok {
+		return true
+	}
+	if strings.HasPrefix(model, openCodeMantleProviderID+"/") ||
+		strings.HasPrefix(model, openCodeLegacyMantleProviderID+"/") {
+		return true
+	}
+	// Preserved (user-owned or later-edited) defaults have no matching
+	// record and must survive; an empty model is nothing worth removing.
+	return model != "" && model == o.writtenModel(home, scope)
+}
+
+// writtenModel returns the root default model the last apply recorded in the
+// scope's auth sidecar ("" when absent, preserved, or unreadable).
+func (o opencode) writtenModel(home, scope string) string {
+	path, err := o.SidecarPath(home, scope)
+	if err != nil {
+		return ""
+	}
+	block := ReadSidecarFile(path)
+	meta, _ := block["meta"].(map[string]any)
+	written, _ := meta["writtenModel"].(string)
+	return written
 }
 
 func (o opencode) LaunchSpec() LaunchSpec {
@@ -147,8 +193,14 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 			whitelist = append(whitelist, discovered.ID)
 		}
 	}
-	if w := catalogUnavailableWarning(opts.ModelCatalog, modelID, opts.Region, "it remains configured for explicit use", o, opts.RefreshedSources); w != "" {
-		warnings = append(warnings, w)
+	// A plain apply preserves an existing default: there is no selected
+	// model to vet against the catalog in that case — the table entry is
+	// for explicit use only.
+	preserved, preserveExisting := preservedDefaultModel(opts)
+	if !preserveExisting {
+		if w := catalogUnavailableWarning(opts.ModelCatalog, modelID, opts.Region, "it remains configured for explicit use", o, opts.RefreshedSources); w != "" {
+			warnings = append(warnings, w)
+		}
 	}
 
 	providerTable := map[string]any{
@@ -164,14 +216,74 @@ func (o opencode) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, er
 		providerTable["whitelist"] = whitelist
 	}
 
-	return ConfigPlan{
+	plan := ConfigPlan{
 		Keys: map[string]any{
 			"model":    bedrockProviderID + "/" + modelID,
 			"provider": map[string]any{bedrockProviderID: providerTable},
 		},
 		ManagedKeys: []string{"model", "provider"},
 		Warnings:    warnings,
-	}, nil
+	}
+	if preserveExisting {
+		// OpenCode's root "model" is the CLI's own native session default,
+		// not Bedrock routing: a plain apply keeps the user's value instead
+		// of pinning Juggernaut's convenience default.
+		preserveExistingDefault(&plan, preserved)
+	}
+	return plan, nil
+}
+
+// preserveExistingDefault strips the root model write from a plan whose apply
+// preserves the CLI's existing default (see preservedDefaultModel), leaves the
+// remaining managed keys, and records the preservation notice.
+func preserveExistingDefault(plan *ConfigPlan, preserved string) {
+	delete(plan.Keys, "model")
+	kept := make([]string, 0, len(plan.ManagedKeys))
+	for _, k := range plan.ManagedKeys {
+		if k != "model" {
+			kept = append(kept, k)
+		}
+	}
+	plan.ManagedKeys = kept
+	plan.Warnings = append(plan.Warnings, fmt.Sprintf(
+		"existing default model %q preserved; pass --model to set the default", preserved))
+}
+
+// preservedDefaultModel returns the existing root default model an apply
+// without --model must preserve, and whether one applies. OpenCode's root
+// "model" is the native session default for every agent that does not select
+// its own, so a plain apply keeps it instead of pinning Juggernaut's
+// convenience default. A model pointing at the OpenCode provider entry this
+// apply removes (the other endpoint's) is not preserved — it would dangle
+// once the endpoint switch cleans the inactive entry.
+func preservedDefaultModel(opts Options) (string, bool) {
+	if opts.Model != "" {
+		return "", false
+	}
+	existing, ok := opts.Existing["model"].(string)
+	if !ok || existing == "" {
+		return "", false
+	}
+	if isOpenCodeStaleModel(existing, opts.Endpoint) {
+		return "", false
+	}
+	return existing, true
+}
+
+// isOpenCodeStaleModel reports whether a root model references an OpenCode
+// provider entry no apply to the given endpoint keeps — the other endpoint's
+// current id or the v5 Mantle-era leftover. Endpoint switches delete the
+// inactive entry (CleanEndpoint) and migrations drop the v5 table, which
+// would leave the model dangling; foreign and same-endpoint models are never
+// stale.
+func isOpenCodeStaleModel(model, endpoint string) bool {
+	if strings.HasPrefix(model, openCodeLegacyMantleProviderID+"/") {
+		return true
+	}
+	if endpoint == bedrock.EndpointMantle {
+		return strings.HasPrefix(model, bedrockProviderID+"/")
+	}
+	return strings.HasPrefix(model, openCodeMantleProviderID+"/")
 }
 
 func (o opencode) SupportsModel(model CatalogModel) ModelSupport {

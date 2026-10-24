@@ -203,7 +203,7 @@ func buildApplyPlan(prov provider.Provider, home, region string, bCfg *bedrock.C
 		return nil, err
 	}
 
-	provOpts, err := buildProviderOptions(home, region, opts)
+	provOpts, err := buildProviderOptions(prov, home, region, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +409,7 @@ func buildApplyOptions(authMode, endpoint, region string, opusplan bool, models 
 
 // buildProviderOptions constructs the provider.Options from the schema options
 // that were already built for apply, plus the cached model catalog.
-func buildProviderOptions(home, region string, scopts schema.Options) (provider.Options, error) {
+func buildProviderOptions(prov provider.Provider, home, region string, scopts schema.Options) (provider.Options, error) {
 	provOpts := toProviderOptions(scopts)
 	// For non-Claude CLIs, --model is a provider model KEY (e.g. gpt-oss-120b),
 	// not one of Claude's per-tier IDs. Thread the raw flag through so the
@@ -419,6 +419,15 @@ func buildProviderOptions(home, region string, scopts schema.Options) (provider.
 	// default). Providers use it to word the region auto-switch message; a
 	// non-serving region is overridden either way (the Iron Fist).
 	provOpts.RegionExplicit = applyFlags.region != ""
+	// The provider's current config: providers consult it to preserve
+	// user-owned values (OpenCode's root default model) when a plain apply
+	// would otherwise overwrite them. readProviderConfig returns nil for a
+	// missing file, which simply disables preservation on first apply.
+	existing, err := readProviderConfig(prov, home, scopts.Scope)
+	if err != nil {
+		return provOpts, fmt.Errorf("reading existing %s config: %w", prov.Name(), err)
+	}
+	provOpts.Existing = existing
 	catalog, sources, err := cachedProviderCatalog(home, region)
 	if err != nil {
 		return provOpts, fmt.Errorf("loading cached model catalog: %w", err)

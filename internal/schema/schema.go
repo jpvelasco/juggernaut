@@ -82,6 +82,11 @@ type Meta struct {
 	PermissionMode         string   `json:"permissionMode,omitempty"`
 	AlwaysThinking         bool     `json:"alwaysThinkingEnabled,omitempty"`
 	ServiceTier            string   `json:"serviceTier,omitempty"`
+	// WrittenModel records the root default model an apply wrote into the
+	// CLI's config (empty when the provider preserved an existing one).
+	// Value-aware uninstall removes the default only while it still equals
+	// this record, so a user's own or later-edited default survives.
+	WrittenModel string `json:"writtenModel,omitempty"`
 }
 
 // NativeKeys are the top-level settings.json keys Claude Code reads directly.

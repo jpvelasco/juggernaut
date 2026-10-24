@@ -356,12 +356,57 @@ func TestApply_Codex_ForeignConfig_DottedLeafCollision_Refuses(t *testing.T) {
 	}
 }
 
-// TestApply_OpenCode_ForeignConfig_Refuses: OpenCode's whole-value "model" key
-// already present under a foreign config triggers a refusal. Colliding on
-// provider.bedrock-mantle itself would double as OpenCode's OwnsConfig marker
-// (making the fixture indistinguishable from a legitimate re-apply), so this
-// uses the sibling "model" key instead.
-func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
+// TestApply_OpenCode_ForeignModel_Preserved: OpenCode's root "model" is the
+// CLI's own native default, not Bedrock routing. A plain apply over a config
+// Juggernaut doesn't own adds the amazon-bedrock provider entry and preserves
+// the user's model — no refusal, no --force. This is the deliberate counter-
+// part to the other CLIs: pinning with --model is the only way to claim that
+// key.
+func TestApply_OpenCode_ForeignModel_Preserved(t *testing.T) {
+	home := setupApplyTest(t)
+
+	opencodeDir := filepath.Join(home, ".config", "opencode")
+	if err := safepath.MkdirAll(opencodeDir); err != nil {
+		t.Fatalf("mkdir opencode config dir: %v", err)
+	}
+	configPath := filepath.Join(opencodeDir, "opencode.json")
+	foreign := `{"model": "their-own-provider/their-own-model"}`
+	if err := safepath.WriteFile(opencodeDir, configPath, []byte(foreign)); err != nil {
+		t.Fatalf("write foreign opencode config: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		// --auth=iam keeps this test keychain-free (the token store only runs
+		// for bedrock-api-key applies): on macOS CI the real keychain backend
+		// blocks headless writes, so a bedrock-api-key apply would hang.
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=opencode", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply --cli=opencode: %v", err)
+		}
+	})
+	if !strings.Contains(out, "preserved") {
+		t.Errorf("apply should report the preserved default model, got:\n%s", out)
+	}
+
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(readHomeFile(t, opencodeDir, configPath)), &cfg); err != nil {
+		t.Fatalf("opencode.json is not valid JSON: %v", err)
+	}
+	if model, _ := cfg["model"].(string); model != "their-own-provider/their-own-model" {
+		t.Errorf("user's default model must be preserved, got: %v", cfg["model"])
+	}
+	prov, _ := cfg["provider"].(map[string]any)
+	if _, ok := prov["amazon-bedrock"]; !ok {
+		t.Errorf("apply must add the amazon-bedrock provider entry, got: %v", cfg["provider"])
+	}
+}
+
+// TestApply_OpenCode_ExplicitModel_ForeignConfig_Refuses: --model claims the
+// root "model" key. On a config Juggernaut doesn't own, an existing model
+// value collides and apply refuses without --force — the only OpenCode
+// collision path, since a plain apply preserves that key.
+func TestApply_OpenCode_ExplicitModel_ForeignConfig_Refuses(t *testing.T) {
 	home := setupApplyTest(t)
 
 	opencodeDir := filepath.Join(home, ".config", "opencode")
@@ -375,10 +420,10 @@ func TestApply_OpenCode_ForeignConfig_Refuses(t *testing.T) {
 	}
 
 	err := ExecuteArgs([]string{
-		"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight",
+		"apply", "--cli=opencode", "--auth=" + authmode.BedrockAPIKey, bedrockKeyFlag(), "--region=us-west-2", "--skip-preflight", "--model=gpt-oss-120b",
 	})
 	if err == nil {
-		t.Fatal("expected apply to refuse a foreign opencode config with a colliding model key")
+		t.Fatal("expected apply --model to refuse a foreign opencode config with a colliding model key")
 	}
 	if !strings.Contains(err.Error(), "model") {
 		t.Errorf("error should name the colliding path, got: %v", err)
@@ -408,6 +453,7 @@ func TestApply_DryRun_ForeignConfig_JSON_ReportsCollisionsWithoutWriting(t *test
 		cli, dir, file string
 		auth, region   string
 		keyFlag        string
+		modelFlag      string
 		foreign        string
 		wantCollision  string
 	}{
@@ -420,6 +466,9 @@ func TestApply_DryRun_ForeignConfig_JSON_ReportsCollisionsWithoutWriting(t *test
 		{
 			name: "opencode", cli: "opencode", dir: filepath.Join(".config", "opencode"), file: "opencode.json",
 			region: "us-west-2", auth: authmode.BedrockAPIKey, keyFlag: bedrockKeyFlag(),
+			// A plain apply preserves a foreign root model (it's the CLI's
+			// native default), so the collision report requires --model.
+			modelFlag:     "--model=gpt-oss-120b",
 			foreign:       `{"model": "their-own-provider/their-own-model"}`,
 			wantCollision: "model",
 		},
@@ -444,6 +493,9 @@ func TestApply_DryRun_ForeignConfig_JSON_ReportsCollisionsWithoutWriting(t *test
 			args = append(args, "--auth="+c.auth, "--region="+c.region, "--dry-run", "--skip-preflight")
 			if c.keyFlag != "" {
 				args = append(args, c.keyFlag)
+			}
+			if c.modelFlag != "" {
+				args = append(args, c.modelFlag)
 			}
 			out := captureStdout(t, func() {
 				err := ExecuteArgs(args)
