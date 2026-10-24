@@ -313,12 +313,26 @@ func TestCodex_OwnsManagedValue(t *testing.T) {
 	}
 }
 
-// TestCodex_OwnsManagedValue_NoRecord: without a sidecar record the root
-// model is the user's — nothing is claimed.
+// TestCodex_OwnsManagedValue_NoRecord: without a sidecar record (a
+// pre-record install or a preserved default), any value in the ID space
+// Juggernaut writes for Codex is owned — the provider entry uninstall
+// removes is what made it routable. A foreign value stays the user's.
 func TestCodex_OwnsManagedValue_NoRecord(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	p, _ := Get("codex")
-	if OwnsManagedValueFor(p, home, "user", "model", "global.openai.gpt-6.1-sol") {
-		t.Error("no record: the root model must not be owned")
+	cases := []struct {
+		value any
+		want  bool
+	}{
+		{"global.openai.gpt-6.1-sol", true}, // the pre-record seeded default
+		{"global.openai.gpt-6-luna", true},  // any roster ID from an explicit pre-record pin
+		{"openai.gpt-6-astra", true},        // the mantle-era default's bare shape
+		{"gpt-5.2-codex", false},            // the user's own OpenAI model
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := OwnsManagedValueFor(p, home, "user", "model", c.value); got != c.want {
+			t.Errorf("OwnsManagedValue(no record, %v) = %v, want %v", c.value, got, c.want)
+		}
 	}
 }

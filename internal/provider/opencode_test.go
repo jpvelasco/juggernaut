@@ -461,9 +461,9 @@ func TestOpenCode_OwnsManagedValue(t *testing.T) {
 }
 
 // TestOpenCode_OwnsManagedValue_NoRecord: without a sidecar record (a
-// preserved default, or an apply from before the record existed), a
-// runtime-prefixed default is the user's; only Juggernaut-exclusive prefixes
-// are owned.
+// pre-record install or a preserved default), only the seeded convenience
+// default and Juggernaut-exclusive prefixes are owned; a native
+// amazon-bedrock default and foreign values stay the user's.
 func TestOpenCode_OwnsManagedValue_NoRecord(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	p, _ := Get("opencode")
@@ -471,8 +471,9 @@ func TestOpenCode_OwnsManagedValue_NoRecord(t *testing.T) {
 		value any
 		want  bool
 	}{
-		{"amazon-bedrock/openai.gpt-oss-120b-1:0", false},
+		{"amazon-bedrock/openai.gpt-oss-120b-1:0", true}, // the pre-record seeded default
 		{"amazon-bedrock/anthropic.claude-sonnet-5-5", false},
+		{"amazon-bedrock/global.zai.glm-5.3", false},
 		{"amazon-bedrock-mantle/openai.gpt-6-astra", true},
 		{"bedrock-mantle/openai.gpt-oss-120b-1:0", true},
 		{"batwing-coder/qwen-coder", false},
