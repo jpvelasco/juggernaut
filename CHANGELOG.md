@@ -2,6 +2,41 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.6.0] - 2026-10-24
+
+**Feature release.** Plain applies stop resetting OpenCode's and Codex's
+native default model, and uninstall removes only the defaults Juggernaut
+actually wrote.
+
+### Added
+
+- **OpenCode keeps its default model on plain applies.** OpenCode's root
+  `model` is the CLI's own native setting, so an apply without `--model`
+  now preserves whatever default is configured — the user's own or a
+  previously pinned one — instead of pinning the convenience default. A
+  fresh config still seeds `gpt-oss-120b`, an explicit `--model` still
+  claims the key, endpoint switches replace a default that would dangle,
+  and a foreign config's existing model no longer collides on a plain
+  apply.
+- **Codex keeps its default model on plain applies.** The same contract
+  adapted to Codex's provider-bound model: a plain apply preserves a
+  default Codex can serve through the pinned Bedrock runtime (the
+  sol/luna/astra/terra families in the endpoint's shape); foreign or
+  cross-endpoint values fall back to the working convenience default,
+  and v5 migration behavior is unchanged.
+- **`glm-5.3` convenience alias for OpenCode.** `apply --cli=opencode
+  --model=glm-5.3` resolves to the `global.zai.glm-5.3` cross-region
+  inference profile without the passthrough warning.
+
+### Fixed
+
+- **Uninstall removes only the defaults apply wrote.** OpenCode and Codex
+  record the root model they write in the auth sidecar, and uninstall
+  removes the key only while it still equals that record — a user's own,
+  preserved, or later-edited default survives, as does a native OpenCode
+  `amazon-bedrock` default that shares the runtime prefix with
+  Juggernaut's writes. Mantle-era leftovers remain always removed.
+
 ## [6.5.2] - 2026-10-23
 
 **Patch release.** Keeps managed Codex sessions from using stale
@@ -1684,7 +1719,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.5.2...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.0...HEAD
+[6.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.0
 [6.5.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.2
 [6.5.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.1
 [6.5.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.0
