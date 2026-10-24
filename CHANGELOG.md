@@ -2,6 +2,16 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.6.2] - 2026-10-24
+
+**Patch release.** Maintenance: CodeQL action bump and no behavior changes.
+
+### Other
+
+- **CodeQL action 4.38.3 → 4.39.1.** Both `init` and `analyze` in
+  `codeql.yml` now pin `v4.39.1` (`9b325408…`), which updates the default
+  CodeQL bundle to 2.27.3. CI-only change; no runtime behavior.
+
 ## [6.6.1] - 2026-10-24
 
 **Patch release.** The model catalog binding survives SSO token rotation,
@@ -1746,7 +1756,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.1...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.2...HEAD
+[6.6.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.2
 [6.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.1
 [6.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.0
 [6.5.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.2
