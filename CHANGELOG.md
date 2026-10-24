@@ -2,6 +2,28 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.6.1] - 2026-10-24
+
+**Patch release.** The model catalog binding survives SSO token rotation,
+and a scope miss no longer silently degrades apply.
+
+### Fixed
+
+- **The credential scope is stable across SSO logins.** The scope
+  fingerprint hashed the raw bytes of every file in `~/.aws/sso/cache` —
+  access tokens, client registrations, and expiries that rotate on every
+  `aws sso login` — so the model catalog binding missed after each login
+  cycle and apply silently wrote configs without discovered models or a
+  picker whitelist. The fingerprint now hashes only the SSO cache's
+  identity fields (`accountId`, `startUrl`, `region`): account and portal
+  switches still re-scope; routine logins do not. Existing bindings
+  re-scope once on upgrade — re-run `juggernaut models refresh --region
+  <region>` after upgrading.
+- **Apply warns when the catalog cache has no binding for the current
+  credential scope.** Instead of silently omitting discovered models,
+  apply now points at `models refresh` whenever a cache exists but the
+  current scope/region has no entry.
+
 ## [6.6.0] - 2026-10-24
 
 **Feature release.** Plain applies stop resetting OpenCode's and Codex's
@@ -1724,7 +1746,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.0...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.1...HEAD
+[6.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.1
 [6.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.0
 [6.5.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.2
 [6.5.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.5.1
