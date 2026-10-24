@@ -28,9 +28,8 @@ func TestApply_OpenCode_WarnsOnCatalogScopeMiss(t *testing.T) {
 		t.Fatalf("write model-catalog.json: %v", err)
 	}
 
-	var stderr string
 	var out string
-	stderr = captureStderr(t, func() {
+	stderr := captureStderr(t, func() {
 		out = applyOpenCodeIAM(t)
 	})
 
@@ -55,8 +54,7 @@ func TestApply_OpenCode_WarnsOnCatalogScopeMiss(t *testing.T) {
 func TestApply_OpenCode_NoWarnWithoutCache(t *testing.T) {
 	home := setupApplyTest(t)
 
-	var stderr string
-	stderr = captureStderr(t, func() {
+	stderr := captureStderr(t, func() {
 		_ = applyOpenCodeIAM(t)
 	})
 
