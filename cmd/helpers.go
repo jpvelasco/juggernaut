@@ -812,13 +812,19 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 		provOpts.Region = plan.ResolvedRegion
 	}
 	// Providers that make value-ownership decisions on uninstall get a
-	// record of the default this apply wrote (empty when preserved), so
-	// removal only claims what apply actually wrote. Gated on the
-	// ManagedValueOwner extension so non-participating providers' metadata
-	// (e.g. Claude's golden-diffed settings) stays byte-identical.
+	// record of the default this apply owns — the model it writes, or a
+	// preserved model that a prior apply still owns per the previous
+	// sidecar record (a plain re-apply must not erase the record, or
+	// uninstall would leave Juggernaut's own default dangling after
+	// removing its provider entry). Gated on the ManagedValueOwner
+	// extension so non-participating providers' metadata (e.g. Claude's
+	// golden-diffed settings) stays byte-identical.
 	if _, ok := prov.(provider.ManagedValueOwner); ok {
 		if model, ok := plan.Keys["model"].(string); ok {
 			provOpts.WrittenModel = model
+		} else if preserved, _ := provOpts.Existing["model"].(string); preserved != "" &&
+			provider.OwnsManagedValueFor(prov, home, applyFlags.scope, "model", preserved) {
+			provOpts.WrittenModel = preserved
 		}
 	}
 

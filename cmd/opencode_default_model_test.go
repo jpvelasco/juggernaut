@@ -181,6 +181,45 @@ func TestUninstall_OpenCode_RemovesMantleEraModelWithoutRecord(t *testing.T) {
 	}
 }
 
+// TestUninstall_OpenCode_RemovesPreservedJuggernautDefault: a plain
+// re-apply preserves a Juggernaut-written default and must carry the
+// ownership record forward — otherwise uninstall would leave that default
+// dangling after removing its provider entry (apply --model, plain apply,
+// uninstall).
+func TestUninstall_OpenCode_RemovesPreservedJuggernautDefault(t *testing.T) {
+	home := setupApplyTest(t)
+
+	applyOpenCodeIAM(t, "--model=gpt-oss-20b") // written + recorded
+	applyOpenCodeIAM(t)                        // preserved; the record must carry forward
+
+	uninstallOpenCode(t, home)
+
+	cfg := readOpenCodeConfig(t, home)
+	if _, present := cfg["model"]; present {
+		t.Errorf("uninstall must remove the preserved Juggernaut-written default, got: %v", cfg["model"])
+	}
+}
+
+// TestUninstall_OpenCode_KeepsUserEditAfterReapply: the record carries
+// forward only while the preserved default still matches what a prior apply
+// wrote; a user edit between applies breaks the chain and uninstall keeps
+// the edit.
+func TestUninstall_OpenCode_KeepsUserEditAfterReapply(t *testing.T) {
+	home := setupApplyTest(t)
+	path := writeHomeFile(t, home, ".config/opencode", "opencode.json", "{}")
+
+	applyOpenCodeIAM(t, "--model=gpt-oss-20b") // written + recorded
+	rewriteModel(t, path, "batwing-coder/qwen-coder")
+	applyOpenCodeIAM(t) // preserves the edit; the record must NOT carry
+
+	uninstallOpenCode(t, home)
+
+	cfg := readOpenCodeConfig(t, home)
+	if model, _ := cfg["model"].(string); model != "batwing-coder/qwen-coder" {
+		t.Errorf("user's edit must survive re-apply and uninstall, got: %v", cfg["model"])
+	}
+}
+
 func readOpenCodeConfig(t *testing.T, home string) map[string]any {
 	t.Helper()
 	path := filepath.Join(home, ".config", "opencode", "opencode.json")
