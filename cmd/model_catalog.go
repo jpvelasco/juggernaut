@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -271,4 +272,30 @@ func loadCachedSnapshot(home, region string) (*discovery.RegionCatalog, error) {
 		return nil, err
 	}
 	return &snapshot, nil
+}
+
+// catalogCacheExists reports whether a model catalog cache file is present at
+// all, independent of whether the current credential scope and region have a
+// binding in it. Apply uses it to tell "never refreshed" (expected on fresh
+// installs) from "refreshed under a different credential scope" (the cache
+// silently stopped matching — worth telling the user about).
+func catalogCacheExists(home string) bool {
+	path, err := discovery.CachePath(home)
+	if err != nil {
+		return false
+	}
+	_, statErr := os.Stat(path)
+	return statErr == nil
+}
+
+// warnCatalogScopeMiss advises the user when a model catalog cache exists but
+// the current credential scope and region have no entry in it: the config is
+// written without discovered models or a picker whitelist, and without this
+// warning that degradation would be silent.
+func warnCatalogScopeMiss(home, region string) {
+	if !catalogCacheExists(home) {
+		return
+	}
+	warnf("model catalog cache exists but has no entry for the current credential scope in %s; "+
+		"run `juggernaut models refresh --region %s` — the config is written without discovered models", region, region)
 }

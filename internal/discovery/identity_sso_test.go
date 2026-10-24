@@ -145,7 +145,80 @@ func TestCredentialScope_SSOCacheUnreadableEntryFoldsIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rescope after cache change: %v", err)
 	}
-	if third == first {
-		t.Fatal("readable-entry change did not alter the scope alongside an unreadable one")
+	if third != first {
+		t.Fatal("identity-less entry (no accountId/startUrl/region) must not alter the scope")
+	}
+
+	ssoCacheFile(t, home, "account-c.json", `{"accountId":"C1111222233"}`)
+	fourth, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("rescope after identity-bearing entry: %v", err)
+	}
+	if fourth == first {
+		t.Fatal("identity-bearing entry must alter the scope")
+	}
+}
+
+// Given an SSO session whose aws-cli token rotates (the portal-keyed token
+// model: accessToken/expiresAt refresh on every login, and client
+// registrations churn), When the credential fingerprint is recomputed, Then
+// the scope must stay stable — a rotating fingerprint orphans the catalog
+// binding for the same credential selection after each login cycle, silently
+// degrading apply to an empty catalog.
+func TestCredentialScope_StableAcrossSSOTokenRotation(t *testing.T) {
+	home := testhome.NewTestHome(t)
+	clearSSORelevantEnv(t)
+
+	ssoCacheFile(t, home, "3dacbce5.json", `{
+		"startUrl": "https://example.awsapps.com/start",
+		"region": "us-west-2",
+		"accessToken": "token-AAA",
+		"expiresAt": "2026-10-24T18:26:23.141Z",
+		"clientId": "client-1",
+		"clientSecret": "secret-1"
+	}`)
+	before, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("scope before rotation: %v", err)
+	}
+
+	// Every login cycle: fresh tokens, fresh expiry, client re-registration.
+	ssoCacheFile(t, home, "3dacbce5.json", `{
+		"startUrl": "https://example.awsapps.com/start",
+		"region": "us-west-2",
+		"accessToken": "token-BBB-new-session",
+		"expiresAt": "2026-10-25T09:00:00.000Z",
+		"clientId": "client-2-registered",
+		"clientSecret": "secret-2"
+	}`)
+	ssoCacheFile(t, home, "0b46fd61.json", `{
+		"clientId": "client-2-registered",
+		"clientSecret": "secret-2",
+		"expiresAt": "2027-01-21T03:12:21Z",
+		"scopes": ["sso:account:access"],
+		"grantTypes": ["authorization_code", "refresh_token"]
+	}`)
+
+	afterRotation, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("scope after rotation: %v", err)
+	}
+	if afterRotation != before {
+		t.Fatal("scope changed across SSO token rotation — the catalog binding would be orphaned by routine logins")
+	}
+
+	// A portal switch is a real identity change and must re-scope.
+	ssoCacheFile(t, home, "3dacbce5.json", `{
+		"startUrl": "https://other-tenant.awsapps.com/start",
+		"region": "us-west-2",
+		"accessToken": "token-CCC",
+		"expiresAt": "2026-10-25T09:00:00.000Z"
+	}`)
+	afterPortalSwitch, err := CredentialScope(home)
+	if err != nil {
+		t.Fatalf("scope after portal switch: %v", err)
+	}
+	if afterPortalSwitch == before {
+		t.Fatal("scope unchanged after switching SSO portals")
 	}
 }

@@ -432,6 +432,13 @@ func buildProviderOptions(prov provider.Provider, home, region string, scopts sc
 	if err != nil {
 		return provOpts, fmt.Errorf("loading cached model catalog: %w", err)
 	}
+	if len(catalog) == 0 && len(sources) == 0 {
+		// Sources survive a refresh that legitimately returned zero models,
+		// so empty models AND empty sources means no binding matched the
+		// current credential scope/region — advise rather than degrade
+		// silently.
+		warnCatalogScopeMiss(home, region)
+	}
 	provOpts.ModelCatalog = catalog
 	provOpts.RefreshedSources = sources
 	return provOpts, nil
