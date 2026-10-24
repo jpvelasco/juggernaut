@@ -36,6 +36,11 @@ actually wrote.
   preserved, or later-edited default survives, as does a native OpenCode
   `amazon-bedrock` default that shares the runtime prefix with
   Juggernaut's writes. Mantle-era leftovers remain always removed.
+- **Pre-record installs no longer leave an orphaned model behind.**
+  Installs made before the written-model record shipped are cleaned up
+  on uninstall too: Codex removes any Bedrock inference-profile ID its
+  pinned provider made routable, and OpenCode removes its seeded
+  convenience default. A user's own value still survives (#523).
 
 ## [6.5.2] - 2026-10-23
 
