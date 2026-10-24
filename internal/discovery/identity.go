@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,6 +43,15 @@ func CallerAccount(ctx context.Context, region string) (string, error) {
 // CredentialScope returns a non-secret fingerprint of the local AWS credential
 // selection. This lets offline commands select the account cache populated by
 // the most recent explicit refresh without contacting AWS.
+//
+// The fingerprint hashes identity sources, not volatile bytes: the profile
+// name, the assumed-role/web-identity/container env vars, the contents of
+// ~/.aws/config and ~/.aws/credentials (a static key rotation or a profile
+// re-point is a real credential change and legitimately re-scopes), and the
+// SSO cache's identity fields only (accountId, startUrl, region). Hashing the
+// SSO cache's raw bytes — access tokens, client registrations, expiries —
+// would orphan the catalog binding for the same credential selection after
+// every `aws sso login` refresh cycle.
 func CredentialScope(home string) (string, error) {
 	hash := sha256.New()
 	writeHashField(hash, "profile", firstNonEmpty(os.Getenv("AWS_PROFILE"), os.Getenv("AWS_DEFAULT_PROFILE"), "default"))
@@ -73,66 +83,58 @@ func CredentialScope(home string) (string, error) {
 			}
 			writeHashField(hash, "contents", string(data))
 		}
-		hashSSOCache(hash, home)
+		hashSSOIdentity(hash, home)
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// hashSSOCache folds the aws-cli SSO token cache (~/.aws/sso/cache) into the
-// credential fingerprint. Switching accounts in the SSO portal refreshes that
-// cache while leaving ~/.aws/config and credentials untouched, so without it
-// the scope cannot distinguish accounts and apply/doctor would serve another
-// account's cached model inventory. Relative paths are collected first, then
-// read outside the walk (no filesystem operations inside the WalkDir
-// callback), and sorted for deterministic hashing. Read errors fold into the
-// fingerprint instead of failing; a missing directory hashes as an explicit
-// marker.
-func hashSSOCache(hash hashWriter, home string) {
+// hashSSOIdentity folds the aws-cli SSO token cache's identity fields into the
+// credential fingerprint. Only identity-bearing fields are hashed: accountId
+// (legacy account-keyed tokens, where the portal-selected account is not in
+// ~/.aws/config) and startUrl with region (portal-keyed tokens). Access
+// tokens, refresh tokens, client registrations, and expiries rotate on every
+// login cycle, and hashing them would orphan the catalog binding for the same
+// credential selection after each refresh. Files without identity fields
+// (client registrations) and unreadable or unparseable entries contribute
+// nothing rather than hashing volatile bytes.
+func hashSSOIdentity(hash hashWriter, home string) {
 	dir := filepath.Join(home, ".aws", "sso", "cache")
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		writeHashField(hash, "sso-cache", "<absent>")
+		writeHashField(hash, "sso-identity", "<absent>")
 		return
 	}
 	defer root.Close()
-
-	type ssoCacheEntry struct {
-		rel     string
-		walkErr string
-	}
-	var entries []ssoCacheEntry
-	// Walk errors surface through the callback (including a failed root
-	// listing) and fold into the fingerprint like any other entry.
+	var identities []string
 	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			entries = append(entries, ssoCacheEntry{rel: path, walkErr: err.Error()})
+		if err != nil || d.IsDir() {
 			return nil
 		}
-		if d.IsDir() {
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
 			return nil
 		}
-		// path is walked beneath dir, so Rel always succeeds.
-		rel, _ := filepath.Rel(dir, path)
-		entries = append(entries, ssoCacheEntry{rel: rel})
+		data, readErr := root.ReadFile(rel)
+		if readErr != nil {
+			return nil
+		}
+		var token struct {
+			AccountID string `json:"accountId"`
+			StartURL  string `json:"startUrl"`
+			Region    string `json:"region"`
+		}
+		if json.Unmarshal(data, &token) != nil {
+			return nil
+		}
+		if token.AccountID == "" && token.StartURL == "" && token.Region == "" {
+			return nil
+		}
+		identities = append(identities, token.AccountID+"\x00"+token.StartURL+"\x00"+token.Region)
 		return nil
 	})
-
-	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
-	for _, entry := range entries {
-		switch {
-		case entry.walkErr != "":
-			writeHashField(hash, "sso-cache:"+entry.rel, "<walk-error: "+entry.walkErr+">")
-		default:
-			// Root-scoped read: symlinks and traversal inside a cache entry
-			// are refused, so the fingerprint can only ever hash bytes that
-			// genuinely live in the SSO cache directory.
-			data, readErr := root.ReadFile(entry.rel)
-			if readErr != nil {
-				writeHashField(hash, "sso-cache:"+entry.rel, "<read-error: "+readErr.Error()+">")
-				continue
-			}
-			writeHashField(hash, "sso-cache:"+entry.rel, string(data))
-		}
+	sort.Strings(identities)
+	for _, identity := range identities {
+		writeHashField(hash, "sso-identity", identity)
 	}
 }
 
