@@ -109,20 +109,7 @@ func (o opencode) OwnsManagedValue(home, scope, key string, value any) bool {
 	}
 	// Preserved (user-owned or later-edited) defaults have no matching
 	// record and must survive; an empty model is nothing worth removing.
-	return model != "" && model == o.writtenModel(home, scope)
-}
-
-// writtenModel returns the root default model the last apply recorded in the
-// scope's auth sidecar ("" when absent, preserved, or unreadable).
-func (o opencode) writtenModel(home, scope string) string {
-	path, err := o.SidecarPath(home, scope)
-	if err != nil {
-		return ""
-	}
-	block := ReadSidecarFile(path)
-	meta, _ := block["meta"].(map[string]any)
-	written, _ := meta["writtenModel"].(string)
-	return written
+	return model != "" && model == sidecarWrittenModel(o, home, scope)
 }
 
 func (o opencode) LaunchSpec() LaunchSpec {

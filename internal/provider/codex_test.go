@@ -2,7 +2,10 @@ package provider
 
 import (
 	"runtime"
+	"strings"
 	"testing"
+
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestGet_Codex confirms the registry resolves the Codex provider.
@@ -157,5 +160,165 @@ func TestCodex_OwnedSubKeys_LeafRegion(t *testing.T) {
 		if !seen {
 			t.Errorf("owned sub-key %q missing (leaf-level, to preserve user aws subkeys): got %v", k, keys)
 		}
+	}
+}
+
+// TestCodex_BuildConfig_PreservesExistingDefaultModel: a plain apply over a
+// runtime-routed config keeps a resolvable, runtime-shaped default instead of
+// resetting it to sol.
+func TestCodex_BuildConfig_PreservesExistingDefaultModel(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Existing = map[string]any{
+		"model":          "global.openai.gpt-6-luna",
+		"model_provider": CodexBedrockRuntimeProviderID,
+	}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if _, present := plan.Keys["model"]; present {
+		t.Errorf("plan must not write the root model when preserving, got: %v", plan.Keys["model"])
+	}
+	for _, k := range plan.ManagedKeys {
+		if k == "model" {
+			t.Errorf("plan must not claim the model key when preserving, got: %v", plan.ManagedKeys)
+		}
+	}
+	if len(plan.Warnings) == 0 || !strings.Contains(plan.Warnings[len(plan.Warnings)-1], "preserved") {
+		t.Errorf("plan should report the preserved default, got: %v", plan.Warnings)
+	}
+	if plan.Keys["model_provider"] != CodexBedrockRuntimeProviderID {
+		t.Errorf("routing keys must still be written, got: %v", plan.Keys)
+	}
+}
+
+// TestCodex_BuildConfig_ReplacesUnservableDefault: a foreign default (the
+// user's own OpenAI model) can't be served through the Bedrock runtime — a
+// plain apply replaces it with the working convenience default instead of
+// preserving a guaranteed 404.
+func TestCodex_BuildConfig_ReplacesUnservableDefault(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Existing = map[string]any{
+		"model":          "gpt-5.2-codex",
+		"model_provider": CodexBedrockRuntimeProviderID,
+	}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if m, _ := plan.Keys["model"].(string); m != "global.openai.gpt-6.1-sol" {
+		t.Errorf("unservable default must reset to sol, got: %v", plan.Keys["model"])
+	}
+}
+
+// TestCodex_BuildConfig_ReplacesStaleShapes: cross-endpoint model shapes and
+// v5 legacy routing are migrated, not preserved.
+func TestCodex_BuildConfig_ReplacesStaleShapes(t *testing.T) {
+	cases := []struct {
+		name     string
+		endpoint string
+		existing map[string]any
+	}{
+		{
+			"runtime apply over mantle-shaped model", "",
+			map[string]any{"model": "openai.gpt-6-astra", "model_provider": CodexBedrockRuntimeProviderID},
+		},
+		{
+			"mantle apply over runtime-shaped model", "mantle",
+			map[string]any{"model": "global.openai.gpt-6-astra", "model_provider": CodexLegacyProviderID},
+		},
+		{
+			"runtime apply over v5 legacy routing", "",
+			map[string]any{"model": "global.openai.gpt-5.6-sol", "model_provider": CodexLegacyProviderID},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p, _ := Get("codex")
+			opts := baseOpts()
+			opts.Endpoint = c.endpoint
+			opts.Existing = c.existing
+
+			plan, err := p.BuildConfig(testConfig(), opts)
+			if err != nil {
+				t.Fatalf("BuildConfig: %v", err)
+			}
+			m, _ := plan.Keys["model"].(string)
+			if m == "" {
+				t.Fatalf("stale model must be replaced, not preserved; keys: %v", plan.Keys)
+			}
+			if m == c.existing["model"] {
+				t.Errorf("stale model %v must not be written back", c.existing["model"])
+			}
+		})
+	}
+}
+
+// TestCodex_Mantle_PreservesExistingDefaultModel: the mantle endpoint has the
+// same contract — a mantle-shaped default survives a plain mantle apply.
+func TestCodex_Mantle_PreservesExistingDefaultModel(t *testing.T) {
+	p, _ := Get("codex")
+	opts := baseOpts()
+	opts.Endpoint = "mantle"
+	opts.Existing = map[string]any{
+		"model":          "openai.gpt-6-astra",
+		"model_provider": CodexLegacyProviderID,
+	}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig (mantle): %v", err)
+	}
+	if _, present := plan.Keys["model"]; present {
+		t.Errorf("mantle plan must not write the root model when preserving, got: %v", plan.Keys["model"])
+	}
+}
+
+// TestCodex_OwnsManagedValue: ownership of the root "model" is record-based —
+// Juggernaut owns it only while it still equals what the last apply wrote.
+func TestCodex_OwnsManagedValue(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	p, _ := Get("codex")
+	if err := WriteSidecar(p, home, Options{
+		Scope: "user", AuthMode: "iam", Region: "us-west-2", Version: "test",
+		WrittenModel: "global.openai.gpt-6.1-sol",
+	}); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	cases := []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{"written default still equals record", "global.openai.gpt-6.1-sol", true},
+		{"default later edited by user", "global.openai.gpt-6-luna", false},
+		{"foreign default never written", "gpt-5.2-codex", false},
+		{"empty model", "", false},
+		{"malformed model value", 42, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := OwnsManagedValueFor(p, home, "user", "model", c.value); got != c.want {
+				t.Errorf("OwnsManagedValue(%v) = %v, want %v", c.value, got, c.want)
+			}
+		})
+	}
+	// Non-model managed keys are owned regardless of value.
+	if !OwnsManagedValueFor(p, home, "user", "model_provider", "anything") {
+		t.Error("non-model managed keys must be owned")
+	}
+}
+
+// TestCodex_OwnsManagedValue_NoRecord: without a sidecar record the root
+// model is the user's — nothing is claimed.
+func TestCodex_OwnsManagedValue_NoRecord(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	p, _ := Get("codex")
+	if OwnsManagedValueFor(p, home, "user", "model", "global.openai.gpt-6.1-sol") {
+		t.Error("no record: the root model must not be owned")
 	}
 }
