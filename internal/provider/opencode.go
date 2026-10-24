@@ -90,11 +90,16 @@ func (o opencode) OwnsConfig(data map[string]any) bool {
 // uninstall. The runtime prefix alone can't decide ownership — amazon-bedrock
 // is OpenCode's own built-in provider id, so a native Bedrock default
 // (something Juggernaut never wrote) shares it with Juggernaut's writes.
-// A model is Juggernaut's only when it still equals the value the last
-// apply wrote (recorded in the auth sidecar) or it points at a
+// A model is Juggernaut's when it still equals the value the last apply
+// wrote (recorded in the auth sidecar), when it points at a
 // Juggernaut-exclusive provider entry (the mantle id and its v5 leftover,
-// which no native setup uses). Every other managed key is owned regardless
-// of value.
+// which no native setup uses), or — with no record, i.e. an install from
+// before records shipped or a preserved default — when it is exactly the
+// seeded convenience default Juggernaut wrote for every pre-record plain
+// apply; removing it restores the pre-Juggernaut state instead of leaving
+// an orphaned default behind. Everything else, including a native
+// amazon-bedrock default and a preserved or later-edited value, is the
+// user's. Every other managed key is owned regardless of value.
 func (o opencode) OwnsManagedValue(home, scope, key string, value any) bool {
 	if key != "model" {
 		return true
@@ -107,9 +112,14 @@ func (o opencode) OwnsManagedValue(home, scope, key string, value any) bool {
 		strings.HasPrefix(model, openCodeLegacyMantleProviderID+"/") {
 		return true
 	}
-	// Preserved (user-owned or later-edited) defaults have no matching
-	// record and must survive; an empty model is nothing worth removing.
-	return model != "" && model == sidecarWrittenModel(o, home, scope)
+	written := sidecarWrittenModel(o, home, scope)
+	if written != "" {
+		return model == written
+	}
+	// No record: a pre-record install (records shipped with the preserve
+	// behavior) or a preserved default. The one value that era's plain
+	// applies provably wrote is the seeded convenience default.
+	return model == bedrockProviderID+"/"+opencodeModelAliases[opencodeDefaultModel()]
 }
 
 func (o opencode) LaunchSpec() LaunchSpec {

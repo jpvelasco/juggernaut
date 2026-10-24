@@ -169,16 +169,43 @@ func TestUninstall_Codex_PreservesUserEditedModel(t *testing.T) {
 	}
 }
 
-// TestUninstall_Codex_PreservesDefaultWithoutRecord: with no sidecar record
-// (a preserved default or a pre-record config), the root model is kept.
-func TestUninstall_Codex_PreservesDefaultWithoutRecord(t *testing.T) {
+// TestUninstall_Codex_RemovesPreRecordDefault: a v6.5.x-era install (records
+// shipped with the preserve behavior) carries the seeded default with no
+// writtenModel record in its sidecar. Uninstall must remove it — leaving it
+// behind orphans the model now that its provider entry is gone (#523).
+func TestUninstall_Codex_RemovesPreRecordDefault(t *testing.T) {
 	home := setupApplyTest(t)
-	writeHomeFile(t, home, ".codex", "config.toml", `model = "global.openai.gpt-6-astra"`+"\n")
-	applyCodexIAM(t) // preserved: never recorded as written
+	writeHomeFile(t, home, ".codex", "config.toml", `model = "global.openai.gpt-6.1-sol"
+model_provider = "amazon-bedrock-runtime"
+
+[model_providers.amazon-bedrock-runtime.aws]
+region = "us-west-2"
+`)
+	writeHomeFile(t, home, ".codex", ".juggernaut.json", `{"juggernaut": {"auth": {"mode": "iam", "region": "us-west-2"}, "meta": {"managedBy": "juggernaut", "scope": "user", "schemaVersion": 2}}}`)
 	uninstallCodex(t)
 
 	cfg := readCodexConfig(t, home)
-	if model, _ := cfg["model"].(string); model != "global.openai.gpt-6-astra" {
-		t.Errorf("preserved default must survive uninstall, got: %v", cfg["model"])
+	if _, present := cfg["model"]; present {
+		t.Errorf("pre-record seeded default must be removed on uninstall, got: %v", cfg["model"])
+	}
+}
+
+// TestUninstall_Codex_PreservesForeignModelWithoutRecord: a foreign default
+// (the user's own OpenAI model) under a pre-record install survives
+// uninstall — only the ID space Juggernaut writes is cleaned up.
+func TestUninstall_Codex_PreservesForeignModelWithoutRecord(t *testing.T) {
+	home := setupApplyTest(t)
+	writeHomeFile(t, home, ".codex", "config.toml", `model = "gpt-5.2-codex"
+model_provider = "amazon-bedrock-runtime"
+
+[model_providers.amazon-bedrock-runtime.aws]
+region = "us-west-2"
+`)
+	writeHomeFile(t, home, ".codex", ".juggernaut.json", `{"juggernaut": {"auth": {"mode": "iam", "region": "us-west-2"}, "meta": {"managedBy": "juggernaut", "scope": "user", "schemaVersion": 2}}}`)
+	uninstallCodex(t)
+
+	cfg := readCodexConfig(t, home)
+	if model, _ := cfg["model"].(string); model != "gpt-5.2-codex" {
+		t.Errorf("user's foreign model must survive uninstall, got: %v", cfg["model"])
 	}
 }

@@ -68,10 +68,15 @@ func (c codex) OwnsConfig(data map[string]any) bool {
 
 // OwnsManagedValue keeps a user-set root "model" alive through uninstall.
 // Codex's model value has no provider prefix to inspect, so ownership is
-// purely record-based: the root model is Juggernaut's only while it still
-// equals the value the last apply wrote (recorded in the auth sidecar). A
-// preserved or later-edited default survives; every other managed key is
-// owned regardless of value.
+// record-based: the root model is Juggernaut's while it still equals the
+// value the last apply wrote (recorded in the auth sidecar). With no record
+// — an install from before records shipped, or a preserved default — any
+// value in the ID space Juggernaut writes for Codex (a codexModel-resolvable
+// Bedrock inference-profile ID) is removed: the provider entry uninstall
+// deletes is what made it routable, so it is dead weight either way, and
+// every pre-record plain apply wrote exactly such a value. A foreign value
+// (the user's own OpenAI model) survives. Every other managed key is owned
+// regardless of value.
 func (c codex) OwnsManagedValue(home, scope, key string, value any) bool {
 	if key != "model" {
 		return true
@@ -80,7 +85,14 @@ func (c codex) OwnsManagedValue(home, scope, key string, value any) bool {
 	if !ok {
 		return true
 	}
-	return model != "" && model == sidecarWrittenModel(c, home, scope)
+	written := sidecarWrittenModel(c, home, scope)
+	if written != "" {
+		return model == written
+	}
+	// No record: remove the pre-record era's own ID space so uninstall
+	// leaves no orphaned model behind.
+	_, resolves := codexModel(model)
+	return resolves
 }
 
 func (c codex) NativeManagedKeys() []string {

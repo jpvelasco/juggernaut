@@ -220,6 +220,30 @@ func TestUninstall_OpenCode_KeepsUserEditAfterReapply(t *testing.T) {
 	}
 }
 
+// TestUninstall_OpenCode_RemovesPreRecordSeedDefault: a v6.5.x-era install
+// (records shipped with the preserve behavior) carries the seeded default
+// with no writtenModel record. Uninstall must remove it — leaving it behind
+// orphans the model now that Juggernaut's provider entry is gone (#523).
+func TestUninstall_OpenCode_RemovesPreRecordSeedDefault(t *testing.T) {
+	home := setupApplyTest(t)
+	writeHomeFile(t, home, ".config/opencode", "opencode.json", `{
+	"model": "amazon-bedrock/openai.gpt-oss-120b-1:0",
+	"provider": {
+		"amazon-bedrock": {
+			"options": {"region": "us-west-2"},
+			"models": {"openai.gpt-oss-120b-1:0": {"id": "openai.gpt-oss-120b-1:0", "name": "openai.gpt-oss-120b-1:0"}}
+		}
+	}
+}`)
+	writeHomeFile(t, home, ".config/opencode", ".juggernaut.json", `{"juggernaut": {"auth": {"mode": "iam", "region": "us-west-2"}, "meta": {"managedBy": "juggernaut", "scope": "user", "schemaVersion": 2}}}`)
+	uninstallOpenCode(t, home)
+
+	cfg := readOpenCodeConfig(t, home)
+	if _, present := cfg["model"]; present {
+		t.Errorf("pre-record seeded default must be removed on uninstall, got: %v", cfg["model"])
+	}
+}
+
 func readOpenCodeConfig(t *testing.T, home string) map[string]any {
 	t.Helper()
 	path := filepath.Join(home, ".config", "opencode", "opencode.json")
