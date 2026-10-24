@@ -225,6 +225,7 @@ func TestOpenCode_BuildConfig_Aliases(t *testing.T) {
 	cases := map[string]string{
 		"glm-4.7":       "zai.glm-4.7",
 		"glm-5":         "zai.glm-5",
+		"glm-5.3":       "global.zai.glm-5.3",
 		"kimi-k2.5":     "moonshotai.kimi-k2.5",
 		"deepseek-v3.2": "deepseek.v3.2",
 		"qwen3-coder":   "qwen.qwen3-coder-480b-a35b-v1:0",
