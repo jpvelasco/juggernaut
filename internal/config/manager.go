@@ -388,6 +388,15 @@ func (m *Manager) RemoveManagedKeys(keys []string) error {
 // removed — preserving the user's; if that empties the table, the table is
 // dropped. All other keys are removed whole-value.
 func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][]string) error {
+	return m.RemoveManagedKeysDeepIf(keys, ownedSubKeys, nil)
+}
+
+// RemoveManagedKeysDeepIf is RemoveManagedKeysDeep with an optional ownsValue
+// predicate for whole-value managed keys: when the predicate reports an
+// existing value as NOT Juggernaut-owned, the key is preserved instead of
+// removed. Deep-merge keys and the juggernaut block are not predicate-gated —
+// sub-key ownership already covers the former, and the block is always ours.
+func (m *Manager) RemoveManagedKeysDeepIf(keys []string, ownedSubKeys map[string][]string, ownsValue func(key string, value any) bool) error {
 	return m.withConfig(func(existing map[string]any) error {
 		// Always remove the juggernaut block — this is the uninstall entry point
 		// and the block must go regardless of whether the caller listed it.
@@ -401,6 +410,12 @@ func (m *Manager) RemoveManagedKeysDeep(keys []string, ownedSubKeys map[string][
 			case actionDeep:
 				return removeOwnedSubKeys(existing, k, ownedSubKeys[k], m.path)
 			default:
+				if ownsValue != nil && !ownsValue(k, existing[k]) {
+					// A user-owned value under a key Juggernaut manages
+					// (e.g. OpenCode's preserved root default model) —
+					// removal must leave it in place.
+					return nil
+				}
 				delete(existing, k)
 			}
 			return nil

@@ -263,3 +263,206 @@ func TestOpenCode_BuildConfig_Passthrough(t *testing.T) {
 		t.Error("passthrough (unverified) model should emit a warning")
 	}
 }
+
+// TestOpenCode_BuildConfig_PreservesExistingDefaultModel: the root "model" is
+// OpenCode's own native default, so a plain apply (--model omitted) over a
+// config that already has one keeps it instead of pinning Juggernaut's
+// convenience default. The plan then must not claim the key.
+func TestOpenCode_BuildConfig_PreservesExistingDefaultModel(t *testing.T) {
+	p, _ := Get("opencode")
+	opts := baseOpts()
+	opts.Existing = map[string]any{"model": "batwing-coder/qwen-coder"}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if _, present := plan.Keys["model"]; present {
+		t.Errorf("plan must not write the root model key when preserving, got: %v", plan.Keys["model"])
+	}
+	assertManagedKeys(t, plan, []string{"provider"})
+	found := false
+	for _, w := range plan.Warnings {
+		if strings.Contains(w, "batwing-coder/qwen-coder") && strings.Contains(w, "preserved") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("plan should warn that the existing default is preserved, got: %v", plan.Warnings)
+	}
+}
+
+// TestOpenCode_BuildConfig_WritesDefaultWhenNoModelExists: a plain apply on a
+// fresh (or model-less) config still seeds the convenience default —
+// preservation only applies when a default exists to preserve.
+func TestOpenCode_BuildConfig_WritesDefaultWhenNoModelExists(t *testing.T) {
+	p, _ := Get("opencode")
+	plan, err := p.BuildConfig(testConfig(), baseOpts()) // Existing nil, Model ""
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/openai.gpt-oss-120b-1:0" {
+		t.Errorf("default model = %v, want amazon-bedrock/openai.gpt-oss-120b-1:0", plan.Keys["model"])
+	}
+	assertManagedKeys(t, plan, []string{"model", "provider"})
+}
+
+// TestOpenCode_BuildConfig_ExplicitModelOverridesPreservation: --model claims
+// the root key; an existing default (even a foreign one) does not survive it.
+func TestOpenCode_BuildConfig_ExplicitModelOverridesPreservation(t *testing.T) {
+	p, _ := Get("opencode")
+	opts := baseOpts()
+	opts.Model = "grok-4.6"
+	opts.Existing = map[string]any{"model": "batwing-coder/qwen-coder"}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/global.xai.grok-4.6" {
+		t.Errorf("explicit model = %v, want amazon-bedrock/global.xai.grok-4.6", plan.Keys["model"])
+	}
+	assertManagedKeys(t, plan, []string{"model", "provider"})
+}
+
+// TestOpenCode_BuildConfig_ReplacesStaleModels: a root model pointing at the
+// provider entry this apply removes would dangle, so it is replaced with the
+// apply's default instead of preserved. Covers the cross-endpoint switch and
+// the v5 bedrock-mantle leftover for both endpoints.
+func TestOpenCode_BuildConfig_ReplacesStaleModels(t *testing.T) {
+	cases := []struct {
+		name     string
+		endpoint string
+		existing string
+		wantKeys []string
+	}{
+		{"runtime apply over mantle model", "", "amazon-bedrock-mantle/openai.gpt-6-astra", []string{"model", "provider"}},
+		{"runtime apply over v5 mantle model", "", "bedrock-mantle/openai.gpt-oss-120b-1:0", []string{"model", "provider"}},
+		{"mantle apply over runtime model", "mantle", "amazon-bedrock/openai.gpt-oss-120b-1:0", []string{"model", "providers"}},
+		{"mantle apply over v5 mantle model", "mantle", "bedrock-mantle/openai.gpt-oss-120b-1:0", []string{"model", "providers"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p, _ := Get("opencode")
+			opts := baseOpts()
+			opts.Endpoint = c.endpoint
+			opts.Existing = map[string]any{"model": c.existing}
+
+			plan, err := p.BuildConfig(testConfig(), opts)
+			if err != nil {
+				t.Fatalf("BuildConfig: %v", err)
+			}
+			m, _ := plan.Keys["model"].(string)
+			if m == "" {
+				t.Fatalf("stale model %q must be replaced, not preserved; keys: %v", c.existing, plan.Keys)
+			}
+			if strings.Contains(m, c.existing) {
+				t.Errorf("stale model %q must not be written back", c.existing)
+			}
+			assertManagedKeys(t, plan, c.wantKeys)
+		})
+	}
+}
+
+// TestOpenCode_Mantle_PreservesExistingDefaultModel: the mantle endpoint has
+// the same contract — a foreign default survives a plain mantle apply.
+func TestOpenCode_Mantle_PreservesExistingDefaultModel(t *testing.T) {
+	p, _ := Get("opencode")
+	opts := baseOpts()
+	opts.Endpoint = "mantle"
+	opts.Existing = map[string]any{"model": "batwing-coder/qwen-coder"}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig (mantle): %v", err)
+	}
+	if _, present := plan.Keys["model"]; present {
+		t.Errorf("mantle plan must not write the root model key when preserving, got: %v", plan.Keys["model"])
+	}
+	assertManagedKeys(t, plan, []string{"providers"})
+}
+
+// TestOpenCode_Mantle_ReplacesStaleRuntimeModel: switching an owned config to
+// mantle replaces a runtime-prefixed default with the mantle default.
+func TestOpenCode_Mantle_ReplacesStaleRuntimeModel(t *testing.T) {
+	p, _ := Get("opencode")
+	opts := baseOpts()
+	opts.Endpoint = "mantle"
+	opts.Existing = map[string]any{"model": "amazon-bedrock/openai.gpt-oss-120b-1:0"}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig (mantle): %v", err)
+	}
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock-mantle/openai.gpt-6-astra" {
+		t.Errorf("mantle default = %v, want amazon-bedrock-mantle/openai.gpt-6-astra", plan.Keys["model"])
+	}
+	assertManagedKeys(t, plan, []string{"model", "providers"})
+}
+
+// TestOpenCode_NonStringModelNotPreserved: a malformed non-string root model
+// is not a default to preserve; the plain default is written.
+func TestOpenCode_NonStringModelNotPreserved(t *testing.T) {
+	p, _ := Get("opencode")
+	opts := baseOpts()
+	opts.Existing = map[string]any{"model": 42}
+
+	plan, err := p.BuildConfig(testConfig(), opts)
+	if err != nil {
+		t.Fatalf("BuildConfig: %v", err)
+	}
+	if m, _ := plan.Keys["model"].(string); m != "amazon-bedrock/openai.gpt-oss-120b-1:0" {
+		t.Errorf("default model = %v, want amazon-bedrock/openai.gpt-oss-120b-1:0", plan.Keys["model"])
+	}
+}
+
+// TestOpenCode_OwnsManagedValue: uninstall ownership of the root "model" is
+// value-aware — Juggernaut owns models pointing at its own OpenCode provider
+// entries (any era), and preserves foreign ones.
+func TestOpenCode_OwnsManagedValue(t *testing.T) {
+	p, _ := Get("opencode")
+	cases := []struct {
+		key   string
+		value any
+		want  bool
+	}{
+		{"model", "batwing-coder/qwen-coder", false},
+		{"model", "their-own-provider/their-own-model", false},
+		{"model", "", false},
+		{"model", "amazon-bedrock/openai.gpt-oss-120b-1:0", true},
+		{"model", "amazon-bedrock/global.zai.glm-5.3", true},
+		{"model", "amazon-bedrock-mantle/openai.gpt-6-astra", true},
+		{"model", "bedrock-mantle/openai.gpt-oss-120b-1:0", true},
+		{"model", 42, true},  // malformed value: removal is safe
+		{"model", nil, true}, // absent value: removal is a no-op
+		{"provider", map[string]any{}, true},
+		{"providers", nil, true},
+	}
+	for _, c := range cases {
+		if got := OwnsManagedValueFor(p, c.key, c.value); got != c.want {
+			t.Errorf("OwnsManagedValue(%q, %v) = %v, want %v", c.key, c.value, got, c.want)
+		}
+	}
+}
+
+// TestOwnsManagedValueFor_DefaultOwnsEverything: providers without the
+// ManagedValueOwner extension own every value of their managed keys (the
+// pre-extension behavior).
+func TestOwnsManagedValueFor_DefaultOwnsEverything(t *testing.T) {
+	p, _ := Get("claude")
+	if !OwnsManagedValueFor(p, "model", "whatever-the-user-set") {
+		t.Error("claude does not implement ManagedValueOwner; every value must be owned")
+	}
+}
+
+func assertManagedKeys(t *testing.T, plan ConfigPlan, want []string) {
+	t.Helper()
+	if len(plan.ManagedKeys) != len(want) {
+		t.Fatalf("ManagedKeys = %v, want %v", plan.ManagedKeys, want)
+	}
+	for i, k := range plan.ManagedKeys {
+		if k != want[i] {
+			t.Fatalf("ManagedKeys = %v, want %v", plan.ManagedKeys, want)
+		}
+	}
+}

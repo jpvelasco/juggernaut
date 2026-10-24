@@ -95,6 +95,13 @@ type Options struct {
 	// which is distinct from "never refreshed" and still counts as proof that
 	// the model is unavailable.
 	RefreshedSources []string
+	// Existing is the provider's current parsed config for the target scope,
+	// nil when the file does not exist yet. Providers may consult it to
+	// preserve user-owned values instead of overwriting them — OpenCode, for
+	// example, keeps an existing root "model" default when --model is omitted,
+	// because that leaf is the CLI's own native setting rather than Bedrock
+	// routing.
+	Existing map[string]any
 }
 
 // FromSchemaOptions stores schema.Options directly so the Claude provider can

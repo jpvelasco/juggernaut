@@ -96,6 +96,11 @@ func (o opencode) buildMantleConfig(opts Options) (ConfigPlan, error) {
 	if message != "" {
 		plan.Warnings = append(plan.Warnings, id+" "+message)
 	}
+	if preserved, ok := preservedDefaultModel(opts); ok {
+		// Same contract as the runtime path: a plain apply keeps the CLI's
+		// own native default model instead of pinning the mantle default.
+		preserveExistingDefault(&plan, preserved)
+	}
 	return plan, nil
 }
 

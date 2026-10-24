@@ -122,6 +122,27 @@ type MantleConfigChecker interface {
 	ValidateMantleConfig(data map[string]any, region string) error
 }
 
+// ManagedValueOwner is an optional extension implemented by providers that
+// can tell a user-owned value from Juggernaut's own under a top-level key
+// they otherwise manage. Uninstall consults it so a value apply preserved as
+// the user's survives the removal of Juggernaut's writes. Providers that
+// don't implement it own every value of their managed keys.
+type ManagedValueOwner interface {
+	// OwnsManagedValue reports whether the existing value at a managed
+	// top-level key belongs to Juggernaut and is safe to remove on uninstall.
+	OwnsManagedValue(key string, value any) bool
+}
+
+// OwnsManagedValueFor consults the optional ManagedValueOwner extension.
+// Providers that don't implement it own every value of their managed keys.
+func OwnsManagedValueFor(p Provider, key string, value any) bool {
+	owner, ok := p.(ManagedValueOwner)
+	if !ok {
+		return true
+	}
+	return owner.OwnsManagedValue(key, value)
+}
+
 // StripLegacyConfig deletes a provider's stale legacy tables from the existing
 // config in place. It is a no-op for providers that don't implement
 // LegacyCleaner (all current CLIs except Codex have no such leftover).
