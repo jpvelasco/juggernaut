@@ -375,7 +375,16 @@ func TestApply_OpenCode_ForeignModel_Preserved(t *testing.T) {
 		t.Fatalf("write foreign opencode config: %v", err)
 	}
 
-	out := applyCLI(t, "opencode")
+	out := captureStdout(t, func() {
+		// --auth=iam keeps this test keychain-free (the token store only runs
+		// for bedrock-api-key applies): on macOS CI the real keychain backend
+		// blocks headless writes, so a bedrock-api-key apply would hang.
+		if err := ExecuteArgs([]string{
+			"apply", "--cli=opencode", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+		}); err != nil {
+			t.Fatalf("apply --cli=opencode: %v", err)
+		}
+	})
 	if !strings.Contains(out, "preserved") {
 		t.Errorf("apply should report the preserved default model, got:\n%s", out)
 	}
