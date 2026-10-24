@@ -17,17 +17,40 @@ import (
 //     foreign or Juggernaut-written, instead of pinning the convenience
 //     default (the pre-6.6 behavior flipped it on every re-apply);
 //   - --model still claims the key;
-//   - uninstall removes only models Juggernaut wrote and keeps the user's.
+//   - uninstall removes only the default apply actually wrote (recorded in
+//     the auth sidecar) and keeps a user's own — including a native
+//     amazon-bedrock default, which shares the runtime prefix with
+//     Juggernaut's writes.
+//
+// Applies use --auth=iam so no test touches the keychain: the token store
+// only runs for bedrock-api-key applies, and on macOS CI the real keychain
+// backend blocks headless writes (the behavior then runs on all three legs
+// instead of skipping).
+
+// applyOpenCodeIAM runs a keychain-free OpenCode apply and returns its output.
+func applyOpenCodeIAM(t *testing.T, extra ...string) string {
+	t.Helper()
+	args := append([]string{
+		"apply", "--cli=opencode", "--auth=iam", "--region=us-west-2", "--skip-preflight",
+	}, extra...)
+	var applyErr error
+	out := captureStdout(t, func() {
+		applyErr = ExecuteArgs(args)
+	})
+	if applyErr != nil {
+		t.Fatalf("apply --cli=opencode: %v", applyErr)
+	}
+	return out
+}
 
 // TestApply_OpenCode_ReapplyKeepsPinnedModel: a plain re-apply over a config
 // Juggernaut owns keeps the previously pinned default instead of resetting it
 // to the convenience default.
 func TestApply_OpenCode_ReapplyKeepsPinnedModel(t *testing.T) {
 	home := setupApplyTest(t)
-	setupIsolatedKeychain(t)
 
-	applyCLI(t, "opencode", "--model=gpt-oss-20b")
-	plain := applyCLI(t, "opencode")
+	applyOpenCodeIAM(t, "--model=gpt-oss-20b")
+	plain := applyOpenCodeIAM(t)
 
 	if !strings.Contains(plain, "preserved") {
 		t.Errorf("re-apply should report the preserved default, got:\n%s", plain)
@@ -43,14 +66,13 @@ func TestApply_OpenCode_ReapplyKeepsPinnedModel(t *testing.T) {
 // edit — the flip-the-default-on-apply regression this behavior replaces.
 func TestApply_OpenCode_ReapplyKeepsUserEditedModel(t *testing.T) {
 	home := setupApplyTest(t)
-	setupIsolatedKeychain(t)
 	path := writeHomeFile(t, home, ".config/opencode", "opencode.json", "{}")
 
-	applyCLI(t, "opencode", "--model=gpt-oss-20b")
+	applyOpenCodeIAM(t, "--model=gpt-oss-20b")
 	// The user re-points the default at their own local model.
 	rewriteModel(t, path, "batwing-coder/qwen-coder")
 
-	plain := applyCLI(t, "opencode")
+	plain := applyOpenCodeIAM(t)
 	if !strings.Contains(plain, "preserved") {
 		t.Errorf("re-apply should report the preserved default, got:\n%s", plain)
 	}
@@ -65,10 +87,9 @@ func TestApply_OpenCode_ReapplyKeepsUserEditedModel(t *testing.T) {
 // model in place.
 func TestUninstall_OpenCode_PreservesUserDefaultModel(t *testing.T) {
 	home := setupApplyTest(t)
-	setupIsolatedKeychain(t)
 
 	writeHomeFile(t, home, ".config/opencode", "opencode.json", `{"model": "their-own-provider/their-own-model"}`)
-	applyCLI(t, "opencode") // preserved foreign default + managed provider entry
+	applyOpenCodeIAM(t) // preserved foreign default + managed provider entry
 
 	uninstallOpenCode(t, home)
 
@@ -86,18 +107,77 @@ func TestUninstall_OpenCode_PreservesUserDefaultModel(t *testing.T) {
 	}
 }
 
+// TestUninstall_OpenCode_PreservesNativeBedrockDefault: amazon-bedrock is
+// OpenCode's own built-in provider id, so a native Bedrock default shares the
+// runtime prefix with Juggernaut's writes without being Juggernaut's. Apply
+// preserves it (no written-model record); uninstall must too.
+func TestUninstall_OpenCode_PreservesNativeBedrockDefault(t *testing.T) {
+	home := setupApplyTest(t)
+
+	writeHomeFile(t, home, ".config/opencode", "opencode.json", `{"model": "amazon-bedrock/anthropic.claude-sonnet-5-5"}`)
+	applyOpenCodeIAM(t)
+
+	uninstallOpenCode(t, home)
+
+	cfg := readOpenCodeConfig(t, home)
+	if model, _ := cfg["model"].(string); model != "amazon-bedrock/anthropic.claude-sonnet-5-5" {
+		t.Errorf("native Bedrock default must survive apply and uninstall, got: %v", cfg["model"])
+	}
+	if prov, ok := cfg["provider"].(map[string]any); ok {
+		if _, present := prov["amazon-bedrock"]; present {
+			t.Errorf("uninstall must remove the managed provider entry, got: %v", prov)
+		}
+	}
+}
+
 // TestUninstall_OpenCode_RemovesJuggernautWrittenModel: a default Juggernaut
-// wrote is removed with the rest of the managed config.
+// wrote (recorded in the sidecar) is removed with the rest of the managed
+// config — but only while it still equals the record.
 func TestUninstall_OpenCode_RemovesJuggernautWrittenModel(t *testing.T) {
 	home := setupApplyTest(t)
-	setupIsolatedKeychain(t)
 
-	applyCLI(t, "opencode") // writes the convenience default
+	applyOpenCodeIAM(t) // writes the convenience default and records it
 	uninstallOpenCode(t, home)
 
 	cfg := readOpenCodeConfig(t, home)
 	if _, present := cfg["model"]; present {
 		t.Errorf("uninstall must remove the Juggernaut-written default, got: %v", cfg["model"])
+	}
+}
+
+// TestUninstall_OpenCode_KeepsEditedDefaultAfterPinnedApply: apply wrote and
+// recorded a default; the user then re-pointed it at their own model; the
+// stale record no longer matches, so uninstall keeps the user's edit.
+func TestUninstall_OpenCode_KeepsEditedDefaultAfterPinnedApply(t *testing.T) {
+	home := setupApplyTest(t)
+	path := writeHomeFile(t, home, ".config/opencode", "opencode.json", "{}")
+
+	applyOpenCodeIAM(t, "--model=gpt-oss-20b") // written + recorded
+	rewriteModel(t, path, "batwing-coder/qwen-coder")
+
+	uninstallOpenCode(t, home)
+
+	cfg := readOpenCodeConfig(t, home)
+	if model, _ := cfg["model"].(string); model != "batwing-coder/qwen-coder" {
+		t.Errorf("user's post-apply edit must survive uninstall, got: %v", cfg["model"])
+	}
+}
+
+// TestUninstall_OpenCode_RemovesMantleEraModelWithoutRecord: the mantle-era
+// provider ids are Juggernaut-exclusive, so a leftover root model pointing at
+// them is owned even with no sidecar record.
+func TestUninstall_OpenCode_RemovesMantleEraModelWithoutRecord(t *testing.T) {
+	home := setupApplyTest(t)
+	path := writeHomeFile(t, home, ".config/opencode", "opencode.json", "{}")
+
+	applyOpenCodeIAM(t)
+	rewriteModel(t, path, "bedrock-mantle/openai.gpt-oss-120b-1:0") // simulate the v5 leftover
+
+	uninstallOpenCode(t, home)
+
+	cfg := readOpenCodeConfig(t, home)
+	if _, present := cfg["model"]; present {
+		t.Errorf("mantle-era leftover must be removed on uninstall, got: %v", cfg["model"])
 	}
 }
 

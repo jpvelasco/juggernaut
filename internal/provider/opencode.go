@@ -87,10 +87,15 @@ func (o opencode) OwnsConfig(data map[string]any) bool {
 }
 
 // OwnsManagedValue keeps a user's root "model" default alive through
-// uninstall: Juggernaut owns that leaf only when it points at one of the
-// OpenCode provider entries Juggernaut manages or wrote in a past era. Every
-// other managed key is owned regardless of value.
-func (o opencode) OwnsManagedValue(key string, value any) bool {
+// uninstall. The runtime prefix alone can't decide ownership — amazon-bedrock
+// is OpenCode's own built-in provider id, so a native Bedrock default
+// (something Juggernaut never wrote) shares it with Juggernaut's writes.
+// A model is Juggernaut's only when it still equals the value the last
+// apply wrote (recorded in the auth sidecar) or it points at a
+// Juggernaut-exclusive provider entry (the mantle id and its v5 leftover,
+// which no native setup uses). Every other managed key is owned regardless
+// of value.
+func (o opencode) OwnsManagedValue(home, scope, key string, value any) bool {
 	if key != "model" {
 		return true
 	}
@@ -98,9 +103,26 @@ func (o opencode) OwnsManagedValue(key string, value any) bool {
 	if !ok {
 		return true
 	}
-	return strings.HasPrefix(model, bedrockProviderID+"/") ||
-		strings.HasPrefix(model, openCodeMantleProviderID+"/") ||
-		strings.HasPrefix(model, openCodeLegacyMantleProviderID+"/")
+	if strings.HasPrefix(model, openCodeMantleProviderID+"/") ||
+		strings.HasPrefix(model, openCodeLegacyMantleProviderID+"/") {
+		return true
+	}
+	// Preserved (user-owned or later-edited) defaults have no matching
+	// record and must survive; an empty model is nothing worth removing.
+	return model != "" && model == o.writtenModel(home, scope)
+}
+
+// writtenModel returns the root default model the last apply recorded in the
+// scope's auth sidecar ("" when absent, preserved, or unreadable).
+func (o opencode) writtenModel(home, scope string) string {
+	path, err := o.SidecarPath(home, scope)
+	if err != nil {
+		return ""
+	}
+	block := ReadSidecarFile(path)
+	meta, _ := block["meta"].(map[string]any)
+	written, _ := meta["writtenModel"].(string)
+	return written
 }
 
 func (o opencode) LaunchSpec() LaunchSpec {

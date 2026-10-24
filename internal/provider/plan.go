@@ -45,6 +45,7 @@ func juggernautAuthBlock(opts Options, region string) (map[string]any, error) {
 			ManagedBy:     "juggernaut",
 			Scope:         opts.Scope,
 			AppliedAt:     fmt.Sprintf("%d", time.Now().Unix()),
+			WrittenModel:  opts.WrittenModel,
 		},
 	}
 	m, err := ToMap(block)
@@ -102,6 +103,13 @@ type Options struct {
 	// because that leaf is the CLI's own native setting rather than Bedrock
 	// routing.
 	Existing map[string]any
+	// WrittenModel is the root default model this apply writes into the
+	// provider's config (empty when the provider preserved an existing one).
+	// cmd sets it from the built plan for providers implementing
+	// ManagedValueOwner; OpenCode persists it in its auth sidecar so
+	// uninstall removes only a default apply actually wrote — and only while
+	// it still equals that value.
+	WrittenModel string
 }
 
 // FromSchemaOptions stores schema.Options directly so the Claude provider can

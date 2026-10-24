@@ -129,18 +129,21 @@ type MantleConfigChecker interface {
 // don't implement it own every value of their managed keys.
 type ManagedValueOwner interface {
 	// OwnsManagedValue reports whether the existing value at a managed
-	// top-level key belongs to Juggernaut and is safe to remove on uninstall.
-	OwnsManagedValue(key string, value any) bool
+	// top-level key belongs to Juggernaut and is safe to remove on
+	// uninstall. home/scope locate the provider's auth sidecar, which
+	// implementations may consult to distinguish values apply wrote from
+	// the user's own.
+	OwnsManagedValue(home, scope, key string, value any) bool
 }
 
 // OwnsManagedValueFor consults the optional ManagedValueOwner extension.
 // Providers that don't implement it own every value of their managed keys.
-func OwnsManagedValueFor(p Provider, key string, value any) bool {
+func OwnsManagedValueFor(p Provider, home, scope, key string, value any) bool {
 	owner, ok := p.(ManagedValueOwner)
 	if !ok {
 		return true
 	}
-	return owner.OwnsManagedValue(key, value)
+	return owner.OwnsManagedValue(home, scope, key, value)
 }
 
 // StripLegacyConfig deletes a provider's stale legacy tables from the existing

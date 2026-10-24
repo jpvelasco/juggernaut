@@ -417,30 +417,68 @@ func TestOpenCode_NonStringModelNotPreserved(t *testing.T) {
 }
 
 // TestOpenCode_OwnsManagedValue: uninstall ownership of the root "model" is
-// value-aware — Juggernaut owns models pointing at its own OpenCode provider
-// entries (any era), and preserves foreign ones.
+// record-based — Juggernaut owns the default only while it still equals what
+// the last apply wrote (sidecar record), or when it points at a
+// Juggernaut-exclusive provider entry. A native runtime default
+// (amazon-bedrock is OpenCode's own built-in provider id) is never claimed
+// without a matching record.
 func TestOpenCode_OwnsManagedValue(t *testing.T) {
+	home := testutil.NewTestHome(t)
 	p, _ := Get("opencode")
+	// An apply that wrote a default records it in the auth sidecar.
+	if err := WriteSidecar(p, home, Options{
+		Scope: "user", AuthMode: "iam", Region: "us-west-2", Version: "test",
+		WrittenModel: "amazon-bedrock/global.zai.glm-5.3",
+	}); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
 	cases := []struct {
+		name  string
 		key   string
 		value any
 		want  bool
 	}{
-		{"model", "batwing-coder/qwen-coder", false},
-		{"model", "their-own-provider/their-own-model", false},
-		{"model", "", false},
-		{"model", "amazon-bedrock/openai.gpt-oss-120b-1:0", true},
-		{"model", "amazon-bedrock/global.zai.glm-5.3", true},
-		{"model", "amazon-bedrock-mantle/openai.gpt-6-astra", true},
-		{"model", "bedrock-mantle/openai.gpt-oss-120b-1:0", true},
-		{"model", 42, true},  // malformed value: removal is safe
-		{"model", nil, true}, // absent value: removal is a no-op
-		{"provider", map[string]any{}, true},
-		{"providers", nil, true},
+		{"written default still equals record", "model", "amazon-bedrock/global.zai.glm-5.3", true},
+		{"pinned default later edited by user", "model", "amazon-bedrock/openai.gpt-oss-120b-1:0", false},
+		{"native runtime default never written", "model", "amazon-bedrock/anthropic.claude-sonnet-5-5", false},
+		{"foreign default", "model", "batwing-coder/qwen-coder", false},
+		{"mantle default", "model", "amazon-bedrock-mantle/openai.gpt-6-astra", true},
+		{"v5 mantle leftover", "model", "bedrock-mantle/openai.gpt-oss-120b-1:0", true},
+		{"empty model is nothing to remove", "model", "", false},
+		{"malformed model value", "model", 42, true},
+		{"absent model value", "model", nil, true},
+		{"other managed key", "provider", map[string]any{}, true},
+		{"providers key", "providers", nil, true},
 	}
 	for _, c := range cases {
-		if got := OwnsManagedValueFor(p, c.key, c.value); got != c.want {
-			t.Errorf("OwnsManagedValue(%q, %v) = %v, want %v", c.key, c.value, got, c.want)
+		t.Run(c.name, func(t *testing.T) {
+			if got := OwnsManagedValueFor(p, home, "user", c.key, c.value); got != c.want {
+				t.Errorf("OwnsManagedValue(%q, %v) = %v, want %v", c.key, c.value, got, c.want)
+			}
+		})
+	}
+}
+
+// TestOpenCode_OwnsManagedValue_NoRecord: without a sidecar record (a
+// preserved default, or an apply from before the record existed), a
+// runtime-prefixed default is the user's; only Juggernaut-exclusive prefixes
+// are owned.
+func TestOpenCode_OwnsManagedValue_NoRecord(t *testing.T) {
+	home := testutil.NewTestHome(t)
+	p, _ := Get("opencode")
+	cases := []struct {
+		value any
+		want  bool
+	}{
+		{"amazon-bedrock/openai.gpt-oss-120b-1:0", false},
+		{"amazon-bedrock/anthropic.claude-sonnet-5-5", false},
+		{"amazon-bedrock-mantle/openai.gpt-6-astra", true},
+		{"bedrock-mantle/openai.gpt-oss-120b-1:0", true},
+		{"batwing-coder/qwen-coder", false},
+	}
+	for _, c := range cases {
+		if got := OwnsManagedValueFor(p, home, "user", "model", c.value); got != c.want {
+			t.Errorf("OwnsManagedValue(no record, %v) = %v, want %v", c.value, got, c.want)
 		}
 	}
 }
@@ -450,7 +488,8 @@ func TestOpenCode_OwnsManagedValue(t *testing.T) {
 // pre-extension behavior).
 func TestOwnsManagedValueFor_DefaultOwnsEverything(t *testing.T) {
 	p, _ := Get("claude")
-	if !OwnsManagedValueFor(p, "model", "whatever-the-user-set") {
+	home := testutil.NewTestHome(t)
+	if !OwnsManagedValueFor(p, home, "user", "model", "whatever-the-user-set") {
 		t.Error("claude does not implement ManagedValueOwner; every value must be owned")
 	}
 }

@@ -190,8 +190,11 @@ func uninstallSettingsBlock(home, scope string, prov provider.Provider) {
 	if has {
 		// A provider may preserve a user-owned value under a managed key
 		// (OpenCode's root default model); the removal walk consults the
-		// optional ownership extension so those survive the uninstall.
-		owns := func(key string, value any) bool { return provider.OwnsManagedValueFor(prov, key, value) }
+		// optional ownership extension — with home/scope so it can consult
+		// its auth sidecar — and those values survive the uninstall.
+		owns := func(key string, value any) bool {
+			return provider.OwnsManagedValueFor(prov, home, scope, key, value)
+		}
 		if err := mgr.RemoveManagedKeysDeepIf(prov.NativeManagedKeys(), prov.OwnedSubKeys(), owns); err != nil {
 			warnf("could not remove %s block: %v", scope, err)
 			return

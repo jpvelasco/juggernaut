@@ -811,6 +811,16 @@ func commitApply(home, authMode, token string, block *schema.Block, prov provide
 	if plan.ResolvedRegion != "" {
 		provOpts.Region = plan.ResolvedRegion
 	}
+	// Providers that make value-ownership decisions on uninstall get a
+	// record of the default this apply wrote (empty when preserved), so
+	// removal only claims what apply actually wrote. Gated on the
+	// ManagedValueOwner extension so non-participating providers' metadata
+	// (e.g. Claude's golden-diffed settings) stays byte-identical.
+	if _, ok := prov.(provider.ManagedValueOwner); ok {
+		if model, ok := plan.Keys["model"].(string); ok {
+			provOpts.WrittenModel = model
+		}
+	}
 
 	path, err := prov.ConfigPath(home, applyFlags.scope)
 	if err != nil {
