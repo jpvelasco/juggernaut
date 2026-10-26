@@ -36,7 +36,12 @@ gh api repos/OWNER/REPO \
 }
 EOF
 
-# CodeQL default setup
+# CodeQL — advanced workflow OR default setup, never both
+# If this repo scans via .github/workflows/codeql.yml (the shipped advanced
+# workflow), keep default setup DISABLED — GitHub refuses to run both for the
+# same languages and the committed workflow's uploads fail with "CodeQL
+# analyses from advanced configurations cannot be processed when the default
+# setup is enabled". If the repo relies on default setup instead, enable it:
 gh api repos/OWNER/REPO/code-scanning/default-setup \
   --method PATCH \
   --input - <<'EOF'
@@ -73,13 +78,7 @@ gh api repos/OWNER/REPO/rulesets \
       "parameters": {
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
-        "required_status_checks": [
-          { "context": "lint" },
-          { "context": "test (ubuntu-latest)" },
-          { "context": "test (macos-latest)" },
-          { "context": "test (windows-latest)" },
-          { "context": "Codacy Static Code Analysis" }
-        ]
+        "required_status_checks": []
       }
     }
   ]
@@ -108,16 +107,36 @@ EOF
 
 > **Note on required status checks:** the `required_status_checks` array above
 > is intentionally empty — GitHub only recognises job names after they've run
-> once. After the first CI run, populate it with the checks that match your
-> workflows, for example:
-> ```json
-> { "context": "lint" },
-> { "context": "test (ubuntu-latest)" },
-> { "context": "test (macos-latest)" },
-> { "context": "test (windows-latest)" },
-> { "context": "Codacy Static Code Analysis" }
-> ```
-> Then apply via `PATCH /repos/OWNER/REPO/rulesets/{ruleset_id}`.
+> once. After the first CI run, update the ruleset via:
+> `PATCH /repos/OWNER/REPO/rulesets/{ruleset_id}`
+
+---
+
+## Codacy setup (one-time, outside the repo — public repos only)
+
+> **Public repos only:** Codacy's free Open Source plan covers public repos;
+> private repos have no Codacy integration (its files aren't shipped there).
+> Skip this section for private repos.
+
+Codacy cannot be fully configured from repo files — these steps are done once
+in the Codacy dashboard, then everything runs automatically (PR checks and the
+main dashboard update via the integration webhook; coverage via
+`.github/workflows/codacy-coverage.yml`).
+
+1. **Add the repository to Codacy** (if not already present) so the GitHub
+   integration analyzes PRs and posts the `Codacy Static Code Analysis` check.
+2. **Repository Settings → Analysis:** leave **cloud analysis** enabled. Do
+   NOT enable "Repository analysis on your server" — that requires a CI job to
+   upload local results on every commit, and if the job doesn't run on PRs
+   (or can't upload), PRs deadlock waiting for a check that never reports.
+3. **Repository Settings → Coverage:** copy the project token and add it as the
+   `CODACY_REPOSITORY_API_TOKEN` secret in GitHub → Settings → Secrets.
+   Validate the upload in the "Test your integration" panel after the next CI
+   run (needs a baseline commit before PR coverage metrics appear).
+4. **Code patterns:** enable the tools that fit the repo's stack (e.g. Revive
+   for Go) and disable noise (e.g. Trivy/Checkov where the repo has no
+   container/IaC files). Tools enabled by an org AI Policy cannot be disabled
+   per-repo.
 
 ---
 
@@ -146,6 +165,6 @@ EOF
 ### Security & Analysis
 - Secret scanning: enabled
 - Push protection: enabled
-- CodeQL (default setup): enabled
+- CodeQL: enabled — via the committed `.github/workflows/codeql.yml` (advanced) OR default setup, never both at once
 - Dependabot alerts: enabled
 - Dependabot security updates: enabled

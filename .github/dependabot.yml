@@ -4,3 +4,19 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # codeql-action init/autobuild/analyze share a release SHA and must run
+      # the same version — ungrouped, dependabot bumps them as separate PRs and
+      # a split bump fails every Analyze job ("Loaded a configuration file for
+      # version X, but running version Y").
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      gomod:
+        patterns:
+          - "*"
