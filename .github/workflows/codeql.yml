@@ -2,9 +2,9 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   pull_request:
-    branches: [main]
+    branches: ["main"]
   schedule:
     - cron: "0 0 * * 0"
 
@@ -14,12 +14,20 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze ${{ matrix.language }}
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # actions covers workflows; go uses autobuild so CodeQL analyzes compiled
+      # code rather than source-only extraction. This repo ships JavaScript in
+      # its npm/ shim, so javascript-typescript stays active (build-mode: none).
       matrix:
-        language: [actions, go, javascript-typescript]
+        include:
+          - language: actions
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
 
     steps:
       - name: Checkout repository
@@ -30,6 +38,10 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
+        uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
