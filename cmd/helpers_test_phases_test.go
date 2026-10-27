@@ -1887,14 +1887,14 @@ func TestReportLegacyRecovery_BackupRestore(t *testing.T) {
 
 	// Create a juggernaut binary and a backup file to trigger restore.
 	self := filepath.Join(binDir, "juggernaut")
-	if err := os.WriteFile(self, []byte("#!/bin/sh\necho juggernaut"), 0o700); err != nil {
+	if err := os.WriteFile(self, []byte("#!/bin/sh\necho juggernaut"), 0o700); err != nil { // nosemgrep: go_file-permissions_rule-fileperm -- executable POSIX test stub
 		t.Fatalf("write juggernaut: %v", err)
 	}
 
 	// Create a backup file (not a symlink — backup restore only checks
 	// if backup exists and claude does not).
 	backup := filepath.Join(binDir, "claude.juggernaut-original")
-	if err := os.WriteFile(backup, []byte("#!/bin/sh\necho real-claude"), 0o700); err != nil {
+	if err := os.WriteFile(backup, []byte("#!/bin/sh\necho real-claude"), 0o700); err != nil { // nosemgrep: go_file-permissions_rule-fileperm -- executable POSIX test stub
 		t.Fatalf("write backup: %v", err)
 	}
 
@@ -2455,7 +2455,7 @@ func TestReportLegacyRecovery_MultipleActions(t *testing.T) {
 
 	// Create a juggernaut binary.
 	self := filepath.Join(binDir, "juggernaut")
-	if err := os.WriteFile(self, []byte("#!/bin/sh\necho juggernaut"), 0o700); err != nil {
+	if err := os.WriteFile(self, []byte("#!/bin/sh\necho juggernaut"), 0o700); err != nil { // nosemgrep: go_file-permissions_rule-fileperm -- executable POSIX test stub
 		t.Fatalf("write juggernaut: %v", err)
 	}
 
@@ -2466,7 +2466,7 @@ func TestReportLegacyRecovery_MultipleActions(t *testing.T) {
 	}
 
 	backup := filepath.Join(binDir, "claude.juggernaut-original")
-	if err := os.WriteFile(backup, []byte("#!/bin/sh\necho real-claude"), 0o700); err != nil {
+	if err := os.WriteFile(backup, []byte("#!/bin/sh\necho real-claude"), 0o700); err != nil { // nosemgrep: go_file-permissions_rule-fileperm -- executable POSIX test stub
 		t.Fatalf("write backup: %v", err)
 	}
 

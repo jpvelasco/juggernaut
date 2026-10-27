@@ -7,7 +7,7 @@
     "repositoryId": "848571",
     "repositoryName": "juggernaut",
     "createdAt": "2026-07-21T08:53:24.021Z",
-    "updatedAt": "2026-08-08T04:56:12.900Z",
+    "updatedAt": "2026-10-27T03:12:50.558Z",
     "languages": [
       "Go",
       "Javascript",
@@ -153,10 +153,6 @@
           "patternId": "jackson_parse-error"
         }
       ]
-    },
-    {
-      "toolId": "Lizard",
-      "patterns": []
     },
     {
       "toolId": "Checkov",

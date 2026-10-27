@@ -15,7 +15,7 @@ import (
 
 func readClaudeSettings(t *testing.T, home string) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json")) // nosemgrep: go_filesystem_rule-fileread -- test fixture path, not user input
 	if err != nil {
 		t.Fatalf("reading settings.json: %v", err)
 	}

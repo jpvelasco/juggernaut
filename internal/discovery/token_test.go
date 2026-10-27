@@ -71,7 +71,7 @@ func TestMintBedrockToken_StaticCredentials(t *testing.T) {
 	if u.Host != bedrockTokenHost || u.Path != "/" {
 		t.Errorf("token host/path = %q/%q, want %q/", u.Host, u.Path, bedrockTokenHost)
 	}
-	q := u.Query()
+	q := u.Query() // nosemgrep: go_sql_rule-concat-sqli -- net/url query parsing, not SQL
 	for key, want := range map[string]string{
 		"Action":               "CallWithBearerToken",
 		"Version":              "1",
@@ -113,7 +113,7 @@ func TestMintBedrockToken_ExpiringCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintBedrockToken: %v", err)
 	}
-	expires := decodeMintedToken(t, token).Query().Get("X-Amz-Expires")
+	expires := decodeMintedToken(t, token).Query().Get("X-Amz-Expires") // nosemgrep: go_sql_rule-concat-sqli -- net/url query parsing, not SQL
 	secs, err := time.ParseDuration(expires + "s")
 	if err != nil {
 		t.Fatalf("X-Amz-Expires = %q: %v", expires, err)
