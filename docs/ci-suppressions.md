@@ -22,6 +22,19 @@ other `MkdirAll 0o700` fixture sites).
 `isLegacyClaudeShim` deletion also removes a stale `nolint:unused`. Keep these
 current when adding or removing suppressions.
 
+Counts were re-verified during the Codacy checks pass on 2026-10-27: 11 open
+dashboard findings and 6 local-only sites — 4 `WriteFile 0o700` executable-stub
+lines still carrying the 2026-07 dashboard dismissals plus the same-file dedup
+twins Codacy collapses by line text (`apply_profile_test.go:453`,
+`doctor_profile_test.go:21`) — clear via 16 new annotations: the standard
+directory nosemgrep on 6 `MkdirAll 0o700` sites, the fixture nosemgrep on 3
+`ReadFile` sites, `go_sql_rule-concat-sqli` on the two `url.URL.Query()` lines,
+the fileperm stub annotation on the 4 `WriteFile 0o700` lines, and the exec pair
+on `codex_launch.go` (same resolved-binary + constant-args shape as
+`codexVersionProbe`). No dashboard dismissals were needed. `Lizard` was also
+removed from `.codacy/codacy.config.json` (cloud-metrics only, breaks local
+runs) so local Opengrep analysis works.
+
 ## Fixed instead of suppressed
 
 - `internal/provider/base.go` — two `//nolint:staticcheck` on the deprecated
@@ -54,6 +67,7 @@ current when adding or removing suppressions.
 | `internal/keychain/crypter_windows.go:53,67,77` | `#nosec G115,G103` + `nosemgrep use-of-unsafe-block` | integer conversion / unsafe | DPAPI `DATA_BLOB` marshalling requires `unsafe`; sizes are bounded by the keychain limit well under 4GB. |
 | `internal/provider/sidecar.go` (`readSidecarBlock`) | `#nosec G304` | file-read of a variable path | Paths are provider-derived sidecar locations (`.juggernaut.json` next to the provider config), never user input; read-only and every error path is the documented "absent" outcome. |
 | `cmd/codex_version.go` (`codexVersionProbe`) | `#nosec G204` + `nosemgrep dangerous-exec-command, go_subproc_rule-subproc` | exec with a variable command | `path` is the codex binary resolved from a fixed binary-name list on PATH; args are the constant `"--version"` with no shell. |
+| `internal/provider/codex_launch.go` (`prepareCodexLaunch`) | `nosemgrep dangerous-exec-command, go_subproc_rule-subproc` | exec with a variable command | `path` is the codex binary the activation launcher resolved (`LaunchSpec.PrepareArgs` receives `binPath`, which skips the Juggernaut binary and legacy artifacts); args are the constant `"--help"` with no shell — mirrors `codexVersionProbe`. |
 
 ### npm launcher (`npm/index.js`, `npm/index.test.js`)
 
@@ -64,7 +78,7 @@ asserts containment under the owning platform package dir, staging uses
 `fs.mkdtempSync` with a constant prefix plus `COPYFILE_EXCL`, and test
 fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
 
-### Test-only Go suppressions (~50 sites)
+### Test-only Go suppressions (~95 sites)
 
 - `// nosemgrep go.lang.correctness.permissions.file_permission.incorrect-default-permission`
   on `os.MkdirAll(..., 0o700)` — the permission is correct for directories and
@@ -82,5 +96,15 @@ fixtures build their trees under `fs.mkdtempSync(os.tmpdir())` roots.
   `cmd/apply_collision_test.go` (pre-write backup glob match), and
   `internal/config/backup_rotation_test.go` (backup glob matches).
 - `cmd/launch_exitcode_test.go` - `#nosec G204` + `nosemgrep go_subproc_rule-subproc,dangerous-exec-command` on the wrapper-child harness spawning `os.Executable()` (the test binary itself) so exit-code propagation through `Execute()` can be asserted.
+- `// nosemgrep go_sql_rule-concat-sqli` on `url.URL.Query()` in
+  `internal/discovery/token_test.go` — net/url query-string parsing of a minted
+  Bedrock token, not a database call; the cloud Semgrep rule matches the
+  method name.
+- `cmd/helpers_test_phases_test.go` — `// nosemgrep go_file-permissions_rule-fileperm`
+  on the four `os.WriteFile(..., 0o700)` POSIX shell-stub lines (the fake
+  `juggernaut` binary and the `claude` backup it restores): the stubs model
+  executable binaries, so they keep the owner-exec bit. These were dismissed on
+  the dashboard in 2026-07 and now carry in-code annotations so local Opengrep
+  runs stay green.
 - Executable test stubs written `0o755` (`cmd/launch_exitcode_test.go`, `cmd/codex_version_test.go` — both the faked-probe stub and the real-probe stub in `TestCodexBinaryVersion_RealProbe`, `internal/activation/auth_modes_degrade_test.go`) - `#nosec G306` + `nosemgrep fileperm/incorrect-default-permission`; POSIX shell stubs must be executable for the resolution/launch pipeline's `isExecutable` gate to accept them. The `stubCodexProbe` stub is never executed (the probe is swapped for a fake); `TestCodexBinaryVersion_RealProbe`'s stub is executed — that is the point (it covers the real probe).
 - `internal/config/write_test.go` and `cmd/helpers_test_phases_test.go` - `nosemgrep mkdir/fileperm/incorrect-default-permission` alongside the existing `//nolint:gosec` on the intentional read-only dir and its cleanup chmod restore.

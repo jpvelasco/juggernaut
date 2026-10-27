@@ -420,7 +420,7 @@ func TestApply_GrokIAMAuthCommandCarriesProfile(t *testing.T) {
 		t.Fatalf("apply --cli=grok error: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(home, ".grok", "config.toml"))
+	data, err := os.ReadFile(filepath.Join(home, ".grok", "config.toml")) // nosemgrep: go_filesystem_rule-fileread -- test fixture path, not user input
 	if err != nil {
 		t.Fatalf("reading grok config.toml: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestApply_GrokIAMAuthCommandUnchangedWithoutProfile(t *testing.T) {
 		t.Fatalf("apply --cli=grok error: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(home, ".grok", "config.toml"))
+	data, err := os.ReadFile(filepath.Join(home, ".grok", "config.toml")) // nosemgrep: go_filesystem_rule-fileread -- test fixture path, not user input
 	if err != nil {
 		t.Fatalf("reading grok config.toml: %v", err)
 	}

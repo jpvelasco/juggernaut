@@ -18,7 +18,7 @@ import (
 func writeManagedClaudeSettings(t *testing.T, home, profile string) {
 	t.Helper()
 	dir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir .claude: %v", err)
 	}
 	auth := `{"mode": "iam", "region": "us-west-2"`
@@ -142,7 +142,7 @@ func TestCheckAWSProfile_BearerAuthSkipped(t *testing.T) {
 func TestCheckAWSProfile_UnmanagedSkipped(t *testing.T) {
 	home := testutil.NewTestHome(t)
 	dir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"env": {}}`), 0o600); err != nil {
@@ -161,7 +161,7 @@ func TestCheckAWSProfile_UnmanagedSkipped(t *testing.T) {
 // sidecar, not opencode.json — the check must read the sidecar.
 func TestCheckAWSProfile_SidecarProvider(t *testing.T) {
 	home := testutil.NewTestHome(t)
-	if err := os.MkdirAll(filepath.Join(home, ".config", "opencode"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".config", "opencode"), 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir: %v", err)
 	}
 	sidecar := `{"juggernaut": {"auth": {"mode": "iam", "region": "us-west-2", "profile": "dev-sidecar"}, "meta": {"managedBy": "juggernaut"}}}`

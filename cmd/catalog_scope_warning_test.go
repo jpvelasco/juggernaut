@@ -20,7 +20,7 @@ func TestApply_OpenCode_WarnsOnCatalogScopeMiss(t *testing.T) {
 	home := setupApplyTest(t)
 
 	cacheDir := filepath.Join(home, ".juggernaut")
-	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatalf("mkdir .juggernaut: %v", err)
 	}
 	cache := `{"version": 2, "accounts": {}, "bindings": {"some-other-scope": "123456789012"}}`

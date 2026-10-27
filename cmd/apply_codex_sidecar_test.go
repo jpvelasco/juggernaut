@@ -120,7 +120,7 @@ func TestCodexSidecarWriteFailurePreservesLegacyConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(sidecar, 0o700); err != nil {
+	if err := os.MkdirAll(sidecar, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 		t.Fatal(err)
 	}
 	err = ExecuteArgs([]string{"apply", "--cli=codex", "--auth=iam"})

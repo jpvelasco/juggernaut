@@ -29,7 +29,7 @@ func TestLaunchPreparesOnlyTargetManagedArgs(t *testing.T) {
 			// Another CLI's managed config is not authority to rewrite this
 			// target's arguments, even though it activates shared auth handling.
 			claudeDir := filepath.Join(home, ".claude")
-			if err := os.MkdirAll(claudeDir, 0o700); err != nil {
+			if err := os.MkdirAll(claudeDir, 0o700); err != nil { // nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission -- directory
 				t.Fatal(err)
 			}
 			if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{"juggernaut":{"meta":{"managedBy":"juggernaut"},"auth":{"mode":"iam"}}}`), 0o600); err != nil {
