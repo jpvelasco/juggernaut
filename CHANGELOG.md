@@ -2,6 +2,28 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.6.3] - 2026-10-27
+
+**Patch release.** Maintenance: CI modernization and static-analysis
+cleanup; no behavior changes.
+
+### Other
+
+- **CI toolchain and dependabot modernization.** golangci-lint v2.12.2 →
+  v2.15.0 on both lint jobs (the older binary's embedded type-checker
+  misbehaves under newer toolchains), dependabot now tracks Go modules
+  and groups codeql-action bumps so init/analyze never split, and
+  `codeql.yml` moves to the current template form with autobuild for Go
+  while keeping javascript-typescript active for the JavaScript shipped
+  in `npm/`. CI-only change; no runtime behavior.
+- **Static-analysis suppressions documented and annotated.** The
+  `// nosemgrep` ledger now covers every known false-positive site
+  Codacy flags (directory permissions on `MkdirAll 0o700` fixtures,
+  test-fixture file reads, net/url query parsing misread as SQL, the
+  resolved-binary `--help` probe in `prepareCodexLaunch`), and `Lizard`
+  is dropped from the local Codacy config so Opengrep runs. Comments
+  and docs only; no runtime behavior.
+
 ## [6.6.2] - 2026-10-24
 
 **Patch release.** Maintenance: CodeQL action bump and no behavior changes.
@@ -1756,7 +1778,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.2...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.3...HEAD
+[6.6.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.3
 [6.6.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.2
 [6.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.1
 [6.6.0]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.0
