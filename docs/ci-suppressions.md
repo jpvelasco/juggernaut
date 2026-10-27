@@ -27,7 +27,7 @@ dashboard findings and 6 local-only sites — 4 `WriteFile 0o700` executable-stu
 lines still carrying the 2026-07 dashboard dismissals plus the same-file dedup
 twins Codacy collapses by line text (`apply_profile_test.go:453`,
 `doctor_profile_test.go:21`) — clear via 16 new annotations: the standard
-directory nosemgrep on 7 `MkdirAll 0o700` sites, the fixture nosemgrep on 3
+directory nosemgrep on 6 `MkdirAll 0o700` sites, the fixture nosemgrep on 3
 `ReadFile` sites, `go_sql_rule-concat-sqli` on the two `url.URL.Query()` lines,
 the fileperm stub annotation on the 4 `WriteFile 0o700` lines, and the exec pair
 on `codex_launch.go` (same resolved-binary + constant-args shape as
