@@ -35,6 +35,21 @@ on `codex_launch.go` (same resolved-binary + constant-args shape as
 removed from `.codacy/codacy.config.json` (cloud-metrics only, breaks local
 runs) so local Opengrep analysis works.
 
+Counts were re-audited on 2026-11-03: dashboard shows 0 active findings and 15
+cloud-side dismissals (all `TestCode`, all on file-permission rules in
+`*_test.go` files: 10× `incorrect-default-permission`, 5× `fileperm`, across
+`cmd/helpers_test_phases_test.go`, `internal/config/write_test.go`,
+`internal/discovery/cache_coverage_extra_test.go`, and
+`cmd/apply_test_helpers_coverage_test.go`). The 15 dismissals were created
+2026-07 against line anchors that have since drifted (the
+`cache_coverage_extra_test.go` literal `0o700` was replaced by
+`safepath.DirPerm`; other sites moved within their files). They remain
+semantically valid — every currently-live `0o700` callsite in `*_test.go`
+carries the in-code `// nosemgrep` annotation, which is the authoritative
+suppression mechanism; the cloud dismissals act as a redundant safety net in
+case a future refactor separates an annotation from its line. Leave them in
+place; they are not masking any active issue.
+
 ## Fixed instead of suppressed
 
 - `internal/provider/base.go` — two `//nolint:staticcheck` on the deprecated
