@@ -2,6 +2,35 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [6.6.4] - 2026-11-04
+
+**Patch release.** Fixes the first-run setup prompt discarding `--region` and
+`--opusplan`, plus a CI security hardening and test hygiene; no other behavior
+changes.
+
+### Fixed
+
+- **First-run setup keeps `--region` and `--opusplan`.** Accepting the setup
+  prompt with Enter returned an empty region and `opusplan=false`, silently
+  discarding the values passed to `apply` on a first run. The prompt now starts
+  from the caller's values.
+
+### Documentation
+
+- **Audit trail for the 2026-11-03 Codacy dismissals re-check.** Records the
+  re-check outcome. Docs only.
+
+### Other
+
+- **Octopus review runs on `pull_request`.** It previously ran on
+  `pull_request_target`, which gave fork PRs a base-repo token with
+  `pull-requests: write` while the fork's diff went to an external review
+  service. Fork PRs now get a read-only token. CI-only change.
+- **First-run prompt test no longer depends on `TERM`.** The test failed under
+  `TERM=dumb`, where huh falls back to line prompts. The form now runs through a
+  seam and the test asserts the prompt path directly. Test-only.
+- **Go module dependency bumps.** Dependabot group update across eight modules.
+
 ## [6.6.3] - 2026-10-27
 
 **Patch release.** Maintenance: CI modernization and static-analysis
@@ -1778,7 +1807,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.3...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.4...HEAD
+[6.6.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.4
 [6.6.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.3
 [6.6.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.2
 [6.6.1]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.1
