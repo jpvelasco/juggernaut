@@ -456,6 +456,9 @@ var runApplyForm = func(form *huh.Form) error { return form.Run() }
 // Returns auth mode, region, opusplan, and error.
 func promptApplyInputs(bCfg *bedrock.Config, region string, opusplan bool) (authMode, resolvedRegion string, resolvedOpusplan bool, err error) {
 	permMode := applyFlags.mode
+	// Seed the bound values so accepting a prompt with Enter keeps the caller's
+	// --region / --opusplan. The Placeholder is only a hint and is not the value.
+	resolvedRegion, resolvedOpusplan = region, opusplan
 	flushConsoleInput()
 	form := huh.NewForm(
 		huh.NewGroup(

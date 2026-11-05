@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"errors"
+	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/huh"
@@ -294,6 +296,35 @@ func TestResolveFirstApplyInputs_InteractiveNoAuthPrompts(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("guided prompt ran %d times, want 1", calls)
+	}
+}
+
+// TestPromptApplyInputs_AcceptedDefaultsKeepFlags drives the real first-run form
+// in accessible (line-prompt) mode and accepts every default with an empty line.
+// The --region and --opusplan values passed in must survive, not reset to zero.
+func TestPromptApplyInputs_AcceptedDefaultsKeepFlags(t *testing.T) {
+	defer resetFlags()
+	resetFlags()
+
+	orig := runApplyForm
+	runApplyForm = func(form *huh.Form) error {
+		return form.WithAccessible(true).
+			WithInput(strings.NewReader("\n\n\n\n\n")).
+			WithOutput(io.Discard).
+			Run()
+	}
+	t.Cleanup(func() { runApplyForm = orig })
+
+	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2"}}
+	_, region, opusplan, err := promptApplyInputs(bCfg, "eu-west-1", true)
+	if err != nil {
+		t.Fatalf("promptApplyInputs: %v", err)
+	}
+	if region != "eu-west-1" {
+		t.Errorf("region = %q, want eu-west-1 (the flag value, not an empty input)", region)
+	}
+	if !opusplan {
+		t.Error("opusplan = false, want true (the flag value)")
 	}
 }
 
