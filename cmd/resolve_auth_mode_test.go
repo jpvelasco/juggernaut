@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"os"
-	"runtime"
-	"strings"
 	"testing"
 
+	"github.com/charmbracelet/huh"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/bedrock"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
@@ -276,22 +276,24 @@ func TestResolveFirstApplyInputs_ExplicitAuthSkipsPromptOnTTY(t *testing.T) {
 }
 
 func TestResolveFirstApplyInputs_InteractiveNoAuthPrompts(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("TUI form blocks on Windows without a real console")
-	}
 	defer resetFlags()
 	resetFlags()
 	withInteractiveStdin(t, true)
 
+	errPromptReached := errors.New("prompt reached")
+	calls := 0
+	orig := runApplyForm
+	runApplyForm = func(*huh.Form) error { calls++; return errPromptReached }
+	t.Cleanup(func() { runApplyForm = orig })
+
 	home := testutil.NewTestHome(t)
 	bCfg := &bedrock.Config{Defaults: bedrock.Defaults{Region: "us-west-2", AuthMode: authmode.IAM}}
 	_, _, _, err := resolveApplyInputs(home, bCfg, mustProvider(t, "claude"))
-	if err == nil {
-		t.Fatal("expected guided prompt to run (and fail without a real TTY)")
+	if !errors.Is(err, errPromptReached) {
+		t.Fatalf("err = %v, want the guided prompt's error", err)
 	}
-	if !strings.Contains(err.Error(), "terminal") && !strings.Contains(err.Error(), "tty") &&
-		!strings.Contains(err.Error(), "interactive") && !strings.Contains(err.Error(), "could not open") {
-		t.Logf("prompt failed as expected: %v", err)
+	if calls != 1 {
+		t.Fatalf("guided prompt ran %d times, want 1", calls)
 	}
 }
 
