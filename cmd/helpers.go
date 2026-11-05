@@ -448,6 +448,10 @@ func resolveReApplyInputs(home string, bCfg *bedrock.Config, prov provider.Provi
 	return authMode, region, opusplan, nil
 }
 
+// runApplyForm runs the first-run setup form. Tests replace it so they do not
+// depend on terminal detection (huh falls back to line prompts under TERM=dumb).
+var runApplyForm = func(form *huh.Form) error { return form.Run() }
+
 // promptApplyInputs launches the interactive first-time setup form.
 // Returns auth mode, region, opusplan, and error.
 func promptApplyInputs(bCfg *bedrock.Config, region string, opusplan bool) (authMode, resolvedRegion string, resolvedOpusplan bool, err error) {
@@ -480,7 +484,7 @@ func promptApplyInputs(bCfg *bedrock.Config, region string, opusplan bool) (auth
 				Value(&resolvedOpusplan),
 		),
 	)
-	if err = form.Run(); err != nil {
+	if err = runApplyForm(form); err != nil {
 		return "", resolvedRegion, resolvedOpusplan, err
 	}
 	if permMode != "" && applyFlags.mode == "" {
