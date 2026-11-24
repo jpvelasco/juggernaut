@@ -2,6 +2,26 @@
 
 All notable changes to Juggernaut will be documented in this file.
 
+## [Unreleased]
+
+## [6.6.5] - 2026-11-24
+
+**Patch release.** Fixes Claude Code reverting an interactive effort choice to `high`.
+
+### Fixed
+
+- **Claude Code remembers your `/effort` selection.** Running `juggernaut apply`
+  without `--effort` now sets a native default that you can change in Claude Code.
+  To clear an existing Juggernaut effort pin, reapply to the same scope without
+  `--effort` and restart Claude Code. Passing `--effort` explicitly still pins the level.
+
+### Other
+
+- **macOS coverage uploads use Python 3.13.** This restores compatibility with
+  the Codecov uploader on GitHub-hosted runners.
+- **Dependency updates.** Updated the Go toolchain to 1.26.11, refreshed the AWS
+  SDK for Go and other Go dependencies, and updated the CodeQL and Go setup actions.
+
 ## [6.6.4] - 2026-11-04
 
 **Patch release.** Fixes the first-run setup prompt discarding `--region` and
@@ -140,8 +160,6 @@ AWS credentials in a shared background server.
   connections and daemon-management commands pass through unchanged.
   Older Codex versions retain their existing invocation, and running
   shared sessions are not restarted or interrupted.
-
-## [Unreleased]
 
 ## [6.5.1] - 2026-10-23
 
@@ -1807,7 +1825,8 @@ The installer now shows an upgrade banner when it detects a v1 profile block or 
 [5.1.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.5
 [5.1.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.4
 [5.1.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v5.1.3
-[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.4...HEAD
+[Unreleased]: https://github.com/jpvelasco/juggernaut/compare/v6.6.5...HEAD
+[6.6.5]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.5
 [6.6.4]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.4
 [6.6.3]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.3
 [6.6.2]: https://github.com/jpvelasco/juggernaut/releases/tag/v6.6.2
