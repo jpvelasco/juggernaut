@@ -17,7 +17,6 @@ var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "Configure Claude Code to use Amazon Bedrock",
 	Args:  validateApplyArgs,
-	RunE:  runApply,
 }
 
 var applyFlags struct {
@@ -50,6 +49,7 @@ var applyFlags struct {
 }
 
 func init() {
+	applyCmd.RunE = runApply
 	f := applyCmd.Flags()
 	f.StringVar(&applyFlags.cli, "cli", "claude", "coding CLI to configure: "+provider.SupportedNames())
 	f.StringVar(&applyFlags.auth, "auth", "", "authentication mode: iam or "+authmode.BedrockAPIKey)
@@ -67,7 +67,7 @@ func init() {
 	f.StringVar(&applyFlags.fallbackModel, "fallback-model", "", "comma-separated fallback model IDs")
 	f.StringVar(&applyFlags.availableModels, "available-models", "", "comma-separated model allowlist (families, version prefixes, or full IDs) written to Claude Code's native availableModels")
 	f.BoolVar(&applyFlags.enforceAvailableModels, "enforce-available-models", false, "extend --available-models to the Default model option (requires --available-models)")
-	f.StringVar(&applyFlags.effort, "effort", "high", "effort level: low|medium|high|xhigh|max|auto")
+	f.StringVar(&applyFlags.effort, "effort", "high", "pin Claude effort to low|medium|high|xhigh|max|auto (omit to allow /effort changes)")
 	f.BoolVar(&applyFlags.opusplan, "opusplan", false, "route planning to Opus, execution to Sonnet")
 	f.BoolVar(&applyFlags.noOpusplan, "no-opusplan", false, "disable opusplan")
 	f.BoolVar(&applyFlags.no1m, "no-1m-context", false, "disable 1M token context")
@@ -389,6 +389,7 @@ func buildApplyOptions(authMode, endpoint, region string, opusplan bool, models 
 		Endpoint:               endpoint,
 		Profile:                profile,
 		Effort:                 applyFlags.effort,
+		UseDefaultEffort:       !applyCmd.Flags().Changed("effort"),
 		Scope:                  applyFlags.scope,
 		Version:                Version,
 		OpusModel:              models.opusModel,

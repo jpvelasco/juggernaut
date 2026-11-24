@@ -69,6 +69,38 @@ func TestClaude_BuildConfig_EnvHasBedrockModels(t *testing.T) {
 	}
 }
 
+func TestClaude_BuildConfig_PreservesUserEffortOverride(t *testing.T) {
+	for _, tc := range []struct{ owner, recorded string }{
+		{"juggernaut", "high"}, // The user edited an old pin.
+		{"other", "low"},       // A foreign block cannot claim ownership.
+	} {
+		t.Run(tc.owner, func(t *testing.T) {
+			opts := baseOpts()
+			opts.SchemaOpts.UseDefaultEffort = true
+			opts.Existing = map[string]any{
+				"env": map[string]any{schema.EffortEnv: "low"},
+				"juggernaut": map[string]any{
+					"meta": map[string]any{"managedBy": tc.owner},
+					"env":  map[string]any{schema.EffortEnv: tc.recorded},
+				},
+			}
+			plan, err := MustGet("claude").BuildConfig(testConfig(), opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if env := plan.Keys["env"].(map[string]string); env[schema.EffortEnv] != "low" {
+				t.Error("lost the user's effort override")
+			}
+			if _, owned := testutil.NestedMapChain(plan.Keys, "juggernaut", "env", schema.EffortEnv); owned {
+				t.Error("claimed ownership of the user's effort override")
+			}
+			if _, copied := plan.RuntimeEnv[schema.EffortEnv]; copied {
+				t.Error("copied the user's override into the runtime fallback")
+			}
+		})
+	}
+}
+
 // TestClaude_BuildConfig_AvailableModels verifies that AvailableModels and
 // EnforceAvailableModels are threaded through provider.Options to ConfigPlan.Keys.
 func TestClaude_BuildConfig_AvailableModels(t *testing.T) {

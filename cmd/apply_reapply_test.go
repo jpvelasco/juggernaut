@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jpvelasco/juggernaut/v5/internal/activation"
 	"github.com/jpvelasco/juggernaut/v5/internal/authmode"
 	"github.com/jpvelasco/juggernaut/v5/internal/provider"
+	"github.com/jpvelasco/juggernaut/v5/internal/testutil"
 )
 
 // TestApply_BedrockKey_FlagStoresViaFallback runs a real (non-dry-run) apply
@@ -69,6 +71,45 @@ func TestApply_UserScopePersistsNonSecretRuntimeFallback(t *testing.T) {
 	}
 	if _, ok := state.Env[authmode.BedrockAuthEnvName]; ok {
 		t.Error("runtime fallback must never persist a bearer token")
+	}
+}
+
+func TestApply_ReapplyWithoutEffortClearsPin(t *testing.T) {
+	home := setupApplyTest(t)
+	const effortEnv = "CLAUDE_CODE_EFFORT_LEVEL"
+	const model = "claude-opus-5-5"
+	writeSettingsJSON(t, home, map[string]any{
+		"modelSettings": map[string]any{model: map[string]any{"effortLevel": "xhigh"}},
+	})
+	// Explicit high produces the same pin that older releases wrote by default.
+	for _, tc := range []struct {
+		args   []string
+		pinned bool
+	}{
+		{[]string{"apply", "--auth=iam", "--effort=high"}, true},
+		{[]string{"apply"}, false},
+	} {
+		if err := ExecuteArgs(tc.args); err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		settings := parseJSONForTest(t, filepath.Join(home, ".claude", "settings.json"))
+		if got, _ := testutil.NestedMapChain(settings, "modelSettings", model, "effortLevel"); got != "xhigh" {
+			t.Fatalf("%v: saved per-model effort = %v, want xhigh", tc.args, got)
+		}
+		if got := settings["effortLevel"]; got != "high" {
+			t.Errorf("%v: native effortLevel = %v, want high", tc.args, got)
+		}
+		state, found, err := activation.LoadRuntimeState(home, "claude")
+		if err != nil || !found {
+			t.Fatalf("%v: runtime fallback found %v, err %v", tc.args, found, err)
+		}
+		value, present := testutil.NestedMapChain(settings, "env", effortEnv)
+		if present != tc.pinned || (present && value != "high") {
+			t.Errorf("%v: env pin = %v, present %v, want pinned %v", tc.args, value, present, tc.pinned)
+		}
+		if got, ok := state.Env[effortEnv]; ok != tc.pinned || (ok && got != "high") {
+			t.Errorf("%v: runtime pin = %q, present %v, want pinned %v", tc.args, got, ok, tc.pinned)
+		}
 	}
 }
 

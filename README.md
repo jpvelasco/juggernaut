@@ -272,16 +272,18 @@ juggernaut apply --auth=iam --available-models=sonnet,claude-opus-5-5 --enforce-
 
 ## Effort Levels
 
-Controls adaptive thinking depth. Valid values are `low`, `medium`, `high`, `xhigh`, `max`, and `auto`; Claude Code falls back to the highest supported level for the active model. Juggernaut writes fixed persisted levels (`low`, `medium`, `high`, `xhigh`) to both native `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`. Juggernaut defaults to `high`, which matches the supported effort levels of Sonnet 5.5, Opus 5.5, and Haiku 5.5 (the first Haiku with effort controls).
+With `--effort` omitted, Juggernaut writes `effortLevel: high` as a native default. Claude Code lets you change it with `/effort` and saves your choice per model. Recent models such as Opus 5.5 use their own default until you choose a level when this setting comes from user scope.
+
+Passing `--effort` explicitly pins the value through `CLAUDE_CODE_EFFORT_LEVEL`, which takes precedence over `/effort`. The fixed levels `low`, `medium`, `high`, and `xhigh` also populate native `effortLevel`. `max` and `auto` use only the environment variable. To clear an existing Juggernaut pin, reapply to the same scope without `--effort` and restart Claude. A separately configured environment override still takes precedence. Claude Code limits effort to levels the active model supports. Ultracode is a separate session setting.
 
 | Level | Behavior |
 |-------|----------|
 | `low` | Minimal thinking — fastest, lowest cost |
 | `medium` | Moderate thinking |
-| `high` | Almost always thinks (default) |
+| `high` | Almost always thinks |
 | `xhigh` | Always thinks deeply |
 | `max` | Maximum thinking — deepest reasoning, highest cost |
-| `auto` | Claude Code selects the effort level |
+| `auto` | Use the API’s default effort |
 
 ```bash
 juggernaut apply --auth=iam --effort=max
@@ -342,7 +344,6 @@ The hidden `juggernaut launch` command reads the Bedrock API key from the OS key
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-5-5[1m]",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-5-5[1m]",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "global.anthropic.claude-haiku-5-5",
-    "CLAUDE_CODE_EFFORT_LEVEL": "high",
     "ENABLE_PROMPT_CACHING_1H": "1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   }
