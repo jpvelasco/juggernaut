@@ -89,6 +89,12 @@ jobs:
         run: |
           go test ./... -v -coverprofile=coverage.out -covermode=atomic
           tr -d '\r' < coverage.out > coverage.tmp && mv coverage.tmp coverage.out
+      # Codecov's test-results-parser ships macOS wheels for Python 3.13.
+      - name: Select Python for the macOS Codecov uploader
+        if: runner.os == 'macOS' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.13'
       # Upload per-OS coverage so Codecov merges all three legs. Much of the
       # PowerShell/launcher/keychain code is Windows-only, so a Linux-only
       # report understates true coverage; merging the OS matrix reflects it.
