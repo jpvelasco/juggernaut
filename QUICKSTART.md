@@ -9,6 +9,8 @@ juggernaut apply --auth=iam   # or --auth=bedrock-api-key
 claude
 ```
 
+Use `/effort xhigh` in Claude to save a per-model preference. If an older install keeps reverting to `high`, upgrade Juggernaut, re-run `juggernaut apply` for the same scope without `--effort`, then restart Claude.
+
 Claude Code can also opt in to the parallel `bedrock-mantle` endpoint (runtime remains the default):
 
 ```bash

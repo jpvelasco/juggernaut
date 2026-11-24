@@ -70,6 +70,8 @@ Architecture, provider inventory, managed keys, and CI/release design live in
 
 Defaults and model pins live in `bedrock-config.json` (embedded into the binary at
 build time). Do not hardcode Bedrock model IDs or env defaults in scripts.
+Keep `CLAUDE_CODE_EFFORT_LEVEL` out of the base environment. Only an explicit
+`apply --effort` should override Claude’s interactive effort selection.
 
 Every CLI defaults to `bedrock-runtime`; `apply --endpoint=mantle` is opt-in.
 Codex and OpenCode mantle use native Responses providers and bare model IDs.
