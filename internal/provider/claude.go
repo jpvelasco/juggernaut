@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"maps"
 	"path/filepath"
 	"strings"
 
@@ -96,7 +97,7 @@ func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, erro
 
 	keys := map[string]any{
 		"juggernaut":             blockMap,
-		"env":                    native.Env,
+		"env":                    c.settingsEnv(native.Env, opts.Existing),
 		"model":                  native.Model,
 		"modelOverrides":         modelOverrides,
 		"fallbackModel":          native.FallbackModel,
@@ -114,6 +115,24 @@ func (c claude) BuildConfig(cfg *bedrock.Config, opts Options) (ConfigPlan, erro
 		Warnings:    block.Warnings,
 		RuntimeEnv:  native.Env,
 	}, nil
+}
+
+// settingsEnv keeps a user's own effort override in settings.json. Only the
+// generated environment belongs in the ownership record and runtime fallback.
+func (c claude) settingsEnv(generated map[string]string, existing map[string]any) map[string]string {
+	env, _ := existing["env"].(map[string]any)
+	value, ok := env[schema.EffortEnv].(string)
+	if !ok || generated[schema.EffortEnv] != "" {
+		return generated
+	}
+	block, _ := existing["juggernaut"].(map[string]any)
+	previous, _ := block["env"].(map[string]any)
+	if c.OwnsConfig(existing) && previous[schema.EffortEnv] == value {
+		return generated
+	}
+	settings := maps.Clone(generated)
+	settings[schema.EffortEnv] = value
+	return settings
 }
 
 func (c claude) LaunchSpec() LaunchSpec {

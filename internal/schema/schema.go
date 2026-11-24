@@ -14,6 +14,9 @@ import (
 // SchemaVersion is the current version of the Juggernaut settings.json block.
 const SchemaVersion = 2
 
+// EffortEnv overrides all interactive effort choices in Claude Code.
+const EffortEnv = "CLAUDE_CODE_EFFORT_LEVEL"
+
 // Options holds all user-supplied apply parameters.
 type Options struct {
 	AuthMode               string
@@ -21,6 +24,7 @@ type Options struct {
 	Endpoint               string // "", "runtime", or "mantle"; runtime is the default
 	Profile                string // named AWS profile for IAM auth; "" = ambient default chain
 	Effort                 string
+	UseDefaultEffort       bool // --effort omitted: write only the editable native default
 	Scope                  string
 	Version                string
 	OpusModel              string
@@ -314,7 +318,12 @@ func buildEnv(cfg *bedrock.Config, opts Options, opus, sonnet, haiku, fable stri
 		setDefaultEnv(env, "ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES", "effort,max_effort,xhigh_effort,thinking,adaptive_thinking,interleaved_thinking")
 	}
 	env["CLAUDE_CODE_SUBAGENT_MODEL"] = haiku
-	env["CLAUDE_CODE_EFFORT_LEVEL"] = opts.Effort
+	if opts.UseDefaultEffort {
+		// Older Bedrock configs include this override in their base environment.
+		delete(env, EffortEnv)
+	} else {
+		env[EffortEnv] = opts.Effort
+	}
 
 	if opts.Opusplan {
 		env["ANTHROPIC_MODEL"] = claudeCodeContextModelID("opusplan", opts.Use1M)

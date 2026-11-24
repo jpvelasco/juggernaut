@@ -203,13 +203,13 @@ Set native fallback chain: `juggernaut apply --auth=iam --fallback-model=global.
 
 ## Effort levels
 
-Controls adaptive thinking depth. Valid values: `low | medium | high | xhigh | max | auto`. Fixed persisted levels (`low | medium | high | xhigh`) are written to native `effortLevel`; `max` and `auto` are env-only because Claude Code settings do not accept them as persisted `effortLevel` values. Ultracode is separate from `effortLevel` and `CLAUDE_CODE_EFFORT_LEVEL`, so Juggernaut does not expose it as `--effort`.
+Omit `--effort` to choose effort interactively with `/effort`. Juggernaut writes a native `effortLevel` default of `high`. Recent models such as Opus 5.5 use their own default in user scope until you choose a level. An explicit `--effort` pins the level via `CLAUDE_CODE_EFFORT_LEVEL`, overriding the interactive picker. The fixed levels `low`, `medium`, `high`, and `xhigh` also populate native `effortLevel`. `max` and `auto` are env-only. To clear a previous pin, reapply to the same scope without `--effort` and restart Claude. Ultracode is a separate session setting.
 
 ```bash
 juggernaut apply --auth=iam --effort=max
 ```
 
-Default: `high`. On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported. Opus 5 supports adaptive thinking on by default; disabling it caps effort at `high`. Opus 5.5's adaptive thinking is always on and cannot be disabled. Haiku 5.5 adds effort controls — the first Haiku to support them.
+On Opus 4.8/4.7, effort level controls adaptive thinking depth — manual thinking mode is not supported. Opus 5 supports adaptive thinking on by default; disabling it caps effort at `high`. Opus 5.5's adaptive thinking is always on and cannot be disabled. Haiku 5.5 adds effort controls — the first Haiku to support them.
 
 ## Permission modes
 

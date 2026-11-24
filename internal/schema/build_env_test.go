@@ -11,9 +11,10 @@ import (
 func TestBuildEnv_DefaultOptions(t *testing.T) {
 	cfg := testConfig()
 	opts := schema.Options{
-		Region: "us-west-2",
-		Effort: "high",
-		Use1M:  true,
+		Region:           "us-west-2",
+		Effort:           "high",
+		UseDefaultEffort: true,
+		Use1M:            true,
 	}
 	block, err := schema.Build(cfg, opts)
 	if err != nil {
@@ -35,8 +36,8 @@ func TestBuildEnv_DefaultOptions(t *testing.T) {
 	if block.Env["CLAUDE_CODE_SUBAGENT_MODEL"] != "global.anthropic.claude-haiku-4-5-20251001-v1:0" {
 		t.Errorf("expected subagent model, got %q", block.Env["CLAUDE_CODE_SUBAGENT_MODEL"])
 	}
-	if block.Env["CLAUDE_CODE_EFFORT_LEVEL"] != "high" {
-		t.Errorf("expected effort=high, got %q", block.Env["CLAUDE_CODE_EFFORT_LEVEL"])
+	if value, pinned := block.Env[schema.EffortEnv]; pinned {
+		t.Errorf("default options retained the base config's effort pin %q", value)
 	}
 	// Config-level env vars should be present
 	if block.Env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] != "32768" {
